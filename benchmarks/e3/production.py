@@ -2142,6 +2142,25 @@ def _execution_seconds(round_dir: Path, active_attempt_id: str | None = None) ->
     return consumed
 
 
+def _record_missing_assessments(
+    stream_dir: Path, material: str, round_index: int, chat: Any,
+) -> None:
+    # A round can complete without its assessment (job ended first); record it now.
+    for index in range(1, round_index):
+        _round_hypothesis_assessment(stream_dir, material, BOUNDED_SEED, index, chat)
+
+
+def record_missing_assessments(output_root: Path, material: str, round_index: int) -> None:
+    """Record prior-round assessments before the next round's generation deadline starts."""
+    stream_dir = (
+        output_root.resolve() / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
+    )
+    if round_index < 2 or not stream_dir.is_dir():
+        return
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        _record_missing_assessments(stream_dir, material, round_index, _chat_model())
+
+
 def prepare_round(
     manifest_path: Path, output_root: Path, material: str, round_index: int,
 ) -> dict[str, Any]:
@@ -2155,9 +2174,7 @@ def prepare_round(
     stream_dir.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
         chat = _chat_model()
-        # A round can complete without its assessment (job ended first); record it now.
-        for index in range(1, round_index):
-            _round_hypothesis_assessment(stream_dir, material, seed, index, chat)
+        _record_missing_assessments(stream_dir, material, round_index, chat)
         history = _history_for_round(output_root, material, strategy, seed, round_index)
         round_dir = stream_dir / f"round-{round_index:02d}"
         if (round_dir / "generation-preflight.json").is_file():
@@ -3137,6 +3154,7 @@ def main(argv: list[str] | None = None) -> int:
             f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
         )
         if args.command == "prepare":
+            record_missing_assessments(args.output_root, args.material, args.round_index)
             command = [
                 sys.executable, "-m", "benchmarks.e3.production", "prepare-round",
                 "--manifest", str(args.manifest), "--output-root", str(args.output_root),

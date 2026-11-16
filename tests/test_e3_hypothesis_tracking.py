@@ -413,12 +413,12 @@ def test_prepare_records_missing_previous_assessment_before_next_round(tmp_path,
     monkeypatch.setattr(production, "_validate_saved_hypothesis_proposal", lambda *args: None)
     monkeypatch.setattr(production, "_preflight_receipt", lambda *args: {"ok": True})
 
-    assert production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2) == {
-        "ok": True
-    }
+    production.record_missing_assessments(tmp_path / "runs", "phosphorene", 2)
     record = json.loads((stream / "round-01" / "hypothesis-assessment.json").read_text())
     assert record["status"] == "accepted"
     assert len(chat.prompts) == 1
 
-    production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2)
+    assert production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2) == {
+        "ok": True
+    }
     assert len(chat.prompts) == 1
