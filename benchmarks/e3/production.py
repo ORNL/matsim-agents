@@ -22,7 +22,6 @@ import yaml
 
 from benchmarks.e3 import hypothesis_tracking
 from benchmarks.e3.feasibility import (
-    CATALOG_VERSION,
     InvalidActionError,
     ScientificCapacityError,
     assert_capacity,
@@ -30,7 +29,7 @@ from benchmarks.e3.feasibility import (
     executable_catalog,
     validate_allocations,
 )
-from benchmarks.e3.mlip_exploration import (
+from benchmarks.e3.mlip_model import (
     E3_MLIP_CHECKPOINT_SHA256,
     E3_MLIP_MODEL,
     _verified_checkpoint,
@@ -65,14 +64,24 @@ OPTIMIZER_SETTINGS = {
     "relative_increase_threshold": None,
     "max_cell_step_strain": None,
     "max_cell_total_strain": None,
-    "max_optimization_seconds": 60,
-    "optimization_timeout_policy": "between_steps_v1",
+    "max_optimization_seconds": HARD_OPTIMIZATION_SECONDS,
+    "optimization_timeout_policy": "parent_process_deadline",
     "require_native_stress": True,
     "phosphorene_cell_mask": [True, True, False, False, False, True],
     "mof_connectivity_guard": True,
-    "mof_connectivity_version": "atom-indexed-v1",
 }
 REPLICATE_SEEDS = (BOUNDED_SEED,)
+HYPOTHESIS_TRACKING = {
+    "acquisition_calls_per_round": 1,
+    "assessment_calls_per_round_outcome": 1,
+    "round_outcomes": [
+        "completed",
+        "stopped_generation_exhausted",
+        "round_time_limit",
+        "round_failed",
+    ],
+}
+ROUND_OUTCOMES = tuple(HYPOTHESIS_TRACKING["round_outcomes"])
 
 
 class AcquisitionExhausted(ScientificCapacityError):
@@ -109,11 +118,6 @@ def _record_acquisition_stop(round_dir: Path, error: AcquisitionExhausted) -> di
         "evidence_id": f"{round_dir.name}-generation-exhausted",
         "new_optimization_evidence": False,
         "optimizations_attempted": 0,
-        "hypotheses_updated": False,
-        "hypothesis_update": (
-            "no post-round assessment; pre-round hypotheses remain in the acquisition proposal "
-            "and no new optimization evidence was collected"
-        ),
         "partial_structures_retained": partial_count,
         "requested": manifest["main_target"],
         "accepted_unique": partial_count,
@@ -529,15 +533,11 @@ def build_campaign_manifest() -> dict[str, Any]:
         "llm_guided_configuration": objectives["llm_guided_configuration"],
         "rounds": rounds,
         "scientific_objectives_sha256": _sha256_file(OBJECTIVES),
-        "hypothesis_tracking": {
-            "version": hypothesis_tracking.VERSION,
-            "acquisition_calls_per_round": 1,
-            "additional_assessment_calls_per_completed_round": 1,
-        },
+        "hypothesis_tracking": HYPOTHESIS_TRACKING,
         "adaptation": {
             "evidence": "strategy-local MACE geometry-optimization outcomes only",
             "llm_acquisition_calls_per_round": 1,
-            "llm_assessment_calls_per_completed_round": 1,
+            "llm_assessment_calls_per_round_outcome": 1,
             "fallback_on_invalid_llm_proposal": False,
             "minimum_candidates_per_size_tier_per_round": 1,
             "e3_dft_inputs": False,
@@ -592,12 +592,7 @@ def build_campaign_manifest() -> dict[str, Any]:
 
 
 def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
-    tracking = manifest.get("hypothesis_tracking")
-    if tracking != {
-        "version": hypothesis_tracking.VERSION,
-        "acquisition_calls_per_round": 1,
-        "additional_assessment_calls_per_completed_round": 1,
-    }:
+    if manifest.get("hypothesis_tracking") != HYPOTHESIS_TRACKING:
         raise ValueError("unrecognized hypothesis tracking protocol or call budget")
     if manifest.get("optimizer") != OPTIMIZER_SETTINGS:
         raise ValueError("production manifest optimizer does not match the current protocol")
@@ -704,7 +699,6 @@ def _read_hypothesis_assessment(
     record = json.loads(path.read_text(encoding="utf-8"))
     if (
         record.get("status") != "accepted"
-        or record.get("version") != hypothesis_tracking.VERSION
         or not isinstance(record.get("prompt"), str)
         or not record["prompt"].strip()
         or not isinstance(record.get("raw_response"), str)
@@ -835,7 +829,7 @@ def _round_hypothesis_assessment(
         f"Prior strategy-local outcomes: {json.dumps(_compact_history(history), sort_keys=True)}\n"
     )
     record: dict[str, Any] = {
-        "version": hypothesis_tracking.VERSION, "material": material, "seed": seed,
+        "material": material, "seed": seed,
         "after_round": round_index, "prompt": prompt,
         "assessment_stage": assessment_stage,
         "model_id": getattr(chat, "model", getattr(chat, "model_id", None)),
@@ -906,83 +900,6 @@ def _finite_capacity_remaining(
         if group is not None:
             used[group] += int(record.get("attempted", record.get("count", 0)))
     return {group: max(0, 1 - used[group]) for group in capacity_groups}
-
-
-def _rule_allocation(
-    action_space: list[dict[str, Any]],
-    history: list[dict[str, Any]],
-    target: int,
-    minimum_by_tier: dict[str, int],
-) -> list[dict[str, Any]]:
-    action_space, _ = executable_catalog(action_space, history)
-    assert_capacity(action_space, target, minimum_by_tier)
-    allowed = {action["action_id"]: action for action in action_space}
-    covered: dict[str, int] = defaultdict(int)
-    attempted: dict[str, int] = defaultdict(int)
-    converged: dict[str, int] = defaultdict(int)
-    for record in history:
-        action = allowed.get(record["action_id"], record.get("action", {}))
-        if not action:
-            continue
-        for dimension in _action_dimensions(action):
-            covered[dimension] += int(record.get("count", record.get("attempted", 0)))
-        attempted[action["action_id"]] += int(record.get("attempted", 0))
-        converged[action["action_id"]] += int(record.get("converged", 0))
-    counts: dict[str, int] = defaultdict(int)
-    finite_allocated: dict[str, int] = defaultdict(int)
-
-    def available(action: dict[str, Any]) -> bool:
-        info = action["feasibility"]
-        return finite_allocated[info["capacity_group"]] < info["remaining_capacity"]
-
-    def allocate_one(action: dict[str, Any]) -> None:
-        counts[action["action_id"]] += 1
-        finite_allocated[action["feasibility"]["capacity_group"]] += 1
-        for dimension in _action_dimensions(action):
-            covered[dimension] += 1
-
-    def score(action: dict[str, Any]) -> tuple[float, str]:
-        undercovered = sum(1 / (1 + covered[dimension]) for dimension in _action_dimensions(action))
-        n = attempted[action["action_id"]]
-        rate = (converged[action["action_id"]] + 1) / (n + 2)
-        return undercovered + 0.25 * rate, action["action_id"]
-
-    for tier_text, count in sorted(minimum_by_tier.items(), key=lambda item: int(item[0])):
-        tier_actions = [
-            action
-            for action in action_space
-            if str(action["size_tier"]) == tier_text and available(action)
-        ]
-        if not tier_actions and count:
-            raise ScientificCapacityError(f"no allowed generation actions for required tier {tier_text}")
-        for allocation_index in range(count):
-            if not tier_actions:
-                raise ValueError(
-                    f"finite action capacity cannot satisfy the tier {tier_text} minimum"
-                )
-            chosen = max(
-                tier_actions, key=lambda action: (score(action)[0], -int(action["action_id"], 16))
-            )
-            allocate_one(chosen)
-            tier_actions = [action for action in tier_actions if available(action)]
-            if allocation_index < count - 1 and not tier_actions:
-                raise ValueError(
-                    f"finite action capacity cannot satisfy the tier {tier_text} minimum"
-                )
-    allocated = sum(counts.values())
-    if allocated > target:
-        raise ValueError("required tier coverage exceeds the round budget")
-    for _ in range(target - allocated):
-        eligible = [action for action in action_space if available(action)]
-        if not eligible:
-            raise ScientificCapacityError("finite action capacities cannot satisfy the round target")
-        chosen = max(eligible, key=lambda action: (score(action)[0], -int(action["action_id"], 16)))
-        allocate_one(chosen)
-    proposal = [
-        {"action_id": action_id, "count": count}
-        for action_id, count in sorted(counts.items())
-    ]
-    return validate_allocations(proposal, list(allowed.values()), target, minimum_by_tier)
 
 
 def _compact_action_catalog(material: str, action_space: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1120,7 +1037,7 @@ def _llm_allocation(
     prompt = (
         "Choose E3-MLIP crystallographic generation allocations for this round. "
         + evidence_scope + "Return JSON with exactly keys allocations, "
-        "cited_evidence_ids, rationale. allocations is a list of {action_id,count}; "
+        "cited_evidence_ids, rationale, scientific_hypotheses. allocations is a list of {action_id,count}; "
         "counts must be positive integers, IDs unique, sum exactly to the round target, "
         "and each minimum tier count must be met. cited_evidence_ids must be a non-empty "
         "JSON array of exact strings from Valid evidence IDs below; do not invent, "
@@ -1140,18 +1057,12 @@ def _llm_allocation(
         f"{json.dumps(capacity_groups, sort_keys=True, separators=(',', ':'))}\n"
         f"Hierarchical action catalog: {json.dumps(prompt_catalog, separators=(',', ':'))}\n"
     )
-    prompt = prompt.replace(
-        "Return JSON with exactly keys allocations, cited_evidence_ids, rationale.",
-        "Return JSON with exactly keys allocations, cited_evidence_ids, rationale, "
-        "scientific_hypotheses.",
-    )
     prompt += (
         f"\n{hypothesis_tracking.INSTRUCTIONS}\n"
         f"Previous scientific hypotheses: {json.dumps(previous_hypotheses, sort_keys=True)}\n"
     )
     evidence = {
-        **(context or {}), "catalog_version": CATALOG_VERSION,
-        "prompt_version": hypothesis_tracking.VERSION, "prompt": prompt,
+        **(context or {}), "prompt": prompt,
         "previous_hypotheses": previous_hypotheses,
         "valid_evidence_ids": sorted(valid_evidence),
         **hypothesis_scope,
@@ -1324,58 +1235,17 @@ def _materialize_round(
     round_spec: dict[str, Any],
     run_root: Path,
     history: list[dict[str, Any]],
-    chat: Any | None,
+    chat: Any,
 ) -> tuple[Path, Path, dict[str, Any]]:
-    started = time.monotonic()
     local_history = list(history)
     round_dir = (
         run_root / round_spec["material"] / round_spec["strategy"] /
         f"seed-{round_spec['seed']}" / f"round-{round_spec['round']:02d}"
     )
-    recovery_history = round_dir / "acquisition" / "generation-history.json"
-    if recovery_history.is_file():
-        local_history.extend(json.loads(recovery_history.read_text(encoding="utf-8")))
     previous_outcome = round_dir / "acquisition" / "outcome.json"
     if previous_outcome.is_file():
         local_history.append(json.loads(previous_outcome.read_text(encoding="utf-8")))
-    authorization = round_dir / "acquisition" / "recovery-authorization.json"
-    if authorization.is_file():
-        recovery = json.loads(authorization.read_text(encoding="utf-8"))
-        if (
-            recovery["material"] != round_spec["material"]
-            or recovery["seed"] != round_spec["seed"]
-            or recovery["round"] != round_spec["round"]
-            or recovery["additional_llm_calls"] != 1
-        ):
-            raise ValueError("recovery authorization does not match this round")
-        local_history.append(recovery["generation_evidence"])
-    while True:
-        try:
-            return _materialize_selection(manifest, round_spec, run_root, local_history, chat)
-        except ScientificCapacityError:
-            # Only the deterministic policy can decide again without another LLM call.
-            if round_spec["strategy"] != "rule_based_adaptation":
-                raise
-            shortfalls = sorted((round_dir / "acquisition").glob("shortfall-*.json"))
-            events = [json.loads(path.read_text(encoding="utf-8")) for path in shortfalls]
-            previous = {row.get("action_id") for row in local_history if row.get("capacity_exhausted")}
-            new_events = [event for event in events if event["action"]["action_id"] not in previous]
-            if not new_events or time.monotonic() - started >= ROUND_SECONDS:
-                raise
-            for event in new_events:
-                event.update(
-                    action_id=event["action"]["action_id"],
-                    evidence_id=f"generation-shortfall-{event['action']['action_id']}",
-                )
-            local_history.extend(new_events)
-            _atomic_json(recovery_history, [
-                row for row in local_history if row.get("capacity_exhausted")
-            ])
-            old_manifest = round_dir / "round-manifest.json"
-            attempt = len(list((round_dir / "acquisition").glob("attempt-*"))) + 1
-            archive = round_dir / "acquisition" / f"attempt-{attempt:03d}"
-            archive.mkdir()
-            os.replace(old_manifest, archive / "round-manifest.json")
+    return _materialize_selection(manifest, round_spec, run_root, local_history, chat)
 
 
 def _materialize_selection(
@@ -1383,7 +1253,7 @@ def _materialize_selection(
     round_spec: dict[str, Any],
     run_root: Path,
     history: list[dict[str, Any]],
-    chat: Any | None,
+    chat: Any,
 ) -> tuple[Path, Path, dict[str, Any]]:
     generation_started = time.monotonic()
     from ase.io import read
@@ -1404,25 +1274,16 @@ def _materialize_selection(
     round_dir = run_root / material / strategy / f"seed-{seed}" / f"round-{round_index:02d}"
     round_dir.mkdir(parents=True, exist_ok=True)
     round_manifest_path = round_dir / "round-manifest.json"
-    if strategy == "llm_guided_adaptation" and not manifest.get("hypothesis_tracking"):
-        raise ValueError("hypothesis tracking is mandatory for LLM-guided E3-MLIP")
-    saved_proposal = round_dir / "acquisition" / "proposal-001.json"
-    previous_hypotheses = (
-        _previous_hypotheses(round_dir.parent, round_index)
-        if strategy == "llm_guided_adaptation" else []
-    )
-    if (
-        strategy == "llm_guided_adaptation"
-        and round_manifest_path.is_file()
-        and not saved_proposal.is_file()
-    ):
-        raise RuntimeError(f"saved acquisition proposal is missing: {saved_proposal}")
-    if strategy == "llm_guided_adaptation" and saved_proposal.is_file():
-        proposal = json.loads(saved_proposal.read_text(encoding="utf-8"))
+    proposal_path = round_dir / "acquisition" / "proposal-001.json"
+    previous_hypotheses = _previous_hypotheses(round_dir.parent, round_index)
+    if round_manifest_path.is_file() and not proposal_path.is_file():
+        raise RuntimeError(f"saved acquisition proposal is missing: {proposal_path}")
+    if proposal_path.is_file():
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
         if proposal.get("status") == "accepted":
-            _validate_saved_hypothesis_proposal(saved_proposal, previous_hypotheses)
+            _validate_saved_hypothesis_proposal(proposal_path, previous_hypotheses)
         elif round_manifest_path.is_file():
-            raise RuntimeError(f"round has no accepted hypothesis proposal: {saved_proposal}")
+            raise RuntimeError(f"round has no accepted hypothesis proposal: {proposal_path}")
     if round_manifest_path.is_file():
         existing = json.loads(round_manifest_path.read_text(encoding="utf-8"))
         if existing.get("optimizer") != OPTIMIZER_SETTINGS:
@@ -1438,81 +1299,36 @@ def _materialize_selection(
         existing = json.loads(round_manifest_path.read_text(encoding="utf-8"))
         allocations = existing["allocations"]
         selection = existing["selection"]
-        legacy_path = round_dir / "acquisition" / "legacy-selection.json"
-        if not existing.get("catalog_version") and not legacy_path.exists():
-            _atomic_json(legacy_path, {
-                "original_round_manifest": existing,
-                "raw_response": None,
-                "raw_response_unavailable_reason": "original execution did not persist raw proposals",
-                "llm_calls_consumed": int(strategy == "llm_guided_adaptation"),
-            })
     else:
-        legacy_summary = round_dir.parent / "campaign-summary.json"
-        if strategy == "llm_guided_adaptation" and legacy_summary.is_file():
-            summary = json.loads(legacy_summary.read_text(encoding="utf-8"))
-            if (
-                summary.get("stopped_round") == round_index
-                and summary.get("termination_reason") == "round_failed"
-                and not (round_dir / "acquisition" / "recovery-authorization.json").is_file()
-            ):
-                evidence = round_dir / "acquisition" / "legacy-selection.json"
-                if not evidence.exists():
-                    _atomic_json(evidence, {
-                        "raw_response": None,
-                        "raw_response_unavailable_reason": "original rejected proposal was not persisted",
-                        "llm_calls_consumed": 1,
-                        "original_campaign_summary": summary,
-                    })
+        if chat is None:
+            raise ValueError("LLM-guided round requires a configured chat model")
+        if proposal_path.is_file():
+            saved = json.loads(proposal_path.read_text(encoding="utf-8"))
+            if saved["status"] != "accepted":
                 raise ScientificCapacityError(
-                    "Original failed round consumed its one LLM call; raw proposal is unavailable. "
-                    "A replacement policy decision requires explicit additional-call authorization."
+                    f"the round's one LLM acquisition call was already consumed: {proposal_path}"
                 )
-        if strategy == "rule_based_adaptation":
-            allocations = _rule_allocation(action_space, history, target, minimum_by_tier)
-            selection = {
-                "policy": (
-                    "least-covered tier/family/formula/generator/operation with "
-                    "smoothed convergence"
-                ),
-                "cited_evidence_ids": [
-                    "campaign-design",
-                    *[row["evidence_id"] for row in history],
-                ],
-                "rationale": "Deterministic greedy selection; tie-breaks are stable action IDs.",
-            }
+            allocations = saved["accepted_final_allocation"]
+            parsed = json.loads(saved["raw_response"][
+                saved["raw_response"].find("{"):saved["raw_response"].rfind("}") + 1
+            ])
+            citations, rationale = parsed["cited_evidence_ids"], parsed["rationale"]
         else:
-            if chat is None:
-                raise ValueError("LLM-guided round requires a configured chat model")
-            proposal_path = round_dir / "acquisition" / "proposal-001.json"
-            if proposal_path.is_file():
-                saved = json.loads(proposal_path.read_text(encoding="utf-8"))
-                if saved["status"] != "accepted":
-                    raise ScientificCapacityError(
-                        f"one LLM call already consumed: {proposal_path}; "
-                        "another policy decision requires authorization"
-                    )
-                allocations = saved["accepted_final_allocation"]
-                parsed = json.loads(saved["raw_response"][
-                    saved["raw_response"].find("{"):saved["raw_response"].rfind("}") + 1
-                ])
-                citations, rationale = parsed["cited_evidence_ids"], parsed["rationale"]
-            else:
-                allocations, citations, rationale = _llm_allocation(
-                    chat, material, action_space, history, target, minimum_by_tier,
-                    evidence_path=proposal_path,
-                    context={
-                        "round": round_index, "seed": seed,
-                        "campaign_variant": manifest.get("campaign_variant"),
-                        "hypothesis_tracking": True,
-                        "previous_hypotheses": previous_hypotheses,
-                    },
-                )
-            selection = {
-                "policy": "evidence-grounded LLM allocation",
-                "model_id": getattr(chat, "model", None),
-                "cited_evidence_ids": citations,
-                "rationale": rationale,
-            }
+            allocations, citations, rationale = _llm_allocation(
+                chat, material, action_space, history, target, minimum_by_tier,
+                evidence_path=proposal_path,
+                context={
+                    "round": round_index, "seed": seed,
+                    "campaign_variant": manifest.get("campaign_variant"),
+                    "previous_hypotheses": previous_hypotheses,
+                },
+            )
+        selection = {
+            "policy": "evidence-grounded LLM allocation",
+            "model_id": getattr(chat, "model", None),
+            "cited_evidence_ids": citations,
+            "rationale": rationale,
+        }
         _atomic_json(
             round_manifest_path,
             {
@@ -1521,13 +1337,12 @@ def _materialize_selection(
                 "optimizer": OPTIMIZER_SETTINGS,
                 "selection": selection,
                 "allocations": allocations,
-                "catalog_version": CATALOG_VERSION,
             },
         )
 
     feasible_actions, unavailable_actions = executable_catalog(action_space, history)
     _atomic_json(round_dir / "acquisition" / "catalog.json", {
-        "version": CATALOG_VERSION, "available": feasible_actions, "unavailable": unavailable_actions,
+        "available": feasible_actions, "unavailable": unavailable_actions,
     })
     try:
         allocations = validate_allocations(
@@ -1541,12 +1356,12 @@ def _materialize_selection(
             "allocations": allocations, "reason": str(error),
             "requested": target, "accepted_unique": 0,
             "requires_new_policy_decision": True,
-            "remaining_llm_calls": 0 if strategy == "llm_guided_adaptation" else None,
+            "remaining_llm_calls": 0,
         })
         raise ScientificCapacityError(
             f"{material}: saved policy decision is infeasible: {error}. "
-            "The original selection is retained; no action was substituted. "
-            "LLM recovery needs authorization beyond the frozen one-call-per-round limit."
+            "The original selection is retained; no action was substituted and the "
+            "round's one LLM acquisition call is consumed."
         ) from error
 
     selected_actions = []
@@ -1692,7 +1507,7 @@ def _materialize_selection(
                 "rejection_reasons": dict(global_rejections),
                 "capacity_exhausted": True, "remaining_capacity": 0,
                 "requires_new_policy_decision": True,
-                "llm_calls_remaining": 0 if strategy == "llm_guided_adaptation" else None,
+                "llm_calls_remaining": 0,
             }
             _atomic_json(round_dir / "acquisition" / f"shortfall-{action_id}.json", diagnostic)
             _write_jsonl(round_dir / "acquisition" / "partial-candidates.jsonl", candidate_records)
@@ -2088,14 +1903,12 @@ def _deadline_execute(request: tuple[dict[str, Any], Path], calculators: Any) ->
     return _execute_task(task, task_root, calculators)
 
 
-def _hard_optimizer_policy(seconds: float) -> dict[str, Any]:
-    if not math.isfinite(seconds) or seconds <= 0 or seconds > 300:
-        raise ValueError("Hard optimization deadline must be finite and within (0, 300] seconds")
-    return {
-        **OPTIMIZER_SETTINGS,
-        "max_optimization_seconds": seconds,
-        "optimization_timeout_policy": "parent_process_deadline_v1",
-    }
+def _check_hard_deadline(seconds: float) -> None:
+    if seconds != OPTIMIZER_SETTINGS["max_optimization_seconds"]:
+        raise ValueError(
+            "Hard optimization deadline must be the protocol's "
+            f"{OPTIMIZER_SETTINGS['max_optimization_seconds']} seconds"
+        )
 
 
 def _timeout_result(
@@ -2154,15 +1967,14 @@ def run_worker(
     *,
     rank: int,
     world_size: int,
-    hard_optimization_seconds: float | None = None,
+    hard_optimization_seconds: float,
 ) -> dict[str, int]:
+    _check_hard_deadline(hard_optimization_seconds)
     if world_size < 1 or rank < 0 or rank >= world_size:
         raise ValueError("worker rank/world-size are invalid")
     _, checkpoint_sha = _verified_checkpoint()
     if checkpoint_sha != E3_MLIP_CHECKPOINT_SHA256:
         raise ValueError("worker checkpoint does not match the frozen E3-MLIP model")
-    from matsim_agents.backends.mlip.relaxation import CalculatorCache
-
     tasks = [
         json.loads(line)
         for line in tasks_path.read_text(encoding="utf-8").splitlines()
@@ -2172,12 +1984,6 @@ def run_worker(
     task_root = output_root / "tasks"
     from matsim_agents.execution.deadline_worker import DeadlineWorker, TaskDeadlineExceeded
 
-    effective_optimizer = (
-        OPTIMIZER_SETTINGS
-        if hard_optimization_seconds is None
-        else _hard_optimizer_policy(hard_optimization_seconds)
-    )
-    calculators = CalculatorCache() if hard_optimization_seconds is None else None
     with DeadlineWorker(
         _deadline_calculators,
         _deadline_execute,
@@ -2186,25 +1992,16 @@ def run_worker(
         for index, task in enumerate(tasks):
             if index % world_size != rank:
                 continue
-            if hard_optimization_seconds is not None:
-                if task.get("optimizer", effective_optimizer) != effective_optimizer:
-                    raise ValueError("Task optimizer policy differs from the worker hard deadline")
-                task["optimizer"] = effective_optimizer
-            elif task.get("optimizer", OPTIMIZER_SETTINGS) != OPTIMIZER_SETTINGS:
-                raise ValueError(
-                    "Task requires its declared hard deadline; refusing unbounded dispatch"
-                )
+            if task.get("optimizer") != OPTIMIZER_SETTINGS:
+                raise ValueError("Task optimizer policy differs from the current protocol")
             if _task_result(task_root / task["candidate_id"], task) is not None:
                 counts["resumed"] += 1
                 continue
-            if hard_optimization_seconds is None:
-                result = _execute_task(task, task_root, calculators)
-            else:
-                started, wall_started = time.monotonic(), time.time()
-                try:
-                    result = worker.run((task, task_root), seconds=hard_optimization_seconds)
-                except TaskDeadlineExceeded:
-                    result = _timeout_result(task, task_root, started, wall_started)
+            started, wall_started = time.monotonic(), time.time()
+            try:
+                result = worker.run((task, task_root), seconds=hard_optimization_seconds)
+            except TaskDeadlineExceeded:
+                result = _timeout_result(task, task_root, started, wall_started)
             counts[result["status"]] += 1
             counts["attempted"] += 1
     return dict(counts)
@@ -2238,7 +2035,6 @@ def _preflight_receipt(
         raise ScientificCapacityError(f"preflight requires {target} real tasks, found {len(tasks)}")
     if len({task["structure_sha256"] for task in tasks}) != target:
         raise ScientificCapacityError(f"preflight requires {target} distinct geometry identities")
-    # Dispatch may attach the frozen execution optimizer; geometry identities cannot change.
     actual = {task["candidate_id"]: task["structure_file_sha256"] for task in tasks}
     if actual != receipt["structures"]:
         raise ValueError("preflight task identities changed")
@@ -2248,7 +2044,6 @@ def _preflight_receipt(
     receipt["generation_seconds"] = _generation_seconds(round_dir, receipt)
     if receipt["generation_seconds"] >= ROUND_SECONDS:
         raise TimeoutError("CPU generation consumed the round's 1800-second budget")
-    _check_execution_history(round_dir)
     consumed = receipt["generation_seconds"] + _execution_seconds(round_dir, execution_attempt_id)
     if consumed >= ROUND_SECONDS:
         raise TimeoutError("generation plus prior execution consumed the round's 1800-second budget")
@@ -2333,75 +2128,6 @@ def _execution_seconds(round_dir: Path, active_attempt_id: str | None = None) ->
     return consumed
 
 
-def _check_execution_history(round_dir: Path) -> None:
-    if not (round_dir / "execution-time.json").exists() and any(
-        round_dir.glob("tasks/*/attempt-*")
-    ):
-        raise RuntimeError(
-            "legacy execution attempts have no cumulative time ledger; reconcile their "
-            "scheduler/round elapsed time before resuming, rather than granting a new budget"
-        )
-
-
-def authorize_generation_recovery(
-    manifest_path: Path, output_root: Path, material: str, authorization: str,
-) -> dict[str, Any]:
-    """Archive a failed first acquisition and authorize one replacement decision."""
-    if material not in {"lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"}:
-        raise ValueError("generation recovery is limited to the four failed material streams")
-    if not authorization.strip():
-        raise ValueError("an explicit authorization statement is required")
-    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    validate_campaign_manifest(manifest)
-    strategy, seed, round_index = "llm_guided_adaptation", BOUNDED_SEED, 1
-    _find_round(manifest, material, strategy, seed, round_index)
-    stream_dir = output_root / material / strategy / f"seed-{seed}"
-    if not stream_dir.is_dir():
-        raise ValueError("recovery requires an existing failed production stream")
-    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
-        round_dir = stream_dir / "round-01"
-        path = round_dir / "acquisition" / "recovery-authorization.json"
-        if path.is_file():
-            saved = json.loads(path.read_text(encoding="utf-8"))
-            if saved["authorization"] != authorization:
-                raise ValueError("this stream already has a recovery authorization")
-            return saved
-        summary_path = stream_dir / "campaign-summary.json"
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        if (
-            summary.get("stopped_round") != 1
-            or summary.get("termination_reason") != "round_failed"
-        ):
-            raise ValueError("recovery requires a failed first round")
-        if (
-            (round_dir / "generation-preflight.json").exists()
-            or (round_dir / "round-summary.json").exists()
-            or any(round_dir.glob("tasks/**/result.json"))
-        ):
-            raise ValueError("refusing to replace generated or optimized production work")
-        archive = stream_dir / "recovery-attempts" / "round-01-original"
-        archive.mkdir(parents=True, exist_ok=False)
-        _atomic_json(archive / "campaign-summary.json", summary)
-        if round_dir.exists():
-            os.replace(round_dir, archive / "round-01")
-        record = {
-            "material": material, "strategy": strategy, "seed": seed, "round": round_index,
-            "authorization": authorization, "authorized_at_unix": time.time(),
-            "manifest_sha256": _sha256_file(manifest_path),
-            "original_attempt_archive": str(archive),
-            "original_llm_calls_consumed": 1, "additional_llm_calls": 1,
-            "frozen_objectives_modified": False,
-            "generation_evidence": {
-                "evidence_id": "authorized-generation-recovery",
-                "category": "generation_failure_before_gpu",
-                "attempted": 0, "failed": 0,
-            },
-        }
-        _atomic_json(path, record)
-        return record
-
-
 def prepare_round(
     manifest_path: Path, output_root: Path, material: str, round_index: int,
 ) -> dict[str, Any]:
@@ -2414,18 +2140,12 @@ def prepare_round(
     stream_dir = output_root / material / strategy / f"seed-{seed}"
     stream_dir.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
-        if manifest.get("hypothesis_tracking") and round_index > 1:
-            # A round can complete without its assessment (job ended first); record it now.
-            chat = _chat_model()
-            for index in range(1, round_index):
-                _round_hypothesis_assessment(stream_dir, material, seed, index, chat)
+        chat = _chat_model()
+        # A round can complete without its assessment (job ended first); record it now.
+        for index in range(1, round_index):
+            _round_hypothesis_assessment(stream_dir, material, seed, index, chat)
         history = _history_for_round(output_root, material, strategy, seed, round_index)
         round_dir = stream_dir / f"round-{round_index:02d}"
-        authorization = round_dir / "acquisition" / "recovery-authorization.json"
-        if authorization.is_file():
-            saved = json.loads(authorization.read_text(encoding="utf-8"))
-            if saved["manifest_sha256"] != _sha256_file(manifest_path):
-                raise ValueError("recovery authorization belongs to a different manifest")
         if (round_dir / "generation-preflight.json").is_file():
             previous = _previous_hypotheses(stream_dir, round_index)
             _validate_saved_hypothesis_proposal(
@@ -2433,23 +2153,24 @@ def prepare_round(
             )
             return _preflight_receipt(round_dir, manifest_path)
         time_path = round_dir / "generation-time.json"
-        if not time_path.exists() and (round_dir / "round-manifest.json").exists():
-            raise RuntimeError("legacy generation has no time ledger; reconcile before retrying")
-        _check_execution_history(round_dir)
         with _time_budget_attempt(
             time_path, limit_seconds=ROUND_SECONDS - _execution_seconds(round_dir),
         ):
             try:
                 _, tasks_path, _ = _materialize_round(
-                    manifest, spec, output_root, history, _chat_model(),
+                    manifest, spec, output_root, history, chat,
                 )
             except AcquisitionExhausted as error:
-                return _record_acquisition_stop(round_dir, error)
+                outcome = _record_acquisition_stop(round_dir, error)
+                _round_hypothesis_assessment(
+                    stream_dir, material, seed, round_index, chat,
+                    outcome="stopped_generation_exhausted",
+                )
+                return outcome
             tasks = _read_tasks(tasks_path)
             if len(tasks) != int(spec["main_target"]):
                 raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
             receipt = {
-                "catalog_version": CATALOG_VERSION,
                 "manifest_sha256": _sha256_file(manifest_path),
                 "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
                 "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
@@ -2462,108 +2183,6 @@ def prepare_round(
         receipt["generation_seconds"] = _time_budget_consumed(_time_budget_state(time_path))
         _atomic_json(round_dir / "generation-preflight.json", receipt)
         return _preflight_receipt(round_dir, manifest_path)
-
-
-def revalidate_preflight(
-    manifest_path: Path, output_root: Path, material: str, round_index: int,
-) -> dict[str, Any]:
-    """Prove a source-only recovery reproduces the saved first-round geometries."""
-    if round_index != 1:
-        raise ValueError("source recovery revalidation is limited to the failed first rounds")
-    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    validate_campaign_manifest(manifest)
-    spec = _find_round(manifest, material, "llm_guided_adaptation", BOUNDED_SEED, 1)
-    stream_dir = output_root / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
-    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
-        round_dir = stream_dir / "round-01"
-        receipt_path = round_dir / "generation-preflight.json"
-        original = json.loads(receipt_path.read_text(encoding="utf-8"))
-        if original["manifest_sha256"] != _sha256_file(manifest_path):
-            raise ValueError("source revalidation cannot change the campaign manifest")
-        fingerprints = {
-            "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
-            "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
-            "acquisition_sha256": _sha256_file(Path(__file__)),
-        }
-        if all(original.get(key) == value for key, value in fingerprints.items()):
-            return _preflight_receipt(round_dir, manifest_path)
-        _check_execution_history(round_dir)
-        if not (round_dir / "generation-time.json").exists() and any(
-            (round_dir / "acquisition").glob("source-revalidation-*")
-        ):
-            raise RuntimeError("legacy replay history has no time ledger; reconcile before retrying")
-        execution_seconds = _execution_seconds(round_dir)
-        with _time_budget_attempt(
-            round_dir / "generation-time.json",
-            limit_seconds=ROUND_SECONDS - execution_seconds,
-            initial_seconds=original["generation_seconds"],
-        ) as attempt:
-            updated = _replay_preflight(
-                manifest, spec, material, round_dir, original, fingerprints, attempt,
-            )
-        updated["generation_seconds"] = _generation_seconds(round_dir, original)
-        _atomic_json(receipt_path, updated)
-        return _preflight_receipt(round_dir, manifest_path)
-
-
-def _replay_preflight(
-    manifest: dict[str, Any], spec: dict[str, Any], material: str,
-    round_dir: Path, original: dict[str, Any], fingerprints: dict[str, str],
-    attempt: dict[str, Any],
-) -> dict[str, Any]:
-    tasks = _read_tasks(round_dir / "tasks.jsonl")
-    if {row["candidate_id"]: row["structure_file_sha256"] for row in tasks} != original["structures"]:
-        raise ValueError("original preflight task identities changed")
-    for task in tasks:
-        path = Path(task["structure_path"])
-        if (
-            _sha256_file(path) != task["structure_file_sha256"]
-            or _geometry_sha256(path) != task["structure_sha256"]
-        ):
-            raise ValueError(f"original structure changed: {path}")
-    source_hash = hashlib.sha256(_canonical_json(fingerprints).encode()).hexdigest()
-    replay_root = round_dir / "acquisition" / f"source-revalidation-{source_hash[:16]}"
-    replay_round = (
-        replay_root / material / "llm_guided_adaptation" /
-        f"seed-{BOUNDED_SEED}" / "round-01"
-    )
-    for name in ("proposal-001.json", "recovery-authorization.json"):
-        source = round_dir / "acquisition" / name
-        if name == "recovery-authorization.json" and not source.is_file():
-            continue
-        _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
-    _atomic_json(replay_root / "original-preflight.json", original)
-    outcomes = {
-        str(path): _sha256_file(path) for path in round_dir.glob("tasks/**/result.json")
-    }
-    # A plain sentinel has no invoke method: this replay cannot make an LLM call.
-    _, replay_tasks_path, _ = _materialize_round(
-        manifest, spec, replay_root, [], object(),
-    )
-    replay = _read_tasks(replay_tasks_path)
-    old_geometries = {task["structure_sha256"] for task in tasks}
-    new_geometries = {task["structure_sha256"] for task in replay}
-    target = structures_per_round()
-    if len(replay) != target or len(new_geometries) != target or old_geometries != new_geometries:
-        raise ScientificCapacityError(
-            f"source revalidation did not reproduce the original {target} distinct geometries"
-        )
-    if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
-        raise ValueError("source revalidation modified optimization outcome evidence")
-    elapsed = max(0, time.time() - attempt["started_at_unix"])
-    proof = {
-        "actual_seeded_generation": True, "geometry_sets_identical": True,
-        "task_count": len(replay), "llm_calls": 0,
-        "retained_optimization_results": outcomes,
-        "original_preflight": str(replay_root / "original-preflight.json"),
-        "replayed_tasks": str(replay_tasks_path), "elapsed_seconds": elapsed,
-    }
-    _atomic_json(replay_root / "revalidation.json", proof)
-    return {
-        **original, **fingerprints,
-        "source_revalidation": str(replay_root / "revalidation.json"),
-    }
 
 
 def _round_action_outcomes(tasks: list[dict[str, Any]], task_root: Path) -> list[dict[str, Any]]:
@@ -2736,7 +2355,7 @@ def _execute_round_tasks(
     worker_count: int,
     workers_per_node: int,
     worker_python: str,
-    hard_optimization_seconds: float | None = None,
+    hard_optimization_seconds: float,
     round_deadline: float | None = None,
 ) -> None:
     if worker_count < 1 or worker_count % workers_per_node:
@@ -2772,9 +2391,9 @@ def _execute_round_tasks(
         str(tasks_path),
         "--output-root",
         str(round_dir),
+        "--hard-optimization-seconds",
+        str(hard_optimization_seconds),
     ]
-    if hard_optimization_seconds is not None:
-        command.extend(["--hard-optimization-seconds", str(hard_optimization_seconds)])
     if round_deadline is not None:
         remaining_minutes = int((round_deadline - time.monotonic()) // 60)
         if remaining_minutes < 1:
@@ -2791,7 +2410,7 @@ def _execute_round_tasks(
 def run_replicate(
     manifest_path: Path, output_root: Path, material: str, strategy: str, seed: int,
     *, worker_count: int = WORKERS_PER_ARRAY_ELEMENT, worker_python: str | None = None,
-    workers_per_node: int = 4, hard_optimization_seconds: float | None = None,
+    workers_per_node: int = 4, hard_optimization_seconds: float = HARD_OPTIMIZATION_SECONDS,
     round_index: int, round_attempt_id: str | None = None,
 ) -> dict[str, Any]:
     round_dir = output_root / material / strategy / f"seed-{seed}" / f"round-{round_index:02d}"
@@ -2800,8 +2419,6 @@ def run_replicate(
         summary_path.is_file()
         and json.loads(summary_path.read_text()).get("status") == "complete"
     )
-    if not complete:
-        _check_execution_history(round_dir)
     if round_attempt_id is not None or complete:
         reservation = nullcontext(None)
     else:
@@ -2839,7 +2456,7 @@ def _run_replicate(
     worker_count: int = WORKERS_PER_ARRAY_ELEMENT,
     worker_python: str | None = None,
     workers_per_node: int = 4,
-    hard_optimization_seconds: float | None = None,
+    hard_optimization_seconds: float = HARD_OPTIMIZATION_SECONDS,
     round_index: int,
     round_deadline: float,
     round_attempt_id: str | None,
@@ -2863,8 +2480,7 @@ def _run_replicate(
     stream_dir.mkdir(parents=True, exist_ok=True)
     lock_path = stream_dir / ".run.lock"
     with exclusive_lock(lock_path, timeout=0):
-        if hard_optimization_seconds is not None:
-            _hard_optimizer_policy(hard_optimization_seconds)
+        _check_hard_deadline(hard_optimization_seconds)
         policy = {
             "campaign_id": manifest["campaign_id"],
             "manifest_sha256": _sha256_file(manifest_path),
@@ -2878,7 +2494,7 @@ def _run_replicate(
                 raise ValueError("Cannot change optimization deadline when resuming a stream")
         else:
             prepared_rounds = list(stream_dir.glob("round-*"))
-            if prepared_rounds and hard_optimization_seconds is not None:
+            if prepared_rounds:
                 first_round = stream_dir / "round-01"
                 if (
                     round_index != 1
@@ -2930,13 +2546,9 @@ def _run_replicate(
             )
         except AcquisitionExhausted as error:
             return _record_acquisition_stop(round_dir, error)
-        effective_optimizer = _hard_optimizer_policy(hard_optimization_seconds)
         tasks = _read_tasks(tasks_path)
-        for task in tasks:
-            task["optimizer"] = effective_optimizer
-        _write_jsonl(tasks_path, tasks)
-        round_manifest["execution_optimizer"] = effective_optimizer
-        _atomic_json(round_manifest_path, round_manifest)
+        if any(task.get("optimizer") != OPTIMIZER_SETTINGS for task in tasks):
+            raise ValueError("Task optimizer policy differs from the current protocol")
         if len(tasks) != int(spec["main_target"]) or not tasks:
             raise ScientificCapacityError("refusing incomplete or empty GPU workload")
         _execute_round_tasks(
@@ -3276,7 +2888,6 @@ def run_campaign(
             if receipt_path.is_file():
                 receipt = _preflight_receipt(receipt_path.parent, manifest_path)
                 seconds -= receipt["generation_seconds"]
-            _check_execution_history(round_dir)
             with _time_budget_attempt(
                 round_dir / "execution-time.json", limit_seconds=seconds,
             ) as attempt:
@@ -3412,16 +3023,7 @@ def main(argv: list[str] | None = None) -> int:
         "validate", help="validate the frozen protocol without execution"
     )
     validate.add_argument("--manifest", type=Path, required=True)
-    recovery = commands.add_parser(
-        "authorize-recovery", help="record authorization for one replacement first-round decision"
-    )
-    recovery.add_argument("--manifest", type=Path, required=True)
-    recovery.add_argument("--output-root", type=Path, required=True)
-    recovery.add_argument("--material", choices=sorted(MATERIALS), required=True)
-    recovery.add_argument("--authorization", required=True)
-    for name in (
-        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
-    ):
+    for name in ("prepare", "prepare-round", "verify-preflight"):
         preflight = commands.add_parser(name, help="CPU-only production generation gate")
         preflight.add_argument("--manifest", type=Path, required=True)
         preflight.add_argument("--output-root", type=Path, required=True)
@@ -3436,7 +3038,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--workers", type=int)
     run.add_argument("--workers-per-node", type=int, default=4)
     run.add_argument("--worker-python")
-    run.add_argument("--hard-optimization-seconds", type=float)
+    run.add_argument(
+        "--hard-optimization-seconds", type=float, default=HARD_OPTIMIZATION_SECONDS
+    )
     run.add_argument("--round-index", type=int, choices=(1, 2, 3), required=True)
     run.add_argument("--round-attempt-id")
     campaign = commands.add_parser("run-campaign")
@@ -3454,7 +3058,9 @@ def main(argv: list[str] | None = None) -> int:
     worker.add_argument("--output-root", type=Path, required=True)
     worker.add_argument("--rank", type=int)
     worker.add_argument("--world-size", type=int)
-    worker.add_argument("--hard-optimization-seconds", type=float)
+    worker.add_argument(
+        "--hard-optimization-seconds", type=float, default=HARD_OPTIMIZATION_SECONDS
+    )
     cluster = commands.add_parser(
         "cluster-minima", help="cluster relaxed minima after campaign acquisition is complete"
     )
@@ -3487,22 +3093,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "budget-reconcile":
         print(json.dumps(reconcile_gpu_allocation(args.state, args.reservation_id), sort_keys=True))
         return 0
-    if args.command == "authorize-recovery":
-        print(json.dumps(authorize_generation_recovery(
-            args.manifest, args.output_root, args.material, args.authorization,
-        ), sort_keys=True))
-        return 0
-    if args.command in {
-        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
-    }:
+    if args.command in {"prepare", "prepare-round", "verify-preflight"}:
         round_dir = (
             args.output_root / args.material / "llm_guided_adaptation" /
             f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
         )
-        if args.command in {"prepare", "revalidate-preflight"}:
-            internal_command = "prepare-round" if args.command == "prepare" else "revalidate-round"
+        if args.command == "prepare":
             command = [
-                sys.executable, "-m", "benchmarks.e3.production", internal_command,
+                sys.executable, "-m", "benchmarks.e3.production", "prepare-round",
                 "--manifest", str(args.manifest), "--output-root", str(args.output_root),
                 "--material", args.material, "--round-index", str(args.round_index),
             ]
@@ -3516,11 +3114,11 @@ def main(argv: list[str] | None = None) -> int:
                 - _execution_seconds(round_dir)
             )
             if seconds <= 0:
-                raise TimeoutError("round time budget exhausted before source revalidation")
+                raise TimeoutError("round time budget exhausted before generation")
             _run_supervised_round(command, seconds=seconds)
             outcome_path = round_dir / "acquisition" / "outcome.json"
             if (
-                args.command == "prepare" and outcome_path.is_file()
+                outcome_path.is_file()
                 and not (round_dir / "generation-preflight.json").is_file()
             ):
                 outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
@@ -3528,10 +3126,6 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps(outcome, sort_keys=True))
                     return 3
             result = _preflight_receipt(round_dir, args.manifest)
-        elif args.command == "revalidate-round":
-            result = revalidate_preflight(
-                args.manifest, args.output_root, args.material, args.round_index,
-            )
         elif args.command == "verify-preflight":
             result = _preflight_receipt(round_dir, args.manifest)
         else:

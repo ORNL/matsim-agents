@@ -1,4 +1,4 @@
-"""Executable generation constraints shared by both E3 acquisition policies."""
+"""Executable generation constraints for the E3 acquisition policy."""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ from typing import Any
 
 from benchmarks.e3 import structure_generation as generation
 from benchmarks.e3.profiles import structures_per_round
-
-CATALOG_VERSION = "executable-capacities-2"
 
 
 class ScientificCapacityError(ValueError):
@@ -244,7 +242,6 @@ def action_constraints(action: dict[str, Any]) -> dict[str, Any]:
             proton_orientation_sites="all formate hydrogens, fixed C-H lengths",
         )
     return {
-        "catalog_version": CATALOG_VERSION,
         "generator_available": True,
         "generation_method": method,
         "source": source,

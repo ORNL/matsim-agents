@@ -1059,16 +1059,16 @@ def test_resource_ledger_enforces_total_gpu_hour_cap_and_releases_unused_time(tm
 
 
 def test_checkpoint_path_is_the_verified_local_artifact(tmp_path, monkeypatch):
-    from benchmarks.e3 import mlip_exploration
+    from benchmarks.e3 import mlip_model
 
     artifact = tmp_path / "mace" / "maceomat0mediummodel"
     artifact.parent.mkdir()
     artifact.write_bytes(b"frozen model fixture")
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     monkeypatch.setenv("MACE_ARTIFACT_DIR", str(tmp_path))
-    monkeypatch.setattr(mlip_exploration, "E3_MLIP_CHECKPOINT_SHA256", digest)
+    monkeypatch.setattr(mlip_model, "E3_MLIP_CHECKPOINT_SHA256", digest)
 
-    checkpoint_path, actual_digest = mlip_exploration._verified_checkpoint()
+    checkpoint_path, actual_digest = mlip_model._verified_checkpoint()
 
     assert checkpoint_path == artifact.resolve()
     assert actual_digest == digest

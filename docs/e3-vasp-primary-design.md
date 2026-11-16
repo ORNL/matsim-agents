@@ -37,17 +37,14 @@ ingestions makes one post-evidence revision; the last ingestion makes a
 separate final revision. Later-round DFT selections are supplied externally;
 any external selection calls are additional. Early stops reduce this count.
 The offline four-round dry run instead makes ten stub calls: one initial, four
-pre-selection round revisions, four selections, and one final revision. Legacy
-model-selected MLIP exploration makes one initial call plus two per completed
-generation round (selection/revision, then post-outcome revision), so three
-calls for one round and seven for three. Failed or rejected calls consume
+pre-selection round revisions, four selections, and one final revision. E3-MLIP
+production makes one acquisition call per round plus one hypothesis-assessment
+call at every round outcome (completed, stopped, timed out, or failed). Failed or rejected calls consume
 resources; there is no automatic retry or total LLM-call budget enforcer. These
 are planning counts, not authorization or a change to the DFT attempt budget.
 
-The legacy `mlip_exploration` model-selected action path likewise requires
-initial, round, and post-outcome final scientific revisions, preserved in
-`hypothesis-revisions.jsonl` and round manifests. Explicit actions cannot bypass
-the LLM policy; incomplete/missing prior rounds cannot be resumed. Its evidence
+E3-MLIP production records an assessed hypothesis set at every round outcome in
+`hypothesis-assessment.json` and the campaign summary. Its evidence
 remains MLIP-only: generation or optimization outcomes cannot establish VASP
 accuracy or thermodynamic stability. Transfer support/contradiction in the DFT
 ledger requires qualified independent validation/test groups and measured VASP
