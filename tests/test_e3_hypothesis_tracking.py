@@ -327,7 +327,7 @@ def test_next_round_rejects_missing_or_modified_prior_proposal(tmp_path):
         production._previous_hypotheses(stream, 2)
 
 
-def test_prepared_round_does_not_bypass_missing_previous_assessment(tmp_path, monkeypatch):
+def test_prepare_records_missing_previous_assessment_before_next_round(tmp_path, monkeypatch):
     manifest_path = tmp_path / "manifest.json"
     production.write_campaign_manifest(manifest_path)
     stream = tmp_path / "runs" / "phosphorene" / "llm_guided_adaptation" / "seed-20261113"
@@ -340,10 +340,17 @@ def test_prepared_round_does_not_bypass_missing_previous_assessment(tmp_path, mo
         },
     )
     production._atomic_json(stream / "round-02" / "generation-preflight.json", {})
-    monkeypatch.setattr(
-        production,
-        "_preflight_receipt",
-        lambda *args: pytest.fail("must not accept preflight without hypothesis history"),
-    )
-    with pytest.raises(FileNotFoundError, match="hypothesis-assessment.json"):
-        production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2)
+    chat = _Chat({"scientific_hypotheses": [_hypothesis(status="unresolved")]})
+    monkeypatch.setattr(production, "_chat_model", lambda: chat)
+    monkeypatch.setattr(production, "_validate_saved_hypothesis_proposal", lambda *args: None)
+    monkeypatch.setattr(production, "_preflight_receipt", lambda *args: {"ok": True})
+
+    assert production.prepare_round(
+        manifest_path, tmp_path / "runs", "phosphorene", 2
+    ) == {"ok": True}
+    record = json.loads((stream / "round-01" / "hypothesis-assessment.json").read_text())
+    assert record["status"] == "accepted"
+    assert len(chat.prompts) == 1
+
+    production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2)
+    assert len(chat.prompts) == 1

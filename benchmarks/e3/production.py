@@ -2414,6 +2414,11 @@ def prepare_round(
     stream_dir = output_root / material / strategy / f"seed-{seed}"
     stream_dir.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        if manifest.get("hypothesis_tracking") and round_index > 1:
+            # A round can complete without its assessment (job ended first); record it now.
+            chat = _chat_model()
+            for index in range(1, round_index):
+                _round_hypothesis_assessment(stream_dir, material, seed, index, chat)
         history = _history_for_round(output_root, material, strategy, seed, round_index)
         round_dir = stream_dir / f"round-{round_index:02d}"
         authorization = round_dir / "acquisition" / "recovery-authorization.json"

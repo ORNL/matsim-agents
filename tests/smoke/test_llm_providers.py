@@ -281,7 +281,12 @@ def fake_copilot_sdk(monkeypatch):
         limits: ModelLimitsOverride | None = None
 
     state = SimpleNamespace(
-        clients=[], sessions=[], prompts=[], reply="copilot reply", finish_reason="stop"
+        clients=[],
+        sessions=[],
+        prompts=[],
+        reply="copilot reply",
+        finish_reason="stop",
+        continuations=[],
     )
 
     class FakeSession:
@@ -311,15 +316,21 @@ def fake_copilot_sdk(monkeypatch):
                         output_tokens=7,
                     ),
                 ),
+                SimpleNamespace(
+                    agent_id="sub-agent", data=AssistantMessageData(content="sub-agent text")
+                ),
             ]
+            final = AssistantMessageData(
+                content=state.reply, model="served-model", api_call_id="call-1"
+            )
+            events += [
+                SimpleNamespace(agent_id=None, data=AssistantMessageData(content=part))
+                for part in state.continuations
+            ] + [SimpleNamespace(agent_id=None, data=final)]
             for event in events:
                 for handler in self.handlers:
                     handler(event)
-            return SimpleNamespace(
-                data=AssistantMessageData(
-                    content=state.reply, model="served-model", api_call_id="call-1"
-                )
-            )
+            return SimpleNamespace(data=final)
 
     class CopilotClient:
         def __init__(self, **kwargs):
@@ -398,6 +409,14 @@ class TestCopilotProvider:
         assert session["mcp_servers"] == {}
         assert session["included_builtin_agents"] == []
         assert fake_copilot_sdk.prompts == [("hi", 600)]
+
+    def test_reply_split_across_root_assistant_messages_is_joined(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        fake_copilot_sdk.continuations = ['{"a": [1, ', "2, "]
+        fake_copilot_sdk.reply = "3]}"
+        model = get_chat_model(provider="copilot", model="catalog-model")
+        assert model.invoke([HumanMessage(content="hi")]).content == '{"a": [1, 2, 3]}'
 
     def test_runtime_uses_explicit_copilot_home(self, fake_copilot_sdk, monkeypatch):
         from matsim_agents.backends.llm.provider import get_chat_model

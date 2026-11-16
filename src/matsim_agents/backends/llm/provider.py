@@ -317,6 +317,9 @@ class ChatCopilot(BaseChatModel):
         system, prompt = self._prompt(messages)
         token = self.github_token.get_secret_value() if self.github_token else None
         usages: list[Any] = []
+        # Long replies can arrive as several root assistant messages (continuations);
+        # send_and_wait returns only the last one, so collect every fragment.
+        fragments: list[str] = []
         client = _copilot_client(token)
         await client.start()
         try:
@@ -341,6 +344,15 @@ class ChatCopilot(BaseChatModel):
                     usages.append(event.data)
                     if isinstance(event.data, AssistantUsageData)
                     and not getattr(event, "agent_id", None)
+                    else None
+                )
+            )
+            session.on(
+                lambda event: (
+                    fragments.append(event.data.content or "")
+                    if isinstance(event.data, AssistantMessageData)
+                    and not getattr(event, "agent_id", None)
+                    and not getattr(event.data, "tool_requests", None)
                     else None
                 )
             )
@@ -369,7 +381,7 @@ class ChatCopilot(BaseChatModel):
                 f"{output_tokens}>{self.max_completion_tokens}"
             )
         message = AIMessage(
-            content=data.content,
+            content="".join(fragments) if fragments else data.content,
             additional_kwargs=(
                 {"reasoning_content": data.reasoning_text} if data.reasoning_text else {}
             ),

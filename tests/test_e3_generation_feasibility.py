@@ -676,6 +676,7 @@ def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
 
     monkeypatch.setattr(production, "_materialize_round", exhaust)
     monkeypatch.setattr(production, "_chat_model", lambda: object())
+    monkeypatch.setattr(production, "_round_hypothesis_assessment", lambda *args, **kwargs: None)
     monkeypatch.setattr(production, "_verified_checkpoint_sha256", lambda: "verified")
     monkeypatch.setattr(
         production,
@@ -740,6 +741,7 @@ def test_preparation_does_not_disguise_infrastructure_or_invalid_requests(
             },
         )
     monkeypatch.setattr(production, "_chat_model", lambda: object())
+    monkeypatch.setattr(production, "_round_hypothesis_assessment", lambda *args, **kwargs: None)
 
     def fail(*args, **kwargs):
         raise error
