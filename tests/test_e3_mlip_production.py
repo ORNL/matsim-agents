@@ -20,7 +20,6 @@ from benchmarks.e3.production import (
     _materialize_round,
     _mof_bond_graph,
     _mof_connectivity_guard,
-    _rule_allocation,
     _task_result,
     build_campaign_manifest,
     release_gpu_hours,
@@ -111,6 +110,7 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
         "structure_sha256": "test-sha",
         "candidate_kind": "unique_configuration",
         "structure_path": "test.extxyz",
+        "optimizer": OPTIMIZER_SETTINGS,
     }
     tasks_path.write_text(json.dumps(task) + "\n")
     monkeypatch.setattr(
@@ -165,8 +165,6 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
     ) == {"resumed": 1}
     assert calls == [300]
     assert startup_deadlines == [15 * 60, 15 * 60]
-    assert _task_result(path.parent.parent, task) is None
-    task["optimizer"] = payload["optimizer"]
     assert _task_result(path.parent.parent, task) == path
 
 
@@ -208,29 +206,25 @@ def test_existing_stream_cannot_change_optimization_deadline(tmp_path):
         )
 
 
-@pytest.mark.parametrize("seconds", [0, -1, 301, float("nan"), float("inf")])
-def test_hard_deadline_rejects_invalid_or_longer_than_five_minutes(seconds):
-    from benchmarks.e3.production import _hard_optimizer_policy
+@pytest.mark.parametrize("seconds", [0, -1, 60, 301, float("nan"), float("inf")])
+def test_hard_deadline_must_equal_the_protocol_deadline(seconds):
+    from benchmarks.e3.production import _check_hard_deadline
 
-    with pytest.raises(ValueError, match="within"):
-        _hard_optimizer_policy(seconds)
+    with pytest.raises(ValueError, match="protocol"):
+        _check_hard_deadline(seconds)
 
 
 def test_hard_timeout_is_counted_as_nonconverged_without_usable_minimum(tmp_path):
     import time
 
-    from benchmarks.e3.production import (
-        _hard_optimizer_policy,
-        _round_action_outcomes,
-        _timeout_result,
-    )
+    from benchmarks.e3.production import _round_action_outcomes, _timeout_result
 
     task = {
         "candidate_id": "timeout",
         "structure_sha256": "sha",
         "candidate_kind": "unique_configuration",
         "structure_path": "initial.extxyz",
-        "optimizer": _hard_optimizer_policy(300),
+        "optimizer": OPTIMIZER_SETTINGS,
         "action_id": "action",
         "action": {
             "size_tier": "small",
@@ -291,9 +285,8 @@ def test_campaign_manifest_has_six_classes_and_bounded_budgets():
     assert manifest["optimizer"]["stress_tolerance_eV_per_A3"] is None
     assert manifest["optimizer"]["max_cell_step_strain"] is None
     assert manifest["optimizer"]["max_cell_total_strain"] is None
-    assert manifest["optimizer"]["max_optimization_seconds"] == 60
-    assert manifest["optimizer"]["optimization_timeout_policy"] == "between_steps_v1"
-    assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
+    assert manifest["optimizer"]["max_optimization_seconds"] == 300
+    assert manifest["optimizer"]["optimization_timeout_policy"] == "parent_process_deadline"
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
     assert len(manifest["rounds"]) == 6 * 3
     assert manifest["total_logical_optimizations"] == 1152
@@ -311,7 +304,7 @@ def test_campaign_manifest_has_six_classes_and_bounded_budgets():
         "request_limits": {
             "max_calls_per_round": 2,
             "max_acquisition_calls_per_round": 1,
-            "max_hypothesis_assessment_calls_per_completed_round": 1,
+            "max_hypothesis_assessment_calls_per_round_outcome": 1,
             "max_tokens": 8192,
         },
         "environment_overrides": "prohibited",
@@ -365,22 +358,6 @@ def test_class_actions_are_material_specific_and_mof_never_uses_pyxtal():
     assert any(action["space_groups"] for action in _action_space("nb_ta_o"))
 
 
-def test_rule_policy_is_deterministic_and_satisfies_tier_floors():
-    actions = _action_space("bcc_refractory")
-    floors = {"4": 2, "8": 2, "16": 2, "32": 2, "64": 2}
-
-    first = _rule_allocation(actions, [], target=25, minimum_by_tier=floors)
-    second = _rule_allocation(actions, [], target=25, minimum_by_tier=floors)
-
-    assert first == second
-    assert sum(item["count"] for item in first) == 25
-    by_tier = {}
-    for item in first:
-        tier = str(item["action"]["size_tier"])
-        by_tier[tier] = by_tier.get(tier, 0) + item["count"]
-    assert all(by_tier[tier] >= floor for tier, floor in floors.items())
-
-
 def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
     actions = _action_space("lifepo4")
     parent_actions = [
@@ -389,20 +366,6 @@ def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
         if action["family_label"] == "olivine-pristine" and action["family"] == "olivine"
     ]
     assert parent_actions
-
-    allocation = _rule_allocation(
-        actions,
-        [],
-        target=20,
-        minimum_by_tier={"4": 2, "8": 2, "16": 2, "32": 2},
-    )
-    parent_counts = {}
-    for row in allocation:
-        action = row["action"]
-        if action["family_label"] == "olivine-pristine":
-            tier = str(action["size_tier"])
-            parent_counts[tier] = parent_counts.get(tier, 0) + row["count"]
-    assert all(count <= 1 for count in parent_counts.values())
 
     exhausted = parent_actions[0]
     prior_history = [
@@ -413,17 +376,6 @@ def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
             "converged": 1,
         }
     ]
-    allocation = _rule_allocation(
-        actions,
-        prior_history,
-        target=20,
-        minimum_by_tier={"4": 2, "8": 2, "16": 2, "32": 2},
-    )
-    assert not any(
-        row["action"]["family_label"] == "olivine-pristine"
-        and row["action"]["size_tier"] == exhausted["size_tier"]
-        for row in allocation
-    )
 
     class FakeChat:
         def invoke(self, prompt):
@@ -468,14 +420,6 @@ def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(fa
     assert pristine
     assert all(_finite_capacity_group(action) is not None for action in pristine)
 
-    allocation = _rule_allocation(actions, [], target=10, minimum_by_tier={})
-    allocated = {}
-    for row in allocation:
-        group = _finite_capacity_group(row["action"])
-        if group is not None:
-            allocated[group] = allocated.get(group, 0) + row["count"]
-    assert all(count <= 1 for count in allocated.values())
-
     exhausted = pristine[0]
     prior_history = [
         {
@@ -485,9 +429,6 @@ def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(fa
             "converged": 1,
         }
     ]
-    allocation = _rule_allocation(actions, prior_history, target=1, minimum_by_tier={})
-    assert not any(row["action"]["action_id"] == exhausted["action_id"] for row in allocation)
-
     remaining = next(action for action in pristine if action["action_id"] != exhausted["action_id"])
 
     class FakeChat:
@@ -557,7 +498,6 @@ def test_round_materialization_replicates_control_families_across_tiers(
     )
     spec = {
         **spec,
-        "strategy": "rule_based_adaptation",
         "main_target": 1,
         "minimum_main_count_by_tier": minimum_by_tier,
         "finite_size_control_families": [0],
@@ -569,7 +509,38 @@ def test_round_materialization_replicates_control_families_across_tiers(
         lambda: (tmp_path / "checkpoint", "checkpoint-sha256"),
     )
 
-    _, tasks_path, result = _materialize_round(manifest, spec, tmp_path, [], None)
+    from benchmarks.e3.feasibility import executable_catalog
+
+    available, _ = executable_catalog(manifest["action_spaces"][material], [])
+    chosen = next(row for row in available if str(row["size_tier"]) in minimum_by_tier)
+
+    class FakeChat:
+        def invoke(self, prompt):
+            return type(
+                "Response",
+                (),
+                {
+                    "content": json.dumps(
+                        {
+                            "allocations": [{"action_id": chosen["action_id"], "count": 1}],
+                            "cited_evidence_ids": ["campaign-design"],
+                            "rationale": "sample the required tier",
+                            "scientific_hypotheses": [
+                                {
+                                    "id": "h1",
+                                    "claim": "The family is sampled",
+                                    "prediction": "MACE relaxes the sampled family",
+                                    "status": "proposed",
+                                    "reason": "Not yet evaluated",
+                                    "evidence_ids": ["campaign-design"],
+                                }
+                            ],
+                        }
+                    )
+                },
+            )()
+
+    _, tasks_path, result = _materialize_round(manifest, spec, tmp_path, [], FakeChat())
 
     tasks = [
         json.loads(line)
@@ -709,6 +680,7 @@ def test_multi_node_worker_command_uses_one_gpu_per_rank(monkeypatch, tmp_path):
         worker_count=8,
         workers_per_node=4,
         worker_python="/project/.venv-mace/bin/python",
+        hard_optimization_seconds=300,
     )
 
     command, check = calls[0]
@@ -762,14 +734,6 @@ def test_manifest_rejects_old_fixed_cell_protocol():
         validate_campaign_manifest(manifest)
 
 
-def test_manifest_rejects_old_mof_guard_protocol():
-    manifest = build_campaign_manifest()
-    manifest["optimizer"] = dict(manifest["optimizer"])
-    manifest["optimizer"].pop("mof_connectivity_version")
-    with pytest.raises(ValueError, match="optimizer"):
-        validate_campaign_manifest(manifest)
-
-
 def test_manifest_rejects_previous_llm_provider():
     manifest = build_campaign_manifest()
     manifest["llm_guided_configuration"] = {
@@ -791,7 +755,7 @@ def test_timed_relaxations_reuse_calculator_and_save_completed_step(tmp_path, mo
 
     source = tmp_path / "input.extxyz"
     write(source, bulk("Cu", "fcc", a=3.8, cubic=True))
-    clock_values = iter([100.0, 159.9, 160.0, 200.0, 260.0])
+    clock_values = iter([100.0, 399.9, 400.0, 500.0, 800.0])
     monkeypatch.setattr(relaxation, "time", SimpleNamespace(monotonic=lambda: next(clock_values)))
     monkeypatch.setattr(
         relaxation,
@@ -809,6 +773,7 @@ def test_timed_relaxations_reuse_calculator_and_save_completed_step(tmp_path, mo
         "structure_sha256": "hash",
         "structure_path": str(source),
         "material": "bcc_refractory",
+        "optimizer": OPTIMIZER_SETTINGS,
     }
     results = [
         _execute_task({**task, "candidate_id": candidate}, tmp_path / "tasks", cache)
@@ -940,8 +905,7 @@ def test_mof_bond_swap_rolls_back_relaxation(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("material", sorted(MATERIALS))
-@pytest.mark.parametrize("hard_deadline", [False, True])
-def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material, hard_deadline):
+def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material):
     from ase.build import bulk
     from ase.calculators.emt import EMT
     from ase.io import read, write
@@ -957,11 +921,8 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         "structure_sha256": "geometry",
         "structure_path": str(source),
         "material": material,
+        "optimizer": OPTIMIZER_SETTINGS,
     }
-    if hard_deadline:
-        from benchmarks.e3.production import _hard_optimizer_policy
-
-        task["optimizer"] = _hard_optimizer_policy(300)
 
     class Cache:
         def __init__(self):
@@ -977,7 +938,7 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         assert args.relative_increase_threshold is None
         assert args.max_cell_step_strain is None
         assert args.max_cell_total_strain is None
-        assert args.max_optimization_seconds == (300 if hard_deadline else 60)
+        assert args.max_optimization_seconds == 300
         assert args.cell_mask == (
             (True, True, False, False, False, True) if material == "phosphorene" else None
         )

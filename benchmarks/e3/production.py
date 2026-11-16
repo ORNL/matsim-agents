@@ -694,7 +694,7 @@ def _previous_hypotheses(stream_dir: Path, round_index: int) -> list[dict[str, A
 
 def _read_hypothesis_assessment(
     path: Path, *, material: str | None = None, seed: int | None = None,
-    round_index: int | None = None,
+    round_index: int | None = None, outcome: str = "completed",
 ) -> dict[str, Any]:
     record = json.loads(path.read_text(encoding="utf-8"))
     if (
@@ -705,6 +705,7 @@ def _read_hypothesis_assessment(
         or not record["raw_response"].strip()
         or not isinstance(record.get("valid_evidence_ids"), list)
         or not isinstance(record.get("previous_hypotheses"), list)
+        or record.get("round_outcome") != outcome
         or (material is not None and record.get("material") != material)
         or (seed is not None and record.get("seed") != seed)
         or (round_index is not None and record.get("after_round") != round_index)
@@ -782,25 +783,39 @@ def _hypothesis_evidence_scope(history: list[dict[str, Any]]) -> dict[str, list[
     }
 
 
+def _assessment_path(round_dir: Path, outcome: str) -> Path:
+    if outcome not in ROUND_OUTCOMES:
+        raise ValueError(f"unknown round outcome: {outcome}")
+    if outcome == "completed":
+        return round_dir / "hypothesis-assessment.json"
+    return round_dir / f"hypothesis-assessment-{outcome}.json"
+
+
 def _round_hypothesis_assessment(
     stream_dir: Path, material: str, seed: int, round_index: int, chat: Any,
-    *, additional_history: list[dict[str, Any]] | None = None,
+    *, outcome: str = "completed",
+    additional_history: list[dict[str, Any]] | None = None,
     assessment_stage: str = "post_geometry",
 ) -> None:
-    """Persist one post-round LLM assessment and its complete inputs."""
+    """Persist one LLM hypothesis assessment for the round outcome and its complete inputs."""
     round_dir = stream_dir / f"round-{round_index:02d}"
-    path = round_dir / "hypothesis-assessment.json"
+    path = _assessment_path(round_dir, outcome)
     proposal_path = round_dir / "acquisition" / "proposal-001.json"
-    _validate_saved_hypothesis_proposal(
-        proposal_path, _previous_hypotheses(stream_dir, round_index),
-    )
-    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
-    previous = proposal["scientific_hypotheses"]
+    prior = _previous_hypotheses(stream_dir, round_index)
+    proposal_accepted = proposal_path.is_file() and json.loads(
+        proposal_path.read_text(encoding="utf-8")
+    ).get("status") == "accepted"
+    if proposal_accepted or outcome == "completed":
+        _validate_saved_hypothesis_proposal(proposal_path, prior)
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        previous = proposal["scientific_hypotheses"]
+    else:
+        previous = prior
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
         if existing.get("status") == "accepted":
             assessment = _read_hypothesis_assessment(
-                path, material=material, seed=seed, round_index=round_index,
+                path, material=material, seed=seed, round_index=round_index, outcome=outcome,
             )
             if assessment["previous_hypotheses"] != previous:
                 raise RuntimeError(f"assessment does not match the hypothesis proposal: {path}")
@@ -810,7 +825,7 @@ def _round_hypothesis_assessment(
         raise RuntimeError(f"hypothesis assessment call already attempted; inspect {path}")
     history = _history_for_round(
         stream_dir.parent.parent.parent, material, "llm_guided_adaptation",
-        seed, round_index + 1,
+        seed, round_index + 1 if outcome == "completed" else round_index,
     )
     history.extend(additional_history or [])
     valid_evidence = {"campaign-design"} | {
@@ -818,7 +833,8 @@ def _round_hypothesis_assessment(
     }
     evidence_scope = _hypothesis_evidence_scope(history)
     prompt = (
-        f"Assess scientific hypotheses for {material} after completed E3-MLIP round {round_index}. "
+        f"Assess scientific hypotheses for {material} after E3-MLIP round {round_index} "
+        f"ended with outcome {outcome}. "
         "Use only the supplied strategy-local outcomes. Any QE evidence applies only to "
         "audited geometries; do not compare raw energies from different checkpoints. "
         "Return JSON with exactly the key scientific_hypotheses. "
@@ -830,7 +846,7 @@ def _round_hypothesis_assessment(
     )
     record: dict[str, Any] = {
         "material": material, "seed": seed,
-        "after_round": round_index, "prompt": prompt,
+        "after_round": round_index, "round_outcome": outcome, "prompt": prompt,
         "assessment_stage": assessment_stage,
         "model_id": getattr(chat, "model", getattr(chat, "model_id", None)),
         "valid_evidence_ids": sorted(valid_evidence), "previous_hypotheses": previous,
@@ -981,8 +997,6 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "capacity_exhausted",
         "remaining_capacity",
         "new_optimization_evidence",
-        "hypotheses_updated",
-        "hypothesis_update",
         "shortfalls",
         "remaining_capacity_by_group",
         "qe_audits_by_action",
@@ -2164,7 +2178,7 @@ def prepare_round(
                 outcome = _record_acquisition_stop(round_dir, error)
                 _round_hypothesis_assessment(
                     stream_dir, material, seed, round_index, chat,
-                    outcome="stopped_generation_exhausted",
+                    outcome="stopped_generation_exhausted", additional_history=[outcome],
                 )
                 return outcome
             tasks = _read_tasks(tasks_path)
@@ -2523,8 +2537,7 @@ def _run_replicate(
         if summary_path.is_file():
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             if summary.get("status") == "complete":
-                if manifest.get("hypothesis_tracking"):
-                    _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
+                _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
                 return {
                     "material": material,
                     "strategy": strategy,
@@ -2545,7 +2558,12 @@ def _run_replicate(
                 manifest, spec, output_root, history, chat
             )
         except AcquisitionExhausted as error:
-            return _record_acquisition_stop(round_dir, error)
+            outcome = _record_acquisition_stop(round_dir, error)
+            _round_hypothesis_assessment(
+                stream_dir, material, seed, round_index, chat,
+                outcome="stopped_generation_exhausted", additional_history=[outcome],
+            )
+            return outcome
         tasks = _read_tasks(tasks_path)
         if any(task.get("optimizer") != OPTIMIZER_SETTINGS for task in tasks):
             raise ValueError("Task optimizer policy differs from the current protocol")
@@ -2626,8 +2644,7 @@ def _run_replicate(
         round_manifest["status"] = "complete"
         round_manifest["round_summary"] = str(summary_path)
         _atomic_json(round_manifest_path, round_manifest)
-        if manifest.get("hypothesis_tracking"):
-            _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
+        _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
         return {
             "material": material,
             "strategy": strategy,
@@ -2720,6 +2737,26 @@ def _terminate_process_group(process: subprocess.Popen) -> None:
     process.wait()
 
 
+def _record_stopped_round(
+    stream_dir: Path, material: str, seed: int, round_index: int, outcome: str,
+    summary: dict[str, Any],
+) -> None:
+    summary["hypothesis_assessment"] = str(
+        _assessment_path(stream_dir / f"round-{round_index:02d}", outcome)
+    )
+    _atomic_json(stream_dir / "campaign-summary.json", summary)
+    _write_campaign_report(stream_dir, summary)
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        _round_hypothesis_assessment(
+            stream_dir, material, seed, round_index, _chat_model(), outcome=outcome,
+            additional_history=[{
+                "evidence_id": f"round-{round_index:02d}-{outcome}",
+                "round": round_index, "category": outcome,
+                "new_optimization_evidence": False,
+            }],
+        )
+
+
 def _run_supervised_round(command: list[str], *, seconds: float = ROUND_SECONDS) -> None:
     if not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("round deadline must be finite and positive")
@@ -2767,6 +2804,7 @@ def _write_campaign_report(stream_dir: Path, summary: dict[str, Any]) -> None:
                 "",
                 f"- Stopped at round: {summary.get('stopped_round', 'unknown')}",
                 f"- Termination reason: `{summary.get('termination_reason', 'unknown')}`",
+                f"- Hypothesis assessment: `{summary.get('hypothesis_assessment', 'missing')}`",
             ]
         )
     if summary["status"] == "stopped_generation_exhausted":
@@ -2774,8 +2812,6 @@ def _write_campaign_report(stream_dir: Path, summary: dict[str, Any]) -> None:
             "",
             "Acquisition stopped without new optimization evidence in the stopped round.",
             "Partial generated structures are retained, not counted as optimizations.",
-            "Prior post-round hypotheses are retained without update; the stopped round's "
-            "pre-round proposal is recorded separately and the round is incomplete.",
         ])
     temporary = stream_dir / ".report.md.tmp"
     temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2849,11 +2885,10 @@ def run_campaign(
             summary_path.is_file()
             and json.loads(summary_path.read_text()).get("status") == "complete"
         ):
-            if manifest.get("hypothesis_tracking"):
-                with exclusive_lock(stream_dir / ".run.lock", timeout=0):
-                    _round_hypothesis_assessment(
-                        stream_dir, material, seed, round_index, _chat_model(),
-                    )
+            with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+                _round_hypothesis_assessment(
+                    stream_dir, material, seed, round_index, _chat_model(),
+                )
             completed += 1
             continue
         command = [
@@ -2910,8 +2945,7 @@ def run_campaign(
                 "termination_reason": "round_time_limit",
                 "round_limit_seconds": ROUND_SECONDS,
             }
-            _atomic_json(stream_dir / "campaign-summary.json", failed)
-            _write_campaign_report(stream_dir, failed)
+            _record_stopped_round(stream_dir, material, seed, round_index, "round_time_limit", failed)
             raise
         except subprocess.CalledProcessError:
             failed = {
@@ -2925,10 +2959,7 @@ def run_campaign(
                 "stopped_round": round_index,
                 "termination_reason": "round_failed",
             }
-            _atomic_json(
-                stream_dir / "campaign-summary.json", failed
-            )
-            _write_campaign_report(stream_dir, failed)
+            _record_stopped_round(stream_dir, material, seed, round_index, "round_failed", failed)
             raise
         outcome_path = stream_dir / f"round-{round_index:02d}" / "acquisition" / "outcome.json"
         summary_path = stream_dir / f"round-{round_index:02d}" / "round-summary.json"
@@ -2939,6 +2970,11 @@ def run_campaign(
             outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
             if outcome.get("status") != "stopped_generation_exhausted":
                 raise ValueError(f"unrecognized acquisition outcome: {outcome_path}")
+            _read_hypothesis_assessment(
+                _assessment_path(round_dir, "stopped_generation_exhausted"),
+                material=material, seed=seed, round_index=round_index,
+                outcome="stopped_generation_exhausted",
+            )
             prior_summaries = [
                 json.loads((stream_dir / f"round-{index:02d}" / "round-summary.json").read_text())
                 for index in range(1, round_index)
@@ -2954,7 +2990,9 @@ def run_campaign(
                 "stopped_round": round_index, "round_complete": False,
                 "termination_reason": "generation_exhausted",
                 "acquisition_outcome": outcome,
-                "hypotheses_updated_in_stopped_round": False,
+                "hypothesis_assessment": str(
+                    _assessment_path(round_dir, "stopped_generation_exhausted")
+                ),
                 "new_optimization_evidence_in_stopped_round": False,
                 "logical_optimizations_attempted": sum(
                     prior["task_count"] for prior in prior_summaries

@@ -111,8 +111,7 @@ def test_5000_tasks_are_queued_across_64_workers(tmp_path, monkeypatch, rank, co
         lambda: (tmp_path / "synthetic-checkpoint", production.E3_MLIP_CHECKPOINT_SHA256),
     )
     tasks = [
-        {"candidate_id": str(i), "optimizer": production._hard_optimizer_policy(300)}
-        for i in range(5000)
+        {"candidate_id": str(i), "optimizer": production.OPTIMIZER_SETTINGS} for i in range(5000)
     ]
     path = tmp_path / "tasks.jsonl"
     production._write_jsonl(path, tasks)
