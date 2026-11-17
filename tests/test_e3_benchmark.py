@@ -178,6 +178,7 @@ def _write_test_assessment(round_dir, outcome="completed"):
             "status": "accepted",
             "round_outcome": outcome,
             "assessment_stage": "post_geometry",
+            "additional_history": [],
             "material": round_dir.parent.parent.parent.name,
             "seed": int(round_dir.parent.name.removeprefix("seed-")),
             "after_round": int(round_dir.name.removeprefix("round-")),

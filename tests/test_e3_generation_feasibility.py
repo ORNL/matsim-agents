@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -645,6 +646,151 @@ def test_prepare_cli_supervisor_failure_records_stopped_round(tmp_path, monkeypa
         )
     stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
     assert stopped == [(stream, 2, reason, 1)]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["prepare-round"]),
+        production.LockTimeoutError("execution-time.lock is held"),
+    ],
+)
+def test_prepare_cli_lock_contention_publishes_no_stop(tmp_path, monkeypatch, error):
+    production._atomic_json(tmp_path / "manifest.json", {"campaign_id": "campaign"})
+
+    def supervise(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    monkeypatch.setattr(
+        production,
+        "_record_stopped_round",
+        lambda *args: pytest.fail("lock contention is not a round failure"),
+    )
+    with pytest.raises(type(error)):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
+    assert not list(tmp_path.rglob("campaign-summary.json"))
+
+
+def test_stop_artifacts_wait_for_stream_ownership(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    with (
+        production.exclusive_lock(stream / ".run.lock", timeout=0),
+        pytest.raises(production.LockTimeoutError),
+    ):
+        production._record_stopped_round(
+            stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+        )
+    assert not (stream / "campaign-summary.json").exists()
+
+
+def test_assessed_stop_is_not_republished(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    production._atomic_json(stream / "round-01/hypothesis-assessment-round_time_limit.json", {})
+    production._atomic_json(stream / "campaign-summary.json", {"status": "time_limit"})
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    production._record_stopped_round(
+        stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+    )
+    assert json.loads((stream / "campaign-summary.json").read_text()) == {"status": "time_limit"}
+
+
+def test_stop_summary_survives_assessment_failure(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+
+    def unavailable():
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(production, "_chat_model", unavailable)
+    summary = {
+        "material": "phosphorene",
+        "status": "incomplete",
+        "rounds_completed": 0,
+        "rounds_requested": production.ROUNDS_PER_MATERIAL,
+    }
+    with pytest.raises(RuntimeError, match="model unavailable"):
+        production._record_stopped_round(
+            stream, "phosphorene", 20261113, 1, "round_failed", summary
+        )
+    assert json.loads((stream / "campaign-summary.json").read_text())["status"] == "incomplete"
+    assert not (stream / ".run.lock").exists()
+
+
+def test_dispatch_rechecks_assessed_stop_under_stream_lock(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(production.build_campaign_manifest()))
+    round_dir = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    production._atomic_json(round_dir / "hypothesis-assessment-round_time_limit.json", {})
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production.prepare_round(manifest_path, tmp_path, "phosphorene", 1)
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production._run_replicate(
+            manifest_path,
+            tmp_path,
+            "phosphorene",
+            "llm_guided_adaptation",
+            production.BOUNDED_SEED,
+            round_index=1,
+            round_deadline=time.monotonic() + 60,
+            round_attempt_id=None,
+        )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        production.LockTimeoutError("held"),
+        subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["child"]),
+    ],
+)
+def test_cli_preserves_busy_exit(monkeypatch, error):
+    def busy(argv):
+        raise error
+
+    monkeypatch.setattr(production, "main", busy)
+    assert production._cli([]) == production.LOCK_BUSY_EXIT
+
+
+def test_cli_reraises_other_child_failures(monkeypatch):
+    def failed(argv):
+        raise subprocess.CalledProcessError(1, ["child"])
+
+    monkeypatch.setattr(production, "main", failed)
+    with pytest.raises(subprocess.CalledProcessError):
+        production._cli([])
+
+
+def test_prepare_cli_refuses_round_with_assessed_stop(tmp_path, monkeypatch):
+    round_dir = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    production._atomic_json(round_dir / "hypothesis-assessment-round_failed.json", {})
+    monkeypatch.setattr(
+        production, "_run_supervised_round", lambda *args, **kwargs: pytest.fail("dispatched")
+    )
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
 
 
 def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):
