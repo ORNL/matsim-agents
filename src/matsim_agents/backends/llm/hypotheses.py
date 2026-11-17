@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-VERSION = "scientific-hypotheses-v1"
 FIELDS = {"id", "claim", "prediction", "status", "reason", "evidence_ids"}
 STATUSES = {
     "proposed",

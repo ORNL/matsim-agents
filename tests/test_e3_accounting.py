@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -113,12 +114,6 @@ def test_supervised_replicate_does_not_double_charge(tmp_path, clock, monkeypatc
     assert production._time_budget_consumed(state) == 210
 
 
-def test_legacy_execution_is_not_given_an_invented_zero_duration(tmp_path):
-    (tmp_path / "tasks/candidate/attempt-0001").mkdir(parents=True)
-    with pytest.raises(RuntimeError, match="legacy execution"):
-        production._check_execution_history(tmp_path)
-
-
 def test_initial_generation_retries_also_keep_consumed_time(tmp_path, monkeypatch, clock):
     manifest = tmp_path / "manifest.json"
     production._atomic_json(manifest, production.build_campaign_manifest())
@@ -139,7 +134,7 @@ def test_initial_generation_retries_also_keep_consumed_time(tmp_path, monkeypatc
 
 
 @pytest.fixture
-def replay(tmp_path, monkeypatch, clock):
+def preflight(tmp_path, monkeypatch, clock):
     """Synthetic geometry identities isolate accounting, not atomistic generation."""
     manifest_path = tmp_path / "manifest.json"
     production._atomic_json(manifest_path, production.build_campaign_manifest())
@@ -161,65 +156,24 @@ def replay(tmp_path, monkeypatch, clock):
     receipt = {
         "generation_seconds": 100,
         "manifest_sha256": production._sha256_file(manifest_path),
-        "generator_sha256": "old-source",
-        "catalog_sha256": "old-source",
-        "acquisition_sha256": "old-source",
+        "generator_sha256": production._sha256_file(
+            production.REPO / "benchmarks/e3/structure_generation.py"
+        ),
+        "catalog_sha256": production._sha256_file(production.REPO / "benchmarks/e3/feasibility.py"),
+        "acquisition_sha256": production._sha256_file(Path(production.__file__)),
         "structures": {row["candidate_id"]: row["structure_file_sha256"] for row in tasks},
     }
     production._atomic_json(round_dir / "generation-preflight.json", receipt)
-    for name in ("proposal-001.json", "recovery-authorization.json"):
-        production._atomic_json(round_dir / "acquisition" / name, {})
-    monkeypatch.setattr(production, "_geometry_sha256", lambda path: path.stem)
-    durations = [120, 1]
-    calls = []
-
-    def materialize(manifest, spec, root, *args):
-        calls.append(root)
-        clock[0] += durations.pop(0)
-        path = root / "cached-tasks.jsonl"
-        production._write_jsonl(path, tasks)
-        return root / "round-manifest.json", path, {"status": "generation_complete"}
-
-    monkeypatch.setattr(production, "_materialize_round", materialize)
-    return SimpleNamespace(
-        manifest=manifest_path,
-        root=tmp_path,
-        round_dir=round_dir,
-        calls=calls,
-        durations=durations,
-    )
-
-
-def test_exhausted_replay_cannot_retry_its_cached_generation(replay):
-    replay.durations[:] = [1701]
-    for _ in range(2):
-        with pytest.raises(TimeoutError, match="time budget exhausted"):
-            production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    assert len(replay.calls) == 1
-    assert (
-        production._time_budget_consumed(
-            json.loads((replay.round_dir / "generation-time.json").read_text())
-        )
-        == 1801
-    )
-
-
-def test_source_revalidation_does_not_require_replacement_call_authorization(replay):
-    (replay.round_dir / "acquisition/recovery-authorization.json").unlink()
-    result = production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    assert result["generation_seconds"] == 220
-    replay_acquisition = replay.calls[0] / (
-        "lifepo4/llm_guided_adaptation/seed-20261113/round-01/acquisition"
-    )
-    assert (replay_acquisition / "proposal-001.json").is_file()
-    assert not (replay_acquisition / "recovery-authorization.json").exists()
+    return SimpleNamespace(manifest=manifest_path, root=tmp_path, round_dir=round_dir)
 
 
 @pytest.mark.parametrize(
     "prior_evidence", [None, "attempt", "summary", "later_round", "changed_input"]
 )
-def test_fresh_cpu_preflight_can_register_hard_deadline_policy(replay, monkeypatch, prior_evidence):
-    production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
+def test_fresh_cpu_preflight_can_register_hard_deadline_policy(
+    preflight, monkeypatch, prior_evidence
+):
+    replay = preflight
     if prior_evidence == "attempt":
         (replay.round_dir / "tasks/candidate/attempt-0001").mkdir(parents=True)
     elif prior_evidence == "summary":
@@ -234,10 +188,8 @@ def test_fresh_cpu_preflight_can_register_hard_deadline_policy(replay, monkeypat
 
     monkeypatch.setattr(production, "_verified_checkpoint_sha256", reached_execution)
     message = (
-        "legacy execution attempts"
-        if prior_evidence == "attempt"
-        else "requires a fresh stream"
-        if prior_evidence in {"summary", "later_round"}
+        "requires a fresh stream"
+        if prior_evidence in {"attempt", "summary", "later_round"}
         else "preflight structure changed"
         if prior_evidence == "changed_input"
         else "verified preflight reached execution"
@@ -260,45 +212,17 @@ def test_fresh_cpu_preflight_can_register_hard_deadline_policy(replay, monkeypat
         assert policy["manifest_sha256"] == production._sha256_file(replay.manifest)
 
 
-def test_receipt_write_failure_keeps_prior_replay_charge(replay, monkeypatch):
-    atomic = production._atomic_json
-    receipt_path = replay.round_dir / "generation-preflight.json"
-
-    def fail_receipt(path, value):
-        if path == receipt_path and "source_revalidation" in value:
-            raise OSError("receipt write failed")
-        atomic(path, value)
-
-    monkeypatch.setattr(production, "_atomic_json", fail_receipt)
-    with pytest.raises(OSError, match="receipt write failed"):
-        production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    monkeypatch.setattr(production, "_atomic_json", atomic)
-    result = production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    assert result["generation_seconds"] == 221
-    assert len(replay.calls) == 2
-
-
-def test_replay_respects_execution_time_already_consumed(replay, clock):
+def test_preflight_refuses_gpu_allocation_after_combined_budget_exhaustion(preflight, clock):
+    replay = preflight
     with production._time_budget_attempt(
         replay.round_dir / "execution-time.json",
         limit_seconds=1700,
     ):
-        clock[0] += 1600
-    with pytest.raises(TimeoutError, match="time budget exhausted"):
-        production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-
-
-def test_preflight_refuses_gpu_allocation_after_combined_budget_exhaustion(replay, clock):
-    production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    with production._time_budget_attempt(
-        replay.round_dir / "execution-time.json",
-        limit_seconds=1580,
-    ):
-        clock[0] += 1579
+        clock[0] += 1699
     assert production._preflight_receipt(replay.round_dir, replay.manifest)
     with production._time_budget_attempt(
         replay.round_dir / "execution-time.json",
-        limit_seconds=1580,
+        limit_seconds=1700,
     ) as attempt:
         assert production._preflight_receipt(
             replay.round_dir,
@@ -307,17 +231,6 @@ def test_preflight_refuses_gpu_allocation_after_combined_budget_exhaustion(repla
         )
         with pytest.raises(TimeoutError, match="generation plus prior execution"):
             production._preflight_receipt(replay.round_dir, replay.manifest)
-
-
-@pytest.mark.parametrize("published_proof", [False, True])
-def test_legacy_replay_without_time_ledger_requires_reconciliation(replay, published_proof):
-    legacy = replay.round_dir / "acquisition/source-revalidation-legacy"
-    legacy.mkdir()
-    if published_proof:
-        production._atomic_json(legacy / "revalidation.json", {"elapsed_seconds": 200})
-    with pytest.raises(RuntimeError, match="legacy replay history"):
-        production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
-    assert not replay.calls
 
 
 @pytest.fixture

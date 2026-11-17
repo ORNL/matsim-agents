@@ -79,24 +79,32 @@ design remains LLM-only. See the [generation and recovery contract](../../docs/w
 for raw proposal retention, generation shortfalls, and the frozen one-call
 limit for acquisition decisions that blocks unapproved replacement decisions.
 
-For an explicitly authorized first-round recovery in a campaign using the
-current hypothesis-tracking protocol, record one replacement LLM decision per
-material before using the submission helper:
+Every round outcome records one LLM hypothesis assessment in the round
+directory: `hypothesis-assessment.json` for a completed round, and
+`hypothesis-assessment-<outcome>.json` for `stopped_generation_exhausted`,
+`round_time_limit`, or `round_failed`. Each record states its `round_outcome`,
+the hypotheses it assessed, and the evidence it cited; the campaign summary
+and report reference the assessment of the stopping round.
+
+To audit hypothesis records after a campaign (read-only on the run data):
 
 ```bash
-.venv/bin/python -m benchmarks.e3.production authorize-recovery \
-  --manifest benchmarks/e3/manifests/e3-mlip-production.json \
-  --output-root runs/e3-mlip-production --material lifepo4 \
-  --authorization "Operator authorization for this production recovery"
+.venv/bin/python -m benchmarks.e3.hypothesis_audit runs/<campaign> \
+  --output runs/<campaign>/hypothesis-audit
 ```
 
-Repeat only for materials covered by the authorization. This preserves the
-original round and campaign summary in the stream's
-`recovery-attempts/round-01-original` directory. The round-local authorization
-allows one new decision, not unlimited retries; invoking the command again
-does not grant another call. It does not make older runs without the required
-hypothesis records compatible with this protocol. Scientific objectives,
-seeds, optimization settings, round targets, and GPU budgets are unchanged.
+The command writes `interaction-index.csv`, `hypothesis-evolution.csv`,
+`review-flags.csv` and a SHA-256 `manifest.json`. The revision types are
+mechanical field diffs. The flags mark rows that need human review:
+
+- hypotheses resolved on introduction;
+- status changes without new converged data;
+- resolved statuses that cite several compositions;
+- changes to claim or prediction text;
+- rounds with no converged structures;
+- records that were not accepted.
+
+The tool does not judge whether a change is a scientific revision.
 
 Generator revision 3 retains the 0.08 Angstrom phosphorene reconstruction bound
 but samples collective in-plane displacements with zero net translation.
@@ -109,31 +117,23 @@ avoiding the matcher's composition-keyed cache equality bottleneck for large
 frameworks. Matching tolerances, primitive-cell handling, and equivalence
 decisions are unchanged.
 
-After an infrastructure-only source correction invalidates a prepared first-round
-receipt, use `revalidate-preflight` with the same arguments as `verify-preflight`.
-It executes the saved allocation and production seeds again without inference,
-requires exactly the same 64 geometry identities, and verifies that existing
-optimization results remain unchanged. The original receipt and replay evidence
-are retained under `acquisition/source-revalidation-*`; replay time is added to
-the original generation time within the unchanged round budget.
-`generation-time.json` preserves initial generation and all replay attempts,
-including failed attempts and failures before publishing a receipt. Cached generated structures
+`generation-time.json` preserves every generation attempt, including failed
+attempts and failures before publishing a receipt. Cached generated structures
 do not reset this cumulative time. `execution-time.json` similarly tracks each
 supervised execution attempt; both the supervisor and worker-step deadline use
 the same remaining balance after generation and prior execution.
 Reservations are persisted before work. An attempt killed before its finish
 record retains its entire remaining allowance, not a fresh 30 minutes on retry.
-Legacy interrupted execution/replay evidence without a time ledger is refused
-rather than assigned an invented zero duration; recovering it requires verified
-historical timing evidence. Completed rounds are not rerun or recharged.
+Interrupted execution evidence without a time ledger is refused rather than
+assigned an invented zero duration. Completed rounds are not rerun or recharged.
 
 Valid generation exhaustion is a scientific stop, not an infrastructure failure.
 The round remains incomplete with status `stopped_generation_exhausted`.
 `acquisition/outcome.json` retains the requested/accepted counts, rejection
 reasons, partial structures, and remaining capacity groups for LLM ingestion.
-It explicitly records that no new optimization evidence was collected and prior
-hypotheses are retained without update. This evidence enters any subsequent
-authorized allocation prompt; recording it does not make an additional LLM call.
+It explicitly records that no new optimization evidence was collected. The
+round's one hypothesis assessment then evaluates the prior hypotheses against
+this outcome and is saved as `hypothesis-assessment-stopped_generation_exhausted.json`.
 The campaign writes this stop to its summary/report and exits normally without
 starting later rounds. The CPU `prepare` command instead exits with documented
 code `3` and JSON diagnostics, preventing the submission helper from requesting

@@ -119,7 +119,13 @@ def test_round_worker_step_uses_remaining_round_walltime(monkeypatch, tmp_path):
     assert command[-2:] == ["--hard-optimization-seconds", "300"]
     with pytest.raises(TimeoutError, match="budget exhausted"):
         production._execute_round_tasks(
-            tmp_path / "tasks.jsonl", tmp_path, 64, 4, "worker-python", round_deadline=159
+            tmp_path / "tasks.jsonl",
+            tmp_path,
+            64,
+            4,
+            "worker-python",
+            hard_optimization_seconds=300,
+            round_deadline=159,
         )
     assert len(calls) == 1
 
@@ -142,7 +148,7 @@ def campaign(tmp_path, monkeypatch):
     return manifest_path, output_root
 
 
-def _write_test_assessment(round_dir):
+def _write_test_assessment(round_dir, outcome="completed"):
     hypotheses = [
         {
             "id": "h1",
@@ -167,10 +173,10 @@ def _write_test_assessment(round_dir):
         },
     )
     production._atomic_json(
-        round_dir / "hypothesis-assessment.json",
+        production._assessment_path(round_dir, outcome),
         {
             "status": "accepted",
-            "version": production.hypothesis_tracking.VERSION,
+            "round_outcome": outcome,
             "assessment_stage": "post_geometry",
             "material": round_dir.parent.parent.parent.name,
             "seed": int(round_dir.parent.name.removeprefix("seed-")),
@@ -232,9 +238,23 @@ def test_campaign_rejects_round_without_hypothesis_assessment(campaign, monkeypa
     assert not summary.exists()
 
 
+def _record_assessments(monkeypatch):
+    calls = []
+    monkeypatch.setattr(production, "_chat_model", lambda: "chat")
+    monkeypatch.setattr(
+        production,
+        "_round_hypothesis_assessment",
+        lambda stream, material, seed, index, chat, **kwargs: calls.append(
+            (index, kwargs.get("outcome", "completed"))
+        ),
+    )
+    return calls
+
+
 def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
     manifest_path, output_root = campaign
     command = ["test-round"]
+    assessments = _record_assessments(monkeypatch)
 
     def time_out(*args, **kwargs):
         raise subprocess.TimeoutExpired(command, production.ROUND_SECONDS)
@@ -247,6 +267,10 @@ def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
     assert summary["status"] == "incomplete"
     assert summary["rounds_completed"] == 0
     assert summary["termination_reason"] == "round_time_limit"
+    assert summary["hypothesis_assessment"].endswith(
+        "round-01/hypothesis-assessment-round_time_limit.json"
+    )
+    assert assessments == [(1, "round_time_limit")]
     assert "incomplete" in (stream / "report.md").read_text()
 
 
@@ -261,6 +285,7 @@ def test_campaign_retries_subtract_prior_generation_and_execution(campaign, monk
     with production._time_budget_attempt(round_dir / "execution-time.json", limit_seconds=1700):
         clock[0] += 300
     deadlines = []
+    _record_assessments(monkeypatch)
 
     def fail(command, *, seconds):
         deadlines.append(seconds)
@@ -276,7 +301,7 @@ def test_campaign_retries_subtract_prior_generation_and_execution(campaign, monk
     assert deadlines == [1400, 1300]
 
 
-def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign, monkeypatch):
+def test_campaign_generation_exhaustion_records_hypothesis_assessment(campaign, monkeypatch):
     manifest_path, output_root = campaign
     calls = []
 
@@ -301,7 +326,6 @@ def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign
                 {
                     "status": "stopped_generation_exhausted",
                     "new_optimization_evidence": False,
-                    "hypotheses_updated": False,
                     "shortfalls": [
                         {
                             "requested": 6,
@@ -316,6 +340,16 @@ def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign
                 },
             )
 
+    stops = []
+
+    def assess_stop(root, material, index):
+        stops.append(index)
+        _write_test_assessment(
+            root / f"{material}/llm_guided_adaptation/seed-20261113/round-{index:02d}",
+            "stopped_generation_exhausted",
+        )
+
+    monkeypatch.setattr(production, "assess_generation_stop", assess_stop)
     monkeypatch.setattr(production, "_run_supervised_round", run_round)
     summary = production.run_campaign(
         manifest_path,
@@ -324,21 +358,28 @@ def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign
         "worker-python",
     )
     assert calls == [1, 2, 3]
+    assert stops == [3]
     assert summary["status"] == "stopped_generation_exhausted"
     assert summary["rounds_completed"] == 2
     assert summary["stopped_round"] == 3
     assert summary["logical_optimizations_attempted"] == 128
     assert summary["outcomes"] == {"nonconverged": 128}
     assert summary["new_optimization_evidence_in_stopped_round"] is False
-    assert summary["hypotheses_updated_in_stopped_round"] is False
+    assert summary["hypothesis_assessment"].endswith(
+        "round-03/hypothesis-assessment-stopped_generation_exhausted.json"
+    )
     stream = output_root / "phosphorene/llm_guided_adaptation/seed-20261113"
     assert not (stream / "round-03/round-summary.json").exists()
-    assert "retained without update" in (stream / "report.md").read_text()
+    assert (
+        "hypothesis-assessment-stopped_generation_exhausted.json"
+        in (stream / "report.md").read_text()
+    )
     assert json.loads((stream / "round-01/round-summary.json").read_text())["task_count"] == 64
 
 
 def test_campaign_infrastructure_failure_still_raises(campaign, monkeypatch):
     manifest_path, output_root = campaign
+    assessments = _record_assessments(monkeypatch)
 
     def fail(*args, **kwargs):
         raise subprocess.CalledProcessError(1, ["infrastructure-failure"])
@@ -351,6 +392,45 @@ def test_campaign_infrastructure_failure_still_raises(campaign, monkeypatch):
         json.loads((stream / "campaign-summary.json").read_text())["termination_reason"]
         == "round_failed"
     )
+    assert assessments == [(1, "round_failed")]
+
+
+def test_failed_round_assessment_includes_terminal_results(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+    round_dir = output_root / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    task = {
+        "candidate_id": "done",
+        "structure_sha256": "sha",
+        "candidate_kind": "unique_configuration",
+        "structure_path": "initial.extxyz",
+        "optimizer": production.OPTIMIZER_SETTINGS,
+        "action_id": "action",
+        "action": {"size_tier": 4, "family": "test", "generator": "test"},
+        "formula": "P",
+        "formula_units": 1,
+        "num_atoms": 1,
+    }
+    pending = {**task, "candidate_id": "pending", "structure_sha256": "other"}
+    production._write_jsonl(round_dir / "tasks.jsonl", [task, pending])
+    production._timeout_result(task, round_dir / "tasks", time.monotonic(), time.time())
+    histories = []
+    monkeypatch.setattr(production, "_chat_model", lambda: "chat")
+    monkeypatch.setattr(
+        production,
+        "_round_hypothesis_assessment",
+        lambda *args, **kwargs: histories.append(kwargs["additional_history"]),
+    )
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["worker-failure"])
+
+    monkeypatch.setattr(production, "_run_supervised_round", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        production.run_campaign(manifest_path, output_root, "phosphorene", "worker-python")
+    (history,) = histories
+    assert history[0]["action_id"] == "action" and history[0]["attempted"] == 1
+    assert history[-1]["category"] == "round_failed"
+    assert history[-1]["new_optimization_evidence"] is True
 
 
 def test_budget_ledger_uses_cfs_compatible_lock(tmp_path, monkeypatch):

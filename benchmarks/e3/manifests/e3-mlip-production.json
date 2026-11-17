@@ -81473,7 +81473,7 @@
     "evidence": "strategy-local MACE geometry-optimization outcomes only",
     "fallback_on_invalid_llm_proposal": false,
     "llm_acquisition_calls_per_round": 1,
-    "llm_assessment_calls_per_completed_round": 1,
+    "llm_assessment_calls_per_round_outcome": 1,
     "minimum_candidates_per_size_tier_per_round": 1
   },
   "campaign_id": "e3-mlip-production",
@@ -81494,8 +81494,13 @@
   },
   "hypothesis_tracking": {
     "acquisition_calls_per_round": 1,
-    "additional_assessment_calls_per_completed_round": 1,
-    "version": "e3-mlip-hypotheses-v1"
+    "assessment_calls_per_round_outcome": 1,
+    "round_outcomes": [
+      "completed",
+      "stopped_generation_exhausted",
+      "round_time_limit",
+      "round_failed"
+    ]
   },
   "llm_guided_configuration": {
     "decoding": "provider_default",
@@ -81505,7 +81510,7 @@
     "request_limits": {
       "max_acquisition_calls_per_round": 1,
       "max_calls_per_round": 2,
-      "max_hypothesis_assessment_calls_per_completed_round": 1,
+      "max_hypothesis_assessment_calls_per_round_outcome": 1,
       "max_tokens": 8192
     }
   },
@@ -81581,12 +81586,11 @@
     "fmax_eV_A": 0.02,
     "max_cell_step_strain": null,
     "max_cell_total_strain": null,
-    "max_optimization_seconds": 60,
+    "max_optimization_seconds": 300,
     "maxiter": 500,
     "maxstep_A": 0.05,
     "mof_connectivity_guard": true,
-    "mof_connectivity_version": "atom-indexed-v1",
-    "optimization_timeout_policy": "between_steps_v1",
+    "optimization_timeout_policy": "parent_process_deadline",
     "optimizer": "FIRE",
     "phosphorene_cell_mask": [
       true,
@@ -81977,7 +81981,7 @@
   ],
   "rounds_per_material": 3,
   "schema_version": 1,
-  "scientific_objectives_sha256": "96fcee95304cbffc4187769ab3532ca7092768cbde12173f70f33c92bbe37a3a",
+  "scientific_objectives_sha256": "049c01b57c144d25a3fa3c223d1284f8de127ed440c691daff2dc394fb57b1ad",
   "seed": 20261113,
   "status": "planned_not_authorized",
   "strategies": [

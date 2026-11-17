@@ -317,6 +317,9 @@ class ChatCopilot(BaseChatModel):
         system, prompt = self._prompt(messages)
         token = self.github_token.get_secret_value() if self.github_token else None
         usages: list[Any] = []
+        # Long replies can arrive as several root assistant messages (continuations);
+        # send_and_wait returns only the last one, so collect every fragment.
+        fragments: list[tuple[str | None, str]] = []
         client = _copilot_client(token)
         await client.start()
         try:
@@ -344,18 +347,33 @@ class ChatCopilot(BaseChatModel):
                     else None
                 )
             )
+            session.on(
+                lambda event: (
+                    fragments.append((event.data.api_call_id, event.data.content or ""))
+                    if isinstance(event.data, AssistantMessageData)
+                    and not getattr(event, "agent_id", None)
+                    and not getattr(event.data, "tool_requests", None)
+                    else None
+                )
+            )
             response = await session.send_and_wait(prompt, timeout=self.request_timeout)
         finally:
             await client.stop()
         data = getattr(response, "data", None)
         if not isinstance(data, AssistantMessageData):
             raise RuntimeError(f"Copilot model {self.model!r} returned no assistant message")
-        usage = next(
-            (u for u in reversed(usages) if data.api_call_id and u.api_call_id == data.api_call_id),
-            usages[-1] if usages else None,
+        call_ids = {call_id for call_id, _ in fragments if call_id} | (
+            {data.api_call_id} if data.api_call_id else set()
         )
-        input_tokens = getattr(usage, "input_tokens", None)
-        output_tokens = getattr(usage, "output_tokens", None)
+        by_call = {u.api_call_id: u for u in usages if u.api_call_id in call_ids}
+        usage = by_call.get(data.api_call_id) or (usages[-1] if usages else None)
+        contributing = list(by_call.values()) or ([usage] if usage else [])
+        counts = [(u.input_tokens, u.output_tokens) for u in contributing]
+        complete = bool(counts) and all(
+            isinstance(i, int) and isinstance(o, int) for i, o in counts
+        )
+        input_tokens = sum(i for i, _ in counts) if complete else None
+        output_tokens = sum(o for _, o in counts) if complete else None
         provider_metadata: dict[str, str] = {}
         if isinstance(output_tokens, int) and output_tokens > self.max_completion_tokens:
             log.warning(
@@ -369,7 +387,7 @@ class ChatCopilot(BaseChatModel):
                 f"{output_tokens}>{self.max_completion_tokens}"
             )
         message = AIMessage(
-            content=data.content,
+            content="".join(text for _, text in fragments) if fragments else data.content,
             additional_kwargs=(
                 {"reasoning_content": data.reasoning_text} if data.reasoning_text else {}
             ),

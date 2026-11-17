@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -121,41 +122,6 @@ def test_unparseable_raw_llm_proposals_are_retained(tmp_path, response):
     assert saved["status"] == "rejected"
 
 
-@pytest.mark.parametrize("material", list(production.MATERIALS))
-def test_both_policies_use_identical_full_round_catalog_and_capacities(material):
-    actions = production._action_space(material)
-    floors = dict.fromkeys(map(str, production.MATERIALS[material]["tiers"]), 1)
-    deterministic = production._rule_allocation(actions, [], 64, floors)
-    proposal = {
-        "allocations": [
-            {"action_id": row["action"]["action_id"], "count": row["count"]}
-            for row in deterministic
-        ],
-        "cited_evidence_ids": ["campaign-design"],
-        "rationale": "capacity parity",
-        "scientific_hypotheses": [
-            {
-                "id": "h1",
-                "claim": "Candidate energies may differ",
-                "prediction": "MACE energies differ between structures",
-                "status": "proposed",
-                "reason": "Not yet evaluated",
-                "evidence_ids": ["campaign-design"],
-            }
-        ],
-    }
-    llm, _, _ = production._llm_allocation(
-        SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposal))),
-        material,
-        actions,
-        [],
-        64,
-        floors,
-    )
-    assert llm == deterministic
-    assert sum(row["count"] for row in llm) == 64
-
-
 @pytest.mark.parametrize("material,expected", [("zn_formate_mof", 1)])
 def test_original_seeded_exhaustion_preserves_partial_structures_and_diagnostics(
     tmp_path,
@@ -200,133 +166,12 @@ def test_preflight_refuses_missing_and_empty_gpu_workloads(tmp_path):
         production._preflight_receipt(tmp_path, tmp_path / "manifest.json")
 
 
-def test_legacy_rejected_proposal_does_not_consume_another_llm_call(tmp_path):
-    manifest = production.build_campaign_manifest()
-    spec = next(row for row in manifest["rounds"] if row["material"] == "lifepo4")
-    stream = tmp_path / "lifepo4/llm_guided_adaptation/seed-20261113"
-    stream.mkdir(parents=True)
-    production._atomic_json(
-        stream / "campaign-summary.json",
-        {
-            "stopped_round": 1,
-            "termination_reason": "round_failed",
-        },
-    )
-    with pytest.raises(ScientificCapacityError, match="one LLM call"):
-        production._materialize_round(
-            manifest,
-            spec,
-            tmp_path,
-            [],
-            SimpleNamespace(invoke=lambda _: pytest.fail("legacy call budget exhausted")),
-        )
-    saved = json.loads((stream / "round-01/acquisition/legacy-selection.json").read_text())
-    assert saved["raw_response"] is None
-    assert saved["llm_calls_consumed"] == 1
-
-
-@pytest.mark.parametrize("material", ["lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"])
-def test_authorized_recovery_preserves_original_and_grants_only_one_call(tmp_path, material):
-    manifest = production.build_campaign_manifest()
-    manifest_path = tmp_path / "manifest.json"
-    production._atomic_json(manifest_path, manifest)
-    stream = tmp_path / material / "llm_guided_adaptation/seed-20261113"
-    original = stream / "round-01"
-    original.mkdir(parents=True)
-    (original / "original-evidence.txt").write_text("original failure")
-    production._atomic_json(
-        stream / "campaign-summary.json",
-        {
-            "stopped_round": 1,
-            "termination_reason": "round_failed",
-        },
-    )
-    record = production.authorize_generation_recovery(
-        manifest_path,
-        tmp_path,
-        material,
-        "Approved one replacement decision",
-    )
-    archive = Path(record["original_attempt_archive"])
-    assert (archive / "round-01/original-evidence.txt").read_text() == "original failure"
-    assert (archive / "campaign-summary.json").is_file()
-    assert record["additional_llm_calls"] == 1
-    assert (
-        production.authorize_generation_recovery(
-            manifest_path,
-            tmp_path,
-            material,
-            "Approved one replacement decision",
-        )
-        == record
-    )
-    spec = next(row for row in manifest["rounds"] if row["material"] == material)
-    calls = []
-
-    def invoke(prompt):
-        calls.append(prompt)
-        assert "authorized-generation-recovery" in prompt
-        return SimpleNamespace(content="invalid proposal retained")
-
-    with pytest.raises(ValueError, match="no JSON"):
-        production._materialize_round(
-            manifest,
-            spec,
-            tmp_path,
-            [],
-            SimpleNamespace(invoke=invoke),
-        )
-    with pytest.raises(ScientificCapacityError, match="one LLM call already consumed"):
-        production._materialize_round(
-            manifest,
-            spec,
-            tmp_path,
-            [],
-            SimpleNamespace(invoke=invoke),
-        )
-    assert len(calls) == 1
-    proposal = json.loads((original / "acquisition/proposal-001.json").read_text())
-    assert proposal["raw_response"] == "invalid proposal retained"
-    assert manifest_path.read_text() == json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-
-
-@pytest.mark.parametrize(
-    "artifact",
-    ["generation-preflight.json", "round-summary.json", "tasks/a/attempt-01/result.json"],
-)
-def test_recovery_refuses_generated_or_optimized_work(tmp_path, artifact):
-    manifest_path = tmp_path / "manifest.json"
-    production._atomic_json(manifest_path, production.build_campaign_manifest())
-    stream = tmp_path / "lifepo4/llm_guided_adaptation/seed-20261113"
-    path = stream / "round-01" / artifact
-    path.parent.mkdir(parents=True)
-    path.write_text("{}")
-    production._atomic_json(
-        stream / "campaign-summary.json",
-        {
-            "stopped_round": 1,
-            "termination_reason": "round_failed",
-        },
-    )
-    with pytest.raises(ValueError, match="refusing to replace"):
-        production.authorize_generation_recovery(
-            manifest_path,
-            tmp_path,
-            "lifepo4",
-            "Approved",
-        )
-    assert path.is_file()
-    assert not (stream / "recovery-attempts").exists()
-
-
-def test_insufficient_shared_capacity_fails_before_either_policy_can_acquire():
+def test_insufficient_shared_capacity_fails_before_llm_acquisition():
     actions = [
         row
         for row in production._action_space("lifepo4")
         if row["family"] == "olivine" and row["size_tier"] == 4
     ]
-    with pytest.raises(ScientificCapacityError, match="cannot satisfy the round target"):
-        production._rule_allocation(actions, [], 2, {})
     with pytest.raises(ScientificCapacityError, match="cannot satisfy the round target"):
         production._llm_allocation(
             SimpleNamespace(invoke=lambda _: pytest.fail("insufficient capacity before inference")),
@@ -338,63 +183,39 @@ def test_insufficient_shared_capacity_fails_before_either_policy_can_acquire():
         )
 
 
-def test_generation_shortfall_drives_an_explicit_deterministic_decision(tmp_path, monkeypatch):
-    manifest = production.build_campaign_manifest()
-    spec = next(row for row in manifest["rounds"] if row["material"] == "lifepo4")
-    spec = {
-        **spec,
-        "strategy": "rule_based_adaptation",
-        "main_target": 1,
-        "minimum_main_count_by_tier": {"4": 1},
-    }
-    original = structure_generation.generate_structures
-    calls = []
-
-    def exhaust_first(material, action, output, **kwargs):
-        calls.append(action["action_id"])
-        if len(calls) == 1:
-            raise structure_generation.GenerationExhausted(
-                "test seeded shortfall",
-                [],
-                {"generation_attempts": 40, "accepted_unique": 0, "rejection_reasons": {}},
-            )
-        return original(material, action, output, **kwargs)
-
-    monkeypatch.setattr(structure_generation, "generate_structures", exhaust_first)
-    monkeypatch.setattr(
-        production,
-        "_verified_checkpoint",
-        lambda: (Path("unused"), production.E3_MLIP_CHECKPOINT_SHA256),
-    )
-    path, tasks_path, result = production._materialize_round(manifest, spec, tmp_path, [], None)
-    assert len(production._read_tasks(tasks_path)) == 1
-    assert result["status"] == "generation_complete"
-    assert len(calls) == 2 and calls[0] != calls[1]
-    archived = path.parent / "acquisition/attempt-001/round-manifest.json"
-    assert archived.is_file()
-    evidence = json.loads((path.parent / "acquisition/generation-history.json").read_text())
-    assert evidence[0]["action_id"] == calls[0]
-    assert evidence[0]["category"] == "generation_shortfall"
-    assert evidence[0]["accepted_unique"] == 0
-    assert not list(tmp_path.glob("**/tasks/**/result.json"))
-
-
 def test_generation_infrastructure_failure_is_not_capacity_exhaustion(tmp_path, monkeypatch):
     manifest = production.build_campaign_manifest()
     spec = next(row for row in manifest["rounds"] if row["material"] == "lifepo4")
     spec = {
         **spec,
-        "strategy": "rule_based_adaptation",
         "main_target": 1,
         "minimum_main_count_by_tier": {"4": 1},
     }
+    available, _ = executable_catalog(manifest["action_spaces"]["lifepo4"], [])
+    action = next(row for row in available if row["size_tier"] == 4)
+    proposal = {
+        "allocations": [{"action_id": action["action_id"], "count": 1}],
+        "cited_evidence_ids": ["campaign-design"],
+        "rationale": "sample the required tier",
+        "scientific_hypotheses": [
+            {
+                "id": "h1",
+                "claim": "The olivine family is sampled",
+                "prediction": "MACE relaxes the sampled structure",
+                "status": "proposed",
+                "reason": "Not yet evaluated",
+                "evidence_ids": ["campaign-design"],
+            }
+        ],
+    }
+    chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposal)))
 
     def fail(*args, **kwargs):
         raise OSError("test unavailable filesystem")
 
     monkeypatch.setattr(structure_generation, "generate_structures", fail)
     with pytest.raises(OSError, match="unavailable filesystem"):
-        production._materialize_round(manifest, spec, tmp_path, [], None)
+        production._materialize_round(manifest, spec, tmp_path, [], chat)
     diagnostics = list(tmp_path.glob("**/acquisition/failure-*.json"))
     assert len(diagnostics) == 1
     assert json.loads(diagnostics[0].read_text())["category"] == "infrastructure_failure"
@@ -622,16 +443,6 @@ def test_uncached_niggli_matching_preserves_frozen_equivalence(variant, monkeypa
     assert structure_generation.structures_symmetry_equivalent(parent, other, matcher) == expected
 
 
-def test_source_revalidation_refuses_future_adaptive_rounds(tmp_path):
-    with pytest.raises(ValueError, match="failed first rounds"):
-        production.revalidate_preflight(
-            tmp_path / "manifest.json",
-            tmp_path,
-            "lifepo4",
-            2,
-        )
-
-
 @pytest.mark.parametrize("entrypoint", ["prepare", "replicate"])
 def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
     tmp_path,
@@ -676,6 +487,14 @@ def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
 
     monkeypatch.setattr(production, "_materialize_round", exhaust)
     monkeypatch.setattr(production, "_chat_model", lambda: object())
+    assessments = []
+    monkeypatch.setattr(
+        production,
+        "_round_hypothesis_assessment",
+        lambda stream, material, seed, index, chat, **kwargs: assessments.append(
+            (index, kwargs.get("outcome", "completed"), kwargs.get("additional_history"))
+        ),
+    )
     monkeypatch.setattr(production, "_verified_checkpoint_sha256", lambda: "verified")
     monkeypatch.setattr(
         production,
@@ -707,14 +526,15 @@ def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
     assert outcome["status"] == "stopped_generation_exhausted"
     assert outcome["round_complete"] is False
     assert outcome["new_optimization_evidence"] is False
-    assert outcome["hypotheses_updated"] is False
+    assert all(row[1] == "completed" for row in assessments)
+    production.assess_generation_stop(tmp_path, "phosphorene", 3)
+    assert assessments[-1] == (3, "stopped_generation_exhausted", [outcome])
     assert outcome["optimizations_attempted"] == 0
     assert outcome["requested"] == 64 and outcome["accepted_unique"] == 2
     assert outcome["shortfalls"] == [diagnostic]
     assert set(outcome["remaining_capacity_by_group"].values()) == {0}
     compact = production._compact_history([outcome])[0]
     assert compact["shortfalls"] == [diagnostic]
-    assert compact["hypotheses_updated"] is False
     assert not (round_dir / "round-summary.json").exists()
     assert not (round_dir / "generation-preflight.json").exists()
     assert len(production._read_tasks(round_dir / "acquisition/partial-candidates.jsonl")) == 2
@@ -740,6 +560,7 @@ def test_preparation_does_not_disguise_infrastructure_or_invalid_requests(
             },
         )
     monkeypatch.setattr(production, "_chat_model", lambda: object())
+    monkeypatch.setattr(production, "_round_hypothesis_assessment", lambda *args, **kwargs: None)
 
     def fail(*args, **kwargs):
         raise error
@@ -758,6 +579,9 @@ def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, mo
         production._atomic_json(round_dir / "acquisition/outcome.json", outcome)
 
     monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    stops = []
+    monkeypatch.setattr(production, "assess_generation_stop", lambda *args: stops.append(args))
     monkeypatch.setattr(
         production,
         "_preflight_receipt",
@@ -778,6 +602,49 @@ def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, mo
         == 3
     )
     assert json.loads(capsys.readouterr().out) == outcome
+    assert stops == [(tmp_path, "phosphorene", 1)]
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (subprocess.TimeoutExpired(["prepare-round"], 1), "round_time_limit"),
+        (subprocess.CalledProcessError(1, ["prepare-round"]), "round_failed"),
+    ],
+)
+def test_prepare_cli_supervisor_failure_records_stopped_round(tmp_path, monkeypatch, error, reason):
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, {"campaign_id": "campaign"})
+
+    def supervise(*args, **kwargs):
+        raise error
+
+    stopped = []
+    monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    monkeypatch.setattr(
+        production,
+        "_record_stopped_round",
+        lambda stream, material, seed, index, outcome, summary: stopped.append(
+            (stream, index, outcome, summary["rounds_completed"])
+        ),
+    )
+    with pytest.raises(type(error)):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(manifest_path),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+                "--round-index",
+                "2",
+            ]
+        )
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    assert stopped == [(stream, 2, reason, 1)]
 
 
 def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):
@@ -798,44 +665,3 @@ def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkey
         == 0
     )
     assert json.loads(capsys.readouterr().out) == outcome
-
-
-@pytest.mark.parametrize("changed", ["manifest", "tasks", "structure"])
-def test_source_revalidation_rejects_changed_original_evidence(tmp_path, changed):
-    import hashlib
-
-    manifest_path = tmp_path / "manifest.json"
-    production._atomic_json(manifest_path, production.build_campaign_manifest())
-    round_dir = tmp_path / "lifepo4/llm_guided_adaptation/seed-20261113/round-01"
-    round_dir.mkdir(parents=True)
-    structure = round_dir / "original.extxyz"
-    structure.write_text("changed original")
-    task = {
-        "candidate_id": "original",
-        "structure_file_sha256": "original-file-digest",
-        "structure_sha256": "original-geometry-digest",
-        "structure_path": str(structure),
-    }
-    production._write_jsonl(round_dir / "tasks.jsonl", [task])
-    production._atomic_json(
-        round_dir / "generation-preflight.json",
-        {
-            "generation_seconds": 100,
-            "manifest_sha256": (
-                "changed"
-                if changed == "manifest"
-                else hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-            ),
-            "structures": {} if changed == "tasks" else {"original": "original-file-digest"},
-        },
-    )
-    with pytest.raises(
-        ValueError,
-        match={
-            "manifest": "cannot change",
-            "tasks": "identities changed",
-            "structure": "original structure changed",
-        }[changed],
-    ):
-        production.revalidate_preflight(manifest_path, tmp_path, "lifepo4", 1)
-    assert not list(round_dir.glob("acquisition/source-revalidation-*"))

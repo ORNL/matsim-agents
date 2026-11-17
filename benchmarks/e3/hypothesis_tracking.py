@@ -1,4 +1,4 @@
-"""E3 protocol version using the shared scientific hypothesis contract."""
+"""E3 use of the shared scientific hypothesis contract."""
 
 from matsim_agents.backends.llm.hypotheses import (
     FIELDS,
@@ -7,6 +7,4 @@ from matsim_agents.backends.llm.hypotheses import (
     validate_hypotheses,
 )
 
-VERSION = "e3-mlip-hypotheses-v1"
-
-__all__ = ["FIELDS", "INSTRUCTIONS", "STATUSES", "VERSION", "validate_hypotheses"]
+__all__ = ["FIELDS", "INSTRUCTIONS", "STATUSES", "validate_hypotheses"]

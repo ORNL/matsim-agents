@@ -281,7 +281,13 @@ def fake_copilot_sdk(monkeypatch):
         limits: ModelLimitsOverride | None = None
 
     state = SimpleNamespace(
-        clients=[], sessions=[], prompts=[], reply="copilot reply", finish_reason="stop"
+        clients=[],
+        sessions=[],
+        prompts=[],
+        reply="copilot reply",
+        finish_reason="stop",
+        continuations=[],
+        continuation_usage=None,
     )
 
     class FakeSession:
@@ -311,15 +317,35 @@ def fake_copilot_sdk(monkeypatch):
                         output_tokens=7,
                     ),
                 ),
+                SimpleNamespace(
+                    agent_id="sub-agent", data=AssistantMessageData(content="sub-agent text")
+                ),
             ]
+            final = AssistantMessageData(
+                content=state.reply, model="served-model", api_call_id="call-1"
+            )
+            for index, part in enumerate(state.continuations):
+                call_id = f"call-0{index}" if state.continuation_usage else None
+                if call_id:
+                    usage = AssistantUsageData(
+                        model="served-model",
+                        api_call_id=call_id,
+                        finish_reason="length",
+                        input_tokens=11,
+                        output_tokens=state.continuation_usage,
+                    )
+                    events.insert(0, SimpleNamespace(agent_id=None, data=usage))
+                events.append(
+                    SimpleNamespace(
+                        agent_id=None,
+                        data=AssistantMessageData(content=part, api_call_id=call_id),
+                    )
+                )
+            events.append(SimpleNamespace(agent_id=None, data=final))
             for event in events:
                 for handler in self.handlers:
                     handler(event)
-            return SimpleNamespace(
-                data=AssistantMessageData(
-                    content=state.reply, model="served-model", api_call_id="call-1"
-                )
-            )
+            return SimpleNamespace(data=final)
 
     class CopilotClient:
         def __init__(self, **kwargs):
@@ -398,6 +424,33 @@ class TestCopilotProvider:
         assert session["mcp_servers"] == {}
         assert session["included_builtin_agents"] == []
         assert fake_copilot_sdk.prompts == [("hi", 600)]
+
+    def test_reply_split_across_root_assistant_messages_is_joined(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        fake_copilot_sdk.continuations = ['{"a": [1, ', "2, "]
+        fake_copilot_sdk.reply = "3]}"
+        model = get_chat_model(provider="copilot", model="catalog-model")
+        assert model.invoke([HumanMessage(content="hi")]).content == '{"a": [1, 2, 3]}'
+
+    def test_split_reply_usage_is_summed_across_calls(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        fake_copilot_sdk.continuations = ["part one "]
+        fake_copilot_sdk.continuation_usage = 6
+        model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=10)
+        result = model.invoke([HumanMessage(content="hi")])
+
+        assert result.content == "part one copilot reply"
+        assert result.usage_metadata == {
+            "input_tokens": 22,
+            "output_tokens": 13,
+            "total_tokens": 35,
+        }
+        assert result.response_metadata["finish_reason"] == "stop"
+        assert result.response_metadata["provider_metadata"] == {
+            "output_token_limit_exceeded": "13>10"
+        }
 
     def test_runtime_uses_explicit_copilot_home(self, fake_copilot_sdk, monkeypatch):
         from matsim_agents.backends.llm.provider import get_chat_model

@@ -297,13 +297,10 @@ class E3Sampler:
             task.update(
                 campaign_variant=VARIANT,
                 active_model=model,
-                optimizer=e3._hard_optimizer_policy(e3.HARD_OPTIMIZATION_SECONDS),
+                optimizer=e3.OPTIMIZER_SETTINGS,
             )
         e3._write_jsonl(tasks_path, tasks)
         round_manifest.update(campaign_variant=VARIANT, active_model=model)
-        round_manifest["execution_optimizer"] = e3._hard_optimizer_policy(
-            e3.HARD_OPTIMIZATION_SECONDS
-        )
         round_manifest["model"] = "MACE E3-QE incumbent"
         round_manifest["mace_model_path"] = model["path"]
         round_manifest["mace_model"] = model["path"]

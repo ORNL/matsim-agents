@@ -380,7 +380,7 @@ def test_geometry_worker_uses_and_records_promoted_checkpoint(tmp_path, monkeypa
     assert result["mace_model_path"] == model["path"]
     assert result["active_model"] == model
     assert result["model"] != e3.MODEL_NAME
-    timeout_task = {**task, "candidate_id": "timeout", "optimizer": e3._hard_optimizer_policy(300)}
+    timeout_task = {**task, "candidate_id": "timeout", "optimizer": e3.OPTIMIZER_SETTINGS}
     import time
 
     timeout = e3._timeout_result(timeout_task, tmp_path / "tasks", time.monotonic(), time.time())

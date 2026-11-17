@@ -122,6 +122,7 @@ def test_completed_round_assessment_is_recorded_once_and_used_next(tmp_path):
     production._round_hypothesis_assessment(stream, "phosphorene", 20261113, 1, chat)
     saved = json.loads((round_dir / "hypothesis-assessment.json").read_text())
     assert saved["status"] == "accepted"
+    assert saved["round_outcome"] == "completed"
     assert saved["scientific_hypotheses"] == [updated]
     assert '"round-1"' in saved["prompt"]
     assert production._previous_hypotheses(stream, 2) == [updated]
@@ -214,6 +215,73 @@ def test_three_round_history_passes_each_assessment_forward_and_records_final(tm
     assert production._previous_hypotheses(stream, 4)[0]["claim"] == "After round 3"
 
 
+@pytest.mark.parametrize("outcome", ["round_failed", "round_time_limit"])
+def test_stopped_round_assessment_updates_the_round_proposal(tmp_path, outcome):
+    stream = tmp_path / "phosphorene" / "llm_guided_adaptation" / "seed-20261113"
+    round_dir = stream / "round-01"
+    _write_proposal(round_dir / "acquisition" / "proposal-001.json")
+    evidence_id = f"round-01-{outcome}"
+    updated = _hypothesis(evidence_id, status="unresolved", claim="Untested after stop")
+    chat = _Chat({"scientific_hypotheses": [updated]})
+    production._round_hypothesis_assessment(
+        stream,
+        "phosphorene",
+        20261113,
+        1,
+        chat,
+        outcome=outcome,
+        additional_history=[{"evidence_id": evidence_id, "category": outcome}],
+    )
+    saved = json.loads((round_dir / f"hypothesis-assessment-{outcome}.json").read_text())
+    assert saved["round_outcome"] == outcome
+    assert saved["previous_hypotheses"] == [_hypothesis()]
+    assert saved["scientific_hypotheses"] == [updated]
+    assert f"ended with outcome {outcome}" in saved["prompt"]
+    assert not (round_dir / "hypothesis-assessment.json").exists()
+    production._round_hypothesis_assessment(
+        stream, "phosphorene", 20261113, 1, chat, outcome=outcome
+    )
+    assert len(chat.prompts) == 1
+
+
+def test_generation_exhaustion_without_proposal_assesses_prior_hypotheses(tmp_path):
+    stream = tmp_path / "phosphorene" / "llm_guided_adaptation" / "seed-20261113"
+    _write_proposal(stream / "round-01" / "acquisition" / "proposal-001.json")
+    production._atomic_json(
+        stream / "round-01" / "round-summary.json",
+        {"status": "complete", "action_outcomes": []},
+    )
+    prior = _hypothesis(status="unresolved")
+    production._round_hypothesis_assessment(
+        stream, "phosphorene", 20261113, 1, _Chat({"scientific_hypotheses": [prior]})
+    )
+    evidence_id = "round-02-generation-exhausted"
+    updated = _hypothesis(evidence_id, status="unresolved", claim="Capacity exhausted")
+    production._round_hypothesis_assessment(
+        stream,
+        "phosphorene",
+        20261113,
+        2,
+        _Chat({"scientific_hypotheses": [updated]}),
+        outcome="stopped_generation_exhausted",
+        additional_history=[{"evidence_id": evidence_id, "category": "generation_shortfall"}],
+    )
+    path = stream / "round-02" / "hypothesis-assessment-stopped_generation_exhausted.json"
+    saved = production._read_hypothesis_assessment(
+        path, round_index=2, outcome="stopped_generation_exhausted"
+    )
+    assert saved["previous_hypotheses"] == [prior]
+    assert saved["scientific_hypotheses"] == [updated]
+
+
+def test_completed_round_requires_its_proposal(tmp_path):
+    stream = tmp_path / "phosphorene" / "llm_guided_adaptation" / "seed-20261113"
+    with pytest.raises(FileNotFoundError):
+        production._round_hypothesis_assessment(
+            stream, "phosphorene", 20261113, 1, _Chat({"scientific_hypotheses": []})
+        )
+
+
 def test_manifest_requires_hypothesis_protocol():
     manifest = production.build_campaign_manifest()
     manifest.pop("hypothesis_tracking")
@@ -262,7 +330,7 @@ def test_saved_proposal_must_match_prior_assessment_and_original_response(tmp_pa
         production._validate_saved_hypothesis_proposal(path, previous)
 
 
-def test_saved_recovery_proposal_uses_exact_evidence_supplied_to_llm(tmp_path):
+def test_saved_proposal_uses_exact_shortfall_evidence_supplied_to_llm(tmp_path):
     actions = production._action_space("phosphorene")
     action = next(item for item in actions if production._finite_capacity_group(item) is None)
     evidence_id = "generation-shortfall-example"
@@ -327,7 +395,7 @@ def test_next_round_rejects_missing_or_modified_prior_proposal(tmp_path):
         production._previous_hypotheses(stream, 2)
 
 
-def test_prepared_round_does_not_bypass_missing_previous_assessment(tmp_path, monkeypatch):
+def test_prepare_records_missing_previous_assessment_before_next_round(tmp_path, monkeypatch):
     manifest_path = tmp_path / "manifest.json"
     production.write_campaign_manifest(manifest_path)
     stream = tmp_path / "runs" / "phosphorene" / "llm_guided_adaptation" / "seed-20261113"
@@ -340,10 +408,22 @@ def test_prepared_round_does_not_bypass_missing_previous_assessment(tmp_path, mo
         },
     )
     production._atomic_json(stream / "round-02" / "generation-preflight.json", {})
-    monkeypatch.setattr(
-        production,
-        "_preflight_receipt",
-        lambda *args: pytest.fail("must not accept preflight without hypothesis history"),
-    )
-    with pytest.raises(FileNotFoundError, match="hypothesis-assessment.json"):
-        production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2)
+    chat = _Chat({"scientific_hypotheses": [_hypothesis(status="unresolved")]})
+    monkeypatch.setattr(production, "_chat_model", lambda: chat)
+    monkeypatch.setattr(production, "_validate_saved_hypothesis_proposal", lambda *args: None)
+    monkeypatch.setattr(production, "_preflight_receipt", lambda *args: {"ok": True})
+
+    with pytest.raises(FileNotFoundError):
+        production.record_missing_assessments(
+            tmp_path / "missing.json", tmp_path / "runs", "phosphorene", 2
+        )
+    assert not chat.prompts
+    production.record_missing_assessments(manifest_path, tmp_path / "runs", "phosphorene", 2)
+    record = json.loads((stream / "round-01" / "hypothesis-assessment.json").read_text())
+    assert record["status"] == "accepted"
+    assert len(chat.prompts) == 1
+
+    assert production.prepare_round(manifest_path, tmp_path / "runs", "phosphorene", 2) == {
+        "ok": True
+    }
+    assert len(chat.prompts) == 1
