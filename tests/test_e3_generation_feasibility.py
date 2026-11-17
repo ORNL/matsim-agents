@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -686,6 +687,66 @@ def test_stop_artifacts_wait_for_stream_ownership(tmp_path, monkeypatch):
             stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
         )
     assert not (stream / "campaign-summary.json").exists()
+
+
+def test_stop_summary_survives_assessment_failure(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+
+    def unavailable():
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(production, "_chat_model", unavailable)
+    with pytest.raises(RuntimeError, match="model unavailable"):
+        production._record_stopped_round(
+            stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+        )
+    assert json.loads((stream / "campaign-summary.json").read_text())["status"] == "incomplete"
+    assert not (stream / ".run.lock").exists()
+
+
+def test_dispatch_rechecks_assessed_stop_under_stream_lock(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(production.build_campaign_manifest()))
+    round_dir = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    production._atomic_json(round_dir / "hypothesis-assessment-round_time_limit.json", {})
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production.prepare_round(manifest_path, tmp_path, "phosphorene", 1)
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production._run_replicate(
+            manifest_path,
+            tmp_path,
+            "phosphorene",
+            "llm_guided_adaptation",
+            production.BOUNDED_SEED,
+            round_index=1,
+            round_deadline=time.monotonic() + 60,
+            round_attempt_id=None,
+        )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        production.LockTimeoutError("held"),
+        subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["child"]),
+    ],
+)
+def test_cli_preserves_busy_exit(monkeypatch, error):
+    def busy(argv):
+        raise error
+
+    monkeypatch.setattr(production, "main", busy)
+    assert production._cli([]) == production.LOCK_BUSY_EXIT
+
+
+def test_cli_reraises_other_child_failures(monkeypatch):
+    def failed(argv):
+        raise subprocess.CalledProcessError(1, ["child"])
+
+    monkeypatch.setattr(production, "main", failed)
+    with pytest.raises(subprocess.CalledProcessError):
+        production._cli([])
 
 
 def test_prepare_cli_refuses_round_with_assessed_stop(tmp_path, monkeypatch):

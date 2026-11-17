@@ -2207,6 +2207,7 @@ def prepare_round(
     stream_dir = output_root / material / strategy / f"seed-{seed}"
     stream_dir.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        _refuse_after_assessed_stop(stream_dir / f"round-{round_index:02d}")
         chat = _chat_model()
         _record_missing_assessments(stream_dir, material, round_index, chat)
         history = _history_for_round(output_root, material, strategy, seed, round_index)
@@ -2540,6 +2541,7 @@ def _run_replicate(
     stream_dir.mkdir(parents=True, exist_ok=True)
     lock_path = stream_dir / ".run.lock"
     with exclusive_lock(lock_path, timeout=0):
+        _refuse_after_assessed_stop(stream_dir / f"round-{round_index:02d}")
         _check_hard_deadline(hard_optimization_seconds)
         policy = {
             "campaign_id": manifest["campaign_id"],
@@ -2785,6 +2787,8 @@ def _record_stopped_round(
     round_dir = stream_dir / f"round-{round_index:02d}"
     summary["hypothesis_assessment"] = str(_assessment_path(round_dir, outcome))
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        _atomic_json(stream_dir / "campaign-summary.json", summary)
+        _write_campaign_report(stream_dir, summary)
         tasks_path = round_dir / "tasks.jsonl"
         tasks = _read_tasks(tasks_path) if tasks_path.is_file() else []
         finished = [
@@ -2801,8 +2805,6 @@ def _record_stopped_round(
                 "new_optimization_evidence": bool(partial),
             }],
         )
-        _atomic_json(stream_dir / "campaign-summary.json", summary)
-        _write_campaign_report(stream_dir, summary)
 
 
 def _refuse_after_assessed_stop(round_dir: Path) -> None:
@@ -3330,9 +3332,17 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
+def _cli(argv: list[str] | None = None) -> int:
     try:
-        raise SystemExit(main())
+        return main(argv)
     except LockTimeoutError as error:
         print(f"stream is busy: {error}", file=sys.stderr)
-        raise SystemExit(LOCK_BUSY_EXIT) from None
+    except subprocess.CalledProcessError as error:
+        if error.returncode != LOCK_BUSY_EXIT:
+            raise
+        print("stream is busy", file=sys.stderr)
+    return LOCK_BUSY_EXIT
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())
