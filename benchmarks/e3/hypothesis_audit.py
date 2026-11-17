@@ -110,6 +110,13 @@ def audit(root: Path) -> dict[str, list[dict[str, Any]]]:
             )
             for row in summary.get("action_outcomes", []):
                 formulas[row["evidence_id"]] = row["formula"]
+        # Failed or timed-out rounds carry their terminal results only in the assessment.
+        for path in sorted(stream.glob("round-*/hypothesis-assessment-*.json")):
+            n = int(path.parent.name.split("-")[1])
+            partial = [row for row in _load(path).get("additional_history", []) if "formula" in row]
+            if partial and n not in converged:
+                converged[n] = sum(row.get("converged", 0) for row in partial)
+            formulas.update((row["evidence_id"], row["formula"]) for row in partial)
         for round_dir in sorted(stream.glob("round-*")):
             n = int(round_dir.name.split("-")[1])
             for kind, path in _records(round_dir):

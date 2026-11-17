@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -602,6 +603,48 @@ def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, mo
     )
     assert json.loads(capsys.readouterr().out) == outcome
     assert stops == [(tmp_path, "phosphorene", 1)]
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (subprocess.TimeoutExpired(["prepare-round"], 1), "round_time_limit"),
+        (subprocess.CalledProcessError(1, ["prepare-round"]), "round_failed"),
+    ],
+)
+def test_prepare_cli_supervisor_failure_records_stopped_round(tmp_path, monkeypatch, error, reason):
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, {"campaign_id": "campaign"})
+
+    def supervise(*args, **kwargs):
+        raise error
+
+    stopped = []
+    monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    monkeypatch.setattr(
+        production,
+        "_record_stopped_round",
+        lambda stream, material, seed, index, outcome, summary: stopped.append(
+            (stream, index, outcome, summary["rounds_completed"])
+        ),
+    )
+    with pytest.raises(type(error)):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(manifest_path),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+                "--round-index",
+                "2",
+            ]
+        )
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    assert stopped == [(stream, 2, reason, 1)]
 
 
 def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):

@@ -111,6 +111,32 @@ def test_audit_classifies_revisions_and_flags_review_cases(tmp_path):
     assert len(tables["interactions"]) == 4
 
 
+def test_failed_round_assessment_uses_its_partial_outcomes(tmp_path):
+    stream = tmp_path / "mat" / "llm_guided_adaptation" / "seed-1"
+    before = _h("H1", "proposed")
+    after = _h("H1", "supported_by_mlip", evidence=("e-a", "e-b"))
+    _write(
+        stream / "round-01/hypothesis-assessment-round_failed.json",
+        {
+            "status": "accepted",
+            "prompt": "x",
+            "additional_history": [
+                {"evidence_id": "e-a", "formula": "A2B", "converged": 2},
+                {"evidence_id": "e-b", "formula": "AB2", "converged": 1},
+                {"evidence_id": "round-01-round_failed", "category": "round_failed"},
+            ],
+            "previous_hypotheses": [before],
+            "scientific_hypotheses": [after],
+        },
+    )
+    tables = hypothesis_audit.audit(tmp_path)
+
+    (row,) = tables["evolution"]
+    assert row["round_converged"] == 3
+    assert row["evidence_formulas"] == "A2B;AB2"
+    assert _flags(tables["flags"]) == {(1, "H1", "resolved_citing_multiple_compositions")}
+
+
 def test_write_outputs_and_manifest_skip_task_directories(tmp_path):
     root = tmp_path / "campaign"
     _campaign(root)

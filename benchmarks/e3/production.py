@@ -848,6 +848,7 @@ def _round_hypothesis_assessment(
         "material": material, "seed": seed,
         "after_round": round_index, "round_outcome": outcome, "prompt": prompt,
         "assessment_stage": assessment_stage,
+        "additional_history": additional_history or [],
         "model_id": getattr(chat, "model", getattr(chat, "model_id", None)),
         "valid_evidence_ids": sorted(valid_evidence), "previous_hypotheses": previous,
         **evidence_scope,
@@ -2802,6 +2803,31 @@ def _record_stopped_round(
         )
 
 
+def _record_supervisor_stop(
+    manifest: dict[str, Any], stream_dir: Path, material: str, round_index: int,
+    completed: int, error: BaseException,
+) -> None:
+    if isinstance(error, subprocess.TimeoutExpired):
+        # The killed child cannot release the stream lock it held.
+        (stream_dir / ".run.lock").unlink(missing_ok=True)
+    reason = (
+        "round_failed" if isinstance(error, subprocess.CalledProcessError) else "round_time_limit"
+    )
+    failed = {
+        "campaign_id": manifest["campaign_id"],
+        "material": material,
+        "strategy": "llm_guided_adaptation",
+        "seed": BOUNDED_SEED,
+        "status": "incomplete",
+        "rounds_completed": completed,
+        "rounds_requested": ROUNDS_PER_MATERIAL,
+        "stopped_round": round_index,
+        "termination_reason": reason,
+        **({"round_limit_seconds": ROUND_SECONDS} if reason == "round_time_limit" else {}),
+    }
+    _record_stopped_round(stream_dir, material, BOUNDED_SEED, round_index, reason, failed)
+
+
 def _run_supervised_round(command: list[str], *, seconds: float = ROUND_SECONDS) -> None:
     if not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("round deadline must be finite and positive")
@@ -2975,36 +3001,10 @@ def run_campaign(
                     [*command, "--round-attempt-id", attempt["attempt_id"]],
                     seconds=attempt["reserved_seconds"],
                 )
-        except (TimeoutError, subprocess.TimeoutExpired) as error:
-            if isinstance(error, subprocess.TimeoutExpired):
-                (stream_dir / ".run.lock").unlink(missing_ok=True)
-            failed = {
-                "campaign_id": manifest["campaign_id"],
-                "material": material,
-                "strategy": strategy,
-                "seed": seed,
-                "status": "incomplete",
-                "rounds_completed": completed,
-                "rounds_requested": ROUNDS_PER_MATERIAL,
-                "stopped_round": round_index,
-                "termination_reason": "round_time_limit",
-                "round_limit_seconds": ROUND_SECONDS,
-            }
-            _record_stopped_round(stream_dir, material, seed, round_index, "round_time_limit", failed)
-            raise
-        except subprocess.CalledProcessError:
-            failed = {
-                "campaign_id": manifest["campaign_id"],
-                "material": material,
-                "strategy": strategy,
-                "seed": seed,
-                "status": "incomplete",
-                "rounds_completed": completed,
-                "rounds_requested": ROUNDS_PER_MATERIAL,
-                "stopped_round": round_index,
-                "termination_reason": "round_failed",
-            }
-            _record_stopped_round(stream_dir, material, seed, round_index, "round_failed", failed)
+        except (TimeoutError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+            _record_supervisor_stop(
+                manifest, stream_dir, material, round_index, completed, error,
+            )
             raise
         outcome_path = stream_dir / f"round-{round_index:02d}" / "acquisition" / "outcome.json"
         summary_path = stream_dir / f"round-{round_index:02d}" / "round-summary.json"
@@ -3203,9 +3203,19 @@ def main(argv: list[str] | None = None) -> int:
                 ROUND_SECONDS - _generation_seconds(round_dir, previous)
                 - _execution_seconds(round_dir)
             )
-            if seconds <= 0:
-                raise TimeoutError("round time budget exhausted before generation")
-            _run_supervised_round(command, seconds=seconds)
+            try:
+                if seconds <= 0:
+                    raise TimeoutError("round time budget exhausted before generation")
+                _run_supervised_round(command, seconds=seconds)
+            except (
+                TimeoutError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
+            ) as error:
+                _record_supervisor_stop(
+                    json.loads(args.manifest.read_text(encoding="utf-8")),
+                    round_dir.parent, args.material, args.round_index,
+                    args.round_index - 1, error,
+                )
+                raise
             outcome_path = round_dir / "acquisition" / "outcome.json"
             if (
                 outcome_path.is_file()
