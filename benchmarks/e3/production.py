@@ -2787,6 +2787,11 @@ def _record_stopped_round(
     round_dir = stream_dir / f"round-{round_index:02d}"
     summary["hypothesis_assessment"] = str(_assessment_path(round_dir, outcome))
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        if any(
+            _assessment_path(round_dir, stop).exists()
+            for stop in ("round_failed", "round_time_limit")
+        ):
+            return
         _atomic_json(stream_dir / "campaign-summary.json", summary)
         _write_campaign_report(stream_dir, summary)
         tasks_path = round_dir / "tasks.jsonl"
@@ -2821,7 +2826,7 @@ def _record_supervisor_stop(
     manifest: dict[str, Any], stream_dir: Path, material: str, round_index: int,
     completed: int, error: BaseException,
 ) -> None:
-    if (
+    if isinstance(error, LockTimeoutError) or (
         isinstance(error, subprocess.CalledProcessError)
         and error.returncode == LOCK_BUSY_EXIT
     ):

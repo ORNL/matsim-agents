@@ -648,11 +648,18 @@ def test_prepare_cli_supervisor_failure_records_stopped_round(tmp_path, monkeypa
     assert stopped == [(stream, 2, reason, 1)]
 
 
-def test_prepare_cli_lock_contention_publishes_no_stop(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "error",
+    [
+        subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["prepare-round"]),
+        production.LockTimeoutError("execution-time.lock is held"),
+    ],
+)
+def test_prepare_cli_lock_contention_publishes_no_stop(tmp_path, monkeypatch, error):
     production._atomic_json(tmp_path / "manifest.json", {"campaign_id": "campaign"})
 
     def supervise(*args, **kwargs):
-        raise subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["prepare-round"])
+        raise error
 
     monkeypatch.setattr(production, "_run_supervised_round", supervise)
     monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
@@ -661,7 +668,7 @@ def test_prepare_cli_lock_contention_publishes_no_stop(tmp_path, monkeypatch):
         "_record_stopped_round",
         lambda *args: pytest.fail("lock contention is not a round failure"),
     )
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(type(error)):
         production.main(
             [
                 "prepare",
@@ -689,6 +696,17 @@ def test_stop_artifacts_wait_for_stream_ownership(tmp_path, monkeypatch):
     assert not (stream / "campaign-summary.json").exists()
 
 
+def test_assessed_stop_is_not_republished(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    production._atomic_json(stream / "round-01/hypothesis-assessment-round_time_limit.json", {})
+    production._atomic_json(stream / "campaign-summary.json", {"status": "time_limit"})
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    production._record_stopped_round(
+        stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+    )
+    assert json.loads((stream / "campaign-summary.json").read_text()) == {"status": "time_limit"}
+
+
 def test_stop_summary_survives_assessment_failure(tmp_path, monkeypatch):
     stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
 
@@ -696,9 +714,15 @@ def test_stop_summary_survives_assessment_failure(tmp_path, monkeypatch):
         raise RuntimeError("model unavailable")
 
     monkeypatch.setattr(production, "_chat_model", unavailable)
+    summary = {
+        "material": "phosphorene",
+        "status": "incomplete",
+        "rounds_completed": 0,
+        "rounds_requested": production.ROUNDS_PER_MATERIAL,
+    }
     with pytest.raises(RuntimeError, match="model unavailable"):
         production._record_stopped_round(
-            stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+            stream, "phosphorene", 20261113, 1, "round_failed", summary
         )
     assert json.loads((stream / "campaign-summary.json").read_text())["status"] == "incomplete"
     assert not (stream / ".run.lock").exists()
