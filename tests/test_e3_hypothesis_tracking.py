@@ -221,6 +221,7 @@ def test_stopped_round_assessment_updates_the_round_proposal(tmp_path, outcome):
     round_dir = stream / "round-01"
     _write_proposal(round_dir / "acquisition" / "proposal-001.json")
     evidence_id = f"round-01-{outcome}"
+    history = [{"evidence_id": evidence_id, "category": outcome}]
     updated = _hypothesis(evidence_id, status="unresolved", claim="Untested after stop")
     chat = _Chat({"scientific_hypotheses": [updated]})
     production._round_hypothesis_assessment(
@@ -230,7 +231,7 @@ def test_stopped_round_assessment_updates_the_round_proposal(tmp_path, outcome):
         1,
         chat,
         outcome=outcome,
-        additional_history=[{"evidence_id": evidence_id, "category": outcome}],
+        additional_history=history,
     )
     saved = json.loads((round_dir / f"hypothesis-assessment-{outcome}.json").read_text())
     assert saved["round_outcome"] == outcome
@@ -239,8 +240,18 @@ def test_stopped_round_assessment_updates_the_round_proposal(tmp_path, outcome):
     assert f"ended with outcome {outcome}" in saved["prompt"]
     assert not (round_dir / "hypothesis-assessment.json").exists()
     production._round_hypothesis_assessment(
-        stream, "phosphorene", 20261113, 1, chat, outcome=outcome
+        stream, "phosphorene", 20261113, 1, chat, outcome=outcome, additional_history=history
     )
+    with pytest.raises(RuntimeError, match="different round results"):
+        production._round_hypothesis_assessment(
+            stream,
+            "phosphorene",
+            20261113,
+            1,
+            chat,
+            outcome=outcome,
+            additional_history=[{"evidence_id": "late", "converged": 1}, *history],
+        )
     assert len(chat.prompts) == 1
 
 

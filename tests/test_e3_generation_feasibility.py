@@ -647,6 +647,67 @@ def test_prepare_cli_supervisor_failure_records_stopped_round(tmp_path, monkeypa
     assert stopped == [(stream, 2, reason, 1)]
 
 
+def test_prepare_cli_lock_contention_publishes_no_stop(tmp_path, monkeypatch):
+    production._atomic_json(tmp_path / "manifest.json", {"campaign_id": "campaign"})
+
+    def supervise(*args, **kwargs):
+        raise subprocess.CalledProcessError(production.LOCK_BUSY_EXIT, ["prepare-round"])
+
+    monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    monkeypatch.setattr(
+        production,
+        "_record_stopped_round",
+        lambda *args: pytest.fail("lock contention is not a round failure"),
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
+    assert not list(tmp_path.rglob("campaign-summary.json"))
+
+
+def test_stop_artifacts_wait_for_stream_ownership(tmp_path, monkeypatch):
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    monkeypatch.setattr(production, "_chat_model", lambda: pytest.fail("no LLM call"))
+    with (
+        production.exclusive_lock(stream / ".run.lock", timeout=0),
+        pytest.raises(production.LockTimeoutError),
+    ):
+        production._record_stopped_round(
+            stream, "phosphorene", 20261113, 1, "round_failed", {"status": "incomplete"}
+        )
+    assert not (stream / "campaign-summary.json").exists()
+
+
+def test_prepare_cli_refuses_round_with_assessed_stop(tmp_path, monkeypatch):
+    round_dir = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    production._atomic_json(round_dir / "hypothesis-assessment-round_failed.json", {})
+    monkeypatch.setattr(
+        production, "_run_supervised_round", lambda *args, **kwargs: pytest.fail("dispatched")
+    )
+    with pytest.raises(RuntimeError, match="already assessed"):
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
+
+
 def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):
     outcome = {"status": "stopped_generation_exhausted", "round_complete": False}
     monkeypatch.setattr(production, "prepare_round", lambda *args: outcome)

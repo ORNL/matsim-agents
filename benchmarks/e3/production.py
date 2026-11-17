@@ -36,7 +36,7 @@ from benchmarks.e3.mlip_model import (
     _verified_checkpoint_sha256,
 )
 from benchmarks.e3.profiles import campaign_id, structures_per_round
-from matsim_agents.execution.locking import exclusive_lock
+from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 
 REPO = Path(__file__).resolve().parents[2]
 E3_STRATEGIES = ("llm_guided_adaptation",)
@@ -82,6 +82,8 @@ HYPOTHESIS_TRACKING = {
     ],
 }
 ROUND_OUTCOMES = tuple(HYPOTHESIS_TRACKING["round_outcomes"])
+# Child exit status when another process owns the stream lock (EX_TEMPFAIL).
+LOCK_BUSY_EXIT = 75
 
 
 class AcquisitionExhausted(ScientificCapacityError):
@@ -821,6 +823,8 @@ def _round_hypothesis_assessment(
                 raise RuntimeError(f"assessment does not match the hypothesis proposal: {path}")
             if assessment.get("assessment_stage") != assessment_stage:
                 raise RuntimeError(f"assessment was recorded at a different scientific stage: {path}")
+            if assessment.get("additional_history") != (additional_history or []):
+                raise RuntimeError(f"assessment was recorded with different round results: {path}")
             return
         raise RuntimeError(f"hypothesis assessment call already attempted; inspect {path}")
     history = _history_for_round(
@@ -2778,21 +2782,17 @@ def _record_stopped_round(
     stream_dir: Path, material: str, seed: int, round_index: int, outcome: str,
     summary: dict[str, Any],
 ) -> None:
-    summary["hypothesis_assessment"] = str(
-        _assessment_path(stream_dir / f"round-{round_index:02d}", outcome)
-    )
-    _atomic_json(stream_dir / "campaign-summary.json", summary)
-    _write_campaign_report(stream_dir, summary)
     round_dir = stream_dir / f"round-{round_index:02d}"
-    tasks_path = round_dir / "tasks.jsonl"
-    tasks = _read_tasks(tasks_path) if tasks_path.is_file() else []
-    finished = [
-        task
-        for task in tasks
-        if _task_result(round_dir / "tasks" / task["candidate_id"], task) is not None
-    ]
-    partial = _round_action_outcomes(finished, round_dir / "tasks")
+    summary["hypothesis_assessment"] = str(_assessment_path(round_dir, outcome))
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        tasks_path = round_dir / "tasks.jsonl"
+        tasks = _read_tasks(tasks_path) if tasks_path.is_file() else []
+        finished = [
+            task
+            for task in tasks
+            if _task_result(round_dir / "tasks" / task["candidate_id"], task) is not None
+        ]
+        partial = _round_action_outcomes(finished, round_dir / "tasks")
         _round_hypothesis_assessment(
             stream_dir, material, seed, round_index, _chat_model(), outcome=outcome,
             additional_history=[*partial, {
@@ -2801,12 +2801,29 @@ def _record_stopped_round(
                 "new_optimization_evidence": bool(partial),
             }],
         )
+        _atomic_json(stream_dir / "campaign-summary.json", summary)
+        _write_campaign_report(stream_dir, summary)
+
+
+def _refuse_after_assessed_stop(round_dir: Path) -> None:
+    for outcome in ("round_failed", "round_time_limit"):
+        path = _assessment_path(round_dir, outcome)
+        if path.exists():
+            raise RuntimeError(
+                f"round stop was already assessed; further dispatch needs operator "
+                f"reconciliation: {path}"
+            )
 
 
 def _record_supervisor_stop(
     manifest: dict[str, Any], stream_dir: Path, material: str, round_index: int,
     completed: int, error: BaseException,
 ) -> None:
+    if (
+        isinstance(error, subprocess.CalledProcessError)
+        and error.returncode == LOCK_BUSY_EXIT
+    ):
+        return
     if isinstance(error, subprocess.TimeoutExpired):
         # The killed child cannot release the stream lock it held.
         (stream_dir / ".run.lock").unlink(missing_ok=True)
@@ -2962,6 +2979,7 @@ def run_campaign(
                 )
             completed += 1
             continue
+        _refuse_after_assessed_stop(round_dir)
         command = [
             sys.executable,
             "-m",
@@ -3183,6 +3201,7 @@ def main(argv: list[str] | None = None) -> int:
             f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
         )
         if args.command == "prepare":
+            _refuse_after_assessed_stop(round_dir)
             record_missing_assessments(
                 args.manifest,
                 args.output_root,
@@ -3312,4 +3331,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except LockTimeoutError as error:
+        print(f"stream is busy: {error}", file=sys.stderr)
+        raise SystemExit(LOCK_BUSY_EXIT) from None
