@@ -1,0 +1,235 @@
+{
+  "authorization": {
+    "id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "scope": "initial weak-scaling n01 job; 2 calculations; no other tiers"
+  },
+  "campaign_id": "E4-six-class-initial-fcc_hea-weak-n01-v1",
+  "execution_authorized": true,
+  "experiment": "weak",
+  "fixed_task_ids": null,
+  "material_class": "fcc_hea",
+  "protocol_id": "fcc-pbe-verified-v1",
+  "queue": "capacity",
+  "resource_request": {
+    "maximum_nodes_per_job": 1,
+    "maximum_walltime_hours_per_job": 101,
+    "total_node_hours_cap": 101
+  },
+  "run_id_prefix": "E4-SIX-fcc_hea-weak-n01-v1",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 128,
+      "calculation_id": "E4-SCALE-FCC-0001",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-SCALE-FCC-0001",
+      "composition": {
+        "Co": 25,
+        "Cr": 26,
+        "Fe": 26,
+        "Mn": 26,
+        "Ni": 25
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-SCALE-FCC-0001",
+        "composition_index": 1,
+        "disorder_realization": 1,
+        "random_seed": 500000
+      },
+      "ediffg_eV_A": "-0.02",
+      "ediffg_eV_per_A": "-0.02",
+      "estimated_task_walltime_hours": 48.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "frozen stage-1 generator on the E2 Cantor parent",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-FCC-0001.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POSCAR": "a43fe914ccd71b01f24a1d0cf0eb37e6eb3b1402063ae06ee98d38a74168fde0",
+        "POTCAR": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+        "START": "4f41f8c872f223b907ffef08f86b2134364ab093c245dcadbe2a34fffddac3f7"
+      },
+      "input_hashes": {
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POSCAR": "a43fe914ccd71b01f24a1d0cf0eb37e6eb3b1402063ae06ee98d38a74168fde0",
+        "POTCAR": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+        "START": "4f41f8c872f223b907ffef08f86b2134364ab093c245dcadbe2a34fffddac3f7"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 2,
+        "execution_segment_hours": 24,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 1,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "fcc_hea",
+      "mpi_ranks": 8,
+      "number_of_atoms": 128,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Co",
+          "label": "Co",
+          "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
+          "source": "external/vasp6/potcar/Co/POTCAR"
+        },
+        {
+          "element": "Cr",
+          "label": "Cr_pv",
+          "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
+        },
+        {
+          "element": "Fe",
+          "label": "Fe_pv",
+          "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
+        },
+        {
+          "element": "Mn",
+          "label": "Mn_pv",
+          "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
+        },
+        {
+          "element": "Ni",
+          "label": "Ni_pv",
+          "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+      "prepared_input_bundle_sha256": "b58870ac411f40727b3f189d0995f2faa6f52208fd2f67040f03e4d33e8e1d96",
+      "protocol_id": "fcc-pbe-verified-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-FCC-0001",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-FCC-0001.POSCAR",
+      "source_poscar_sha256": "a43fe914ccd71b01f24a1d0cf0eb37e6eb3b1402063ae06ee98d38a74168fde0",
+      "structure_family": "128-site FCC Cantor alloy",
+      "structure_id": "949cf4ff2e197628ef200631fea00ef9a1240f1fe8da569741af0598bcc8217c",
+      "threads_per_rank": 8
+    },
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 128,
+      "calculation_id": "E4-SCALE-FCC-0002",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-SCALE-FCC-0002",
+      "composition": {
+        "Co": 25,
+        "Cr": 26,
+        "Fe": 26,
+        "Mn": 26,
+        "Ni": 25
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-SCALE-FCC-0002",
+        "composition_index": 1,
+        "disorder_realization": 2,
+        "random_seed": 500001
+      },
+      "ediffg_eV_A": "-0.02",
+      "ediffg_eV_per_A": "-0.02",
+      "estimated_task_walltime_hours": 48.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "frozen stage-1 generator on the E2 Cantor parent",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-FCC-0002.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POSCAR": "17e78f5edf9921bc6ea25f1f1455e3c05d4652f593b71dea7d8c8b79d325dfc7",
+        "POTCAR": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+        "START": "4f41f8c872f223b907ffef08f86b2134364ab093c245dcadbe2a34fffddac3f7"
+      },
+      "input_hashes": {
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POSCAR": "17e78f5edf9921bc6ea25f1f1455e3c05d4652f593b71dea7d8c8b79d325dfc7",
+        "POTCAR": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+        "START": "4f41f8c872f223b907ffef08f86b2134364ab093c245dcadbe2a34fffddac3f7"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 2,
+        "execution_segment_hours": 24,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 1,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "fcc_hea",
+      "mpi_ranks": 8,
+      "number_of_atoms": 128,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Co",
+          "label": "Co",
+          "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
+          "source": "external/vasp6/potcar/Co/POTCAR"
+        },
+        {
+          "element": "Cr",
+          "label": "Cr_pv",
+          "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
+        },
+        {
+          "element": "Fe",
+          "label": "Fe_pv",
+          "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
+        },
+        {
+          "element": "Mn",
+          "label": "Mn_pv",
+          "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
+        },
+        {
+          "element": "Ni",
+          "label": "Ni_pv",
+          "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
+      "prepared_input_bundle_sha256": "8120d766c878526ba283c91afae62b28bb340f1d9c9286a0fcf7612016f37fa6",
+      "protocol_id": "fcc-pbe-verified-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-FCC-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-FCC-0002.POSCAR",
+      "source_poscar_sha256": "17e78f5edf9921bc6ea25f1f1455e3c05d4652f593b71dea7d8c8b79d325dfc7",
+      "structure_family": "128-site FCC Cantor alloy",
+      "structure_id": "65410e31e5c3a4d595053adaced2f89cf815a648e03ab987d5abc0c47aa53c1d",
+      "threads_per_rank": 8
+    }
+  ],
+  "tiers": [
+    {
+      "node_assignments": [
+        [
+          "E4-SCALE-FCC-0001",
+          "E4-SCALE-FCC-0002"
+        ]
+      ],
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "walltime_cap_hours": 101
+    }
+  ]
+}
