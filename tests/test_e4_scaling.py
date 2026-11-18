@@ -373,6 +373,74 @@ def test_task_without_walltime_estimate_is_rejected():
         scaling.task_continuation_schedule({"calculation_id": "legacy-bcc"})
 
 
+def test_task_validation_reports_all_missing_required_fields():
+    with pytest.raises(ValueError) as error:
+        scaling.validate_task({"calculation_id": "incomplete"})
+    message = str(error.value)
+    assert "incomplete" in message
+    assert "case_dir" in message
+    assert "estimated_task_walltime_hours" in message
+
+
+def test_dispatch_dry_run_prints_readable_plan(monkeypatch, capsys):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    assert (
+        scaling.main(
+            [
+                "dispatch",
+                "--manifest",
+                str(PLANS / "strong-manifest.json"),
+                "--nodes",
+                "1",
+                "--segment-id",
+                "segment-1",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "E4 strong dispatch" in output
+    assert "wave 1:" in output
+    assert "execution_authorized=false" in output
+
+
+def test_preflight_reports_pbs_blockers(monkeypatch, capsys):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    monkeypatch.delenv("PBS_JOBID", raising=False)
+    monkeypatch.delenv("PBS_NODEFILE", raising=False)
+    monkeypatch.delenv("E4_SCALING_RUN_ID", raising=False)
+    assert (
+        scaling.main(
+            [
+                "preflight",
+                "--manifest",
+                str(PLANS / "strong-manifest.json"),
+                "--nodes",
+                "1",
+                "--segment-id",
+                "segment-1",
+            ]
+        )
+        == 1
+    )
+    output = capsys.readouterr().out
+    assert "BLOCKED: manifest is not execution-authorized" in output
+    assert "BLOCKED: PBS_JOBID is not set" in output
+    assert "ready=false" in output
+
+
+def test_main_formats_expected_errors_without_traceback(monkeypatch, capsys):
+    def invalid_manifest(path):
+        raise ValueError("task FCC-1 is missing source_poscar")
+
+    monkeypatch.setattr(scaling, "validate_manifest", invalid_manifest)
+    assert scaling.main(["validate", "missing.json"]) == 2
+    captured = capsys.readouterr()
+    assert "error: task FCC-1 is missing source_poscar" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def _six_class_stub(authorized: bool, class_authorization):
     names = ("bcc_refractory", "fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof", "nb_ta_o")
     return {
