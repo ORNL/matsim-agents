@@ -1,0 +1,190 @@
+{
+  "workload_id": "e4.1-science-qe",
+  "description": "E4.1 real tasks: QE SCF labels of the shared Si contract structure on one-node groups, and HydraGNN relaxations of the paper seed structures on device slots of the driver node. Qualification uses the production thresholds (DFT converged + finite energy/forces; MLIP max force < 0.02 eV/A).",
+  "seed": 41002,
+  "timeout_sec": 1800,
+  "node_points": {
+    "weak": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ],
+    "strong": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ]
+  },
+  "repetitions": 3,
+  "task_classes": [
+    {
+      "name": "qe-si-scf",
+      "kind": "dft",
+      "estimate_seconds": 120,
+      "pool": "dft",
+      "structures": [
+        "benchmarks/portability/structures/Si.vasp"
+      ],
+      "tasks_per_node": 4,
+      "strong_tasks": 256,
+      "tasks": 16
+    },
+    {
+      "name": "hydragnn-relax",
+      "kind": "mlip-relax",
+      "estimate_seconds": 90,
+      "pool": "mlip",
+      "structures": [
+        "examples/paper_cases/seeds/hea_fcc_fcc_random.extxyz",
+        "examples/paper_cases/seeds/lifepo4_olivine.extxyz",
+        "examples/paper_cases/seeds/phosphorene_black_P.extxyz",
+        "examples/paper_cases/seeds/zn_formate_alpha.extxyz"
+      ],
+      "params": {
+        "mlip_backend": "hydragnn",
+        "logdir": "${E4_HYDRAGNN_LOGDIR}",
+        "fmax": 0.02,
+        "maxiter": 200,
+        "hydragnn_inference_head": "OMat24",
+        "mlp_device": "${E4_MLP_DEVICE}",
+        "precision": "fp64",
+        "mlp_precision": "fp64"
+      },
+      "tasks_per_node": 2,
+      "strong_tasks": 128,
+      "tasks": 8
+    }
+  ],
+  "dft_backends": {
+    "aurora": {
+      "backend": "qe",
+      "qe": {
+        "pw_bin": "${E4_QE_PW_BIN}",
+        "pw_wrapper": "deployments/aurora/launchers/_qe-step-aurora.sh",
+        "pseudo_dir": "${E4_QE_PSEUDO_DIR}",
+        "pseudopotentials": {
+          "Si": "Si_r.upf"
+        },
+        "kpts": [
+          4,
+          4,
+          4
+        ],
+        "koffset": [
+          0,
+          0,
+          0
+        ],
+        "occupations": "smearing",
+        "smearing": "gaussian",
+        "degauss_ry": 0.007,
+        "timeout_sec": 1800
+      }
+    },
+    "frontier": {
+      "backend": "qe",
+      "qe": {
+        "pw_bin": "${E4_QE_PW_BIN}",
+        "pw_wrapper": "deployments/frontier/launchers/_qe-step-frontier.sh",
+        "pseudo_dir": "${E4_QE_PSEUDO_DIR}",
+        "pseudopotentials": {
+          "Si": "Si_r.upf"
+        },
+        "kpts": [
+          4,
+          4,
+          4
+        ],
+        "koffset": [
+          0,
+          0,
+          0
+        ],
+        "occupations": "smearing",
+        "smearing": "gaussian",
+        "degauss_ry": 0.007,
+        "timeout_sec": 1800
+      }
+    },
+    "perlmutter": {
+      "backend": "qe",
+      "qe": {
+        "pw_bin": "${E4_QE_PW_BIN}",
+        "pw_wrapper": "deployments/perlmutter/launchers/_qe-step-perlmutter.sh",
+        "pseudo_dir": "${E4_QE_PSEUDO_DIR}",
+        "pseudopotentials": {
+          "Si": "Si_r.upf"
+        },
+        "kpts": [
+          4,
+          4,
+          4
+        ],
+        "koffset": [
+          0,
+          0,
+          0
+        ],
+        "occupations": "smearing",
+        "smearing": "gaussian",
+        "degauss_ry": 0.007,
+        "timeout_sec": 1800
+      }
+    }
+  },
+  "resources": {
+    "aurora": {
+      "preset": "aurora",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "frontier": {
+      "preset": "frontier",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "perlmutter": {
+      "preset": "perlmutter-gpu",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    }
+  }
+}

@@ -1,13 +1,16 @@
 # E4 first production batch (`e4-first-batch-01`)
 
-Twenty approved production DFT calculations: 8 BCC refractory alloys
-(HydraGNN), 4 Cr-Mn-Fe-Co-Ni FCC (GenesisHackathonOct26), and 8 LiFePO4
-antisite supercells (GridAI). Each calculation gets one initial one-node,
-24-hour `capacity` job; the whole batch is capped at 480 node-hours.
+Twenty production DFT calculations: 8 BCC refractory alloys, 4 Cr-Mn-Fe-Co-Ni
+FCC alloys, and 8 LiFePO4 antisite supercells. The HydraGNN allocation revision
+assigns all three families to HydraGNN while preserving the 480 node-hour cap.
+The original `batch-manifest.json` is retained unchanged for provenance; future
+submissions use `batch-manifest-hydragnn.json`. This allocation update submits
+no jobs.
 
 | File | Purpose |
 |---|---|
 | `batch-manifest.json` | Frozen case list, input/PAW hashes, allocations, and resource caps |
+| `batch-manifest-hydragnn.json` | HydraGNN allocation revision with the same cases and cap |
 | `prepare_batch.py` | Builds the private input directories (outside the repository) |
 | `job-bcc.pbs`, `job-fcc.pbs`, `job-lifepo4.pbs` | Family wrappers around `../job-e4-vasp-ab-aurora.pbs` |
 | `submit_batch.py` | Validating submission helper; dry-run by default |

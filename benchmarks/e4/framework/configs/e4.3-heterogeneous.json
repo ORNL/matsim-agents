@@ -1,0 +1,168 @@
+{
+  "workload_id": "e4.3-heterogeneous",
+  "description": "E4.3 mixed workload on a fixed allocation: long one-node DFT-like steps, short device-slot tasks, and real VASP/HydraGNN tasks. Run once per class with --classes (homogeneous baselines), once with all classes and --policy concurrent (the production dispatcher: node groups and device slots run at the same time), and once with --policy staged (classes run one after another) as the explicit comparison baseline.",
+  "seed": 43001,
+  "timeout_sec": 1800,
+  "repetitions": 3,
+  "task_classes": [
+    {
+      "name": "ctl-long-node",
+      "kind": "controlled",
+      "pool": "dft",
+      "duration": {
+        "model": "lognormal",
+        "median_seconds": 120.0,
+        "sigma": 0.5,
+        "max_seconds": 600.0
+      },
+      "artifact_bytes": 1048576,
+      "tasks": 48,
+      "faults": {
+        "fraction": 0.05,
+        "attempts": 1,
+        "mode": "no-result"
+      }
+    },
+    {
+      "name": "ctl-short-device",
+      "kind": "controlled",
+      "pool": "mlip",
+      "duration": {
+        "model": "uniform",
+        "min_seconds": 5.0,
+        "max_seconds": 20.0
+      },
+      "artifact_bytes": 65536,
+      "tasks": 240,
+      "faults": {
+        "fraction": 0.05,
+        "attempts": 1,
+        "mode": "nonfinite"
+      }
+    },
+    {
+      "name": "vasp-si-scf",
+      "kind": "dft",
+      "estimate_seconds": 120,
+      "pool": "dft",
+      "structures": [
+        "benchmarks/portability/structures/Si.vasp"
+      ],
+      "tasks": 16
+    },
+    {
+      "name": "hydragnn-relax",
+      "kind": "mlip-relax",
+      "estimate_seconds": 90,
+      "pool": "mlip",
+      "structures": [
+        "examples/paper_cases/seeds/hea_fcc_fcc_random.extxyz",
+        "examples/paper_cases/seeds/lifepo4_olivine.extxyz",
+        "examples/paper_cases/seeds/phosphorene_black_P.extxyz",
+        "examples/paper_cases/seeds/zn_formate_alpha.extxyz"
+      ],
+      "params": {
+        "mlip_backend": "hydragnn",
+        "logdir": "${E4_HYDRAGNN_LOGDIR}",
+        "fmax": 0.02,
+        "maxiter": 200,
+        "hydragnn_inference_head": "OMat24",
+        "mlp_device": "${E4_MLP_DEVICE}",
+        "precision": "fp64",
+        "mlp_precision": "fp64"
+      },
+      "tasks": 24
+    }
+  ],
+  "dft_backends": {
+    "aurora": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/aurora/launchers/_vasp-step-aurora.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "12"
+        },
+        "timeout_sec": 1800
+      }
+    },
+    "frontier": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/frontier/launchers/_vasp-step-frontier.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "8"
+        },
+        "timeout_sec": 1800
+      }
+    },
+    "perlmutter": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/perlmutter/launchers/_vasp-step-perlmutter.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "4"
+        },
+        "timeout_sec": 1800
+      }
+    }
+  },
+  "resources": {
+    "aurora": {
+      "preset": "aurora",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "frontier": {
+      "preset": "frontier",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "perlmutter": {
+      "preset": "perlmutter-gpu",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    }
+  }
+}

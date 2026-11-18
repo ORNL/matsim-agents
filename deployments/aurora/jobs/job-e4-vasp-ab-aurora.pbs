@@ -88,7 +88,14 @@ JOB_START=$(date +%s)
     exit 2
   }
 SOFT_STOP_DEADLINE=$((JOB_START + SOFT_STOP_SECONDS))
-NELM_MAX=170
+NELM_OVERRIDE="${E4_NELM_OVERRIDE:-}"
+NELM_MAX="${E4_NELM_MAX:-170}"
+[[ "${NELM_MAX}" =~ ^[1-9][0-9]*$ ]] || { echo "bad E4_NELM_MAX=${NELM_MAX}" >&2; exit 2; }
+if [[ -n "${NELM_OVERRIDE}" ]]; then
+  [[ "${NELM_OVERRIDE}" =~ ^[1-9][0-9]*$ && "${NELM_OVERRIDE}" == "${NELM_MAX}" ]] || {
+    echo "E4_NELM_OVERRIDE must be a positive integer matching E4_NELM_MAX" >&2; exit 2;
+  }
+fi
 VASP_STEP="${VASP_STEP:-${REPO}/deployments/aurora/launchers/_vasp-step-aurora.sh}"
 
 umask 077
@@ -187,6 +194,7 @@ initialize_recovery() {
       printf '%s\n' "$(realpath "${CASE_DIR}")" "${VARIANT}" "${REPEAT}" \
         "${E4_CALCULATION_ID}" \
         "${VASP_SHA256}" "${NSW_MAX}" "${STAGE_NSW_MAX}" "${EDIFFG}" \
+        "${NELM_OVERRIDE}" "${NELM_MAX}" \
         "${STAGE_MODE}" "${SINGLE_PRECISION}" "${SINGLE_PREFIX}" "${CHECKPOINT_SECONDS}" \
         "${VASP_MPICH_MODULE:-facility-default}" "${RANKS}" "${THREADS}" \
         "${MATSIM_DEVICE_MASK:-0,1,2,3,4,5,6,7,8,9,10,11}" \
@@ -371,7 +379,7 @@ run_vasp() {
     grep -qiE '^[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1([[:space:]#!]|$)' "${w}/INCAR"
   fi
   # Replace output/segment tags, including semicolon-separated assignments.
-  awk '
+  awk -v nelm_override="${NELM_OVERRIDE}" '
     {
       line = $0
       comment = ""
@@ -381,13 +389,17 @@ run_vasp() {
       }
       n = split(line, fields, ";")
       for (i = 1; i <= n; i++)
-        if (toupper(fields[i]) !~ /^[[:space:]]*(NSW|EDIFFG|LWAVE|LCHARG|LH5)[[:space:]]*=/)
+        if (toupper(fields[i]) !~ /^[[:space:]]*(NSW|EDIFFG|LWAVE|LCHARG|LH5)[[:space:]]*=/ &&
+            !(nelm_override != "" && toupper(fields[i]) ~ /^[[:space:]]*NELM[[:space:]]*=/))
           print fields[i]
       if (comment != "") print comment
     }
   ' "${w}/INCAR" > "${w}/INCAR.checkpoint"
   printf 'NSW = %s\nEDIFFG = %s\nLWAVE = .TRUE.\nLCHARG = .TRUE.\nLH5 = .FALSE.\n' \
     "${segment_nsw}" "${EDIFFG}" >> "${w}/INCAR.checkpoint"
+  if [[ -n "${NELM_OVERRIDE}" ]]; then
+    printf 'NELM = %s\n' "${NELM_OVERRIDE}" >> "${w}/INCAR.checkpoint"
+  fi
   mv "${w}/INCAR.checkpoint" "${w}/INCAR"
   grep -qE "^PREC *= *${prec}\$" "${w}/INCAR"
   kpar=$(awk 'toupper($1)=="KPAR" && $2=="=" {print $3}' "${w}/INCAR")

@@ -1,0 +1,42 @@
+#!/bin/bash
+#PBS -N e4-framework
+#PBS -l place=scatter
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+# One E4 framework measurement (E4.1 / E4.3 / E4.2 stage level) in this allocation.
+# Supply -A, -q, -l select=<nodes>, -l walltime and -v E4_* variables to qsub;
+# `benchmarks/e4/framework/cli.py jobs ... --facility aurora` prints them.
+# Required: PROJECT_ROOT, E4_CONFIG, E4_EXPERIMENT, E4_OUTPUT_ROOT.
+# Optional: E4_REPETITION, E4_POLICY, E4_CLASSES, VENV_PATH, and for real
+# classes E4_VASP_BIN, E4_VASP_POTCAR_DIR, E4_HYDRAGNN_LOGDIR.
+# Resubmitting the same command resumes the run without repeating finished tasks.
+set -euo pipefail
+E4_ALLOCATION_START_EPOCH=$(date +%s.%N)
+export E4_ALLOCATION_START_EPOCH
+
+REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
+VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
+: "${E4_CONFIG:?}" "${E4_EXPERIMENT:?}" "${E4_OUTPUT_ROOT:?}"
+
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+# lmod reads unset variables (ZSH_EVAL_CONTEXT).
+set +u
+load_aurora_frameworks_modules
+[[ -f "${VENV_PATH}/bin/activate" ]] && source "${VENV_PATH}/bin/activate"
+set -u
+export PYTHONPATH="${REPO}:${REPO}/src:${PYTHONPATH:-}"
+export E4_MLP_DEVICE="${E4_MLP_DEVICE:-xpu}"
+# The logdir sits in the frozen HydraGNN example dir (inference_fused); its checkout is two levels up.
+if [[ -n "${E4_HYDRAGNN_LOGDIR:-}" ]]; then
+  HYDRAGNN_EXAMPLE=$(dirname "${E4_HYDRAGNN_LOGDIR}")
+  export PYTHONPATH="${HYDRAGNN_EXAMPLE}:$(dirname "$(dirname "${HYDRAGNN_EXAMPLE}")"):${PYTHONPATH}"
+fi
+# Config paths are relative to the checkout.
+cd "${REPO}"
+
+ARGS=(run "${E4_CONFIG}" --facility aurora --experiment "${E4_EXPERIMENT}"
+  --repetition "${E4_REPETITION:-0}" --output-root "${E4_OUTPUT_ROOT}"
+  --policy "${E4_POLICY:-concurrent}" --auto-resume)
+[[ -n "${E4_CLASSES:-}" ]] && ARGS+=(--classes "${E4_CLASSES}")
+exec "${VENV_PATH}/bin/python" "${REPO}/benchmarks/e4/framework/cli.py" "${ARGS[@]}"

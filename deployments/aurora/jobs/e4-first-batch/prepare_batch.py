@@ -16,8 +16,8 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[4]
 STAGE1 = REPO / "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2"
 LFP_INVENTORY = REPO / "research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1"
-DEFAULT_ROOT = REPO.parent / "e4-first-batch-01"
-DEFAULT_MANIFEST = Path(__file__).resolve().parent / "batch-manifest.json"
+DEFAULT_ROOT = REPO.parent / "e4-first-batch-01-hydragnn"
+DEFAULT_MANIFEST = Path(__file__).resolve().parent / "batch-manifest-hydragnn.json"
 EXECUTABLE = Path("/soft/applications/vasp/vasp.6.6.1/bin/vasp_std")
 
 BCC_IDS = (
@@ -43,8 +43,8 @@ LFP_PAIR_COUNTS = {
 }
 ALLOCATIONS = {
     "bcc": ("HydraGNN", "job-bcc.pbs"),
-    "fcc": ("GenesisHackathonOct26", "job-fcc.pbs"),
-    "lifepo4": ("GridAI", "job-lifepo4.pbs"),
+    "fcc": ("HydraGNN", "job-fcc.pbs"),
+    "lifepo4": ("HydraGNN", "job-lifepo4.pbs"),
 }
 WALLTIME_SECONDS = 24 * 60 * 60
 VASP_SHA256 = "3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6"
@@ -340,11 +340,15 @@ def prepare_case(
     return metadata
 
 
-def prepare_weak_scaling_inputs(root: Path, source_manifest: Path, output_manifest: Path) -> list[dict[str, Any]]:
+def prepare_weak_scaling_inputs(
+    root: Path, source_manifest: Path, output_manifest: Path
+) -> list[dict[str, Any]]:
     """Freeze second disorder realizations for the unauthorized weak-scaling plan."""
     import sys
 
     sys.path.insert(0, str(REPO))
+    from ase.io import read
+
     from benchmarks.e4.aurora_dft.planning import build_candidate_inventory
     from benchmarks.e4.aurora_dft.prepare_stage1 import (
         _lattice_occupations,
@@ -352,7 +356,6 @@ def prepare_weak_scaling_inputs(root: Path, source_manifest: Path, output_manife
         canonical_occupation_hash,
         lattice_site_permutations,
     )
-    from ase.io import read
 
     root = root.resolve()
     source_poscars = REPO / "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs"
@@ -382,7 +385,9 @@ def prepare_weak_scaling_inputs(root: Path, source_manifest: Path, output_manife
         stage_records[calc_id]["canonical_structure_id"] for calc_id in BCC_IDS
     }
     known_poscar_hashes = {
-        case["input_hashes"]["POSCAR"] for case in source_manifest_data["cases"] if case["material_family"] == "bcc"
+        case["input_hashes"]["POSCAR"]
+        for case in source_manifest_data["cases"]
+        if case["material_family"] == "bcc"
     }
     source_poscars.mkdir(parents=True, mode=0o700)
     root.mkdir(parents=True, mode=0o700)
@@ -493,15 +498,20 @@ def main() -> int:
             total_by_allocation.get(case["allocation"], 0)
             + case["nodes"] * case["walltime_seconds"] // 3600
         )
-    if total_by_allocation != {
-        "HydraGNN": 192,
-        "GenesisHackathonOct26": 96,
-        "GridAI": 192,
-    }:
+    if total_by_allocation != {"HydraGNN": 480}:
         raise SystemExit(f"resource-envelope mismatch: {total_by_allocation}")
     manifest = {
         "schema_version": 1,
-        "batch_id": "E4-first-production-batch-01",
+        "batch_id": "E4-first-production-batch-01-hydragnn",
+        "input_batch_directory": root.name,
+        "allocation_revision": {
+            "reallocated_from": "batch-manifest.json",
+            "source_manifest_sha256": sha256(
+                Path(__file__).resolve().parent / "batch-manifest.json"
+            ),
+            "node_hour_cap_unchanged": True,
+            "submission_performed": False,
+        },
         "execution_authorized": False,
         "executable": str(EXECUTABLE),
         "executable_sha256": VASP_SHA256,
@@ -515,7 +525,7 @@ def main() -> int:
     manifest_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
     print(f"Prepared {len(cases)} cases at {root}")
     print(f"Frozen manifest: {manifest_path}")
-    print(f"Resource cap: {total_by_allocation}, total 480 node-hours")
+    print("HydraGNN resource cap: 480 node-hours; no jobs submitted")
     return 0
 
 

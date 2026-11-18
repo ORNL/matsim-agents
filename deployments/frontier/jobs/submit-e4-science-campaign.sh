@@ -1,0 +1,110 @@
+#!/bin/bash
+# Print (default) or submit (--submit) the Frontier E4 science campaign for one DFT code.
+# Usage: E4_ACCOUNT=<proj> submit-e4-science-campaign.sh vasp|qe [--submit] [--validate] [--experiments "weak strong fixed"]
+#   --validate  only the 2-node debug weak run (repetition 0); qualify this before production.
+# Frontier nodes: 8 GCDs (frontier preset). Partition: walltime <= 2 h -> batch; else <= 64 nodes -> extended.
+# Resubmitting a printed command resumes that run.
+set -euo pipefail
+
+CODE=${1:?usage: $0 vasp|qe [--submit] [--validate] [--experiments LIST]}
+shift
+SUBMIT=0
+VALIDATE=0
+EXPERIMENTS="weak strong fixed"
+while (($#)); do
+  case $1 in
+    --submit) SUBMIT=1 ;;
+    --validate) VALIDATE=1 ;;
+    --experiments) EXPERIMENTS=$2; shift ;;
+    *) echo "unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+PROJ=${E4_PROJECT_DIR:-$(dirname "$REPO")}
+VENV=${VENV_PATH:-$REPO/.venv}
+OUT=${E4_OUTPUT_ROOT:-$PROJ/runs/e4-framework}
+ACCOUNT=${E4_ACCOUNT:?set E4_ACCOUNT to your OLCF project}
+CONFIGS=$REPO/benchmarks/e4/framework/configs
+HYDRAGNN_DIR=${HYDRAGNN_DIR:-$PROJ/HydraGNN}
+HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_DIR/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}
+
+case $CODE in
+  vasp)
+    SUFFIX=""
+    DFT_ENV="E4_VASP_BIN=${E4_VASP_BIN:-$REPO/external/vasp6/src/vasp.6.6.1/bin/vasp_std},E4_VASP_POTCAR_DIR=${E4_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}"
+    ;;
+  qe)
+    SUFFIX="-qe"
+    DFT_ENV="E4_QE_PW_BIN=${E4_QE_PW_BIN:-$REPO/external/quantum-espresso/install-gpu/bin/pw.x},E4_QE_PSEUDO_DIR=${E4_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}"
+    ;;
+  *) echo "DFT code must be vasp or qe" >&2; exit 2 ;;
+esac
+
+# cli.py jobs expands ${VAR} in the config, so the DFT and HydraGNN variables must be set.
+export E4_HYDRAGNN_LOGDIR=$HYDRAGNN E4_MLP_DEVICE=${E4_MLP_DEVICE:-cuda}
+IFS=, read -r -a pairs <<<"$DFT_ENV"
+for pair in "${pairs[@]}"; do
+  export "${pair?}"
+  [[ -e ${pair#*=} ]] || { echo "missing: ${pair#*=}" >&2; exit 1; }
+done
+[[ -d $E4_HYDRAGNN_LOGDIR ]] || { echo "missing: $E4_HYDRAGNN_LOGDIR" >&2; exit 1; }
+mkdir -p "$OUT/slurm"
+
+plan() {  # config experiment [cli.py jobs options] -> "nodes walltime repetition" lines
+  local config=$1 experiment=$2
+  shift 2
+  PYTHONPATH="$REPO:$REPO/src" "$VENV/bin/python3" -W ignore "$REPO/benchmarks/e4/framework/cli.py" \
+    jobs "$config" --facility frontier --experiment "$experiment" "$@" 2>/dev/null |
+    python3 -c 'import json,sys;[print(r["nodes"],r["walltime"],r["repetition"]) for r in json.load(sys.stdin)["runs"]]'
+}
+
+partition_for() {  # nodes walltime -> sbatch partition/QOS options
+  local minutes=$((10#${2:0:2} * 60 + 10#${2:3:2}))
+  if ((VALIDATE)); then echo "-p batch -q debug"
+  elif ((minutes <= 120)); then echo "-p batch"
+  elif (($1 <= 64)) && ((minutes <= 1440)); then echo "-p extended"
+  else echo "no partition for $1 nodes x $2" >&2; return 1
+  fi
+}
+
+emit() {  # config experiment nodes walltime repetition name
+  local partition env
+  partition=$(partition_for "$3" "$4")
+  env="ALL,PROJECT_ROOT=$REPO,VENV_PATH=$VENV,HYDRAGNN_DIR=$HYDRAGNN_DIR,E4_CONFIG=${1#"$REPO"/}"
+  env+=",E4_EXPERIMENT=$2,E4_REPETITION=$5,E4_OUTPUT_ROOT=$OUT,E4_POLICY=concurrent"
+  env+=",E4_HYDRAGNN_LOGDIR=$E4_HYDRAGNN_LOGDIR,$DFT_ENV"
+  # shellcheck disable=SC2206
+  local cmd=(sbatch -A "$ACCOUNT" $partition -N "$3" -t "$4" -J "$6"
+    -o "$OUT/slurm/%x-%j.out" -e "$OUT/slurm/%x-%j.err" --export="$env"
+    "$REPO/deployments/frontier/jobs/job-e4-framework-frontier.sh")
+  if ((SUBMIT)); then
+    local out
+    out=$("${cmd[@]}" 2>&1) || { echo "$6: sbatch failed: $out" >&2; exit 1; }
+    echo "$6: $out"
+  else
+    printf '%q ' "${cmd[@]}"
+    echo
+  fi
+}
+
+tag=${CODE:0:1}
+if ((VALIDATE)); then
+  emit "$CONFIGS/e4.1-science$SUFFIX.json" weak 2 00:55:00 0 "e4${tag}-val"
+  exit 0
+fi
+for experiment in $EXPERIMENTS; do
+  if [[ $experiment == fixed ]]; then
+    config=$CONFIGS/e4.3-heterogeneous$SUFFIX.json
+    # The E4.3 allocation is fixed at 8 nodes (7 DFT node groups + 1 MLIP node).
+    while read -r nodes wall rep; do
+      emit "$config" fixed "$nodes" "$wall" "$rep" "e4${tag}-h-r$rep"
+    done < <(plan "$config" fixed --nodes 8)
+  else
+    config=$CONFIGS/e4.1-science$SUFFIX.json
+    while read -r nodes wall rep; do
+      emit "$config" "$experiment" "$nodes" "$wall" "$rep" "e4${tag}-${experiment:0:1}$nodes-r$rep"
+    done < <(plan "$config" "$experiment")
+  fi
+done

@@ -96,7 +96,7 @@ if [[ "$MODE" == exit-failure ]]; then exit 7; fi
 """
     )
     text = JOB.read_text()
-    settings = text.split('NSW_MAX="${E4_NSW:-30}"', 1)[1].split("NELM_MAX=170", 1)[0]
+    settings = text.split('NSW_MAX="${E4_NSW:-30}"', 1)[1].split('VASP_STEP="', 1)[0]
     directories = text.split("umask 077", 1)[1].split("log() {", 1)[0]
     lifecycle = text.split("log() {", 1)[1].split('\nlog "job=', 1)[0]
     workflow = text.split("initialize_recovery() {", 1)[1]
@@ -112,7 +112,7 @@ if [[ "$MODE" == exit-failure ]]; then exit 7; fi
         'THREADS="${E4_OMP_THREADS:-8}"\n'
         'NSW_MAX="${E4_NSW:-30}"'
         + settings
-        + "\nNELM_MAX=170\nVASP_BIN=unused\nATTEMPT=0\nSTATUS=\n"
+        + "\nVASP_BIN=unused\nATTEMPT=0\nSTATUS=\n"
         + "umask 077"
         + directories
         + "log() {"

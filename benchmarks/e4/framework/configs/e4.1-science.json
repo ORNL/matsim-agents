@@ -1,0 +1,134 @@
+{
+  "workload_id": "e4.1-science",
+  "description": "E4.1 real tasks: VASP SCF labels of the shared Si contract structure on one-node groups, and HydraGNN relaxations of the paper seed structures on device slots of the driver node. Qualification uses the production thresholds (DFT converged + finite energy/forces; MLIP max force < 0.02 eV/A).",
+  "seed": 41002,
+  "timeout_sec": 1800,
+  "node_points": {
+    "weak": [2, 4, 8, 16, 32, 64, 128],
+    "strong": [2, 4, 8, 16, 32, 64, 128]
+  },
+  "repetitions": 3,
+  "task_classes": [
+    {
+      "name": "vasp-si-scf",
+      "kind": "dft",
+      "estimate_seconds": 120,
+      "pool": "dft",
+      "structures": ["benchmarks/portability/structures/Si.vasp"],
+      "tasks_per_node": 4,
+      "strong_tasks": 256,
+      "tasks": 16
+    },
+    {
+      "name": "hydragnn-relax",
+      "kind": "mlip-relax",
+      "estimate_seconds": 90,
+      "pool": "mlip",
+      "structures": ["examples/paper_cases/seeds/hea_fcc_fcc_random.extxyz", "examples/paper_cases/seeds/lifepo4_olivine.extxyz", "examples/paper_cases/seeds/phosphorene_black_P.extxyz", "examples/paper_cases/seeds/zn_formate_alpha.extxyz"],
+      "params": {
+        "mlip_backend": "hydragnn",
+        "logdir": "${E4_HYDRAGNN_LOGDIR}",
+        "fmax": 0.02,
+        "maxiter": 200,
+        "hydragnn_inference_head": "OMat24",
+        "mlp_device": "${E4_MLP_DEVICE}",
+        "precision": "fp64",
+        "mlp_precision": "fp64"
+      },
+      "tasks_per_node": 2,
+      "strong_tasks": 128,
+      "tasks": 8
+    }
+  ],
+  "dft_backends": {
+    "aurora": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/aurora/launchers/_vasp-step-aurora.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "12"
+        },
+        "timeout_sec": 1800
+      }
+    },
+    "frontier": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/frontier/launchers/_vasp-step-frontier.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "8"
+        },
+        "timeout_sec": 1800
+      }
+    },
+    "perlmutter": {
+      "backend": "vasp",
+      "vasp": {
+        "vasp_bin": "${E4_VASP_BIN}",
+        "vasp_wrapper": "deployments/perlmutter/launchers/_vasp-step-perlmutter.sh",
+        "incar_template": "benchmarks/e4/framework/configs/INCAR.si-scf",
+        "kpoints_template": "benchmarks/e4/framework/configs/KPOINTS.si-scf",
+        "potcar_dir": "${E4_VASP_POTCAR_DIR}",
+        "extra_incar": {
+          "KPAR": "4"
+        },
+        "timeout_sec": 1800
+      }
+    }
+  },
+  "resources": {
+    "aurora": {
+      "preset": "aurora",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "frontier": {
+      "preset": "frontier",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    },
+    "perlmutter": {
+      "preset": "perlmutter-gpu",
+      "pools": {
+        "mlip": {
+          "nodes": 1,
+          "devices": "all"
+        },
+        "dft": {
+          "nodes": "rest",
+          "devices": "all",
+          "nodes_per_job": 1,
+          "ranks_per_device": 1
+        }
+      }
+    }
+  }
+}

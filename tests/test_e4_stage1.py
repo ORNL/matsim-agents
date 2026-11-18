@@ -111,8 +111,8 @@ def test_stage1_pbs_files_are_preflight_only(tmp_path):
     _stage_pbs(tmp_path)
     expected = {
         "pbs-dryrun-bcc.pbs": "HydraGNN",
-        "pbs-dryrun-fcc.pbs": "GenesisHackathonOct26",
-        "pbs-dryrun-lifepo4.pbs": "GridAI",
+        "pbs-dryrun-fcc.pbs": "HydraGNN",
+        "pbs-dryrun-lifepo4.pbs": "HydraGNN",
     }
     for filename, allocation in expected.items():
         script = (tmp_path / filename).read_text()

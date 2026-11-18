@@ -1,0 +1,39 @@
+{
+  "workload_id": "e4-smoke-local",
+  "description": "Local smoke test: short controlled tasks on synthetic node groups and local device slots, with deterministic injected failures.",
+  "seed": 20261117,
+  "timeout_sec": 60,
+  "node_points": {"weak": [1, 2, 4], "strong": [1, 2, 4]},
+  "repetitions": 1,
+  "task_classes": [
+    {
+      "name": "ctl-node",
+      "kind": "controlled",
+      "pool": "dft",
+      "duration": {"model": "uniform", "min_seconds": 0.05, "max_seconds": 0.15},
+      "artifact_bytes": 4096,
+      "tasks_per_node": 3,
+      "strong_tasks": 8,
+      "tasks": 6,
+      "faults": {"fraction": 0.25, "attempts": 1, "mode": "no-result"}
+    },
+    {
+      "name": "ctl-device",
+      "kind": "controlled",
+      "pool": "mlip",
+      "duration": {"model": "fixed", "seconds": 0.05},
+      "artifact_bytes": 1024,
+      "tasks_per_node": 2,
+      "strong_tasks": 4,
+      "tasks": 4,
+      "faults": {"fraction": 0.5, "attempts": 1, "mode": "nonfinite"}
+    }
+  ],
+  "resources": {
+    "local": {
+      "launcher": "local",
+      "geometry": {"vendor": "cpu", "devices_per_node": 0, "cores_per_node": 4},
+      "pools": {"dft": {"nodes": "all", "devices": "all", "nodes_per_job": 1}}
+    }
+  }
+}

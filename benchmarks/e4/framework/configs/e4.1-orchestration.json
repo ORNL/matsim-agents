@@ -1,0 +1,35 @@
+{
+  "workload_id": "e4.1-orchestration",
+  "description": "E4.1 controlled orchestration tasks: deterministic CPU payloads launched as one-node MPI steps through run_dft_batch. Isolates framework dispatch, placement, checkpoint and retry costs from science codes.",
+  "seed": 41001,
+  "timeout_sec": 600,
+  "node_points": {"weak": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512], "strong": [1, 2, 4, 8, 16, 32, 64, 128]},
+  "repetitions": 3,
+  "task_classes": [
+    {
+      "name": "ctl-step",
+      "kind": "controlled",
+      "pool": "dft",
+      "duration": {"model": "lognormal", "median_seconds": 30.0, "sigma": 0.25, "max_seconds": 90.0},
+      "artifact_bytes": 1048576,
+      "tasks_per_node": 32,
+      "strong_tasks": 1024,
+      "tasks": 256,
+      "faults": {"fraction": 0.02, "attempts": 1, "mode": "no-result"}
+    }
+  ],
+  "resources": {
+    "aurora": {
+      "preset": "aurora",
+      "pools": {"dft": {"nodes": "all", "devices": "all", "nodes_per_job": 1, "ranks_per_device": 1}}
+    },
+    "frontier": {
+      "preset": "frontier",
+      "pools": {"dft": {"nodes": "all", "devices": "all", "nodes_per_job": 1, "ranks_per_device": 1}}
+    },
+    "perlmutter": {
+      "preset": "perlmutter-gpu",
+      "pools": {"dft": {"nodes": "all", "devices": "all", "nodes_per_job": 1, "ranks_per_device": 1}}
+    }
+  }
+}
