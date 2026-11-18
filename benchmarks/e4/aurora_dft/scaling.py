@@ -49,6 +49,12 @@ def is_converged_final_status(status: str | None) -> bool:
     return bool(re.fullmatch(r"converged:[A-Z]\d+", status or ""))
 
 
+def parse_max_force(value: str) -> float | None:
+    """Run-record force field; failed stages log ``unknown``."""
+
+    return None if value == "unknown" else float(value)
+
+
 VASP_DEFAULT_NELM = 60
 
 
@@ -78,8 +84,7 @@ def task_nelm_max(task: dict[str, Any]) -> int:
 
 def task_continuation_schedule(task: dict[str, Any]) -> list[dict[str, Any]]:
     launch = task.get("launch_settings", {})
-    # Legacy BCC manifests carry only the shared 24 h task_layout budget.
-    budget_hours = task.get("estimated_task_walltime_hours", TASK_WALLTIME_HOURS)
+    budget_hours = task["estimated_task_walltime_hours"]
     budget_seconds = int(float(budget_hours) * 3600)
     count = int(launch.get("continuation_segments", 1))
     if count < 1:
@@ -138,7 +143,7 @@ def task_record(case: dict[str, Any]) -> dict[str, Any]:
             "omp_threads_per_rank",
             "ediffg_eV_per_A",
         )
-    }
+    } | {"estimated_task_walltime_hours": TASK_WALLTIME_HOURS}
 
 
 def validate_task(task: dict[str, Any]) -> None:
@@ -148,6 +153,9 @@ def validate_task(task: dict[str, Any]) -> None:
     bcc_task = protocol_id == PROTOCOL
     ranks = task.get("mpi_ranks")
     threads = task.get("omp_threads_per_rank")
+    walltime_hours = task.get("estimated_task_walltime_hours")
+    if not isinstance(walltime_hours, (int, float)) or walltime_hours <= 0:
+        raise ValueError(f"{task.get('calculation_id')}: task walltime estimate must be positive")
     if bcc_task and (ranks != 8 or threads != 8):
         raise ValueError(f"{task.get('calculation_id')}: unexpected MPI/OpenMP layout")
     if not isinstance(ranks, int) or ranks < 1 or not isinstance(threads, int) or threads < 1:
@@ -581,7 +589,9 @@ def dispatch(
             ),
             "restart_provenance": continuation_records,
             "total_ionic_steps": sum(int(record[1]) for record in stage_records),
-            "final_max_force_eV_per_A": float(stage_records[-1][2]) if stage_records else None,
+            "final_max_force_eV_per_A": (
+                parse_max_force(stage_records[-1][2]) if stage_records else None
+            ),
             "stage_statuses": [record[4] for record in stage_records],
         }
 

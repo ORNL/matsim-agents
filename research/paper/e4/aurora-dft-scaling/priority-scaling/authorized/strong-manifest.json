@@ -65,7 +65,8 @@
       "potcar_sha256": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-0561",
@@ -116,7 +117,8 @@
       "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1121",
@@ -167,7 +169,8 @@
       "potcar_sha256": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1201",
@@ -225,7 +228,8 @@
       "potcar_sha256": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1501",
@@ -283,7 +287,8 @@
       "potcar_sha256": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1701",
@@ -341,7 +346,8 @@
       "potcar_sha256": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1801",
@@ -406,7 +412,8 @@
       "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     },
     {
       "calculation_id": "E4-BCC-1805",
@@ -471,7 +478,8 @@
       "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
       "mpi_ranks": 8,
       "omp_threads_per_rank": 8,
-      "ediffg_eV_per_A": "-0.01"
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 24
     }
   ],
   "larger_tiers": {
