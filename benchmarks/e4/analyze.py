@@ -37,22 +37,29 @@ def _write_class_plots(rows: list[dict], output_dir: Path) -> list[str]:
     )
     for material_class in classes:
         class_rows = [row for row in rows if row["material_class"] == material_class]
+        facilities = sorted({str(row.get("facility", "unknown")) for row in class_rows})
         figure, axes = plt.subplots(2, 3, figsize=(14, 8), constrained_layout=True)
         for axis, (key, title, experiment) in zip(axes.flat, metrics, strict=True):
             for kind in ("strong", "weak") if experiment == "all" else (experiment,):
-                points = sorted(
-                    (row for row in class_rows if row["experiment"] == kind),
-                    key=lambda row: row["nodes"],
-                )
-                if not points:
-                    continue
-                x = [row["nodes"] for row in points]
-                y = [row.get(key) for row in points]
-                if key == "median_valid_task_throughput_per_second":
-                    y = [None if v is None else v / n for v, n in zip(y, x, strict=True)]
-                axis.plot(x, y, marker="o", label=kind)
+                for facility in facilities:
+                    points = sorted(
+                        (
+                            row
+                            for row in class_rows
+                            if row["experiment"] == kind
+                            and str(row.get("facility", "unknown")) == facility
+                        ),
+                        key=lambda row: row["nodes"],
+                    )
+                    if not points:
+                        continue
+                    x = [row["nodes"] for row in points]
+                    y = [row.get(key) for row in points]
+                    if key == "median_valid_task_throughput_per_second":
+                        y = [None if v is None else v / n for v, n in zip(y, x, strict=True)]
+                    axis.plot(x, y, marker="o", label=f"{facility} {kind}")
             axis.set_title(title)
-            axis.set_xlabel("Aurora nodes")
+            axis.set_xlabel("nodes")
             axis.set_xscale("log", base=2)
             axis.grid(True, alpha=0.25)
             if axis.lines:

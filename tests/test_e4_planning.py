@@ -122,6 +122,30 @@ def test_scaling_baselines_and_series_are_per_facility():
     assert by_site[("frontier", 8)]["repetitions"] == 1
 
 
+def test_class_plots_draw_one_series_per_facility(monkeypatch, tmp_path):
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    from benchmarks.e4 import analyze
+
+    aurora = [_measurement("strong", 8, 1, 100), _measurement("strong", 16, 1, 60)]
+    frontier = [
+        {**_measurement("strong", 8, 1, 40), "facility": "frontier"},
+        {**_measurement("strong", 16, 1, 30), "facility": "frontier"},
+    ]
+    figures = []
+    monkeypatch.setattr(plt.Figure, "savefig", lambda self, *a, **k: figures.append(self))
+    monkeypatch.setattr(plt, "close", lambda *a, **k: None)
+    analyze._write_class_plots(analyze_scaling(aurora + frontier), tmp_path)
+    (figure,) = figures
+    speedup = figure.axes[1]
+    assert sorted(line.get_label() for line in speedup.lines) == [
+        "aurora strong",
+        "frontier strong",
+    ]
+    assert {axis.get_xlabel() for axis in figure.axes} == {"nodes"}
+
+
 def test_weak_scaling_uses_valid_task_throughput_and_node_hours():
     rows = analyze_scaling(
         [
