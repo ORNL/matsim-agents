@@ -13,12 +13,21 @@ Source code, build artifacts, and installation are placed under
 
 ## Status
 
-The Aurora GPU build path in this repository has been validated end-to-end:
+The Intel GPU build and runtime are not yet validated. The previous Aurora
+build job exited before CMake because PBS staged the script outside the
+repository and the builder could not locate the checkout. The builder now
+falls back to `PROJECT_ROOT` or `PBS_O_WORKDIR` and verifies the requested QE
+GPU features and architecture in the CMake cache. A successful build still
+needs a compute-node smoke test to confirm actual offload.
 
-- CMake configure/build/install completed with exit code 0.
-- Install prefix contains 106 executables in `install-gpu/bin/`.
-- Core binaries present and installed: `pw.x`, `cp.x`, `ph.x`, `pp.x`, `epw.x`.
-- Runtime paths were set to Aurora oneAPI compiler runtime libs during install.
+Aurora's system QE 7.6 CPU/OpenMP binary is not evidence of GPU support; use
+the repository-built `install-gpu/bin/pw.x` for the GPU smoke test.
+
+In the QE source revision used by this build, the Intel oneAPI OpenMP target
+regions are in EPW, not the PWSCF, FFTXlib, or eigensolver paths. A successful
+`pw.x` SCF therefore does not demonstrate Intel GPU execution. The Aurora GPU
+smoke job runs the `epw_mob_polar` test and samples device utilization with
+`xpu-smi` while EPW runs.
 
 ## What gets built
 
@@ -100,11 +109,11 @@ ls -lh external/quantum-espresso/install-gpu/bin/{pw.x,cp.x,ph.x,pp.x,epw.x}
 ls external/quantum-espresso/install-gpu/bin/*.x | wc -l
 ```
 
-Expected characteristics from a successful validated build in this repo:
+Expected characteristics after a successful build:
 
-- install size around ~1 GB
-- core binaries in the multi-megabyte range (for example `pw.x` around ~17 MB)
-- executable count around ~100 (validated run produced 106)
+- core binaries in the multi-megabyte range
+- `pw.x` exists and the CMake cache records `QE_GPU=openmp;oneapi` and
+  `QE_GPU_ARCHS=intel_gpu_pvc`
 
 ## Notes
 

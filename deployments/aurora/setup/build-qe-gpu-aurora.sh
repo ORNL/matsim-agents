@@ -29,6 +29,7 @@
 #   CXX_COMPILER=mpicxx
 #   FORTRAN_COMPILER=mpifort
 #   EXTRA_CMAKE_ARGS="-DVAR=VALUE -DVAR2=VALUE2"
+#   QE_TARGETS="pw" (defaults to the common QE target groups below)
 #
 # Notes:
 # - Aurora frameworks currently provides MPICH wrappers that resolve to oneAPI
@@ -45,7 +46,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 
 if [[ ! -f "${REPO}/pyproject.toml" ]]; then
-    echo "ERROR: Could not detect matsim-agents repo root from ${SCRIPT_DIR}" >&2
+    for candidate in "${PROJECT_ROOT:-}" "${PBS_O_WORKDIR:-}"; do
+        if [[ -n "${candidate}" && -f "${candidate}/pyproject.toml" ]]; then
+            REPO="$(cd "${candidate}" && pwd)"
+            break
+        fi
+    done
+fi
+
+if [[ ! -f "${REPO}/pyproject.toml" ]]; then
+    echo "ERROR: Could not detect matsim-agents repo root from ${SCRIPT_DIR}; set PROJECT_ROOT or submit from the repo root" >&2
     exit 1
 fi
 
@@ -75,6 +85,12 @@ EXTRA_CMAKE_ARGS="${EXTRA_CMAKE_ARGS:-}"
 log()  { printf '\033[1;34m[qe-aurora-gpu]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[qe-aurora-gpu]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[qe-aurora-gpu]\033[0m %s\n' "$*" >&2; exit 1; }
+
+require_cache_entry() {
+    local entry="$1"
+    grep -Fqx -- "${entry}" "${BUILD_DIR}/CMakeCache.txt" \
+        || die "GPU configuration missing from CMakeCache.txt: ${entry}"
+}
 
 init_modules() {
     if command -v module >/dev/null 2>&1; then
@@ -182,10 +198,15 @@ fi
 
 cmake "${CMAKE_ARGS[@]}" "${SRC_DIR}" 2>&1 | tee "${BUILD_DIR}/cmake.log"
 
-QE_TARGETS=(pw cp ph pp neb hp ld1 pwall pwcond tddfpt upf xspectra)
+require_cache_entry "QE_GPU:STRING=${QE_GPU}"
+require_cache_entry "QE_GPU_ARCHS:STRING=${QE_GPU_ARCHS}"
+log "Verified QE GPU features and target architecture in CMake cache"
 
-log "Building targets: ${QE_TARGETS[*]}"
-make -j"${NCORES}" "${QE_TARGETS[@]}" 2>&1 | tee "${BUILD_DIR}/build.log"
+QE_TARGETS="${QE_TARGETS:-pw cp ph pp neb hp ld1 pwall pwcond tddfpt upf xspectra}"
+read -r -a QE_TARGET_ARRAY <<< "${QE_TARGETS}"
+
+log "Building targets: ${QE_TARGET_ARRAY[*]}"
+make -j"${NCORES}" "${QE_TARGET_ARRAY[@]}" 2>&1 | tee "${BUILD_DIR}/build.log"
 
 log "Installing"
 if make install 2>&1 | tee "${BUILD_DIR}/install.log"; then
@@ -195,6 +216,8 @@ else
     mkdir -p "${INSTALL_DIR}/bin"
     cp "${BUILD_DIR}"/bin/*.x "${INSTALL_DIR}/bin/" 2>/dev/null || true
 fi
+
+[[ -x "${INSTALL_DIR}/bin/pw.x" ]] || die "GPU build did not install an executable pw.x"
 
 log "=========================================="
 log "Build finished: $(date)"
