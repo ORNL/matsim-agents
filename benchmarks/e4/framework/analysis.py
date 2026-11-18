@@ -16,7 +16,7 @@ from benchmarks.e4.planning import analyze_scaling
 
 RUN_COLUMNS = (
     "run_id", "facility", "experiment", "policy", "material_class", "nodes", "repetition",
-    "segments", "planned_tasks", "attempted_tasks", "executed_tasks", "converged_tasks",
+    "segments", "timing_complete", "planned_tasks", "attempted_tasks", "executed_tasks", "converged_tasks",
     "valid_tasks", "failed_tasks", "retried_tasks", "total_attempts", "failed_attempts",
     "interrupted_attempts", "application_makespan_seconds", "allocation_seconds",
     "completed_tasks_per_second", "qualified_results_per_second",
@@ -49,7 +49,12 @@ def load_measurements(inputs: Iterable[str | Path]) -> list[dict[str, Any]]:
 
 
 def combine_segments(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One row per run: cumulative counts from the last segment, times summed."""
+    """One row per run: cumulative counts from the last segment, times summed.
+
+    A segment killed before it wrote its measurement leaves a gap in the segment
+    numbers; such runs keep their counts but get no summed timing, so they cannot
+    report an inflated throughput.
+    """
 
     by_run: dict[str, list[dict[str, Any]]] = {}
     for record in records:
@@ -58,9 +63,11 @@ def combine_segments(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     for segments in by_run.values():
         segments.sort(key=lambda r: r.get("segment", 1))
         row = dict(segments[-1], segments=len(segments))
+        numbers = [int(s.get("segment", 1)) for s in segments]
+        row["timing_complete"] = numbers == list(range(1, len(numbers) + 1))
         for field in _SUMMED:
             values = [s[field] for s in segments if s.get(field) is not None]
-            row[field] = sum(values) if values else None
+            row[field] = sum(values) if values and row["timing_complete"] else None
         row["task_execution_seconds"] = [
             x for s in segments for x in s.get("task_execution_seconds", [])
         ]
@@ -81,7 +88,7 @@ def heterogeneous_comparison(rows: Sequence[dict[str, Any]]) -> list[dict[str, A
     i.e. running the classes one after another.
     """
 
-    fixed = [r for r in rows if r["experiment"] == "fixed"]
+    fixed = [r for r in rows if r["experiment"] == "fixed" and r.get("timing_complete", True)]
     output = []
     for mixed in fixed:
         classes = mixed.get("task_classes") or []
@@ -175,8 +182,13 @@ def _plots(scaling: Sequence[dict[str, Any]], output: Path) -> list[str]:
                 and r.get(metric) is not None
             ]
             if points:
-                axis.plot([p["nodes"] for p in points], [p[metric] for p in points], "o-")
+                for site in sorted({p.get("facility", "unknown") for p in points}):
+                    series = [p for p in points if p.get("facility", "unknown") == site]
+                    axis.plot(
+                        [p["nodes"] for p in series], [p[metric] for p in series], "o-", label=site
+                    )
                 axis.set_xscale("log", base=2)
+                axis.legend()
             else:
                 axis.text(0.5, 0.5, "no measured points", ha="center", transform=axis.transAxes)
             axis.set(title=f"{experiment}: {title}", xlabel="nodes")
@@ -197,7 +209,9 @@ def analyze_runs(
     if not records:
         raise SystemExit("no e4-framework measurements found")
     rows = combine_segments(records)
-    scaling = analyze_scaling([r for r in rows if r["experiment"] in {"weak", "strong"}])
+    scaling = analyze_scaling(
+        [r for r in rows if r["experiment"] in {"weak", "strong"} and r["timing_complete"]]
+    )
     hetero = heterogeneous_comparison(rows)
     outputs: dict[str, Any] = {"runs": str(output / "runs.csv")}
     _write_csv(output / "runs.csv", rows, RUN_COLUMNS)
@@ -212,6 +226,7 @@ def analyze_runs(
         "runs": len(rows),
         "resumed_runs": sum(1 for r in rows if r["segments"] > 1),
         "incomplete_runs": [r["run_id"] for r in rows if r["valid_tasks"] != r["planned_tasks"]],
+        "missing_segment_timing_runs": [r["run_id"] for r in rows if not r["timing_complete"]],
         "synthetic_values_generated": False,
         "outputs": outputs,
     }

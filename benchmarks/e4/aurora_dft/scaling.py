@@ -49,9 +49,38 @@ def is_converged_final_status(status: str | None) -> bool:
     return bool(re.fullmatch(r"converged:[A-Z]\d+", status or ""))
 
 
+VASP_DEFAULT_NELM = 60
+
+
+def effective_nelm(start_text: str) -> int:
+    """Electronic-iteration limit VASP applies for a START template."""
+
+    value = VASP_DEFAULT_NELM
+    for raw in start_text.splitlines():
+        line = re.split(r"[#!]", raw, maxsplit=1)[0]
+        for field in line.split(";"):
+            match = re.fullmatch(r"\s*NELM\s*=\s*(\d+)\s*", field, flags=re.IGNORECASE)
+            if match:
+                value = int(match.group(1))
+    return value
+
+
+def task_nelm_max(task: dict[str, Any]) -> int:
+    """Audit limit for one task: the override, the frozen value, or the START NELM."""
+
+    launch = task.get("launch_settings", {})
+    if launch.get("nelm_override") is not None:
+        return int(launch["nelm_override"])
+    if launch.get("nelm_max") is not None:
+        return int(launch["nelm_max"])
+    return effective_nelm((REPO / task["case_dir"] / "START").read_text())
+
+
 def task_continuation_schedule(task: dict[str, Any]) -> list[dict[str, Any]]:
     launch = task.get("launch_settings", {})
-    budget_seconds = int(float(task["estimated_task_walltime_hours"]) * 3600)
+    # Legacy BCC manifests carry only the shared 24 h task_layout budget.
+    budget_hours = task.get("estimated_task_walltime_hours", TASK_WALLTIME_HOURS)
+    budget_seconds = int(float(budget_hours) * 3600)
     count = int(launch.get("continuation_segments", 1))
     if count < 1:
         raise ValueError(f"{task['calculation_id']}: continuation_segments must be positive")
@@ -426,6 +455,7 @@ def dispatch(
         launch = task.get("launch_settings", {})
         continuation_schedule = task_continuation_schedule(task)
         continuation_count = len(continuation_schedule)
+        nelm_max = task_nelm_max(task)
         stage_mode = launch.get("stage_mode", "low-normal")
         stage_nsw_max = int(launch.get("stage_nsw_max", 240 if stage_mode == "low-normal" else 200))
         started = datetime.now(UTC).isoformat()
@@ -462,10 +492,9 @@ def dispatch(
                     "MATSIM_ASSIGNED_NODES": host,
                 }
             )
+            env["E4_NELM_MAX"] = str(nelm_max)
             if launch.get("nelm_override") is not None:
-                nelm_override = int(launch["nelm_override"])
-                env["E4_NELM_OVERRIDE"] = str(nelm_override)
-                env["E4_NELM_MAX"] = str(int(launch.get("nelm_max", nelm_override)))
+                env["E4_NELM_OVERRIDE"] = str(int(launch["nelm_override"]))
             if stage_mode == "single":
                 env["E4_SINGLE_PRECISION"] = str(launch.get("single_precision", "Accurate"))
                 env["E4_SINGLE_PREFIX"] = str(launch.get("single_prefix", "A"))
@@ -685,7 +714,7 @@ def dispatch_six_class(
     from benchmarks.e4.aurora_dft.planning import validate_six_class_workload_manifest
 
     manifest = json.loads(manifest_path.read_text())
-    validate_six_class_workload_manifest(manifest)
+    validate_six_class_workload_manifest(manifest, for_execution=True)
     class_record = next(
         (item for item in manifest["material_classes"] if item["material_class"] == material_class),
         None,
@@ -752,7 +781,9 @@ def dispatch_six_class(
         if segments:
             segments = [
                 {
-                    "segment_id": f"segment-{segment['segment']}",
+                    "segment_id": "all"
+                    if len(segments) == 1
+                    else f"segment-{segment['segment']}",
                     "task_ids": segment["calculation_ids"],
                     "walltime_cap_hours": segment["walltime_cap_hours"],
                 }
@@ -783,8 +814,8 @@ def dispatch_six_class(
         "run_id_prefix": f"E4-SIX-{material_class}-{experiment}-v1",
         "protocol_id": class_record["protocol"]["id"],
         "queue": "capacity",
-        "execution_authorized": manifest["execution_authorized"]
-        and class_record["execution_authorized"],
+        "execution_authorized": manifest["execution_authorized"] is True
+        and class_record.get("execution_authorized") is True,
         "authorization": auth,
         "resource_request": {
             "maximum_nodes_per_job": nodes,

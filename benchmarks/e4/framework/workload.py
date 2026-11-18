@@ -101,8 +101,27 @@ def _structures(task_class_spec: Mapping[str, Any], root: Path) -> list[tuple[st
         path = (root / raw).resolve() if not Path(raw).is_absolute() else Path(raw)
         if not path.is_file():
             raise FileNotFoundError(f"structure not found: {path}")
+        _validate_chemistry(path)
         resolved.append((str(path), sha256_file(path)))
     return resolved
+
+
+_ZN_FORMATE_SPECIES = {"Zn", "C", "H", "O"}
+
+
+def _validate_chemistry(path: Path) -> None:
+    """Reject a Zn-formate seed that is not an intact Zn(HCOO)2 framework."""
+
+    from ase.io import read
+
+    species = set(read(path).get_chemical_symbols())
+    if "Zn" in species and species <= _ZN_FORMATE_SPECIES:
+        from benchmarks.e4.aurora_dft.six_class_inputs import validate_zn_formate
+
+        try:
+            validate_zn_formate(read(path))
+        except ValueError as exc:
+            raise ValueError(f"{path}: not a valid Zn(HCOO)2 structure: {exc}") from exc
 
 
 def _class_tasks(

@@ -329,6 +329,16 @@ def _candidate_from_case(case: dict[str, Any], family: str, assignment: dict[str
     }
 
 
+def _freeze_nelm(candidate: dict[str, Any], repo: Path) -> None:
+    """Record the START electronic-iteration limit so dispatch audits against it."""
+
+    from benchmarks.e4.aurora_dft.scaling import effective_nelm
+
+    start = repo / candidate["case_dir"] / "START"
+    if start.is_file():
+        candidate["launch_settings"]["nelm_max"] = effective_nelm(start.read_text())
+
+
 def _queue_for(nodes: int) -> tuple[str, str]:
     if nodes <= CAPACITY_MAX_NODES:
         return "capacity", "input_complete_authorization_required"
@@ -443,6 +453,8 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             )
             for case in cases
         ]
+        for candidate in records[name]:
+            _freeze_nelm(candidate, repo)
 
     protocol_data = {
         "bcc_refractory": {
@@ -845,17 +857,45 @@ def _validate_six_class_candidate_files(candidate: dict[str, Any], repo: Path = 
 
 
 def validate_six_class_workload_manifest(
-    manifest: dict[str, Any], *, repo: Path = REPO, verify_files: bool = True
+    manifest: dict[str, Any],
+    *,
+    repo: Path = REPO,
+    verify_files: bool = True,
+    for_execution: bool = False,
 ) -> None:
+    """Validate a six-class manifest.
+
+    Planning validation requires an unauthorized manifest. Execution validation
+    (``for_execution=True``) also accepts authorized manifests, but every
+    authorized class must then carry a separate authorization ID; the dispatcher
+    still checks that ID against ``E4_SCALING_AUTHORIZATION``.
+    """
+
     expected = {"bcc_refractory", "fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof", "nb_ta_o"}
     classes = manifest.get("material_classes", [])
     names = [entry.get("material_class") for entry in classes]
     if set(names) != expected or len(names) != len(expected):
         raise ValueError("six-class manifest must contain exactly the six E4 material classes")
-    if manifest.get("execution_authorized") is not False:
-        raise ValueError("six-class manifest must keep execution_authorized=false")
-    if manifest.get("authorization_request", {}).get("additional_jobs_authorized") is not False:
-        raise ValueError("six-class planning manifest must not authorize execution")
+    authorized = manifest.get("execution_authorized")
+    if not isinstance(authorized, bool):
+        raise ValueError("execution_authorized must be explicitly true or false")
+    if not for_execution:
+        if authorized:
+            raise ValueError("six-class manifest must keep execution_authorized=false")
+        if (
+            manifest.get("authorization_request", {}).get("additional_jobs_authorized")
+            is not False
+        ):
+            raise ValueError("six-class planning manifest must not authorize execution")
+    elif authorized:
+        for entry in classes:
+            if entry.get("execution_authorized") and not (
+                isinstance(entry.get("authorization"), dict)
+                and entry["authorization"].get("id")
+            ):
+                raise ValueError(
+                    f"{entry['material_class']}: authorized class must carry an authorization ID"
+                )
     for entry in classes:
         ids = [candidate.get("calculation_id") for candidate in entry.get("candidates", [])]
         if len(ids) != len(set(ids)):

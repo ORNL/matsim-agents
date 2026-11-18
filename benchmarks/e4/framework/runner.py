@@ -42,6 +42,7 @@ from benchmarks.e4.framework.execution import (
 from benchmarks.e4.framework.records import (
     TERMINAL_FIELD,
     AttemptRecorder,
+    TaskHistory,
     read_records,
     task_histories,
 )
@@ -291,15 +292,32 @@ class BenchmarkRun:
             task = tasks.get(task_dir.name)
             if task is None:
                 continue
-            for attempt_dir in sorted(task_dir.glob("attempt-*")):
+            attempt_dirs = sorted(
+                task_dir.glob("attempt-*"), key=lambda path: int(path.name.split("-")[1])
+            )
+            for attempt_dir in attempt_dirs:
                 attempt = int(attempt_dir.name.split("-")[1])
                 if (task.task_id, attempt) in recorded:
                     continue
                 device_result = attempt_dir / "device_result.json"
                 if task.pool in DEVICE_POOLS and device_result.is_file():
                     payload = json.loads(device_result.read_text(encoding="utf-8"))
+                    # Retry budgets count every earlier attempt, including ones reconciled here.
+                    prior = [
+                        r
+                        for r in read_records(self.recorder.path)
+                        if r["task_id"] == task.task_id and int(r["attempt"]) < attempt
+                    ]
+                    history = task_histories(prior).get(task.task_id, TaskHistory())
                     self.recorder.append(
-                        self._device_record(task, attempt_dir, payload, error=None, reconciled=True)
+                        self._device_record(
+                            task,
+                            attempt_dir,
+                            payload,
+                            error=None,
+                            reconciled=True,
+                            retries=history.retries_by_failure,
+                        )
                     )
                 else:
                     self.recorder.append(

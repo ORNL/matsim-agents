@@ -327,7 +327,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     failed = any(row[level] == "fail" for row in report["summary"] for level in levels)
-    return 1 if failed or not report["numerical_comparison_passed"] else 0
+    if failed or report["workflow_comparison_errors"]:
+        return 1
+    return 0 if report["numerical_comparison_passed"] else 1
 
 
 if __name__ == "__main__":

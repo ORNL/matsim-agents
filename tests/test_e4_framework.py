@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import csv
 import json
 from collections import Counter
 from pathlib import Path
@@ -10,10 +11,20 @@ from pathlib import Path
 import pytest
 
 from benchmarks.e4.framework import cli, portability
-from benchmarks.e4.framework.analysis import analyze_runs, heterogeneous_comparison
-from benchmarks.e4.framework.records import read_records
+from benchmarks.e4.framework.analysis import (
+    analyze_runs,
+    combine_segments,
+    heterogeneous_comparison,
+)
+from benchmarks.e4.framework.execution import RetryingTaskBackend, _artifact_matches
+from benchmarks.e4.framework.records import TaskHistory, read_records, task_histories
 from benchmarks.e4.framework.runner import BenchmarkRun
-from benchmarks.e4.framework.workload import build_workload, load_config, sha256_file
+from benchmarks.e4.framework.workload import (
+    _validate_chemistry,
+    build_workload,
+    load_config,
+    sha256_file,
+)
 
 CONFIGS = Path(__file__).resolve().parents[1] / "benchmarks" / "e4" / "framework" / "configs"
 SMOKE = load_config(CONFIGS / "smoke-local.json")
@@ -124,6 +135,69 @@ def test_exit_failures_are_not_retried(tmp_path):
     assert counts["qualified_tasks"] == 0
     assert counts["retried_tasks"] == 0
     assert all(not a["retry_scheduled"] and a["terminal"] for a in _attempts(run.run_dir))
+
+
+def test_cli_run_with_failed_tasks_exits_nonzero(tmp_path):
+    config = copy.deepcopy(SMOKE)
+    config["task_classes"] = [config["task_classes"][0]]
+    config["task_classes"][0]["faults"] = {"fraction": 1.0, "attempts": 1, "mode": "exit"}
+    path = tmp_path / "failing.json"
+    path.write_text(json.dumps(config))
+    argv = ["run", str(path), "--facility", "local", "--experiment", "weak"]
+    argv += ["--output-root", str(tmp_path / "out"), "--nodes", "1", "--local-device-slots", "2"]
+    assert cli.main(argv) == 2
+
+
+def test_controlled_artifact_must_exist_and_match_digest(tmp_path):
+    task = build_workload(SMOKE, experiment="weak", nodes=1).tasks[0]
+    artifact = tmp_path / "artifact.bin"
+    assert not _artifact_matches(task, artifact)
+    artifact.write_bytes(b"tampered")
+    assert not _artifact_matches(task, artifact)
+
+
+def test_resumed_settings_replay_recorded_recovery(tmp_path):
+    backend = RetryingTaskBackend(
+        None, {}, None, run_dir=tmp_path, backend="vasp", settings={"nelm": 60}, timeout_sec=10
+    )
+    assert backend._resumed_settings(TaskHistory()) == ({"nelm": 60}, 10)
+    records = [
+        {"task_id": "t", "attempt": 1, "settings": {"nelm": 60}, "timeout_sec": 10},
+        {
+            "task_id": "t",
+            "attempt": 2,
+            "settings": {"nelm": 120, "algo": "All"},
+            "timeout_sec": 10,
+            "retry_scheduled": True,
+            "failure_class": "scf_not_converged",
+        },
+    ]
+    history = task_histories(records)["t"]
+    assert history.last_settings_record["attempt"] == 2
+    settings, timeout = backend._resumed_settings(history)
+    assert settings == {"nelm": 240, "algo": "All"} and timeout == 10
+
+
+def test_runs_with_missing_segments_get_no_summed_timing():
+    base = {"run_id": "r", "nodes": 1, "executed_tasks": 4, "valid_tasks": 4}
+    rows = combine_segments(
+        [
+            {**base, "segment": 1, "application_makespan_seconds": 10.0},
+            {**base, "segment": 3, "application_makespan_seconds": 10.0},
+        ]
+    )
+    assert rows[0]["timing_complete"] is False
+    assert rows[0]["application_makespan_seconds"] is None
+    assert rows[0]["qualified_results_per_second"] is None
+    complete = combine_segments([{**base, "segment": 1, "application_makespan_seconds": 10.0}])
+    assert complete[0]["timing_complete"] is True
+
+
+def test_hydrogen_free_zn_formate_seed_is_rejected():
+    seeds = Path(__file__).resolve().parents[1] / "examples" / "paper_cases" / "seeds"
+    with pytest.raises(ValueError, match="not a valid Zn"):
+        _validate_chemistry(seeds / "zn_formate_alpha.extxyz")
+    _validate_chemistry(seeds / "zn_formate_alpha_relaxed.extxyz")
 
 
 def test_resume_does_not_repeat_completed_work(tmp_path):
@@ -312,6 +386,20 @@ def test_heterogeneous_comparison_uses_homogeneous_baseline():
     assert row["makespan_ratio_vs_homogeneous_serial"] == pytest.approx(60 / 90)
 
 
+def test_heterogeneous_comparison_skips_runs_with_missing_segment_timing():
+    base = {"experiment": "fixed", "facility": "aurora", "nodes": 8, "repetition": 0}
+    gap = {"timing_complete": False, "application_makespan_seconds": None}
+    ok = {"timing_complete": True}
+    a = {**base, **ok, "run_id": "a", "task_classes": ["a"], "application_makespan_seconds": 40.0}
+    b = {**base, **ok, "run_id": "b", "task_classes": ["b"], "application_makespan_seconds": 50.0}
+    mixed = {**base, **ok, "run_id": "mixed", "task_classes": ["a", "b"]}
+    mixed["application_makespan_seconds"] = 60.0
+    assert heterogeneous_comparison([{**mixed, **gap}, a, b]) == []
+    (row,) = heterogeneous_comparison([mixed, a, {**b, **gap}])
+    assert row["homogeneous_serial_makespan_seconds"] is None
+    assert row["makespan_ratio_vs_homogeneous_serial"] is None
+
+
 def test_jobs_estimator_prints_commands(capsys):
     assert (
         cli.main(
@@ -343,8 +431,13 @@ def test_local_smoke_end_to_end(tmp_path, capsys):
     runs = sorted((tmp_path / "runs").iterdir())
     assert len(runs) == len(SMOKE["node_points"]["weak"]) + len(SMOKE["node_points"]["strong"])
     report = analyze_runs([tmp_path / "runs"], tmp_path / "again", plots=False)
-    scaling = (tmp_path / "again" / "scaling.csv").read_text().splitlines()
-    assert len(scaling) == 1 + len(runs)
-    strong = [line.split(",") for line in scaling[1:] if line.startswith("strong")]
-    assert float(strong[0][7]) == 1.0 and float(strong[0][8]) == 1.0  # baseline speedup/efficiency
+    with (tmp_path / "again" / "scaling.csv").open() as stream:
+        scaling = list(csv.DictReader(stream))
+    assert len(scaling) == len(runs)
+    assert {row["facility"] for row in scaling} == {"local"}
+    strong = sorted(
+        (row for row in scaling if row["experiment"] == "strong"), key=lambda r: int(r["nodes"])
+    )
+    # baseline speedup/efficiency
+    assert float(strong[0]["speedup"]) == 1.0 and float(strong[0]["efficiency"]) == 1.0
     assert report["outputs"]

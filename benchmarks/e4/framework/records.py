@@ -27,6 +27,7 @@ class TaskHistory:
     attempts: int = 0
     terminal: dict[str, Any] | None = None
     retries_by_failure: dict[str, int] = field(default_factory=dict)
+    last_settings_record: dict[str, Any] | None = None
 
 
 class AttemptRecorder:
@@ -98,7 +99,13 @@ def task_histories(records: Iterable[Mapping[str, Any]]) -> dict[str, TaskHistor
     histories: dict[str, TaskHistory] = {}
     for record in records:
         history = histories.setdefault(record["task_id"], TaskHistory())
-        history.attempts = max(history.attempts, int(record["attempt"]))
+        attempt = int(record["attempt"])
+        if "settings" in record and (
+            history.last_settings_record is None
+            or attempt >= int(history.last_settings_record["attempt"])
+        ):
+            history.last_settings_record = dict(record)
+        history.attempts = max(history.attempts, attempt)
         if record.get("retry_scheduled") and record.get("failure_class"):
             failure = record["failure_class"]
             history.retries_by_failure[failure] = history.retries_by_failure.get(failure, 0) + 1

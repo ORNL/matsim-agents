@@ -34,6 +34,7 @@ from matsim_agents.execution.placement import ProcessLaunch
 from matsim_agents.execution.recovery import (
     DEFAULT_POLICY,
     WALLTIME_RETURN_CODE,
+    FailureClass,
     adjusted_settings,
     can_retry,
     classify_failure,
@@ -101,6 +102,8 @@ class ControlledStepExecutor:
         settings: dict[str, Any],
         timeout_sec: float | None,
     ) -> dict[str, Any]:
+        # The launcher may change directory; relative paths would then miss the attempt.
+        work_dir = Path(work_dir).resolve()
         command = [
             "bash",
             str(self.launcher),
@@ -180,6 +183,7 @@ class ControlledStepExecutor:
                 == expected_digest(task.task_id, task.seed, task.artifact_bytes)
             ),
             "metric_finite": bool(result and math.isfinite(float(result["metric"]))),
+            "artifact_matches": _artifact_matches(task, work_dir / "artifact.bin"),
         }
         outcome.update(
             converged=converged,
@@ -189,6 +193,14 @@ class ControlledStepExecutor:
             failure_reason=reason,
         )
         return outcome
+
+
+def _artifact_matches(task: TaskSpec, artifact: Path) -> bool:
+    """The on-disk artifact exists and hashes to the deterministic digest."""
+
+    return artifact.is_file() and sha256_file(artifact) == expected_digest(
+        task.task_id, task.seed, task.artifact_bytes
+    )
 
 
 def _forces_ok(result: DFTResult, n_atoms: int) -> bool:
@@ -387,7 +399,7 @@ class RetryingTaskBackend:
         history = self.histories.get(task.task_id, TaskHistory())
         retries = dict(history.retries_by_failure)
         attempt = history.attempts
-        settings, timeout = dict(self.settings), self.timeout_sec
+        settings, timeout = self._resumed_settings(history)
         queued_seconds = self.recorder.offset() - self.recorder.offset(self.dispatch_origin)
         while True:
             attempt += 1
@@ -444,6 +456,20 @@ class RetryingTaskBackend:
                 return self._result(task, work_dir, outcome, ended - started)
             retries[failure.value] = retries.get(failure.value, 0) + 1
             settings, timeout = adjusted_settings(failure, self.backend, settings, timeout)
+
+    def _resumed_settings(self, history: TaskHistory) -> tuple[dict[str, Any], float | None]:
+        """Settings and timeout for the next attempt, replaying recorded recovery."""
+
+        record = history.last_settings_record
+        if record is None:
+            return dict(self.settings), self.timeout_sec
+        settings = dict(record.get("settings") or {})
+        timeout = record.get("timeout_sec")
+        if record.get("retry_scheduled") and record.get("failure_class"):
+            settings, timeout = adjusted_settings(
+                FailureClass(record["failure_class"]), self.backend, settings, timeout
+            )
+        return settings, timeout
 
     def _result(
         self, task: TaskSpec, work_dir: Path, outcome: Mapping[str, Any], seconds: float
