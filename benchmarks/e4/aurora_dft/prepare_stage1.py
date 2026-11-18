@@ -531,8 +531,8 @@ def _case_protocol(family: str, source: dict[str, str]) -> dict[str, Any]:
 def _stage_pbs(output: Path) -> None:
     definitions = (
         ("bcc", "bcc_refractory", "HydraGNN"),
-        ("fcc", "fcc_hea", "GenesisHackathonOct26"),
-        ("lifepo4", "lifepo4", "GridAI"),
+        ("fcc", "fcc_hea", "HydraGNN"),
+        ("lifepo4", "lifepo4", "HydraGNN"),
     )
     for short, family, allocation in definitions:
         path = output / f"pbs-dryrun-{short}.pbs"

@@ -1,0 +1,17 @@
+SYSTEM = E4 Si SCF single point ({natoms} atoms)
+PREC   = Normal
+ENCUT  = 400
+EDIFF  = 1E-6
+ALGO   = Normal
+NELM   = 100
+NELMIN = 4
+ISMEAR = 0
+SIGMA  = 0.1
+LREAL  = .FALSE.
+ISPIN  = 1
+ISYM   = 0
+NSW    = 0
+IBRION = -1
+LWAVE  = .FALSE.
+LCHARG = .FALSE.
+LORBIT = 0

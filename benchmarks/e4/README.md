@@ -1,5 +1,9 @@
 # E4 planning and dry-run preflight
 
+The E4.1/E4.2/E4.3 measurement framework (workloads, runs, resume, analysis,
+portability levels, job commands) is documented in
+[framework/README.md](framework/README.md).
+
 This folder prepares the E4 campaign only. It has no scheduler-submit code. `prepare.py` validates synthetic allocation layouts through the existing `ResourcePlan` resolver and writes a run matrix whose every row is `not_authorized`.
 
 From the repository root:

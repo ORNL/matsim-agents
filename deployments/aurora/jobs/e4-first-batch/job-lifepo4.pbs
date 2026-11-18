@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -N e4-lifepo4
-#PBS -A GridAI
+#PBS -A HydraGNN
 #PBS -q capacity
 #PBS -l select=1
 #PBS -l place=scatter
