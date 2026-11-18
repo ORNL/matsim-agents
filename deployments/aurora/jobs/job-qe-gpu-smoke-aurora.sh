@@ -85,10 +85,21 @@ grep -R -Fq 'JOB DONE.' "${TEST_SUITE}/epw_mob_polar" || {
   echo "QE EPW test runner failed with status ${TEST_RC}; see ${RUN_DIR}/epw-test.log" >&2
   exit "${TEST_RC}"
 }
-grep -Eq '([1-9][0-9]*\.?[0-9]*|0\.[0-9]*[1-9])[[:space:]]*%' \
-  "${RUN_DIR}/gpu-telemetry.log" || {
-  echo "EPW test passed but xpu-smi recorded no nonzero GPU utilization; see ${RUN_DIR}/gpu-telemetry.log" >&2
+# EPW kernels are too short to register in 1 s xpu-smi samples; LIBOMPTARGET_INFO logs each launch.
+shopt -s nullglob
+EPW_ERR_LOGS=("${TEST_SUITE}"/epw_mob_polar/test.err.aurora-intel-gpu.inp=epw*.in.args=*)
+shopt -u nullglob
+[[ "${#EPW_ERR_LOGS[@]}" -gt 0 ]] || {
+  echo "No EPW stderr logs found to verify GPU kernel execution" >&2
   exit 1
 }
+for log in "${EPW_ERR_LOGS[@]}"; do
+  kernels=$(grep -c 'Executed kernel entry .* on device' "${log}" || true)
+  echo "$(basename "${log}"): ${kernels} GPU kernels executed"
+  [[ "${kernels}" -gt 0 ]] || {
+    echo "EPW stage ran without executing any GPU kernels: ${log}" >&2
+    exit 1
+  }
+done
 
-echo "PASS: QE EPW test passed and xpu-smi recorded GPU utilization."
+echo "PASS: QE EPW test passed and every EPW stage executed GPU kernels."

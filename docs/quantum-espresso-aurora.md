@@ -26,8 +26,9 @@ the repository-built `install-gpu/bin/pw.x` for the GPU smoke test.
 In the QE source revision used by this build, the Intel oneAPI OpenMP target
 regions are in EPW, not the PWSCF, FFTXlib, or eigensolver paths. A successful
 `pw.x` SCF therefore does not demonstrate Intel GPU execution. The Aurora GPU
-smoke job runs the `epw_mob_polar` test and samples device utilization with
-`xpu-smi` while EPW runs.
+smoke job runs the `epw_mob_polar` test and requires every EPW stage's
+`LIBOMPTARGET_INFO` log to record executed GPU kernels; EPW kernels are too short
+to show up reliably in the `xpu-smi` telemetry it also records.
 
 Unpatched QE `develop` (71e4e9b) aborts `epw_mob_polar` stages `epw2`/`epw3`
 under `OMP_TARGET_OFFLOAD=MANDATORY` with a PVC page fault
