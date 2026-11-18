@@ -70,7 +70,7 @@ def task_nelm_max(task: dict[str, Any]) -> int:
 
     launch = task.get("launch_settings", {})
     if launch.get("nelm_override") is not None:
-        return int(launch.get("nelm_max", launch["nelm_override"]))
+        return int(launch["nelm_override"])
     if launch.get("nelm_max") is not None:
         return int(launch["nelm_max"])
     return effective_nelm((REPO / task["case_dir"] / "START").read_text())

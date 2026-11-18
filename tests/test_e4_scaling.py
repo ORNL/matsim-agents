@@ -317,6 +317,8 @@ def test_task_nelm_max_prefers_override_then_frozen_then_start(monkeypatch, tmp_
     assert scaling.task_nelm_max(task) == 60
     assert scaling.task_nelm_max({**task, "launch_settings": {"nelm_max": 200}}) == 200
     assert scaling.task_nelm_max({**task, "launch_settings": {"nelm_override": 300}}) == 300
+    both = {**task, "launch_settings": {"nelm_max": 200, "nelm_override": 400}}
+    assert scaling.task_nelm_max(both) == 400
 
 
 def test_legacy_task_without_walltime_estimate_uses_task_layout_budget():

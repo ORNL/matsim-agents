@@ -386,6 +386,20 @@ def test_heterogeneous_comparison_uses_homogeneous_baseline():
     assert row["makespan_ratio_vs_homogeneous_serial"] == pytest.approx(60 / 90)
 
 
+def test_heterogeneous_comparison_skips_runs_with_missing_segment_timing():
+    base = {"experiment": "fixed", "facility": "aurora", "nodes": 8, "repetition": 0}
+    gap = {"timing_complete": False, "application_makespan_seconds": None}
+    ok = {"timing_complete": True}
+    a = {**base, **ok, "run_id": "a", "task_classes": ["a"], "application_makespan_seconds": 40.0}
+    b = {**base, **ok, "run_id": "b", "task_classes": ["b"], "application_makespan_seconds": 50.0}
+    mixed = {**base, **ok, "run_id": "mixed", "task_classes": ["a", "b"]}
+    mixed["application_makespan_seconds"] = 60.0
+    assert heterogeneous_comparison([{**mixed, **gap}, a, b]) == []
+    (row,) = heterogeneous_comparison([mixed, a, {**b, **gap}])
+    assert row["homogeneous_serial_makespan_seconds"] is None
+    assert row["makespan_ratio_vs_homogeneous_serial"] is None
+
+
 def test_jobs_estimator_prints_commands(capsys):
     assert (
         cli.main(

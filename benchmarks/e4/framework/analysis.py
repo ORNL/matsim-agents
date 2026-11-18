@@ -88,7 +88,7 @@ def heterogeneous_comparison(rows: Sequence[dict[str, Any]]) -> list[dict[str, A
     i.e. running the classes one after another.
     """
 
-    fixed = [r for r in rows if r["experiment"] == "fixed"]
+    fixed = [r for r in rows if r["experiment"] == "fixed" and r.get("timing_complete", True)]
     output = []
     for mixed in fixed:
         classes = mixed.get("task_classes") or []
