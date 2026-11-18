@@ -29,15 +29,27 @@ regions are in EPW, not the PWSCF, FFTXlib, or eigensolver paths. A successful
 smoke job runs the `epw_mob_polar` test and samples device utilization with
 `xpu-smi` while EPW runs.
 
+Unpatched QE `develop` (71e4e9b) aborts `epw_mob_polar` stages `epw2`/`epw3`
+under `OMP_TARGET_OFFLOAD=MANDATORY` with a PVC page fault
+(`Segmentation fault from GPU ... (CCS) type: 0 (NotPresent)`), while the same
+inputs pass with offload disabled. In the oneMKL branch of
+`vmewan2bloch_batch` (`EPW/src/wannier2bloch.f90`), `ir_cfac` is filled on the
+host and passed to a `!$omp dispatch` `ZGEMV_BATCH_STRIDED` without ever being
+mapped, so its `target update to` is a no-op and oneMKL receives a host pointer.
+The builder applies
+`deployments/aurora/setup/patches/qe-epw-onemkl-ir-cfac/epw-map-ir-cfac.patch`,
+which adds the missing `!$omp target enter data map(alloc:ir_cfac)`.
+
 ## What gets built
 
-- QE source from `QEF/q-e` (default branch: `develop`, overrideable).
+- QE source from `QEF/q-e` (default branch: `develop`, pinned to
+  `QE_COMMIT=71e4e9b25b35`; set `QE_COMMIT=''` to follow the branch tip).
 - GPU build via QE CMake flags:
   - `-DQE_GPU="openmp;oneapi"`
   - `-DQE_GPU_ARCHS=intel_gpu_pvc`
 - MPI-enabled executables and common target groups, including:
   - `pw`, `cp`, `ph`, `pp`, `neb`, `hp`, `ld1`, `pwall`, `pwcond`,
-    `tddfpt`, `upf`, `xspectra`
+    `tddfpt`, `upf`, `xspectra`, `epw`
 
 ## Toolchain and environment
 
