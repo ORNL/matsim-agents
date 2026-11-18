@@ -75,32 +75,37 @@ def _write_class_plots(rows: list[dict], output_dir: Path) -> list[str]:
 
 def _manifest_status(manifest_path: Path, rows: list[dict]) -> list[dict]:
     manifest = json.loads(manifest_path.read_text())
-    actual = {(row["material_class"], row["experiment"], row["nodes"]): row for row in rows}
+    actual: dict[tuple, list[dict]] = {}
+    for row in rows:
+        actual.setdefault((row["material_class"], row["experiment"], row["nodes"]), []).append(row)
     status = []
     for entry in manifest["material_classes"]:
         material_class = entry["material_class"]
         for experiment, key in (("strong", "strong_scaling"), ("weak", "weak_scaling")):
             for tier in entry[key]["tiers"]:
-                measured = actual.get((material_class, experiment, tier["nodes"]))
-                if measured is None:
-                    execution_status = "planned_unexecuted"
-                elif measured["fully_valid_repetitions"] == measured["repetitions"]:
-                    execution_status = "measured_complete"
-                else:
-                    execution_status = "measured_incomplete_or_failed"
-                status.append(
-                    {
-                        "material_class": material_class,
-                        "experiment": experiment,
-                        "nodes": tier["nodes"],
-                        "plan_status": tier["status"],
-                        "queue_eligible": tier.get("queue_eligible"),
-                        "execution_status": execution_status,
-                        "measured_repetitions": measured["repetitions"] if measured else 0,
-                        "completed_tasks": measured["valid_tasks"] if measured else 0,
-                        "failed_tasks": measured["failed_tasks"] if measured else 0,
-                    }
-                )
+                # One status per measuring facility; a complete site must not mask another.
+                measurements = actual.get((material_class, experiment, tier["nodes"])) or [None]
+                for measured in measurements:
+                    if measured is None:
+                        execution_status = "planned_unexecuted"
+                    elif measured["fully_valid_repetitions"] == measured["repetitions"]:
+                        execution_status = "measured_complete"
+                    else:
+                        execution_status = "measured_incomplete_or_failed"
+                    status.append(
+                        {
+                            "material_class": material_class,
+                            "experiment": experiment,
+                            "nodes": tier["nodes"],
+                            "facility": measured.get("facility", "unknown") if measured else None,
+                            "plan_status": tier["status"],
+                            "queue_eligible": tier.get("queue_eligible"),
+                            "execution_status": execution_status,
+                            "measured_repetitions": measured["repetitions"] if measured else 0,
+                            "completed_tasks": measured["valid_tasks"] if measured else 0,
+                            "failed_tasks": measured["failed_tasks"] if measured else 0,
+                        }
+                    )
     return status
 
 

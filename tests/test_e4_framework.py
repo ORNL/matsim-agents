@@ -236,6 +236,32 @@ def test_resume_does_not_repeat_completed_work(tmp_path):
     assert later == []
 
 
+def test_reconcile_parses_attempt_log_once(monkeypatch, tmp_path):
+    from benchmarks.e4.framework import runner as runner_module
+
+    run, _ = _run(SMOKE, tmp_path, nodes=2)
+    path = run.run_dir / "attempts.jsonl"
+    lines = path.read_text().splitlines(keepends=True)
+    path.write_text("".join(lines[:2]))
+    resumed = BenchmarkRun(
+        SMOKE,
+        facility="local",
+        experiment="weak",
+        repetition=0,
+        output_root=tmp_path,
+        nodes=2,
+        local_device_slots=2,
+        resume=True,
+    )
+    calls = []
+    original = runner_module.read_records
+    monkeypatch.setattr(runner_module, "read_records", lambda p: calls.append(p) or original(p))
+    histories = resumed._reconcile()
+    assert len(calls) == 1
+    assert any(r.get("reconciled") for r in read_records(path))
+    assert histories == runner_module.task_histories(read_records(path))
+
+
 def test_resume_rejects_changed_identity(tmp_path):
     _run(SMOKE, tmp_path)
     changed = copy.deepcopy(SMOKE)

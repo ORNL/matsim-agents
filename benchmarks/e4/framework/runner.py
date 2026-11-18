@@ -285,7 +285,13 @@ class BenchmarkRun:
     def _reconcile(self) -> dict[str, Any]:
         """Record interrupted attempts and device results written before a crash."""
 
+        # Parsed once; appends are mirrored here so recovery stays linear in log size.
         records = read_records(self.recorder.path)
+
+        def append(record: dict[str, Any]) -> None:
+            self.recorder.append(record)
+            records.append(json.loads(json.dumps({**record, "segment": self.recorder.segment})))
+
         recorded = {(r["task_id"], int(r["attempt"])) for r in records}
         tasks = {task.task_id: task for task in self.workload.tasks}
         for task_dir in sorted((self.run_dir / "tasks").glob("*")):
@@ -305,11 +311,11 @@ class BenchmarkRun:
                     # Retry budgets count every earlier attempt, including ones reconciled here.
                     prior = [
                         r
-                        for r in read_records(self.recorder.path)
+                        for r in records
                         if r["task_id"] == task.task_id and int(r["attempt"]) < attempt
                     ]
                     history = task_histories(prior).get(task.task_id, TaskHistory())
-                    self.recorder.append(
+                    append(
                         self._device_record(
                             task,
                             attempt_dir,
@@ -320,7 +326,7 @@ class BenchmarkRun:
                         )
                     )
                 else:
-                    self.recorder.append(
+                    append(
                         {
                             "record": "attempt",
                             "task_id": task.task_id,
@@ -336,7 +342,7 @@ class BenchmarkRun:
                             TERMINAL_FIELD: False,
                         }
                     )
-        return task_histories(read_records(self.recorder.path))
+        return task_histories(records)
 
     def _node_group_executor(self, kind: str):
         if kind in self.executors:
