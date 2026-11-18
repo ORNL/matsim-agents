@@ -52,10 +52,7 @@ def is_converged_final_status(status: str | None) -> bool:
 def parse_max_force(value: str) -> float | None:
     """Run-record force field; failed stages log ``unknown``."""
 
-    try:
-        return float(value)
-    except ValueError:
-        return None
+    return None if value == "unknown" else float(value)
 
 
 VASP_DEFAULT_NELM = 60
@@ -87,8 +84,7 @@ def task_nelm_max(task: dict[str, Any]) -> int:
 
 def task_continuation_schedule(task: dict[str, Any]) -> list[dict[str, Any]]:
     launch = task.get("launch_settings", {})
-    # Legacy BCC manifests carry only the shared 24 h task_layout budget.
-    budget_hours = task.get("estimated_task_walltime_hours", TASK_WALLTIME_HOURS)
+    budget_hours = task["estimated_task_walltime_hours"]
     budget_seconds = int(float(budget_hours) * 3600)
     count = int(launch.get("continuation_segments", 1))
     if count < 1:

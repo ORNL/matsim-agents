@@ -106,9 +106,99 @@ def test_convergence_tags_cover_bcc_and_single_stage_materials():
     assert not scaling.is_converged_final_status("converged:n0")
 
 
-def test_failed_stage_unknown_force_does_not_crash_dispatcher():
+def test_parse_max_force_accepts_numbers_and_unknown():
     assert scaling.parse_max_force("0.0180257553") == pytest.approx(0.0180257553)
     assert scaling.parse_max_force("unknown") is None
+    with pytest.raises(ValueError):
+        scaling.parse_max_force("n/a")
+
+
+def _setup_single_fcc_dispatch(monkeypatch, tmp_path, fake_run, *, continuation_segments=2):
+    nodefile = tmp_path / "nodefile"
+    nodefile.write_text("node0\n")
+    monkeypatch.setattr(scaling, "REPO", tmp_path)
+    monkeypatch.setattr(scaling, "validate_manifest_data", lambda manifest: manifest)
+    monkeypatch.setenv("PBS_JOBID", "test-job")
+    monkeypatch.setenv("PBS_NODEFILE", str(nodefile))
+    monkeypatch.setenv("E4_SCALING_AUTHORIZATION", "approved")
+    monkeypatch.setenv("E4_SCALING_RUN_ID", "E4-TEST-run")
+    monkeypatch.setattr(scaling.subprocess, "run", fake_run)
+    task = {
+        "calculation_id": "FCC-1",
+        "case_dir": "case",
+        "source_poscar": "POSCAR",
+        "source_poscar_sha256": "hash",
+        "composition": {"Fe": 1},
+        "structure_id": "structure",
+        "protocol_id": "fcc",
+        "input_hashes": {},
+        "prepared_input_bundle_sha256": "bundle",
+        "paw_components": [],
+        "potcar_sha256": "potcar",
+        "mpi_ranks": 8,
+        "omp_threads_per_rank": 8,
+        "ediffg_eV_per_A": "-0.02",
+        "estimated_task_walltime_hours": 48,
+        "launch_settings": {
+            "stage_mode": "single",
+            "stage_nsw_max": 200,
+            "single_precision": "Accurate",
+            "single_prefix": "A",
+            "continuation_segments": continuation_segments,
+            "execution_segment_hours": 24,
+            "scheduler_margin_hours_per_segment": 1,
+            "nelm_override": 400,
+            "nelm_max": 400,
+        },
+    }
+    manifest = {
+        "execution_authorized": True,
+        "authorization": {"id": "approved"},
+        "experiment": "strong",
+        "material_class": "fcc_hea",
+        "run_id_prefix": "E4-TEST",
+        "protocol_id": "fcc",
+        "tasks": [task],
+        "fixed_task_ids": ["FCC-1"],
+        "tiers": [{"nodes": 1, "segments": [{"segment_id": "all", "task_ids": ["FCC-1"]}]}],
+        "resource_request": {"total_node_hours_cap": 50},
+    }
+    tier_root = tmp_path / "runs/e4-scaling/strong/E4-TEST-run/n01/all"
+    return manifest, tier_root
+
+
+def test_failed_stage_unknown_force_does_not_crash_dispatcher(monkeypatch, tmp_path):
+    def fake_run(args, *, env=None, stdout=None, stderr=None, **kwargs):
+        if args[0] == "git":
+            return type("Result", (), {"stdout": "test-commit"})()
+        root = Path(env["E4_OUTPUT_ROOT"])
+        root.mkdir(parents=True, exist_ok=True)
+        with (root / "run-record.log").open("a") as record:
+            record.write(
+                "end tag=A31 rc=1 ionic_steps=3 max_force_eV_per_A=unknown "
+                "seconds=120 status=failed:exit-1\n"
+            )
+            record.write("EXIT job=test calculation_id=FCC-1 status=1 final=A31:failed:exit-1\n")
+        return type("Result", (), {"returncode": 1})()
+
+    manifest, tier_root = _setup_single_fcc_dispatch(monkeypatch, tmp_path, fake_run)
+    assert (
+        scaling.dispatch(tmp_path / "unused.json", 1, None, False, manifest_override=manifest) == 1
+    )
+    result = next(
+        json.loads(line)
+        for line in (tier_root / "dispatch.jsonl").read_text().splitlines()
+        if '"event": "finished"' in line
+    )
+    assert result["task_status"] == "failed_or_incomplete"
+    assert result["final_max_force_eV_per_A"] is None
+    assert result["final_status"] == "A31:failed:exit-1"
+    assert result["stage_statuses"] == ["failed:exit-1"]
+    assert result["continuation_segments_used"] == 1
+    measurement = json.loads((tier_root / "measurements.jsonl").read_text().splitlines()[0])
+    assert measurement["failed_calculation_ids"] == ["FCC-1"]
+    assert measurement["valid_tasks"] == 0
+    assert measurement["total_ionic_steps"] == 3
 
 
 def test_fcc_and_lifepo4_continuation_schedules_preserve_cumulative_budgets():
@@ -157,14 +247,6 @@ def test_single_segment_task_retains_existing_shutdown_margin():
 
 
 def test_dispatch_resumes_continuation_from_validated_checkpoint(monkeypatch, tmp_path):
-    nodefile = tmp_path / "nodefile"
-    nodefile.write_text("node0\n")
-    monkeypatch.setattr(scaling, "REPO", tmp_path)
-    monkeypatch.setattr(scaling, "validate_manifest_data", lambda manifest: manifest)
-    monkeypatch.setenv("PBS_JOBID", "test-job")
-    monkeypatch.setenv("PBS_NODEFILE", str(nodefile))
-    monkeypatch.setenv("E4_SCALING_AUTHORIZATION", "approved")
-    monkeypatch.setenv("E4_SCALING_RUN_ID", "E4-TEST-run")
     seen = []
 
     def fake_run(args, *, env=None, stdout=None, stderr=None, **kwargs):
@@ -187,47 +269,7 @@ def test_dispatch_resumes_continuation_from_validated_checkpoint(monkeypatch, tm
             record.write(f"EXIT job=test calculation_id=FCC-1 status={status} final={final}\n")
         return type("Result", (), {"returncode": code})()
 
-    monkeypatch.setattr(scaling.subprocess, "run", fake_run)
-    task = {
-        "calculation_id": "FCC-1",
-        "case_dir": "case",
-        "source_poscar": "POSCAR",
-        "source_poscar_sha256": "hash",
-        "composition": {"Fe": 1},
-        "structure_id": "structure",
-        "protocol_id": "fcc",
-        "input_hashes": {},
-        "prepared_input_bundle_sha256": "bundle",
-        "paw_components": [],
-        "potcar_sha256": "potcar",
-        "mpi_ranks": 8,
-        "omp_threads_per_rank": 8,
-        "ediffg_eV_per_A": "-0.02",
-        "estimated_task_walltime_hours": 48,
-        "launch_settings": {
-            "stage_mode": "single",
-            "stage_nsw_max": 200,
-            "single_precision": "Accurate",
-            "single_prefix": "A",
-            "continuation_segments": 2,
-            "execution_segment_hours": 24,
-            "scheduler_margin_hours_per_segment": 1,
-            "nelm_override": 400,
-            "nelm_max": 400,
-        },
-    }
-    manifest = {
-        "execution_authorized": True,
-        "authorization": {"id": "approved"},
-        "experiment": "strong",
-        "material_class": "fcc_hea",
-        "run_id_prefix": "E4-TEST",
-        "protocol_id": "fcc",
-        "tasks": [task],
-        "fixed_task_ids": ["FCC-1"],
-        "tiers": [{"nodes": 1, "segments": [{"segment_id": "all", "task_ids": ["FCC-1"]}]}],
-        "resource_request": {"total_node_hours_cap": 50},
-    }
+    manifest, _ = _setup_single_fcc_dispatch(monkeypatch, tmp_path, fake_run)
     assert (
         scaling.dispatch(tmp_path / "unused.json", 1, None, False, manifest_override=manifest) == 0
     )
@@ -326,9 +368,9 @@ def test_task_nelm_max_prefers_override_then_frozen_then_start(monkeypatch, tmp_
     assert scaling.task_nelm_max(both) == 400
 
 
-def test_legacy_task_without_walltime_estimate_uses_task_layout_budget():
-    schedule = scaling.task_continuation_schedule({"calculation_id": "legacy-bcc"})
-    assert schedule[0]["active_seconds"] == scaling.TASK_WALLTIME_HOURS * 3600
+def test_task_without_walltime_estimate_is_rejected():
+    with pytest.raises(KeyError, match="estimated_task_walltime_hours"):
+        scaling.task_continuation_schedule({"calculation_id": "legacy-bcc"})
 
 
 def _six_class_stub(authorized: bool, class_authorization):
