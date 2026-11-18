@@ -122,6 +122,38 @@ def test_scaling_baselines_and_series_are_per_facility():
     assert by_site[("frontier", 8)]["repetitions"] == 1
 
 
+def test_manifest_status_reports_each_facility(tmp_path):
+    import json
+
+    from benchmarks.e4 import analyze
+
+    manifest = tmp_path / "manifest.json"
+    tier = {"nodes": 8, "status": "planned"}
+    manifest.write_text(
+        json.dumps(
+            {
+                "material_classes": [
+                    {
+                        "material_class": "unclassified",
+                        "strong_scaling": {"tiers": [tier]},
+                        "weak_scaling": {"tiers": []},
+                    }
+                ]
+            }
+        )
+    )
+    aurora = _measurement("strong", 8, 1, 100)
+    frontier = {**_measurement("strong", 8, 1, 40), "facility": "frontier"}
+    frontier["valid_tasks"] -= 1
+    frontier["failed_tasks"] += 1
+    status = analyze._manifest_status(manifest, analyze_scaling([aurora, frontier]))
+    by_site = {row["facility"]: row["execution_status"] for row in status}
+    assert by_site == {
+        "aurora": "measured_complete",
+        "frontier": "measured_incomplete_or_failed",
+    }
+
+
 def test_class_plots_draw_one_series_per_facility(monkeypatch, tmp_path):
     pytest.importorskip("matplotlib")
     import matplotlib.pyplot as plt
