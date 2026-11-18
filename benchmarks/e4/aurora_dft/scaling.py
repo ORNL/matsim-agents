@@ -143,7 +143,7 @@ def task_record(case: dict[str, Any]) -> dict[str, Any]:
             "omp_threads_per_rank",
             "ediffg_eV_per_A",
         )
-    }
+    } | {"estimated_task_walltime_hours": TASK_WALLTIME_HOURS}
 
 
 def validate_task(task: dict[str, Any]) -> None:
@@ -153,6 +153,9 @@ def validate_task(task: dict[str, Any]) -> None:
     bcc_task = protocol_id == PROTOCOL
     ranks = task.get("mpi_ranks")
     threads = task.get("omp_threads_per_rank")
+    walltime_hours = task.get("estimated_task_walltime_hours")
+    if not isinstance(walltime_hours, (int, float)) or walltime_hours <= 0:
+        raise ValueError(f"{task.get('calculation_id')}: task walltime estimate must be positive")
     if bcc_task and (ranks != 8 or threads != 8):
         raise ValueError(f"{task.get('calculation_id')}: unexpected MPI/OpenMP layout")
     if not isinstance(ranks, int) or ranks < 1 or not isinstance(threads, int) or threads < 1:
