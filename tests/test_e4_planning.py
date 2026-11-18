@@ -109,6 +109,19 @@ def test_scaling_uses_smallest_node_count_as_baseline():
     assert [row["efficiency"] for row in strong] == [1, (100 / 60) / 2, (100 / 35) / 4, 5 / 8]
 
 
+def test_scaling_baselines_and_series_are_per_facility():
+    aurora = [_measurement("strong", 8, 1, 100), _measurement("strong", 16, 1, 60)]
+    frontier = [
+        {**_measurement("strong", 8, 1, 40), "facility": "frontier"},
+        {**_measurement("strong", 16, 1, 30), "facility": "frontier"},
+    ]
+    rows = analyze_scaling(aurora + frontier)
+    by_site = {(r["facility"], r["nodes"]): r for r in rows}
+    assert by_site[("aurora", 16)]["speedup"] == 100 / 60
+    assert by_site[("frontier", 16)]["speedup"] == 40 / 30
+    assert by_site[("frontier", 8)]["repetitions"] == 1
+
+
 def test_weak_scaling_uses_valid_task_throughput_and_node_hours():
     rows = analyze_scaling(
         [

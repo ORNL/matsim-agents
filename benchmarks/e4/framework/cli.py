@@ -98,7 +98,8 @@ def _execute(BenchmarkRun, args: argparse.Namespace, *, resume: bool) -> int:  #
             indent=2,
         )
     )
-    return 0 if summary["counts"]["unfinished_tasks"] == 0 else 2
+    counts = summary["counts"]
+    return 0 if counts["unfinished_tasks"] == 0 and counts["failed_tasks"] == 0 else 2
 
 
 def cmd_smoke(args: argparse.Namespace) -> int:

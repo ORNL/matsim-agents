@@ -59,7 +59,7 @@
         "examples/paper_cases/seeds/hea_fcc_fcc_random.extxyz",
         "examples/paper_cases/seeds/lifepo4_olivine.extxyz",
         "examples/paper_cases/seeds/phosphorene_black_P.extxyz",
-        "examples/paper_cases/seeds/zn_formate_alpha.extxyz"
+        "examples/paper_cases/seeds/zn_formate_alpha_relaxed.extxyz"
       ],
       "params": {
         "mlip_backend": "hydragnn",

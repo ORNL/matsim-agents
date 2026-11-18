@@ -211,6 +211,7 @@ def _combine_strong_segments(records: list[dict[str, Any]]) -> list[dict[str, An
         if record.get("segment_group_id") and record.get("segment_count", 1) > 1:
             key = (
                 record["segment_group_id"],
+                record.get("facility", "unknown"),
                 record["material_class"],
                 record["experiment"],
                 record["nodes"],
@@ -265,14 +266,21 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         planned = record.get("planned_tasks", record["attempted_tasks"])
         return record["valid_tasks"] == planned and record["failed_tasks"] == 0
 
-    groups = sorted({(r["experiment"], r.get("material_class", "unclassified")) for r in records})
-    for experiment, material_class in groups:
+    # Facilities differ in hardware, so each one gets its own baseline and series.
+    def facility(record: dict[str, Any]) -> str:
+        return str(record.get("facility", "unknown"))
+
+    groups = sorted(
+        {(facility(r), r["experiment"], r.get("material_class", "unclassified")) for r in records}
+    )
+    for site, experiment, material_class in groups:
         if experiment not in {"strong", "weak"}:
             continue
         subset = [
             r
             for r in records
-            if r["experiment"] == experiment
+            if facility(r) == site
+            and r["experiment"] == experiment
             and r.get("material_class", "unclassified") == material_class
         ]
         if not subset:
@@ -338,6 +346,7 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             )
             results.append(
                 {
+                    "facility": site,
                     "experiment": experiment,
                     "material_class": material_class,
                     "nodes": nodes,

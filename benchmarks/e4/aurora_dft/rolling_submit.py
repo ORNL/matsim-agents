@@ -89,6 +89,12 @@ def parse_qstat_full(text: str) -> tuple[str | None, int | None]:
     )
 
 
+def _segment_id(segment: dict[str, Any], segment_count: int) -> str:
+    """Dispatcher segment ID: single-segment strong tiers only accept ``all``."""
+
+    return "all" if segment_count == 1 else f"segment-{segment['segment']}"
+
+
 def _dispatch_task(candidate: dict[str, Any]) -> dict[str, Any]:
     return {
         **candidate,
@@ -132,7 +138,7 @@ def _normalized_manifest(
         ]
         segments = [
             {
-                "segment_id": f"segment-{segment['segment']}",
+                "segment_id": _segment_id(segment, len(source_segments)),
                 "task_ids": segment["calculation_ids"],
                 "walltime_cap_hours": min(
                     168,
@@ -281,7 +287,7 @@ def build_rolling_plan(
                     "material_class": name,
                     "experiment": "strong",
                     "nodes": 16,
-                    "segment_id": f"segment-{index}",
+                    "segment_id": _segment_id(segment, len(source_segments)),
                     "manifest": str(manifest_path),
                     "manifest_sha256": _sha256(manifest_path),
                     "run_id_prefix": prefix,
@@ -380,7 +386,9 @@ def _run_controller_loop(plan_path: Path, state_path: Path, *, once: bool = Fals
         for job_key in state["blocked"]:
             status_cache["key:" + job_key] = ("F", 1)
         for job_key, info in state["submitted"].items():
-            status_cache["key:" + job_key] = _job_status(info["pbs_job_id"])
+            # Completed jobs keep their persisted terminal status; PBS history expires.
+            if job_key not in state["completed"]:
+                status_cache["key:" + job_key] = _job_status(info["pbs_job_id"])
         for job in plan["jobs"]:
             for job_id in job["after_pbs_job_ids"]:
                 if job_id not in status_cache:
@@ -410,6 +418,12 @@ def _run_controller_loop(plan_path: Path, state_path: Path, *, once: bool = Fals
                     )
                     queue_full_reported = True
                 break
+            manifest_sha256 = _sha256(Path(job["manifest"]))
+            if manifest_sha256 != job["manifest_sha256"]:
+                raise ValueError(
+                    f"{key}: manifest {job['manifest']} changed after planning "
+                    f"(sha256 {manifest_sha256} != {job['manifest_sha256']})"
+                )
             env_values = {
                 "E4_SCALING_MANIFEST": job["manifest"],
                 "E4_SCALING_NODES": str(job["nodes"]),

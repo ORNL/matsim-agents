@@ -302,6 +302,64 @@ def test_six_class_production_matrix_covers_all_tiers_without_authorizing():
     )
 
 
+def test_effective_nelm_reads_start_and_defaults_to_vasp_60():
+    assert scaling.effective_nelm("ENCUT = 520\n") == 60
+    assert scaling.effective_nelm("NELM = 200\n") == 200
+    assert scaling.effective_nelm("ISMEAR = 1; NELM = 170 ! comment\n") == 170
+    assert scaling.effective_nelm("# NELM = 999\nNELM = 80\nNELM=90\n") == 90
+
+
+def test_task_nelm_max_prefers_override_then_frozen_then_start(monkeypatch, tmp_path):
+    monkeypatch.setattr(scaling, "REPO", tmp_path)
+    (tmp_path / "case").mkdir()
+    (tmp_path / "case" / "START").write_text("ALGO = Normal\n")
+    task = {"case_dir": "case", "launch_settings": {}}
+    assert scaling.task_nelm_max(task) == 60
+    assert scaling.task_nelm_max({**task, "launch_settings": {"nelm_max": 200}}) == 200
+    assert scaling.task_nelm_max({**task, "launch_settings": {"nelm_override": 300}}) == 300
+
+
+def test_legacy_task_without_walltime_estimate_uses_task_layout_budget():
+    schedule = scaling.task_continuation_schedule({"calculation_id": "legacy-bcc"})
+    assert schedule[0]["active_seconds"] == scaling.TASK_WALLTIME_HOURS * 3600
+
+
+def _six_class_stub(authorized: bool, class_authorization):
+    names = ("bcc_refractory", "fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof", "nb_ta_o")
+    return {
+        "execution_authorized": authorized,
+        "authorization_request": {"additional_jobs_authorized": authorized},
+        "material_classes": [
+            {
+                "material_class": name,
+                "execution_authorized": authorized,
+                "authorization": class_authorization,
+                "candidates": [],
+                "strong_scaling": {"tiers": []},
+                "weak_scaling": {"tiers": []},
+            }
+            for name in names
+        ],
+    }
+
+
+def test_six_class_validator_separates_planning_and_execution():
+    planning = _six_class_stub(False, None)
+    validate_six_class_workload_manifest(planning, verify_files=False)
+    authorized = _six_class_stub(True, {"id": "approved"})
+    with pytest.raises(ValueError, match="execution_authorized=false"):
+        validate_six_class_workload_manifest(authorized, verify_files=False)
+    validate_six_class_workload_manifest(authorized, verify_files=False, for_execution=True)
+    with pytest.raises(ValueError, match="authorization ID"):
+        validate_six_class_workload_manifest(
+            _six_class_stub(True, None), verify_files=False, for_execution=True
+        )
+    with pytest.raises(ValueError, match="explicitly true or false"):
+        validate_six_class_workload_manifest(
+            {**planning, "execution_authorized": None}, verify_files=False, for_execution=True
+        )
+
+
 def test_segmented_one_node_strong_baseline_is_combined_without_queue_wait():
     first = _measurement("strong", 1, 1, 100, tasks=4, valid=4)
     second = _measurement("strong", 1, 1, 120, tasks=4, valid=4)
