@@ -106,6 +106,11 @@ def test_convergence_tags_cover_bcc_and_single_stage_materials():
     assert not scaling.is_converged_final_status("converged:n0")
 
 
+def test_failed_stage_unknown_force_does_not_crash_dispatcher():
+    assert scaling.parse_max_force("0.0180257553") == pytest.approx(0.0180257553)
+    assert scaling.parse_max_force("unknown") is None
+
+
 def test_fcc_and_lifepo4_continuation_schedules_preserve_cumulative_budgets():
     fcc = {
         "calculation_id": "fcc",

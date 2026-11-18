@@ -49,6 +49,15 @@ def is_converged_final_status(status: str | None) -> bool:
     return bool(re.fullmatch(r"converged:[A-Z]\d+", status or ""))
 
 
+def parse_max_force(value: str) -> float | None:
+    """Run-record force field; failed stages log ``unknown``."""
+
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 VASP_DEFAULT_NELM = 60
 
 
@@ -581,7 +590,9 @@ def dispatch(
             ),
             "restart_provenance": continuation_records,
             "total_ionic_steps": sum(int(record[1]) for record in stage_records),
-            "final_max_force_eV_per_A": float(stage_records[-1][2]) if stage_records else None,
+            "final_max_force_eV_per_A": (
+                parse_max_force(stage_records[-1][2]) if stage_records else None
+            ),
             "stage_statuses": [record[4] for record in stage_records],
         }
 
