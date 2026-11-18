@@ -16,6 +16,7 @@
 #
 # Common overrides:
 #   QE_VERSION=develop|7.4
+#   QE_COMMIT=<sha>  (develop only; empty to follow the branch tip)
 #   QE_REPO=https://gitlab.com/QEF/q-e.git
 #   QE_PREFIX=/path/to/quantum-espresso
 #   SRC_DIR=/path/to/src
@@ -29,6 +30,7 @@
 #   CXX_COMPILER=mpicxx
 #   FORTRAN_COMPILER=mpifort
 #   EXTRA_CMAKE_ARGS="-DVAR=VALUE -DVAR2=VALUE2"
+#   QE_TARGETS="pw" (defaults to the common QE target groups below)
 #
 # Notes:
 # - Aurora frameworks currently provides MPICH wrappers that resolve to oneAPI
@@ -45,11 +47,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 
 if [[ ! -f "${REPO}/pyproject.toml" ]]; then
-    echo "ERROR: Could not detect matsim-agents repo root from ${SCRIPT_DIR}" >&2
+    for candidate in "${PROJECT_ROOT:-}" "${PBS_O_WORKDIR:-}"; do
+        if [[ -n "${candidate}" && -f "${candidate}/pyproject.toml" ]]; then
+            REPO="$(cd "${candidate}" && pwd)"
+            break
+        fi
+    done
+fi
+
+if [[ ! -f "${REPO}/pyproject.toml" ]]; then
+    echo "ERROR: Could not detect matsim-agents repo root from ${SCRIPT_DIR}; set PROJECT_ROOT or submit from the repo root" >&2
     exit 1
 fi
 
 QE_VERSION="${QE_VERSION:-develop}"
+if [[ "${QE_VERSION}" == "develop" ]]; then
+    # Revision the Aurora EPW GPU patch was made and validated against.
+    QE_COMMIT="${QE_COMMIT-71e4e9b25b3555eef3ad9292c28e35e11f0e0869}"
+else
+    QE_COMMIT="${QE_COMMIT:-}"
+fi
 QE_REPO="${QE_REPO:-https://gitlab.com/QEF/q-e.git}"
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 SRC_DIR="${SRC_DIR:-${QE_PREFIX}/src}"
@@ -75,6 +92,12 @@ EXTRA_CMAKE_ARGS="${EXTRA_CMAKE_ARGS:-}"
 log()  { printf '\033[1;34m[qe-aurora-gpu]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[qe-aurora-gpu]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[qe-aurora-gpu]\033[0m %s\n' "$*" >&2; exit 1; }
+
+require_cache_entry() {
+    local entry="$1"
+    grep -Fqx -- "${entry}" "${BUILD_DIR}/CMakeCache.txt" \
+        || die "GPU configuration missing from CMakeCache.txt: ${entry}"
+}
 
 init_modules() {
     if command -v module >/dev/null 2>&1; then
@@ -114,6 +137,7 @@ log "Quantum ESPRESSO GPU build on Aurora"
 log "Date:        $(date)"
 log "Host:        $(hostname)"
 log "QE version:  ${QE_VERSION}"
+log "QE commit:   ${QE_COMMIT:-<branch tip>}"
 log "Source:      ${SRC_DIR}"
 log "Build dir:   ${BUILD_DIR}"
 log "Install:     ${INSTALL_DIR}"
@@ -141,9 +165,32 @@ if [[ ! -d "${SRC_DIR}/.git" ]]; then
     else
         git clone --branch "qe-${QE_VERSION}" "${QE_REPO}" "${SRC_DIR}"
     fi
+    if [[ -n "${QE_COMMIT}" ]]; then
+        log "Checking out pinned QE commit ${QE_COMMIT}"
+        git -C "${SRC_DIR}" checkout --detach "${QE_COMMIT}"
+    fi
 else
     log "QE source already present at ${SRC_DIR}"
     log "HEAD: $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
+    if [[ -n "${QE_COMMIT}" ]]; then
+        QE_HEAD="$(git -C "${SRC_DIR}" rev-parse HEAD)"
+        [[ "${QE_HEAD}" == "$(git -C "${SRC_DIR}" rev-parse "${QE_COMMIT}^{commit}")" ]] \
+            || die "QE source is at ${QE_HEAD}, not pinned QE_COMMIT=${QE_COMMIT}; check it out or set QE_COMMIT=''"
+    fi
+fi
+
+# EPW's oneMKL path dispatches ZGEMV_BATCH_STRIDED on ir_cfac without mapping it,
+# so the GPU dereferences a host pointer (CCS NotPresent fault on PVC).
+IR_CFAC_PATCH="${SCRIPT_DIR}/patches/qe-epw-onemkl-ir-cfac/epw-map-ir-cfac.patch"
+if (cd "${SRC_DIR}" && git apply --reverse --check "${IR_CFAC_PATCH}" 2>/dev/null); then
+    log "EPW ir_cfac device-mapping fix already applied"
+elif (cd "${SRC_DIR}" && git apply --check "${IR_CFAC_PATCH}" 2>/dev/null); then
+    log "Applying EPW ir_cfac device-mapping fix"
+    (cd "${SRC_DIR}" && git apply "${IR_CFAC_PATCH}")
+elif grep -q 'map(alloc:ir_cfac)' "${SRC_DIR}/EPW/src/wannier2bloch.f90"; then
+    log "Upstream EPW already maps ir_cfac; skipping patch"
+else
+    die "EPW ir_cfac patch does not apply to this QE revision: ${IR_CFAC_PATCH}"
 fi
 
 if [[ "${CLEAN_BUILD}" == "1" ]]; then
@@ -182,10 +229,15 @@ fi
 
 cmake "${CMAKE_ARGS[@]}" "${SRC_DIR}" 2>&1 | tee "${BUILD_DIR}/cmake.log"
 
-QE_TARGETS=(pw cp ph pp neb hp ld1 pwall pwcond tddfpt upf xspectra)
+require_cache_entry "QE_GPU:STRING=${QE_GPU}"
+require_cache_entry "QE_GPU_ARCHS:STRING=${QE_GPU_ARCHS}"
+log "Verified QE GPU features and target architecture in CMake cache"
 
-log "Building targets: ${QE_TARGETS[*]}"
-make -j"${NCORES}" "${QE_TARGETS[@]}" 2>&1 | tee "${BUILD_DIR}/build.log"
+QE_TARGETS="${QE_TARGETS:-pw cp ph pp neb hp ld1 pwall pwcond tddfpt upf xspectra epw}"
+read -r -a QE_TARGET_ARRAY <<< "${QE_TARGETS}"
+
+log "Building targets: ${QE_TARGET_ARRAY[*]}"
+make -j"${NCORES}" "${QE_TARGET_ARRAY[@]}" 2>&1 | tee "${BUILD_DIR}/build.log"
 
 log "Installing"
 if make install 2>&1 | tee "${BUILD_DIR}/install.log"; then
@@ -195,6 +247,8 @@ else
     mkdir -p "${INSTALL_DIR}/bin"
     cp "${BUILD_DIR}"/bin/*.x "${INSTALL_DIR}/bin/" 2>/dev/null || true
 fi
+
+[[ -x "${INSTALL_DIR}/bin/pw.x" ]] || die "GPU build did not install an executable pw.x"
 
 log "=========================================="
 log "Build finished: $(date)"

@@ -385,12 +385,11 @@ QE_GPU="openmp;oneapi" bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 EXTRA_CMAKE_ARGS="-DVAR=VALUE" bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
-Validated results from the current repository run:
-
-- build/install completed successfully (exit code 0)
-- install prefix populated under `external/quantum-espresso/install-gpu/`
-- 106 executables installed in `install-gpu/bin/`
-- core binaries present: `pw.x`, `cp.x`, `ph.x`, `pp.x`, `epw.x`
+The previous PBS attempt exited before CMake because the staged job script could
+not locate the repository checkout. The builder now falls back to
+`PROJECT_ROOT` or `PBS_O_WORKDIR` and checks that the CMake cache retains the
+Intel GPU feature and PVC architecture settings. A compute-node QE run is still
+required to validate actual GPU offload.
 
 See full Aurora QE documentation:
 

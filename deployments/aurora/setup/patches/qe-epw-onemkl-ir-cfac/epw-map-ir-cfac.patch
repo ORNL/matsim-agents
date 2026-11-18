@@ -1,0 +1,12 @@
+diff --git a/EPW/src/wannier2bloch.f90 b/EPW/src/wannier2bloch.f90
+index be40244bb..497cab050 100644
+--- a/EPW/src/wannier2bloch.f90
++++ b/EPW/src/wannier2bloch.f90
+@@ -2112,6 +2112,7 @@
+     !$acc enter data copyin(at,irvec)
+     !$acc parallel loop present(ir_cfac,at,irvec) private(irvec_tmp2) collapse(3)
+ #elif defined(__ONEMKL)
++    !$omp target enter data map(alloc:ir_cfac)
+     ! TODO: temporary workaround using OpenMP threads
+     !$omp parallel do private(irvec_tmp2) collapse(3)
+ #endif

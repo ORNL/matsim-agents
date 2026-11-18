@@ -13,22 +13,44 @@ Source code, build artifacts, and installation are placed under
 
 ## Status
 
-The Aurora GPU build path in this repository has been validated end-to-end:
+The Intel GPU build and runtime are not yet validated. The previous Aurora
+build job exited before CMake because PBS staged the script outside the
+repository and the builder could not locate the checkout. The builder now
+falls back to `PROJECT_ROOT` or `PBS_O_WORKDIR` and verifies the requested QE
+GPU features and architecture in the CMake cache. A successful build still
+needs a compute-node smoke test to confirm actual offload.
 
-- CMake configure/build/install completed with exit code 0.
-- Install prefix contains 106 executables in `install-gpu/bin/`.
-- Core binaries present and installed: `pw.x`, `cp.x`, `ph.x`, `pp.x`, `epw.x`.
-- Runtime paths were set to Aurora oneAPI compiler runtime libs during install.
+Aurora's system QE 7.6 CPU/OpenMP binary is not evidence of GPU support; use
+the repository-built `install-gpu/bin/pw.x` for the GPU smoke test.
+
+In the QE source revision used by this build, the Intel oneAPI OpenMP target
+regions are in EPW, not the PWSCF, FFTXlib, or eigensolver paths. A successful
+`pw.x` SCF therefore does not demonstrate Intel GPU execution. The Aurora GPU
+smoke job runs the `epw_mob_polar` test and requires every EPW stage's
+`LIBOMPTARGET_INFO` log to record executed GPU kernels; EPW kernels are too short
+to show up reliably in the `xpu-smi` telemetry it also records.
+
+Unpatched QE `develop` (71e4e9b) aborts `epw_mob_polar` stages `epw2`/`epw3`
+under `OMP_TARGET_OFFLOAD=MANDATORY` with a PVC page fault
+(`Segmentation fault from GPU ... (CCS) type: 0 (NotPresent)`), while the same
+inputs pass with offload disabled. In the oneMKL branch of
+`vmewan2bloch_batch` (`EPW/src/wannier2bloch.f90`), `ir_cfac` is filled on the
+host and passed to a `!$omp dispatch` `ZGEMV_BATCH_STRIDED` without ever being
+mapped, so its `target update to` is a no-op and oneMKL receives a host pointer.
+The builder applies
+`deployments/aurora/setup/patches/qe-epw-onemkl-ir-cfac/epw-map-ir-cfac.patch`,
+which adds the missing `!$omp target enter data map(alloc:ir_cfac)`.
 
 ## What gets built
 
-- QE source from `QEF/q-e` (default branch: `develop`, overrideable).
+- QE source from `QEF/q-e` (default branch: `develop`, pinned to
+  `QE_COMMIT=71e4e9b25b35`; set `QE_COMMIT=''` to follow the branch tip).
 - GPU build via QE CMake flags:
   - `-DQE_GPU="openmp;oneapi"`
   - `-DQE_GPU_ARCHS=intel_gpu_pvc`
 - MPI-enabled executables and common target groups, including:
   - `pw`, `cp`, `ph`, `pp`, `neb`, `hp`, `ld1`, `pwall`, `pwcond`,
-    `tddfpt`, `upf`, `xspectra`
+    `tddfpt`, `upf`, `xspectra`, `epw`
 
 ## Toolchain and environment
 
@@ -100,11 +122,11 @@ ls -lh external/quantum-espresso/install-gpu/bin/{pw.x,cp.x,ph.x,pp.x,epw.x}
 ls external/quantum-espresso/install-gpu/bin/*.x | wc -l
 ```
 
-Expected characteristics from a successful validated build in this repo:
+Expected characteristics after a successful build:
 
-- install size around ~1 GB
-- core binaries in the multi-megabyte range (for example `pw.x` around ~17 MB)
-- executable count around ~100 (validated run produced 106)
+- core binaries in the multi-megabyte range
+- `pw.x` exists and the CMake cache records `QE_GPU=openmp;oneapi` and
+  `QE_GPU_ARCHS=intel_gpu_pvc`
 
 ## Notes
 
