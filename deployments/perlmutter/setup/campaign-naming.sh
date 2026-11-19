@@ -1,16 +1,12 @@
 #!/bin/bash
 
-# Print the MLIP backend selected by an AL config (only that value is substituted).
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/../../common/runtime-env.sh"
+
+# Print the MLIP backend selected by a config's mlip block.
 campaign_mlip_backend() {
-  local repo="$1" python="$2" config="$3"
-  "$python" -c '
-import sys
-from pathlib import Path
-
-import yaml
-
-print(yaml.safe_load(Path(sys.argv[1]).read_text())["mlip"]["backend"])
-' "$config"
+  local python="$2" config="$3"
+  mlip_backend "$python" "$config"
 }
 
 configure_campaign_run_name() {

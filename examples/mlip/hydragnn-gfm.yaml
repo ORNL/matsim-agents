@@ -1,10 +1,12 @@
-# HydraGNN multi-head foundation model, fine-tuned by active learning.
-# INITIAL_LOGDIR: training logdir with config.json and the checkpoint.
+# HydraGNN multi-head foundation model (BEST6 GFM), weighted by its BranchWeightMLP.
+# HYDRAGNN_DIR: HydraGNN checkout containing examples/multidataset_hpo_sc26.
+# Active learning fine-tunes the routed heads (fine_tuner: finetune_hydragnn);
+# set fine_tuner: finetune_hydragnn_newhead to drop all heads and train one.
 mlip:
   backend: hydragnn
-  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
-  logdir: ${INITIAL_LOGDIR}
+  logdir: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
+  checkpoint: multidataset_hpo-BEST6-fp64_epoch_97.pk
+  mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
   hydragnn_root: ${HYDRAGNN_DIR}
-  checkpoint: best_model.pt
   precision: fp32
   device: cuda

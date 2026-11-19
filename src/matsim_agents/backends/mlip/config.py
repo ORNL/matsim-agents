@@ -219,7 +219,25 @@ class MLIPBackendConfig(BaseModel, ABC):
         """The primary model followed by every ensemble member."""
         return [self, *(self.ensemble_member(model) for model in self.ensemble_models)]
 
-    def relaxation_calculator(self, *, charge: float = 0.0, spin: float = 0.0) -> RelaxCalculator:
+    def conditioning(self) -> tuple[float, float]:
+        """The (charge, spin) this model is conditioned on; (0, 0) when it has none."""
+        return (
+            float(getattr(self, "charge", 0.0)),
+            float(getattr(self, "spin", 0.0)),
+        )
+
+    def with_conditioning(self, charge: float, spin: float) -> MLIPBackendConfig:
+        """This model conditioned on ``charge`` and ``spin``."""
+        if "charge" in type(self).model_fields:
+            return self.model_copy(update={"charge": charge, "spin": spin})
+        if charge or spin:
+            raise ValueError(
+                f"{self.backend} models are not conditioned on charge or spin "
+                f"(requested charge={charge}, spin={spin})"
+            )
+        return self
+
+    def relaxation_calculator(self) -> RelaxCalculator:
         """Calculator for structure relaxation and its branch-weight UQ support."""
         from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 
@@ -427,12 +445,10 @@ class HydraGNNConfig(MLIPBackendConfig):
                 files.append(path)
         return sorted(set(files))
 
-    def relaxation_calculator(self, *, charge: float = 0.0, spin: float = 0.0) -> RelaxCalculator:
+    def relaxation_calculator(self) -> RelaxCalculator:
         from matsim_agents.backends.mlip.relaxation import hydragnn_relaxation_calculator
 
-        return hydragnn_relaxation_calculator(
-            self.model_copy(update={"charge": charge, "spin": spin})
-        )
+        return hydragnn_relaxation_calculator(self)
 
 
 class UMAConfig(MLIPBackendConfig):

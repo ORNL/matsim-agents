@@ -40,8 +40,8 @@ class GeometryControls(BaseModel):
     relax_atoms: bool = True
     relax_cell: bool = False
     fixed_atom_indices: list[int] = Field(default_factory=list)
-    charge: float = 0.0
-    spin: float = 0.0
+    charge: float | None = None  # unset: the selected MLIP's configured charge
+    spin: float | None = None  # unset: the selected MLIP's configured spin
     pressure_GPa: float | None = None
     preserve_symmetry: bool = False
 

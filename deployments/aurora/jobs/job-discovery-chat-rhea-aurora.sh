@@ -37,6 +37,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/runtime-env.sh"
 
 VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
@@ -59,6 +61,10 @@ mkdir -p "${RUN_DIR}" "${OUTPUT_DIR}"
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 # shellcheck disable=SC1091
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
+# or the HydraGNN foundation model above. The client runs in that backend's environment.
+MLIP_CONFIG="$(default_mlip_config "${RUN_DIR}" "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}")"
+VENV_PATH="$(mlip_backend_venv "${REPO}" "$(mlip_backend "${VENV_PATH}/bin/python" "$MLIP_CONFIG")" "${VENV_PATH}")"
 if [[ -f "${VENV_PATH}/bin/activate" ]]; then
     source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
     activate_matsim_aurora_python "${REPO}" "${VENV_PATH}"
@@ -148,13 +154,6 @@ while true; do
     (( ELAPSED += INTERVAL ))
 done
 
-# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
-# examples/mlip/*.yaml) or the HydraGNN foundation model above.
-if [[ -z "${MLIP_CONFIG:-}" ]]; then
-  MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
-  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
-    "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
-fi
 
 # ── multi-turn RHEA dialogue ────────────────────────────────────────────────
 # Each turn states ONE equiatomic RHEA formula explicitly in the user

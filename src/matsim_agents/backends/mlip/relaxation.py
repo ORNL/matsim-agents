@@ -20,7 +20,7 @@ import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPBackendConfig, MLIPConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
 
 
@@ -85,8 +85,12 @@ class RelaxStructureInput(RelaxationSettings):
         ...,
         description="MLIP backend and its model settings (backend plus its own config block).",
     )
-    charge: float = 0.0
-    spin: float = 0.0
+    charge: float | None = Field(
+        None, description="System charge; unset uses the mlip block's configured charge."
+    )
+    spin: float | None = Field(
+        None, description="System spin; unset uses the mlip block's configured spin."
+    )
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
     seed: int = 42
@@ -99,7 +103,16 @@ class RelaxStructureInput(RelaxationSettings):
     @model_validator(mode="after")
     def _validate_model_inputs(self):
         self.mlip.check_loadable()
+        self.conditioned_mlip()
         return self
+
+    def conditioned_mlip(self) -> MLIPBackendConfig:
+        """The model to relax with: the mlip block with this request's charge and spin."""
+        charge, spin = self.mlip.conditioning()
+        return self.mlip.with_conditioning(
+            charge if self.charge is None else self.charge,
+            spin if self.spin is None else self.spin,
+        )
 
 
 def atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
@@ -554,7 +567,7 @@ class CalculatorCache:
 
     @staticmethod
     def key(args: RelaxStructureInput) -> tuple:
-        return (args.mlip.model_dump_json(), args.charge, args.spin)
+        return args.conditioned_mlip().model_dump_json()
 
     def get(self, args: RelaxStructureInput) -> RelaxCalculator:
         key = self.key(args)
@@ -577,7 +590,7 @@ class CalculatorCache:
 
 def _relaxation_calculator(args: RelaxStructureInput) -> RelaxCalculator:
     """Build the selected MLIP's relaxation calculator."""
-    return args.mlip.relaxation_calculator(charge=args.charge, spin=args.spin)
+    return args.conditioned_mlip().relaxation_calculator()
 
 
 class _OptimizationOutcome(NamedTuple):

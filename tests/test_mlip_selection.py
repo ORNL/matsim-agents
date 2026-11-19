@@ -66,7 +66,6 @@ def _al_yaml(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def hydragnn_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("INITIAL_LOGDIR", str(tmp_path / "logdir"))
     monkeypatch.setenv("HYDRAGNN_DIR", str(tmp_path / "HydraGNN"))
 
 
@@ -209,3 +208,63 @@ def test_hydragnn_model_files_follow_the_declared_energy_convention(tmp_path):
             "routing.json",
         )
     )
+
+
+@pytest.mark.parametrize("path", SELECTIONS, ids=lambda path: path.stem)
+def test_reusable_selections_are_complete_for_inference(path, hydragnn_env):
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+
+    request = RelaxStructureInput(structure_path="structure.vasp", mlip=load_mlip_config(path))
+    assert request.conditioned_mlip() == request.mlip
+
+
+def _conditioned_hydragnn(tmp_path):
+    return HydraGNNConfig(
+        logdir=tmp_path, checkpoint="c.pk", inference_head=0, charge=2.0, spin=1.0
+    )
+
+
+def test_relaxation_uses_the_configured_charge_and_spin(tmp_path, monkeypatch):
+    from matsim_agents.backends.mlip import relaxation
+
+    built = []
+    monkeypatch.setattr(
+        HydraGNNConfig, "relaxation_calculator", lambda self: built.append(self.conditioning())
+    )
+    request = relaxation.RelaxStructureInput(
+        structure_path="s.vasp", mlip=_conditioned_hydragnn(tmp_path)
+    )
+    relaxation._relaxation_calculator(request)
+    override = request.model_copy(update={"charge": -1.0})
+    relaxation._relaxation_calculator(override)
+    assert built == [(2.0, 1.0), (-1.0, 1.0)]
+    assert relaxation.CalculatorCache.key(request) != relaxation.CalculatorCache.key(override)
+
+
+def test_discovery_relaxations_keep_the_configured_conditioning(tmp_path, monkeypatch):
+    import matsim_agents.discovery.wrapper as wrapper
+    from matsim_agents.discovery.seeds import PhaseCandidate
+
+    candidate = PhaseCandidate(
+        formula="Cu", source="random", structure_path=str(tmp_path / "c.vasp")
+    )
+    monkeypatch.setattr(wrapper, "generate_seed_action", lambda *args, **kwargs: [candidate])
+    requests = []
+
+    def relax(args, **kwargs):
+        requests.append(args.conditioned_mlip().conditioning())
+        raise RuntimeError("stop after the request is built")
+
+    monkeypatch.setattr(wrapper, "relax_with_mlip", relax)
+    wrapper.explore_composition(
+        "Cu", mlip=_conditioned_hydragnn(tmp_path), output_dir=tmp_path / "out"
+    )
+    assert requests and set(requests) == {(2.0, 1.0)}
+
+
+def test_charge_for_a_backend_without_conditioning_is_rejected():
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+
+    assert RelaxStructureInput(structure_path="s", mlip=MACEConfig(), charge=0.0)
+    with pytest.raises(ValidationError, match="not conditioned on charge or spin"):
+        RelaxStructureInput(structure_path="s", mlip=MACEConfig(), spin=1.0)

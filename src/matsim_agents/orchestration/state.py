@@ -20,8 +20,8 @@ class TaskSpec(BaseModel):
     optimizer: Literal["FIRE", "BFGS", "BFGSLineSearch"] = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
-    charge: float = 0.0
-    spin: float = 0.0
+    charge: float | None = None  # unset: the selected MLIP's configured charge
+    spin: float | None = None  # unset: the selected MLIP's configured spin
     random_displacement: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
 

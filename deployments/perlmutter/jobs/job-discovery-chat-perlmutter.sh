@@ -46,8 +46,11 @@ RESOURCES="${MATSIM_RESOURCES:-$REPO/deployments/perlmutter/resources/discovery-
 # ── modules & conda env ──────────────────────────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$VENV"
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
+# or the HydraGNN foundation model above. The client runs in that backend's environment.
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
+activate_python_env "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
@@ -89,13 +92,6 @@ EOF
 )"
 fi
 
-# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
-# examples/mlip/*.yaml) or the HydraGNN foundation model above.
-if [[ -z "${MLIP_CONFIG:-}" ]]; then
-  MLIP_CONFIG="$RUN_DIR/mlip.yaml"
-  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
-    "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" >"$MLIP_CONFIG"
-fi
 
 echo "[$(date)] Submitting discovery query to matsim-agents (in-process Hugging Face model) ..."
 echo "$QUERY" | matsim-agents chat \

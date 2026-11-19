@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
@@ -34,6 +35,8 @@ def test_finetune_eval_job_passes_absolute_inputs_and_the_selected_environment(t
     job = launchers / "job-finetune-eval-perlmutter.sh"
     shutil.copy(ROOT / "deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh", job)
     shutil.copy(ROOT / "deployments/perlmutter/setup/campaign-naming.sh", setup)
+    (repo / "deployments/common").mkdir(parents=True)
+    shutil.copy(ROOT / "deployments/common/runtime-env.sh", repo / "deployments/common")
     (setup / "perlmutter-module-stack.sh").write_text("load_perlmutter_modules_gpu() { :; }\n")
     (setup / "model-artifacts-perlmutter.sh").write_text(
         "configure_mace_model_artifacts() { :; }\n"
@@ -520,3 +523,49 @@ def test_bounded_campaign_submission_names_and_forwards_the_mlip_config(tmp_path
     run_tag, mlip_config = capture.read_text().strip().split("|")
     assert run_tag.startswith("nb-ta-o--7llm-mace-al-qe-hull--")
     assert mlip_config == str(ROOT / "examples/mlip/mace-omat-0-medium.yaml")
+
+
+@pytest.mark.parametrize(
+    ("backend", "expected"),
+    [("hydragnn", "site-venv"), ("uma", "venv-uma"), ("mace", "venv-mace")],
+)
+def test_chat_clients_run_in_the_selected_backends_environment(tmp_path, backend, expected):
+    config = tmp_path / "mlip.yaml"
+    config.write_text(f"mlip:\n  backend: {backend}\n")
+    helpers = ROOT / "deployments/common/runtime-env.sh"
+    script = (
+        f'source "{helpers}"\n'
+        f'mlip_backend_venv "{tmp_path}" "$(mlip_backend "{sys.executable}" "{config}")" '
+        f'"{tmp_path}/site-venv"\n'
+    )
+    env = {**os.environ, "MATSIM_FAIRCHEM_VENV": str(tmp_path / "venv-uma")}
+    env.pop("MATSIM_MACE_VENV", None)
+    result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    expected_path = tmp_path / (".venv-mace" if backend == "mace" else expected)
+    assert result.stdout.strip() == str(expected_path)
+
+
+def test_chat_default_selection_is_the_hydragnn_foundation_model(tmp_path):
+    helpers = ROOT / "deployments/common/runtime-env.sh"
+    env = {k: v for k, v in os.environ.items() if k != "MLIP_CONFIG"}
+    result = subprocess.run(
+        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm /gfm/mlp.pt'],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    path = Path(result.stdout.strip())
+    assert path == tmp_path / "mlip.yaml"
+    assert yaml.safe_load(path.read_text())["mlip"] == {
+        "backend": "hydragnn",
+        "logdir": "/gfm",
+        "mlp_checkpoint": "/gfm/mlp.pt",
+    }
+    chosen = subprocess.run(
+        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm /m'],
+        env={**env, "MLIP_CONFIG": "/my/uma.yaml"},
+        capture_output=True,
+        text=True,
+    )
+    assert chosen.stdout.strip() == "/my/uma.yaml"
