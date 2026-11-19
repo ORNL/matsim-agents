@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from matsim_agents.cli import app, system
@@ -248,3 +250,59 @@ def test_debate_summary_points_to_the_transcript(monkeypatch, tmp_path):
     assert readable.exit_code == 0, readable.output
     assert "Debate complete: 2 round(s)" in readable.output
     assert "transcript.md" in readable.output
+
+
+def test_every_registered_tool_module_has_a_main():
+    import ast
+    from importlib.util import find_spec
+
+    from matsim_agents.cli.tools import TOOLS
+
+    for name, (module, _) in TOOLS.items():
+        spec = find_spec(module)
+        assert spec is not None and spec.origin, (name, module)
+        tree = ast.parse(Path(spec.origin).read_text(encoding="utf-8"))
+        assert any(
+            isinstance(node, ast.FunctionDef) and node.name == "main" for node in tree.body
+        ), (name, module)
+
+
+@pytest.mark.parametrize("takes_argv", [True, False])
+def test_tools_run_passes_arguments_and_exit_code(monkeypatch, takes_argv):
+    import types
+
+    from matsim_agents.cli import tools
+
+    seen = {}
+    if takes_argv:
+
+        def main(argv=None):
+            seen["args"], seen["prog"] = argv, sys.argv[0]
+            return 3
+
+    else:
+
+        def main():
+            seen["args"], seen["prog"] = sys.argv[1:], sys.argv[0]
+            return 3
+
+    fake = types.ModuleType("fake_tool")
+    fake.main = main
+    monkeypatch.setitem(tools.TOOLS, "fake", ("fake_tool", "test tool"))
+    monkeypatch.setitem(sys.modules, "fake_tool", fake)
+    result = CliRunner().invoke(app, ["tools", "run", "fake", "--dataset", "d.json", "--help"])
+    assert result.exit_code == 3
+    assert seen == {
+        "args": ["--dataset", "d.json", "--help"],
+        "prog": "matsim-agents tools run fake",
+    }
+
+
+def test_tools_list_and_unknown_tool():
+    runner = CliRunner()
+    listed = runner.invoke(app, ["tools", "list"])
+    assert listed.exit_code == 0
+    assert "finetune-mace" in listed.output
+    unknown = runner.invoke(app, ["tools", "run", "nope"])
+    assert unknown.exit_code == 2
+    assert "unknown tool 'nope'" in unknown.output

@@ -217,6 +217,8 @@ matsim-agents doctor [--require BACKEND]   # Python/backend preflight without lo
 matsim-agents config list                  # configuration kinds, templates, and consuming commands
 matsim-agents config init KIND OUTPUT.yaml # copy an annotated starter config; never overwrites
 matsim-agents config schema KIND [-o FILE] # JSON Schema for editor validation and completion
+matsim-agents tools list                   # training, dataset, and benchmark tools in the package
+matsim-agents tools run NAME [ARGS...]     # run a tool; its own --help lists its options
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
