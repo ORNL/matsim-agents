@@ -21,7 +21,7 @@ flowchart TD
 
     O -->|HydraGNN, UMA, or MACE| S
     P -->|HydraGNN, UMA, or MACE| S
-    I -->|HydraGNN or UMA| S
+    I -->|HydraGNN, UMA, or MACE| S
 
     R{Return to invoking mode}
 
@@ -138,8 +138,8 @@ flowchart TD
 - Objective, composition, and interactive modes are user-facing adapters, not
   separate scientific workflows. They share discovery, relaxation, and
   active-learning capabilities when configured, then format results for their
-  invoking mode. Objective and composition workflows support HydraGNN, UMA, and
-  MACE; interactive chat currently supports HydraGNN and UMA.
+  invoking mode. Objective, composition, and interactive chat workflows all
+  support HydraGNN, UMA, and MACE through the same `mlip:` selection.
 - Hypothesis formulation, multi-LLM debate, evidence review, and revision are
   conditional investigation or campaign capabilities, not steps in every run.
 - A characterization contract applies to the characterization pathway; it is

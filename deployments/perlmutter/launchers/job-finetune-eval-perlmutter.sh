@@ -112,16 +112,15 @@ export PYTHONPATH="${REPO}/src:${PYTHONPATH:-}"
 
 # shellcheck disable=SC1091
 source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_mlip_model_artifacts "${REPO}" python "${MLIP_CONFIG}"
 case "${BACKEND}" in
   # HydraGNN package + example dir (inference_fused / branch MLP) on the path.
   hydragnn) export PYTHONPATH="${HYDRAGNN_ROOT}:${PYTHONPATH}" ;;
   uma)
-    configure_uma_model_artifacts "${REPO}" "$(mlip_uma_model_name python "${MLIP_CONFIG}")"
     if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
       HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"; export HF_TOKEN
     fi
     ;;
-  mace) configure_mace_model_artifacts "${REPO}" ;;
 esac
 
 EXTRA_ARGS=()

@@ -244,7 +244,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 ### `deployments/perlmutter/jobs/`
 | Script | Purpose |
 |---|---|
-| `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
+| `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + the selected MLIP (`MLIP_CONFIG`, default HydraGNN; FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
 | `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents relax` contract through the shared deployment runner. |
 | `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
 | `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |

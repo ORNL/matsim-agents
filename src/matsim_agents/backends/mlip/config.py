@@ -719,7 +719,10 @@ def load_mlip_config(path: str | Path) -> MLIPBackendConfig:
     from matsim_agents.execution.variables import expand_variables, variable_defaults
 
     path = Path(path).expanduser().resolve()
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise ValueError(f"{path}: invalid YAML: {error}") from error
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a mapping with an mlip block")
     block = data.get("mlip")

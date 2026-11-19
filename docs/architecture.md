@@ -117,7 +117,7 @@ flowchart TD
 
     OP -->|HydraGNN, UMA, or MACE| X
     PP -->|HydraGNN, UMA, or MACE| X
-    IP -->|HydraGNN or UMA| X
+    IP -->|HydraGNN, UMA, or MACE| X
 
     subgraph SCIENCE[Shared scientific capabilities]
       X[Phase search and MLIP relaxation]

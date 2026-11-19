@@ -24,7 +24,7 @@ potentials can be added without changing orchestration logic.
 
 ## Start with a small phase search
 
-For a bounded MACE-only phase search, use one YAML file with
+For a bounded phase search with any supported MLIP, use one YAML file with
 `matsim-agents explore check`, `explore run`, and `explore summary`.
 Every run supports resume. Use `iterations: 3` for multiple rounds and `selection: diverse`
 to skip equivalent structures and prioritize structural diversity.

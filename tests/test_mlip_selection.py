@@ -268,3 +268,27 @@ def test_charge_for_a_backend_without_conditioning_is_rejected():
     assert RelaxStructureInput(structure_path="s", mlip=MACEConfig(), charge=0.0)
     with pytest.raises(ValidationError, match="not conditioned on charge or spin"):
         RelaxStructureInput(structure_path="s", mlip=MACEConfig(), spin=1.0)
+
+
+def test_malformed_selection_yaml_is_a_usage_error(tmp_path, capsys):
+    import argparse
+
+    from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
+
+    path = tmp_path / "broken.yaml"
+    path.write_text("mlip: [\n")
+    with pytest.raises(ValueError, match="invalid YAML"):
+        load_mlip_config(path)
+
+    parser = argparse.ArgumentParser()
+    add_mlip_arguments(parser)
+    with pytest.raises(SystemExit) as exit_info:
+        mlip_config_from_args(parser, parser.parse_args(["--mlip-config", str(path)]))
+    assert exit_info.value.code == 2
+    assert "--mlip-config" in capsys.readouterr().err
+
+    result = CliRunner().invoke(
+        app, ["al", "validate-config", str(_al_yaml(tmp_path)), "--mlip-config", str(path)]
+    )
+    assert result.exit_code == 2
+    assert "invalid YAML" in result.output

@@ -52,6 +52,10 @@ MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CH
 VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
 activate_python_env "$VENV"
 
+# Offline compute nodes: stage the selected model's downloaded artifacts.
+source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_mlip_model_artifacts "$REPO" python "$MLIP_CONFIG"
+
 # Make HydraGNN example utilities importable (inference_fused, etc.)
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
 

@@ -230,10 +230,11 @@ before building a workflow on top of it.
 
 ### Available today
 
-- **Single-point energies and forces** from a HydraGNN MLFF checkpoint
-  through an ASE calculator interface.
-- **Geometry relaxation** of atoms and (optionally) cell, driven by
-  HydraGNN through the upstream `structure_optimization_ASE.py` wrapper.
+- **Single-point energies and forces** from any supported MLIP (HydraGNN,
+  UMA, or MACE, selected by an `mlip:` block) through an ASE calculator
+  interface.
+- **Geometry relaxation** of atoms and (optionally) cell with the selected
+  MLIP.
 - **Isotropic lattice scans** to locate equilibrium volume / lattice
   constant.
 - **Random-shuffle ordering enumeration** for disordered sites,

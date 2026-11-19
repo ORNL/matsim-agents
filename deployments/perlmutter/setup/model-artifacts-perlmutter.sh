@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/../../common/runtime-env.sh"
+
 # Print the UMA model_name of a YAML's mlip block (variables expanded, paths
 # resolved) with the given Python, which must import matsim_agents.
 mlip_uma_model_name() {
@@ -41,4 +44,18 @@ configure_mace_model_artifacts() {
   MACE_CACHE="${MACE_ARTIFACT_DIR}/mace"
   mkdir -p "${MACE_CACHE}"
   export MACE_ARTIFACT_DIR XDG_CACHE_HOME MACE_CACHE
+}
+# Stage the durable artifacts of the model selected by CONFIG's mlip block
+# (UMA bundle or MACE cache; HydraGNN reads its logdir directly). PYTHON must
+# import matsim_agents, i.e. the selected backend's activated environment.
+configure_mlip_model_artifacts() {
+  local repo="$1" python="$2" config="$3" backend model_name
+  backend="$(mlip_backend "$python" "$config")" || return
+  case "$backend" in
+    uma)
+      model_name="$(mlip_uma_model_name "$python" "$config")" || return
+      configure_uma_model_artifacts "$repo" "$model_name"
+      ;;
+    mace) configure_mace_model_artifacts "$repo" ;;
+  esac
 }

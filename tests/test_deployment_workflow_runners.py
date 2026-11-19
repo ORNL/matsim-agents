@@ -39,7 +39,7 @@ def test_finetune_eval_job_passes_absolute_inputs_and_the_selected_environment(t
     shutil.copy(ROOT / "deployments/common/runtime-env.sh", repo / "deployments/common")
     (setup / "perlmutter-module-stack.sh").write_text("load_perlmutter_modules_gpu() { :; }\n")
     (setup / "model-artifacts-perlmutter.sh").write_text(
-        "configure_mace_model_artifacts() { :; }\n"
+        "configure_mlip_model_artifacts() { :; }\n"
     )
     main_venv = tmp_path / "main-venv"
     (main_venv / "bin").mkdir(parents=True)
@@ -569,3 +569,35 @@ def test_chat_default_selection_is_the_hydragnn_foundation_model(tmp_path):
         text=True,
     )
     assert chosen.stdout.strip() == "/my/uma.yaml"
+
+
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+def test_selected_model_artifacts_are_staged(tmp_path, backend):
+    """Offline jobs export the selected model's artifact location before loading it."""
+    blocks = {
+        "hydragnn": "backend: hydragnn\n  logdir: /gfm\n  mlp_checkpoint: /gfm/mlp.pt",
+        "uma": "backend: uma\n  model_name: uma-s-1p1",
+        "mace": "backend: mace\n  model: small",
+    }
+    config = tmp_path / "mlip.yaml"
+    config.write_text(f"mlip:\n  {blocks[backend]}\n")
+    bundle = tmp_path / "artifacts" / "uma" / "uma-s-1p1"
+    bundle.mkdir(parents=True)
+    (bundle / "checkpoint.pt").write_text("weights")
+    (bundle / "atom_refs.yaml").write_text("refs")
+    helper = ROOT / "deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+    script = (
+        f'source "{helper}"\n'
+        f'configure_mlip_model_artifacts "{tmp_path / "repo"}" "{sys.executable}" "{config}"\n'
+        'printf "%s|%s\\n" "${MATSIM_UMA_ARTIFACT_DIR:-}" "${MACE_CACHE:-}"\n'
+    )
+    env = {**os.environ, "MATSIM_MODEL_ARTIFACTS_ROOT": str(tmp_path / "artifacts")}
+    for name in ("MATSIM_UMA_ARTIFACT_DIR", "MACE_ARTIFACT_DIR", "MACE_CACHE"):
+        env.pop(name, None)
+    result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    uma_dir, mace_cache = result.stdout.strip().split("|")
+    assert bool(uma_dir) is (backend == "uma")
+    assert bool(mace_cache) is (backend == "mace")
+    if backend == "uma":
+        assert uma_dir == str(tmp_path / "artifacts" / "uma")
