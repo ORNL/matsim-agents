@@ -194,6 +194,7 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
     out_dir.mkdir()
 
     return ALConfig(
+        random_seed=0,
         mlip=HydraGNNConfig(logdir=logdir),
         md=MDConfig(
             seed_source=SeedSourceConfig(kind="paths", paths=[seed]),
@@ -265,7 +266,7 @@ def _patch_runtime(
     monkeypatch.setattr(
         loop_mod,
         "resolve_seed_structures",
-        lambda src, out_dir: [Path(path) for path in src.paths],
+        lambda src, out_dir, **_: [Path(path) for path in src.paths],
     )
     monkeypatch.setattr(
         loop_mod,
@@ -508,7 +509,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     cfg.loop.n_iterations = 2
     cfg.acquisition.n_select = 4
     cfg.trainer.validation_fraction = 0.25
-    cfg.trainer.validation_split_seed = 2
+    cfg.random_seed = 2
 
     import matsim_agents.active_learning.loop as loop_mod
 
@@ -708,7 +709,6 @@ def test_holdout_split_compares_candidate_without_promotion(
     cfg.trainer = TrainerConfig(
         enabled=True,
         validation_fraction=0.2,
-        validation_split_seed=7,
         compare_after_training=True,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
@@ -1176,7 +1176,7 @@ def test_resume_applies_last_promoted_model_for_all_backends(
             }
         )
     )
-    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *args: [])
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *args, **_: [])
 
     loop_mod.run_active_learning(cfg)
 

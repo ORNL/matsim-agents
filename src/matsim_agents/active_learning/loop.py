@@ -80,7 +80,7 @@ from matsim_agents.datasets.governance import (
     write_dataset_manifest,
 )
 from matsim_agents.execution.placement import Placement
-from matsim_agents.execution.seeding import numpy_rng, stream_seed
+from matsim_agents.seeding import numpy_rng, stream_seed
 
 log = logging.getLogger(__name__)
 

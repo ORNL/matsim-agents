@@ -20,7 +20,7 @@ import hashlib
 import json
 import random
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
 import numpy as np
 
@@ -56,14 +56,24 @@ def python_rng(seed: int, *stream: StreamKey) -> random.Random:
 
 @contextmanager
 def seeded_torch(seed: int, *stream: StreamKey) -> Iterator[None]:
-    """Seed PyTorch's global CPU and CUDA generators for the block, then restore them.
+    """Seed PyTorch's global generators for the block, then restore them.
 
+    ``torch.manual_seed`` reseeds the CPU, CUDA, and XPU generators, so the state
+    of each available accelerator type is saved and restored, also on error.
     For code whose randomness comes from torch's global state (e.g. dropout).
     """
     import torch
 
-    devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
-    with torch.random.fork_rng(devices=devices):
+    with ExitStack() as saved:
+        for device_type in ("cuda", "xpu"):
+            backend = getattr(torch, device_type, None)
+            if backend is not None and backend.is_available():
+                saved.enter_context(
+                    torch.random.fork_rng(
+                        devices=list(range(backend.device_count())), device_type=device_type
+                    )
+                )
+        saved.enter_context(torch.random.fork_rng(devices=[]))
         torch.manual_seed(stream_seed(seed, *stream))
         yield
 

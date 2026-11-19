@@ -36,11 +36,13 @@ print(result.final_energy_eV, result.optimized_structure_path)
 ```python
 from matsim_agents.discovery import explore_composition
 
-# Default: every applicable AFLOW prototype + 50 pyXtal random seeds.
+# Default: every applicable AFLOW prototype + 50 pyXtal random structures.
+# The seed is always explicit (docs/reproducibility.md).
 result = explore_composition(
     "Cs2AgBiBr6",
     mlip=mlip,
     output_dir="./outputs",
+    random_seed=20261113,
 )
 print(result.stability.summary)
 
@@ -50,6 +52,7 @@ result = explore_composition(
     mlip=mlip,
     output_dir="./outputs",
     n_random=0,
+    random_seed=None,
 )
 
 # Novelty-heavy run for an exotic / high-entropy composition with no

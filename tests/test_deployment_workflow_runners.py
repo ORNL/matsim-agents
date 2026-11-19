@@ -238,6 +238,7 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
         "REPO": str(ROOT),
         "RUN_DIR": str(run_dir),
         "MATSIM_SEED_STRUCTURES": ":".join(map(str, seeds)),
+        "MATSIM_RANDOM_SEED": "17",
         "LOGDIR": str(tmp_path / "model"),
         "HYDRAGNN_BRANCH_MLP_CHECKPOINT": str(tmp_path / "weights.pt"),
         "MATSIM_DFT_BACKEND": "qe",
@@ -259,6 +260,7 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     assert cfg.dft.backend == "qe"
     assert cfg.trainer.enabled is False
     assert list(cfg.md.seed_source.paths) == seeds
+    assert cfg.random_seed == 17
     assert cfg.resources.preset == "perlmutter-gpu"
     assert cfg.resources.pools["dft"].share_with == ["training", "mlip"]
     assert "mlip" in cfg.resources.pools

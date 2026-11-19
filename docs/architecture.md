@@ -14,6 +14,7 @@ individual experiments or machines.
 | `backends.llm` | Configuration-selected language-model providers |
 | `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
 | `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
+| `seeding` | The only source of random generators and seeds: named streams derived from one configured seed ([reproducibility](reproducibility.md)) |
 | `execution` | Scheduler-neutral resources, launch contracts, provenance, and the backend capability registry |
 | `datasets` | Dependency-free dataset governance, elemental reference manifests, formation-energy dataset preparation, energy alignment, and objective-aware train/validation/test splits |
 | `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
@@ -80,12 +81,13 @@ enforced by `tests/test_package_boundaries.py`.
 
 | Layer | Packages |
 | --- | --- |
-| 6 | `cli` |
-| 5 | `orchestration`, `campaign` |
-| 4 | `active_learning`, `workflows` |
-| 3 | `discovery`, `training` |
-| 2 | `backends.llm`, `backends.dft`, `backends.mlip` |
-| 1 | `execution`, `datasets` |
+| 7 | `cli` |
+| 6 | `orchestration`, `campaign` |
+| 5 | `active_learning`, `workflows` |
+| 4 | `discovery`, `training` |
+| 3 | `backends.llm`, `backends.dft`, `backends.mlip` |
+| 2 | `execution`, `datasets` |
+| 1 | `seeding` |
 
 When new code needs something from a higher layer, move the shared piece down
 (usually into `datasets`, `execution`, or the relevant `backends` package)

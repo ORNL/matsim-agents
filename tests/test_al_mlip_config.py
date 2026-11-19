@@ -22,6 +22,7 @@ def _base_blocks(tmp_path) -> dict:
     seed = tmp_path / "seed.extxyz"
     seed.write_text("0\n\n")  # content irrelevant; path just needs to exist as a string
     return {
+        "random_seed": 0,
         "md": {
             "seed_source": {"kind": "paths", "paths": [str(seed)]},
         },

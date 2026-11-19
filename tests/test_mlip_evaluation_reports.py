@@ -39,15 +39,15 @@ def test_group_report_resamples_groups_and_names_the_worst():
     assert low <= force["frame_mean"] <= high
     # A metric without labels is omitted rather than reported as zero.
     assert "formation_energy_mae_eV_per_atom" not in report["metrics"]
-    single = group_report(_parity([0.1, 0.2]), ["only", "only"])
+    single = group_report(_parity([0.1, 0.2]), ["only", "only"], seed=0)
     assert single["metrics"]["force_mae_eV_per_A"]["group_bootstrap_95"] is None
 
 
 def test_paired_differences_use_identical_groups():
     groups = ["a", "a", "b", "b"]
-    before = group_report(_parity([0.2, 0.2, 0.4, 0.4]), groups)
-    after = group_report(_parity([0.1, 0.1, 0.5, 0.5]), groups)
-    diff = paired_difference(after, before)["force_mae_eV_per_A"]
+    before = group_report(_parity([0.2, 0.2, 0.4, 0.4]), groups, seed=0)
+    after = group_report(_parity([0.1, 0.1, 0.5, 0.5]), groups, seed=0)
+    diff = paired_difference(after, before, seed=0)["force_mae_eV_per_A"]
     assert diff["mean_difference"] == pytest.approx(0.0)
     assert diff["groups_improved"] == 1 and diff["n_groups"] == 2
 

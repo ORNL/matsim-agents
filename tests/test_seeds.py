@@ -110,13 +110,13 @@ def test_decorate_elemental_yields_single_decoration():
 
 
 def test_random_search_zero_returns_empty():
-    assert random_search(_comp("Si"), n=0) == []
+    assert random_search(_comp("Si"), n=0, seed=0) == []
 
 
 @pytest.mark.skipif(pyxtal_available, reason="pyxtal IS installed; test covers the missing case")
 def test_random_search_degrades_without_pyxtal():
     with pytest.warns(UserWarning, match="pyXtal is not installed"):
-        out = random_search(_comp("Si"), n=5)
+        out = random_search(_comp("Si"), n=5, seed=0)
     assert out == []
 
 

@@ -16,7 +16,7 @@ from matsim_agents.active_learning.candidates import _SeedTask, sample_md_candid
 from matsim_agents.active_learning.config import MDConfig, SeedSourceConfig
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import WorkerOutcome
-from matsim_agents.execution.seeding import numpy_rng
+from matsim_agents.seeding import numpy_rng
 
 
 def _seeds(tmp_path: Path) -> list[Path]:

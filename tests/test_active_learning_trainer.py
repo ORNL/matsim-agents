@@ -43,7 +43,7 @@ def _uma_finetuner(tmp_path, monkeypatch, checkpoint="inference_ckpt.pt"):
 import argparse
 p = argparse.ArgumentParser()
 for flag in ("--dataset", "--output-dir", "--base-model", "--task-name", "--epochs",
-             "--elemental-reference-manifest", "--device"):
+             "--elemental-reference-manifest", "--device", "--seed"):
     p.add_argument(flag)
 p.add_argument("--lora", action="store_true")
 a = p.parse_args()
@@ -93,6 +93,7 @@ def test_retrain_uma_returns_verified_checkpoint(tmp_path, monkeypatch, referenc
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
 
     assert checkpoint == output / "inference_ckpt.pt"
@@ -113,6 +114,7 @@ def test_retrain_uma_finds_nested_fairchem_checkpoint(tmp_path, monkeypatch, ref
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
 
     assert checkpoint == output / "run-1" / "checkpoints" / "final" / "inference_ckpt.pt"
@@ -135,6 +137,7 @@ def test_retrain_rejects_a_model_trained_on_other_data(tmp_path, monkeypatch, re
             iteration=0,
             out_model_dir=tmp_path / "model",
             launch=LAUNCH,
+            seed=0,
         )
 
 
@@ -151,7 +154,7 @@ def test_retrain_mace_launcher_gets_references_and_mode(tmp_path, references):
 import argparse
 p = argparse.ArgumentParser()
 for flag in ("--dataset", "--output-dir", "--family", "--base-model", "--precision",
-             "--epochs", "--elemental-reference-manifest", "--device"):
+             "--epochs", "--elemental-reference-manifest", "--device", "--seed"):
     p.add_argument(flag)
 p.add_argument("--lora", action="store_true")
 a = p.parse_args(sys.argv[3:])
@@ -175,6 +178,7 @@ align(out, a.dataset, a.elemental_reference_manifest)
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
     assert model == output / "mace_finetuned.model"
     argv = json.loads((output / "argv.json").read_text())
@@ -199,6 +203,7 @@ def test_retrain_mace_requires_the_finetuned_model(tmp_path, references):
             iteration=0,
             out_model_dir=tmp_path / "model",
             launch=LAUNCH,
+            seed=0,
         )
 
 
@@ -213,10 +218,22 @@ def test_direct_training_must_be_local_and_single_process(tmp_path, backend):
     def run(launch):
         if backend == "uma":
             return retrain_uma(
-                config, UMAConfig(), tmp_path / "d.extxyz", 0, tmp_path / "o", launch=launch
+                config,
+                UMAConfig(),
+                tmp_path / "d.extxyz",
+                0,
+                tmp_path / "o",
+                launch=launch,
+                seed=0,
             )
         return retrain_mace(
-            config, MACEConfig(), tmp_path / "d.extxyz", 0, tmp_path / "o", launch=launch
+            config,
+            MACEConfig(),
+            tmp_path / "d.extxyz",
+            0,
+            tmp_path / "o",
+            launch=launch,
+            seed=0,
         )
 
     remote = LAUNCH.model_copy(update={"hosts": ("some-other-node",)})

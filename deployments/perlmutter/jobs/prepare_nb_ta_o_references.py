@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 
 from matsim_agents.discovery.composition import parse_composition  # noqa: E402
 from matsim_agents.discovery.seeds import generate_seeds  # noqa: E402
-from matsim_agents.execution.seeding import stream_seed  # noqa: E402
+from matsim_agents.seeding import stream_seed  # noqa: E402
 
 DEFAULT_COMPETING_FORMULAS = [
     "NbTa",

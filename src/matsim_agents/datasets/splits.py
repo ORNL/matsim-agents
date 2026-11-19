@@ -55,7 +55,7 @@ from matsim_agents.datasets.governance import (
     structure_identity,
     write_dataset_manifest,
 )
-from matsim_agents.execution.seeding import numpy_rng
+from matsim_agents.seeding import numpy_rng
 
 SPLIT_MANIFEST = "split-manifest.json"
 ROLES = ("train", "validation", "test")

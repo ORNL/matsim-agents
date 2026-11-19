@@ -1,6 +1,6 @@
 """Central seed management: stream derivation and the repository-wide policy.
 
-Every random generator comes from :mod:`matsim_agents.execution.seeding`, and
+Every random generator comes from :mod:`matsim_agents.seeding`, and
 seeds are configured values: no generator is built elsewhere, no seed is a
 literal or ``seed + i`` arithmetic, and no seed parameter has a default.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from matsim_agents.execution.seeding import (
+from matsim_agents.seeding import (
     numpy_rng,
     python_rng,
     seed_process,
@@ -23,7 +23,7 @@ from matsim_agents.execution.seeding import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SEEDING = ROOT / "src" / "matsim_agents" / "execution" / "seeding.py"
+SEEDING = ROOT / "src" / "matsim_agents" / "seeding.py"
 CHECKED = [
     *sorted((ROOT / "src" / "matsim_agents").rglob("*.py")),
     *sorted((ROOT / "deployments").rglob("*.py")),
@@ -85,6 +85,37 @@ def test_seeded_torch_reproduces_and_restores_the_global_generator():
     assert torch.equal(torch.rand(2), expected_next)
 
 
+def test_seeded_torch_restores_state_on_error_and_saves_xpu_state(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from contextlib import contextmanager
+
+    forked: list[tuple[list[int], str | None]] = []
+    real_fork = torch.random.fork_rng
+
+    @contextmanager
+    def recording_fork(devices=None, device_type=None, **kwargs):
+        forked.append((list(devices or []), device_type))
+        if device_type == "xpu":
+            yield
+            return
+        with real_fork(devices=devices, device_type=device_type, **kwargs):
+            yield
+
+    monkeypatch.setattr(torch.random, "fork_rng", recording_fork)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
+    monkeypatch.setattr(torch.xpu, "device_count", lambda: 2)
+
+    torch.random.manual_seed(123)
+    expected_next = torch.rand(2)
+    torch.random.manual_seed(123)
+    with pytest.raises(RuntimeError), seeded_torch(9, "mc-dropout"):
+        torch.rand(4)
+        raise RuntimeError("scoring failed")
+    assert torch.equal(torch.rand(2), expected_next)
+    assert ([0, 1], "xpu") in forked
+
+
 def test_seed_process_seeds_every_global_generator():
     seed_process(11, "training")
     draws = (random.random(), np.random.random())
@@ -120,7 +151,9 @@ def _violations(path: Path) -> list[str]:
                 (name in GENERATORS and (random_module or name in {"default_rng", "SeedSequence"}))
                 or (owner in {"random", "np.random", "numpy.random"} and name != "Generator")
             ):
-                report(node, f"random generator {ast.unparse(func)}() outside execution/seeding")
+                report(
+                    node, f"random generator {ast.unparse(func)}() outside matsim_agents.seeding"
+                )
             for keyword in node.keywords:
                 if _seed_name(keyword.arg) and _unconfigured(keyword.value):
                     report(
@@ -132,7 +165,7 @@ def _violations(path: Path) -> list[str]:
             and path != SEEDING
             and any(alias.name != "Generator" for alias in node.names)
         ):
-            report(node, f"from {node.module} import bypasses execution/seeding")
+            report(node, f"from {node.module} import bypasses matsim_agents.seeding")
         elif isinstance(node, ast.Dict):
             for key, value in zip(node.keys, node.values, strict=True):
                 if (

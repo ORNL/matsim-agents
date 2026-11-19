@@ -79,7 +79,7 @@ def explore_composition(
     degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float | None = 0.2,
     n_random: int = 50,
-    random_seed: int | None = None,
+    random_seed: int | None,
     generation_action: SeedGenerationAction | None = None,
     max_relaxations: int | None = None,
     on_relaxation_attempt: Callable[[], None] | None = None,
@@ -104,7 +104,9 @@ def explore_composition(
         seeds for novelty / characterization (in addition to every
         applicable AFLOW prototype decoration). ``0`` disables.
     random_seed:
-        Seed of the pyXtal search; required when ``n_random`` is positive.
+        Seed of the pyXtal search. Always passed explicitly: an integer when
+        ``n_random`` is positive, ``None`` only when no pyXtal structure is drawn
+        (``n_random=0``) or a ``generation_action`` carries its own seed.
     generation_action:
         Optional strategy-selected generator action. When supplied, its AFLOW,
         pyXtal, space-group, and formula-unit controls replace ``n_random`` and

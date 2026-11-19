@@ -48,7 +48,9 @@ class FormulaRunRecord(BaseModel):
     formula: str
     status: WorkflowStatus = WorkflowStatus.PLANNED
     iteration: int = 0
-    attempts: int = 0
+    attempts: int = Field(
+        0, description="Logical attempts; recovering an interrupted attempt does not count."
+    )
     random_seed: int | None = Field(
         None,
         description="Seed of the current attempt; an interrupted attempt keeps it on recovery.",
@@ -119,6 +121,13 @@ class CampaignState(BaseModel):
     candidate_registry: CandidateRegistry = Field(default_factory=CandidateRegistry)
     debate_run_ids: list[str] = Field(default_factory=list)
     iteration: int = 0
+    random_seed: int | None = Field(
+        None,
+        description=(
+            "Root seed fixed by the first campaign run; resuming with another seed is "
+            "rejected (docs/reproducibility.md)."
+        ),
+    )
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
     _ledger: EvidenceLedger | None = PrivateAttr(None)

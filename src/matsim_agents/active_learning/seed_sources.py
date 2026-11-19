@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from matsim_agents.execution.seeding import stream_seed
+from matsim_agents.seeding import stream_seed
 
 if TYPE_CHECKING:
     from matsim_agents.active_learning.config import LLMSeedConfig, SeedSourceConfig

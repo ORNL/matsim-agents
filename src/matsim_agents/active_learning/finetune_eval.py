@@ -76,7 +76,7 @@ from matsim_agents.datasets.splits import (
     load_split,
     make_split,
 )
-from matsim_agents.execution.seeding import stream_seed
+from matsim_agents.seeding import stream_seed
 
 log = logging.getLogger(__name__)
 

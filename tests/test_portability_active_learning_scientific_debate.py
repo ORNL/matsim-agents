@@ -14,6 +14,7 @@ from benchmarks.portability.active_learning_scientific_debate import (
 )
 
 _AL_CONFIG_YAML = """
+random_seed: 0
 mlip:
   backend: uma
   model_name: uma-s-1p1

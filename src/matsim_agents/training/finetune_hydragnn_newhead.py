@@ -55,7 +55,7 @@ from matsim_agents.backends.mlip.hydragnn_newhead import (
     apply_newhead_surgery,
     load_update_model,
 )
-from matsim_agents.execution.seeding import seed_process
+from matsim_agents.seeding import seed_process
 from matsim_agents.training.cost import CostReport, count_parameters, track_cost
 from matsim_agents.training.finetune_hydragnn import (
     _atoms_to_data,

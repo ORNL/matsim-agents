@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.campaign.acquisition import (
     CampaignAcquisitionPolicy,
@@ -35,13 +35,16 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
-from matsim_agents.execution.seeding import stream_seed
+from matsim_agents.seeding import stream_seed
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
 class CampaignRunPolicy(BaseModel):
     """Control limits and failure behavior for a campaign run."""
+
+    # Unknown keys fail, so removed seed fields cannot be silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
     formulas_per_iteration: int = Field(1, ge=1)
     max_iterations: int | None = Field(None, ge=1)
@@ -588,23 +591,25 @@ def _select_batch(
 def _start_formula_record(
     campaign: CampaignState,
     formula: str,
-    formula_dir: Path,
+    formula_root: Path,
     selection: Any,
     *,
     random_seed: int,
 ) -> FormulaRunRecord:
     """Reset the formula's run record for a new attempt in this iteration.
 
-    A new attempt draws a new seed from the campaign's *random_seed*, so a retry
-    explores new structures; an interrupted attempt keeps its seed and replays.
+    A new attempt draws a new seed from the campaign's *random_seed* and gets its
+    own directory, so a retry explores new structures without resuming the previous
+    attempt's artifacts. An interrupted attempt keeps its number, seed, and
+    directory, and replays.
     """
     record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
     if record.status != WorkflowStatus.RUNNING or record.random_seed is None:
-        record.random_seed = stream_seed(random_seed, "formula", formula, record.attempts + 1)
+        record.attempts += 1
+        record.random_seed = stream_seed(random_seed, "formula", formula, record.attempts)
     record.status = WorkflowStatus.RUNNING
     record.iteration = campaign.iteration
-    record.attempts += 1
-    record.output_dir = str(formula_dir)
+    record.output_dir = str(formula_root / f"attempt-{record.attempts:04d}")
     record.failure_reason = None
     record.evidence["accounted_refinement_stage_attempts"] = 0
     record.evidence["accounted_refinement_stage_node_hours"] = 0.0
@@ -957,6 +962,13 @@ def run_campaign(
                 f"saved campaign_id {saved.campaign_id!r} does not match {campaign.campaign_id!r}"
             )
         campaign = saved
+    if campaign.random_seed is None:
+        campaign.random_seed = policy.random_seed
+    elif campaign.random_seed != policy.random_seed:
+        raise ValueError(
+            f"campaign was started with random_seed {campaign.random_seed}; resuming it with "
+            f"{policy.random_seed} would mix two seed streams in one campaign"
+        )
 
     root.mkdir(parents=True, exist_ok=True)
     ledger = open_campaign_ledger(campaign, root)
@@ -1020,10 +1032,14 @@ def run_campaign(
             if budget_reason:
                 stop_reason = budget_reason
                 break
-            formula_dir = root / "formulas" / formula
             record = _start_formula_record(
-                campaign, formula, formula_dir, selection, random_seed=policy.random_seed
+                campaign,
+                formula,
+                root / "formulas" / formula,
+                selection,
+                random_seed=policy.random_seed,
             )
+            formula_dir = Path(record.output_dir)
             campaign.save(state_path)
             try:
                 dft_allowance, mlip_allowance = _formula_allowances(campaign)

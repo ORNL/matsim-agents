@@ -235,11 +235,15 @@ def run_phase_exploration(
             parsed = parse_composition(composition)
             if parsed is None:
                 raise ValueError(f"Could not parse composition {composition!r}")
+            if "random_seed" not in kwargs:
+                raise ValueError(
+                    "exploration_kwargs must set random_seed (None only without pyXtal draws)"
+                )
             candidates = generate_seeds(
                 parsed,
                 str(calculations_dir / parsed.formula / "seeds"),
                 n_random=kwargs.get("n_random", 50),
-                random_seed=kwargs.get("random_seed"),
+                random_seed=kwargs["random_seed"],
             )
             initial = CompositionExplorationResult(
                 composition=parsed,

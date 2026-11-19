@@ -17,7 +17,7 @@ from matsim_agents.datasets.energy_alignment import (
 )
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
-from matsim_agents.execution.seeding import stream_seed
+from matsim_agents.seeding import stream_seed
 
 # -- energy alignment -----------------------------------------------------------
 
@@ -365,7 +365,15 @@ def test_mace_cli_takes_the_elemental_references(tmp_path, references):
         atoms.arrays["forces"] = np.zeros((1, 3))
         frames.append(atoms)
     write(path, frames)
-    argv = ["--dataset", str(path), "--output-dir", str(tmp_path / "out"), "--dry-run"]
+    argv = [
+        "--dataset",
+        str(path),
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--dry-run",
+        "--seed",
+        "0",
+    ]
     with pytest.raises(SystemExit):
         finetune_mace.main(argv)  # the references are required
     assert finetune_mace.main([*argv, "--elemental-reference-manifest", str(references)]) == 0

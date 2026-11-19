@@ -64,7 +64,7 @@ import numpy as np
 from matsim_agents.backends.mlip.config import MACEConfig, MACEFamily
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
-from matsim_agents.execution.seeding import seed_process, stream_seed
+from matsim_agents.seeding import seed_process, stream_seed
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 from matsim_agents.training.finetune_uma import (
     _load_labeled_frames,

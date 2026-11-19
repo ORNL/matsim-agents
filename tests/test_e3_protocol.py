@@ -242,7 +242,7 @@ def test_rule_based_ensemble_uses_stored_committee_forces():
     candidates = [Candidate(e.candidate_id, e.atoms, e.candidate_id, 0) for e in pool]
     cfg = AcquisitionConfig(strategy="ensemble", n_select=1, diversity_filter=False)
     chosen, scores = select_candidates(
-        candidates, cfg, None, [run.StoredForces(rows_a), run.StoredForces(rows_b)]
+        candidates, cfg, None, [run.StoredForces(rows_a), run.StoredForces(rows_b)], seed=0
     )
     assert chosen[0].candidate_id == "cand-05" and scores[0] == 0.0
 

@@ -70,6 +70,7 @@ def test_completion_callback_failure_does_not_double_count_candidates(
         mlip=UMAConfig(),
         relax_fn=relax,
         on_phase_done=callback,
+        random_seed=0,
     )
     assert result.candidate_counts == {
         "generated": 3,
@@ -186,6 +187,7 @@ def test_relaxation_allowance_preserves_generation_and_counts_failures(
         n_random=50,
         max_relaxations=allowance,
         relax_fn=fail,
+        random_seed=0,
     )
     assert generation == [50]
     assert len(result.phase_candidates) == 5
@@ -477,6 +479,7 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
         "Si",
         policy=PhaseExplorationPolicy(relax_structures=False),
         output_dir=str(tmp_path),
+        exploration_kwargs={"random_seed": 0},
     )
 
     assert result.initial.outcome_class == "seed_only"

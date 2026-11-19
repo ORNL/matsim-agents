@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.execution.seeding import python_rng
+from matsim_agents.seeding import python_rng
 
 
 class FormulaAcquisitionMetrics(BaseModel):
@@ -36,6 +36,9 @@ class AcquisitionWeights(BaseModel):
 
 class CampaignAcquisitionPolicy(BaseModel):
     """Versioned controls for selecting formulas within each campaign batch."""
+
+    # Unknown keys fail, so removed seed fields cannot be silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
     mode: Literal["random", "exploitation", "exploration", "adaptive"] = "adaptive"

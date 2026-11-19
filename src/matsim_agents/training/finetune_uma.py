@@ -56,7 +56,7 @@ from ase.io import read as ase_read
 from matsim_agents.backends.mlip.config import UMAConfig, UMATask
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
-from matsim_agents.execution.seeding import numpy_rng, seed_process
+from matsim_agents.seeding import numpy_rng, seed_process
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 
 log = logging.getLogger(__name__)

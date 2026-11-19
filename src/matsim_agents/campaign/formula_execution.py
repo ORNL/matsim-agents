@@ -52,7 +52,7 @@ from matsim_agents.discovery.stability import (
 )
 from matsim_agents.execution.contracts import EvidenceLevel
 from matsim_agents.execution.placement import Placement
-from matsim_agents.execution.seeding import numpy_rng, stream_seed
+from matsim_agents.seeding import numpy_rng, stream_seed
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -70,6 +70,9 @@ from matsim_agents.workflows.relaxation import (
 
 class CampaignFormulaExecutionConfig(BaseModel):
     """Reusable numerical configuration for every formula in a campaign."""
+
+    # Unknown keys fail, so removed seed fields cannot be silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
     active_learning_config: Path
     # Replaces the AL config's mlip block, so any backend drives the campaign.
@@ -361,7 +364,6 @@ def _perturbation_robustness(
         converged,
         key=lambda item: item.final_energy_eV / len(ase_read(item.optimized_structure_path)),
     )
-    backend_kwargs = _exploration_kwargs(al_cfg, {})
     trials: list[dict[str, Any]] = []
     for index in range(config.perturbation_trials):
         trial_dir = output_root / f"trial-{index:03d}"
@@ -379,7 +381,7 @@ def _perturbation_robustness(
                     output_dir=str(trial_dir),
                     maxiter=int(config.exploration_kwargs.get("maxiter", 100)),
                     fmax=float(config.exploration_kwargs.get("fmax", 0.02)),
-                    **backend_kwargs,
+                    mlip=al_cfg.mlip,
                 )
             )
             trials.append(
@@ -590,8 +592,22 @@ def _durable_iteration_states(root: Path) -> list[dict[str, Any]]:
     ]
 
 
-def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, Any]:
-    return {"mlip": cfg.mlip, **overrides}
+def _exploration_kwargs(
+    cfg: ALConfig, overrides: dict[str, Any], *, generation_seed: int
+) -> dict[str, Any]:
+    """Exploration arguments seeded with the attempt's *generation_seed*.
+
+    A configured ``generation_action`` carries the seed itself, because
+    ``explore_composition`` rejects an action combined with a separate seed.
+    """
+    kwargs = {"mlip": cfg.mlip, **overrides}
+    action = kwargs.get("generation_action")
+    if action is None:
+        kwargs["random_seed"] = generation_seed
+    else:
+        kwargs["generation_action"] = action.model_copy(update={"random_seed": generation_seed})
+        kwargs["random_seed"] = None
+    return kwargs
 
 
 def _vasp_template_settings(al_cfg: ALConfig) -> dict[str, Any]:
@@ -1313,8 +1329,11 @@ def run_formula_with_active_learning(
             policy=phase_policy,
             output_dir=str(formula_root / "phase_exploration"),
             exploration_kwargs={
-                **_exploration_kwargs(al_cfg, config.exploration_kwargs),
-                "random_seed": stream_seed(random_seed, "generation"),
+                **_exploration_kwargs(
+                    al_cfg,
+                    config.exploration_kwargs,
+                    generation_seed=stream_seed(random_seed, "generation"),
+                ),
                 "mlip_pool": mlip_pool,
             },
             active_learning_runner=active_learning_after_exploration,

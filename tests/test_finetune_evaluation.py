@@ -129,6 +129,7 @@ def test_selection_is_frozen_on_validation_before_any_test_frame(inputs, tmp_pat
         mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(domain),
+        seed=0,
     )
     assert calls[0] == ("fine-tune", "train.extxyz", "validation.extxyz")
     evaluations = [call for call in calls if call[0] == "evaluate"]
@@ -169,6 +170,7 @@ def test_without_validation_the_finetuned_model_is_reported_unselected(inputs, t
                 "split": {"strategy": "random_frame", "train_fraction": 0.8, "test_fraction": 0.2},
             }
         ),
+        seed=0,
     )
     selection = json.loads((output / "selection.json").read_text())
     assert selection["selected"] == "finetuned" and selection["decided_on"] is None
@@ -194,6 +196,7 @@ def test_repetitions_reuse_one_split_per_split_seed(inputs, tmp_path):
         evaluation=_evaluation(
             domain, repetitions={"split_seeds": [1, 2], "training_seeds": [10, 11]}
         ),
+        seed=0,
     )
     for split_seed in (1, 2):
         assert (output / f"split-seed-{split_seed}" / "split" / "split-manifest.json").is_file()
@@ -215,6 +218,7 @@ def test_other_backends_reuse_the_same_split(inputs, tmp_path):
         mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(domain),
+        seed=0,
     )
     manifest = first / "split" / "split-manifest.json"
     second = tmp_path / "second"
@@ -226,6 +230,7 @@ def test_other_backends_reuse_the_same_split(inputs, tmp_path):
         evaluation=finetune_eval.EvaluationConfig(
             objective="transfer to new trajectories", split_manifest=manifest
         ),
+        seed=0,
     )
     assert not (second / "split").exists()
     report = json.loads((second / "eval" / "report.json").read_text())
@@ -269,6 +274,7 @@ def test_report_records_the_model_and_its_recipe(inputs, tmp_path):
         mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(domain, fine_tune={"backend": "uma", "lora": True, "epochs": 3}),
+        seed=0,
     )
     report = json.loads((output / "eval" / "report.json").read_text())
     assert report["backend"] == "uma"
@@ -337,4 +343,5 @@ def test_training_on_an_unsupported_device_is_rejected_before_any_work(tmp_path)
             evaluation=finetune_eval.EvaluationConfig(
                 objective="x", split={"strategy": "random_frame"}
             ),
+            seed=0,
         )

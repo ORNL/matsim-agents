@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPBackendConfig, MLIPConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.execution.seeding import numpy_rng
+from matsim_agents.seeding import numpy_rng
 
 
 class RelaxationSettings(BaseModel):

@@ -302,3 +302,15 @@ def test_promotion_rejects_rotated_reordered_translated_molecule(tmp_path, with_
     )
     with pytest.raises(ValueError, match="overlapping geometries"):
         evaluate_promotion_candidate(cfg, "candidate", iteration=1, training_set=training_set)
+
+
+def test_parity_subsample_keeps_cartesian_components_balanced() -> None:
+    from matsim_agents.active_learning.evaluate import _subsample
+
+    forces = np.tile([1.0, 2.0, 3.0], 19_999)
+    kept = _subsample({"f_ref_eV_per_A": forces, "f_pred_eV_per_A": forces}, 20_000)
+
+    values = kept["f_ref_eV_per_A"]
+    counts = [int((values == component).sum()) for component in (1.0, 2.0, 3.0)]
+    assert values.size <= 20_000
+    assert counts[0] == counts[1] == counts[2] > 0

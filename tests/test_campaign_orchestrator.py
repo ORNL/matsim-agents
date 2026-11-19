@@ -37,7 +37,7 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
-from matsim_agents.execution.seeding import stream_seed
+from matsim_agents.seeding import stream_seed
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -290,13 +290,18 @@ def test_campaign_retries_draw_new_seeds_and_recovery_keeps_the_attempt_seed(tmp
     by_formula: dict[str, list[int]] = {}
     for formula, seed in calls:
         by_formula.setdefault(formula, []).append(seed)
-    # The interrupted NbO attempt replays its seed; each later attempt draws a new one.
-    assert by_formula["NbO"] == [1234, stream_seed(9, "formula", "NbO", 3)]
+    # The interrupted NbO attempt replays its seed without counting as a new attempt;
+    # each later attempt draws a new seed and gets its own directory.
+    assert by_formula["NbO"] == [1234, stream_seed(9, "formula", "NbO", 2)]
     assert by_formula["NbO2"] == [stream_seed(9, "formula", "NbO2", attempt) for attempt in (1, 2)]
     assert len({seed for _, seed in calls}) == len(calls)
     persisted = CampaignState.load(result.state_path)
+    assert persisted.random_seed == 9
     for formula, seeds in by_formula.items():
-        assert persisted.formula_runs[formula].random_seed == seeds[-1]
+        record = persisted.formula_runs[formula]
+        assert record.random_seed == seeds[-1]
+        assert record.attempts == len(seeds)
+        assert Path(record.output_dir).name == f"attempt-{len(seeds):04d}"
 
 
 def test_latest_promotion_uses_persisted_execution_order(tmp_path):
@@ -947,3 +952,40 @@ def test_campaign_runs_final_review_after_stopping(tmp_path):
 
     assert review_calls == [["NbO2"]]
     assert result.campaign.review_history[-1].debate_run_id == "final-review"
+
+
+def test_campaign_resume_rejects_a_different_root_seed(tmp_path):
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
+        return _result(formula, output_dir)
+
+    run_campaign(
+        _campaign(),
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(max_iterations=1, random_seed=9),
+    )
+    with pytest.raises(ValueError, match="started with random_seed 9"):
+        run_campaign(
+            _campaign(),
+            output_dir=tmp_path,
+            formula_runner=runner,
+            policy=CampaignRunPolicy(max_iterations=1, random_seed=10),
+        )
+
+
+def test_campaign_policies_reject_removed_seed_fields(tmp_path):
+    from pydantic import ValidationError
+
+    from matsim_agents.campaign.formula_execution import CampaignFormulaExecutionConfig
+    from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy
+
+    with pytest.raises(ValidationError, match="random_seed"):
+        CampaignAcquisitionPolicy(random_seed=3)
+    with pytest.raises(ValidationError, match="perturbation_seed"):
+        CampaignFormulaExecutionConfig(
+            active_learning_config=tmp_path / "al.yaml",
+            phase_policy=PhaseExplorationPolicy(),
+            perturbation_seed=17,
+        )

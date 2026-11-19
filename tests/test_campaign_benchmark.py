@@ -198,6 +198,7 @@ def test_paired_comparison_rejects_mixed_protocols(second_completed, second_has_
             treatment=BenchmarkArm.ADAPTIVE,
             control=BenchmarkArm.RANDOM,
             metric=_protocol().metrics[0],
+            random_seed=0,
         )
     assert paired_metric_differences(
         [item for item in observations if item.protocol_digest == "protocol-one"],
@@ -247,6 +248,7 @@ def test_paired_comparison_rejects_nonfinite_metrics(treatment_value, control_va
             treatment=BenchmarkArm.ADAPTIVE,
             control=BenchmarkArm.RANDOM,
             metric=_protocol().metrics[0],
+            random_seed=0,
         )
 
 
@@ -261,4 +263,5 @@ def test_paired_comparison_rejects_identical_arms():
             treatment=BenchmarkArm.RANDOM,
             control=BenchmarkArm.RANDOM,
             metric=_protocol().metrics[0],
+            random_seed=0,
         )

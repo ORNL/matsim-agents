@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from matsim_agents.campaign.acquisition import FormulaAcquisitionMetrics
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.seeding import python_rng
+from matsim_agents.seeding import python_rng
 
 
 class StructureCandidateRecord(BaseModel):

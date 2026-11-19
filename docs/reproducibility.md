@@ -1,7 +1,7 @@
 # Reproducibility and random seeds
 
 Every random draw in MATSIM-AGENTS comes from one module,
-[`matsim_agents.execution.seeding`](../src/matsim_agents/execution/seeding.py),
+[`matsim_agents.seeding`](../src/matsim_agents/seeding.py),
 and every seed is a configured value. The same configuration, code checkout,
 and package versions therefore regenerate the same structures, trajectories,
 selections, and splits.
@@ -37,26 +37,43 @@ are valid and never alias positive ones.
 | Dataset splits | `split.seed` | root stream |
 | Relaxation with `random_displacement` | `displacement_seed` (required) | root stream |
 
-A campaign retry of an inconclusive formula is a new attempt with a new seed,
-so it explores new structures; resuming an interrupted attempt keeps its seed
-(`FormulaRunRecord.random_seed` in the campaign state) and replays it.
+A campaign retry of an inconclusive formula is a new attempt with a new seed
+and its own directory (`formulas/<formula>/attempt-NNNN`), so it explores new
+structures and never resumes the previous attempt's active-learning artifacts.
+Resuming an interrupted attempt keeps its number, seed
+(`FormulaRunRecord.random_seed`), and directory, and replays it. The campaign
+state records the root seed of its first run (`CampaignState.random_seed`);
+resuming with a different seed is rejected.
+
+A configured `generation_action` receives the attempt's `generation` seed on a
+copy of the action. Public entry points take the seed explicitly:
+`explore_composition(..., random_seed=...)` accepts `None` only when no pyXtal
+structure is drawn.
 
 ## Rules for code
 
 `tests/test_seeding.py` fails when code under `src/` or `deployments/`:
 
-- builds a generator or seeds global state outside `execution/seeding.py`
+- builds a generator or seeds global state outside `seeding.py`
   (`default_rng`, `random.Random`, `np.random.*`, `torch.manual_seed`, ...);
 - passes a literal seed (`seed=0`) or derives one by arithmetic
   (`seed=base + i`); use `stream_seed(base, "purpose", i)` instead;
 - gives a seed parameter a default.
+
+Campaign and active-learning configurations reject unknown keys, so a removed
+seed field (for example `md.random_seed` or `perturbation_seed`) fails
+validation instead of being ignored.
+
+`seeding` is the lowest import layer, so every package, including `datasets`
+and `execution`, can use it.
 
 `benchmarks/` and `scripts/` are exempt: they hold frozen benchmark and study
 protocols (E3/E4 manifests, blinded assessments) whose recorded seeds must keep
 regenerating the published artifacts.
 
 Use `numpy_rng`/`python_rng` for generators, `seeded_torch` for code that draws
-from PyTorch's global generator (it restores the global state afterwards), and
+from PyTorch's global generator (it restores the CPU, CUDA, and XPU states
+afterwards, also on error), and
 `seed_process` at the start of a training process.
 
 ## Limits

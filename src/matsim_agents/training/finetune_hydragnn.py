@@ -46,7 +46,7 @@ from ase import Atoms
 from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
 from matsim_agents.datasets.governance import sha256_file
-from matsim_agents.execution.seeding import numpy_rng, seed_process
+from matsim_agents.seeding import numpy_rng, seed_process
 from matsim_agents.training.branch_routing import (
     BRANCH_DATASETS,
     branch_weights_for_frames,

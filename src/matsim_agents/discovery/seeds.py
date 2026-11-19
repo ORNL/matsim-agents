@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from matsim_agents.discovery.composition import Composition, parse_composition
-from matsim_agents.execution.seeding import numpy_rng, python_rng
+from matsim_agents.seeding import numpy_rng, python_rng
 
 if TYPE_CHECKING:
     from pymatgen.core import Structure
@@ -106,7 +106,7 @@ class SeedGenerationAction(BaseModel):
     prototype_ids: list[str] = Field(default_factory=list)
     space_groups: list[int] = Field(default_factory=list)
     pyxtal_count: int = Field(default=0, ge=0)
-    random_seed: int = 0
+    random_seed: int
 
     @model_validator(mode="after")
     def _validate_requested_sources(self) -> SeedGenerationAction:

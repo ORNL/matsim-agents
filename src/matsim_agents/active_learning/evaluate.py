@@ -471,11 +471,15 @@ def evaluate_promotion_candidate(
 def _subsample(parity: dict[str, np.ndarray], max_points: int) -> dict[str, np.ndarray]:
     """Cap the force parity arrays for compact plotting (energies are per-frame).
 
-    Keeps evenly spaced components, so the plot needs no random stream.
+    The arrays hold flattened per-atom ``(x, y, z)`` components. Keeping evenly
+    spaced whole atoms preserves every Cartesian component in equal numbers and
+    needs no random stream.
     """
     f_ref = parity["f_ref_eV_per_A"]
     if max_points > 0 and f_ref.size > max_points:
-        idx = np.linspace(0, f_ref.size - 1, max_points).round().astype(int)
+        n_atoms = f_ref.size // 3
+        atoms = np.unique(np.linspace(0, n_atoms - 1, max(1, max_points // 3)).round()).astype(int)
+        idx = (3 * atoms[:, None] + np.arange(3)).reshape(-1)
         parity = dict(parity)
         parity["f_ref_eV_per_A"] = f_ref[idx]
         parity["f_pred_eV_per_A"] = parity["f_pred_eV_per_A"][idx]

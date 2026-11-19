@@ -28,7 +28,7 @@ from ase.io import write as ase_write
 from matsim_agents.active_learning.config import MDConfig
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
-from matsim_agents.execution.seeding import numpy_rng
+from matsim_agents.seeding import numpy_rng
 
 log = logging.getLogger(__name__)
 

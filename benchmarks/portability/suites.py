@@ -294,7 +294,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
             "Si",
             policy=PhaseExplorationPolicy(relax_structures=False),
             output_dir=str(output / "phases"),
-            exploration_kwargs={"n_random": 0},
+            exploration_kwargs={"n_random": 0, "random_seed": None},
         )
     return {
         "status": "complete",
