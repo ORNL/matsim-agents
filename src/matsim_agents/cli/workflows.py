@@ -318,6 +318,21 @@ def _execute_locked(run: ScientificRunDirectory, record: WorkflowInvocation) -> 
     console.print(f"Report: {run.path / 'report.md'}", markup=False)
     if record.state == "failed":
         raise typer.Exit(1)
+    console.print(
+        f"Next: `matsim-agents workflow summary {run.path}` for the report, or "
+        f"`workflow status {run.path}` later.",
+        markup=False,
+        soft_wrap=True,
+    )
+
+
+def _load(config: Path) -> WorkflowConfig:
+    """Load a workflow file; an unreadable or invalid file is a usage error (exit 2)."""
+    try:
+        return load_workflow(config)
+    except (ValueError, OSError, yaml.YAMLError) as error:
+        console.print(f"Configuration error in {config}: {error}", markup=False)
+        raise typer.Exit(2) from error
 
 
 @workflow_app.command("list")
@@ -383,8 +398,9 @@ def init(
 
 @workflow_app.command("check")
 def check(config: Path = typer.Argument(..., exists=True, dir_okay=False)) -> None:
+    """Validate a workflow file and its native configuration without running anything."""
+    cfg = _load(config)
     try:
-        cfg = load_workflow(config)
         notes = _check(cfg)
     except (ValueError, OSError, yaml.YAMLError) as error:
         console.print(f"Preflight failed: {error}", markup=False)
@@ -392,6 +408,12 @@ def check(config: Path = typer.Argument(..., exists=True, dir_okay=False)) -> No
     console.print("Preflight passed")
     for note in notes:
         console.print(note, markup=False)
+    console.print(
+        f"Next: `matsim-agents workflow plan {config}` to see the exact command, "
+        f"then `workflow run {config}`.",
+        markup=False,
+        soft_wrap=True,
+    )
 
 
 def _plan(cfg: WorkflowConfig, *, approved: bool) -> dict[str, Any]:
@@ -428,8 +450,9 @@ def plan(
     as_json: bool = typer.Option(False, "--json", help="Print the plan as JSON."),
 ) -> None:
     """Validate a workflow and show the exact command without executing it."""
+    cfg = _load(config)
     try:
-        result = _plan(load_workflow(config), approved=approve_execution)
+        result = _plan(cfg, approved=approve_execution)
     except (ValueError, OSError, yaml.YAMLError) as error:
         console.print(f"Cannot plan workflow: {error}", markup=False)
         raise typer.Exit(1) from error
@@ -449,8 +472,9 @@ def run(
         False, "--dry-run", help="Validate and print the command without executing it."
     ),
 ) -> None:
+    """Validate and run a workflow, recording the invocation in a new run directory."""
+    cfg = _load(config)
     try:
-        cfg = load_workflow(config)
         if dry_run:
             _print_plan(_plan(cfg, approved=approve_execution))
             return

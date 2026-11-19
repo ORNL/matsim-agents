@@ -51,7 +51,7 @@ class FriendlyTyperGroup(TyperGroup):
 
 
 app = typer.Typer(
-    add_completion=False,
+    add_completion=True,
     cls=FriendlyTyperGroup,
     help=(
         "Multi-agent AI for atomistic materials simulation.\n\n"

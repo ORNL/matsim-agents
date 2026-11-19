@@ -258,6 +258,11 @@ matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan
 Use `matsim-agents --help` (or `-h`) for command details and examples, and
 `matsim-agents --version` to report the installed package version. Put the
 global `--debug` option before a command to show a traceback for diagnosis.
+Run `matsim-agents --install-completion` once to enable tab-completion in your shell.
+
+Exit codes are the same for every command: `0` success, `1` the command ran but
+the scientific work, a preflight check or a required backend failed, and `2` a
+usage or configuration error (bad option, unreadable or invalid file).
 
 Common options (all commands that touch HydraGNN):
 

@@ -306,3 +306,10 @@ def test_tools_list_and_unknown_tool():
     unknown = runner.invoke(app, ["tools", "run", "nope"])
     assert unknown.exit_code == 2
     assert "unknown tool 'nope'" in unknown.output
+
+
+def test_shell_completion_is_offered():
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "--install-completion" in result.output
+    assert "--show-completion" in result.output

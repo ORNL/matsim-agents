@@ -76,6 +76,7 @@ def check(
         console.print(f"Error: {error}", style="red", markup=False)
     if not result.ready:
         raise typer.Exit(1)
+    console.print(f"Next: `matsim-agents explore run {config}`", markup=False)
 
 
 @explore_app.command("run")
@@ -92,6 +93,12 @@ def run(
     _print_summary(summary)
     if summary.status == "failed":
         raise typer.Exit(1)
+    console.print(
+        f"Next: `matsim-agents explore summary {summary.run_directory}` to review, or "
+        f"`explore resume {summary.run_directory}` to continue.",
+        markup=False,
+        soft_wrap=True,
+    )
 
 
 @explore_app.command("summary")
