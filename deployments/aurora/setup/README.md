@@ -106,6 +106,31 @@ MLIP XPU path), and `load_aurora_oneapi_modules` (native builds such as VASP).
 Jobs that run vLLM source `launchers/aurora-vllm.sh`, which launches the server
 through `mpiexec` with the same environment as the vLLM smoke test.
 
+### Interactive shells
+
+The installed `.venv` reuses the `frameworks` Python and PyTorch, so it does
+not work by itself. Load the framework stack before activating it. Without it,
+`import torch` fails with errors such as
+`libpti_view.so.0: cannot open shared object file`:
+
+```bash
+cd /path/to/matsim-agents
+source deployments/aurora/setup/aurora-module-stack.sh
+load_aurora_frameworks_modules   # runs `module reset`, then loads `frameworks`
+source .venv/bin/activate
+python -c 'import torch; print(torch.__version__)'
+bash scripts/check.sh test
+```
+
+Load it in each new shell before using the Python environment, and after any
+`module purge` or `module reset`. Reserve `load_aurora_xpu_modules` for the
+qualified MLIP XPU path and `load_aurora_oneapi_modules` for native builds, as
+listed above. Do not add
+Spack `pti-gpu` paths to `LD_LIBRARY_PATH` by hand: those paths contain build
+hashes and change when ALCF updates the software stack. These modules are
+specific to Aurora. Shared scripts such as `scripts/check.sh` deliberately do
+not load them, so they still work on other systems.
+
 The following entry points match their Frontier and Perlmutter counterparts.
 Submit with your allocation (`qsub -A <project> ...`); none embed an account.
 
