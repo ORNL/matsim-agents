@@ -408,7 +408,8 @@ def random_search(
     from pymatgen.core import Structure
     from pyxtal import pyxtal
 
-    rng = _random.Random(seed)
+    # random.Random(-k) repeats Random(k); give negative seeds their own stream.
+    rng = _random.Random(seed if seed >= 0 else f"negative:{seed}")
     elements = list(comp.elements.keys())
     counts = [comp.elements[e] * formula_units for e in elements]
     allowed_groups = tuple(space_groups) if space_groups is not None else tuple(range(1, 231))

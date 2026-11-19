@@ -333,7 +333,37 @@ def test_real_pyxtal_structures_are_reproducible_from_the_seed():
     pytest.importorskip("pyxtal")
     first = random_search(_comp("Nb2O5"), n=2, seed=20261113)
     second = random_search(_comp("Nb2O5"), n=2, seed=20261113)
+    assert first, "pyXtal generated no structures"
     assert [group for _structure, group in first] == [group for _structure, group in second]
     for (a, _), (b, _) in zip(first, second, strict=True):
-        assert a.lattice.abc == pytest.approx(b.lattice.abc)
+        assert a.lattice.matrix == pytest.approx(b.lattice.matrix)
+        assert a.species == b.species
         assert a.frac_coords == pytest.approx(b.frac_coords)
+
+
+@requires_pymatgen
+def test_negative_seeds_do_not_repeat_positive_seed_batches(monkeypatch):
+    from pymatgen.core import Lattice, Structure
+
+    draws = []
+
+    class FakePyXtal:
+        valid = True
+
+        def from_random(self, **kwargs):
+            draws.append((kwargs["group"], float(kwargs["random_state"].random())))
+
+        def to_pymatgen(self):
+            return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
+    monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
+
+    def batch(seed):
+        draws.clear()
+        random_search(_comp("Si"), n=1, seed=seed, max_attempts_factor=1)
+        return list(draws)
+
+    assert batch(-1) == batch(-1)
+    assert batch(-1) != batch(1)
+    assert batch(-7) != batch(7)
