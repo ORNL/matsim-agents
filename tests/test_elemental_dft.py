@@ -143,7 +143,6 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
     dataset_method_sidecar(dataset, expected, method_signature_elements={"Si", "O"})
     cfg = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={
@@ -200,7 +199,6 @@ def test_phase_plan_references_use_recorded_scope_beyond_training_elements(
 
     cfg = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={
@@ -248,7 +246,6 @@ def test_phase_plan_references_reject_missing_or_incomplete_scope(
     )
     cfg = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
@@ -1116,7 +1113,6 @@ def test_al_additive_reference_extension_across_iterations(
 
     cfg1 = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={
@@ -1163,7 +1159,6 @@ def test_al_additive_reference_extension_across_iterations(
 
     cfg2 = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={
@@ -1241,7 +1236,6 @@ def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_r
     source = _prepare(setup, "source", dft_approved=True)
     config = TrainerConfig(
         enabled=True,
-        train_script=setup.tmp / "train.py",
         training_references={"manifest": source},
     )
     root = setup.tmp / "manifest-references"

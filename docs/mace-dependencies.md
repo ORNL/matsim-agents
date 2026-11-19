@@ -68,7 +68,7 @@ The workflow exposes every foundation loader included in `mace-torch==0.3.16`:
 | `mace_anicc` | H/C/N/O molecules | ANI-CC |
 | `checkpoint` | checkpoint-dependent | local `.model` file |
 
-For active-learning ensemble acquisition, `mlip.mace.ensemble_models` lists
+For active-learning ensemble acquisition, `mlip.ensemble_models` (with `backend: mace`) lists
 additional members alongside the primary model. Variant names and URLs use
 the primary foundation family; existing local files load through the
 `checkpoint` family. A checkpoint-family primary requires local checkpoint

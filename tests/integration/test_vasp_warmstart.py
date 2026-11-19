@@ -48,6 +48,8 @@ from typing import Any
 
 import pytest
 
+from matsim_agents.backends.mlip.config import HydraGNNConfig
+
 DATA_DIR = Path(__file__).resolve().parent / "data"
 FIXTURES_YAML = DATA_DIR / "fixtures.yaml"
 
@@ -139,10 +141,18 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     # composition-aware defaults from recommend_settings if absent.
     vasp_overrides: dict[str, Any] = dict(fixture.get("vasp") or {})
 
-    mlip_kwargs: dict[str, Any] = {
-        "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
-        "hydragnn_branch_mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
-        "mlp_device": _env("MATSIM_VASP_MLP_DEVICE") or "cuda",
+    mlip = HydraGNNConfig(
+        **{
+            key: value
+            for key, value in {
+                "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
+                "mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
+                "device": _env("MATSIM_VASP_MLP_DEVICE") or "cuda",
+            }.items()
+            if value is not None
+        }
+    )
+    mlip_settings: dict[str, Any] = {
         "fmax": 0.05,
         "maxiter": 200,
     }
@@ -159,7 +169,8 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
         potcar_dir=_env("MATSIM_VASP_POTCAR_DIR"),
         vasp_launcher=vasp_launcher,
         vasp_settings_overrides=vasp_overrides,
-        mlip_kwargs=mlip_kwargs,
+        mlip=mlip,
+        mlip_settings=mlip_settings,
         timeout_sec=timeout,
     )
 
@@ -177,7 +188,7 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     if summary.warm is None or "n_ionic_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"hydragnn block: {summary.hydragnn}"
+            f"mlip block: {summary.mlip}"
         )
     warm = summary.warm
     if not warm.get("converged"):

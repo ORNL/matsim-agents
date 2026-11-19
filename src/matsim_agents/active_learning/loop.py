@@ -57,9 +57,7 @@ from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
     dft_results_to_frames,
-    retrain_hydragnn,
-    retrain_mace,
-    retrain_uma,
+    retrain,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
@@ -653,20 +651,7 @@ def _retrain_candidate(
         "dft_launch": placement.pool("dft").launches[0],
         "reference_root": root / "elemental-training-reference",
     }
-    if base_mlip.backend == "hydragnn" and base_mlip.hydragnn is not None:
-        new_model = retrain_hydragnn(
-            cfg.trainer, base_mlip.hydragnn, out_logdir=it_dir / "model", **common
-        )
-    elif base_mlip.backend == "uma" and base_mlip.uma is not None:
-        new_model = retrain_uma(
-            cfg.trainer, base_mlip.uma, out_model_dir=it_dir / "model", **common
-        )
-    elif base_mlip.backend == "mace" and base_mlip.mace is not None:
-        new_model = retrain_mace(
-            cfg.trainer, base_mlip.mace, out_model_dir=it_dir / "model", **common
-        )
-    else:  # pragma: no cover - guarded by MLIPConfig validation
-        raise ValueError(f"no {base_mlip.backend} configuration to fine-tune")
+    new_model = retrain(base_mlip, cfg.trainer, out_dir=it_dir / "model", **common)
     state.candidate_model_path = str(new_model)
 
 
@@ -742,7 +727,7 @@ class _SurrogateModels:
             self._primary = make_mlip_calculator(mlip_cfg, enable_mc_dropout=enable_drop)
             self._ensemble = (
                 build_ensemble(mlip_cfg, enable_mc_dropout=enable_drop)
-                if mlip_cfg.ensemble_paths
+                if mlip_cfg.ensemble_models
                 else []
             )
             self._key = key
@@ -869,17 +854,6 @@ def run_active_learning(
             models.close()
 
 
-def _model_id(mlip: MLIPConfig) -> str:
-    if mlip.backend == "hydragnn" and mlip.hydragnn is not None:
-        return str(mlip.hydragnn.logdir)
-    if mlip.backend == "uma" and mlip.uma is not None:
-        return str(mlip.uma.model_name)
-    if mlip.backend == "mace" and mlip.mace is not None:
-        head = f":{mlip.mace.head}" if mlip.mace.head is not None else ""
-        return f"{mlip.mace.family}:{mlip.mace.model}{head}"
-    return mlip.backend
-
-
 def _score_benchmarks(
     cfg: ALConfig,
     state: IterationState,
@@ -913,14 +887,14 @@ def _score_benchmarks(
             cfg.mlip,
             frames,
             iteration=state.iteration,
-            model_path=_model_id(cfg.mlip),
+            model_path=cfg.mlip.model_reference,
             test_set_label=str(benchmark.dataset),
             elemental_reference_manifest=cfg.benchmark_reference_manifest(),
             calculator=models.incumbent_calculator(cfg.mlip),
         )
         values = asdict(metrics)
         state.benchmark[benchmark.name] = {
-            "model": _model_id(cfg.mlip),
+            "model": cfg.mlip.model_reference,
             "n_dft_labels_total": state.n_training_frames_total + state.n_validation_frames_total,
             "frames_also_labelled": overlap,
             "metrics": {key: values[key] for key in METRIC_DEFINITIONS},

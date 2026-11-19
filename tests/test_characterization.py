@@ -136,7 +136,11 @@ def system(tmp_path):
     return tmp_path, [a, b], path
 
 
+MLIP = {"backend": "uma", "device": "cpu"}
+
+
 def _contract(tmp_path, structures, recipe, **extra):
+    methods = {"mlip": MLIP, **extra.pop("methods", {})}
     return CharacterizationContract.model_validate(
         {
             "contract_id": f"{recipe}-test",
@@ -145,6 +149,7 @@ def _contract(tmp_path, structures, recipe, **extra):
             "structures": [str(p) for p in structures],
             "recipe": recipe,
             "output_root": str(tmp_path / "runs"),
+            "methods": methods,
             **extra,
         }
     )
@@ -760,6 +765,7 @@ def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkey
                 "formula": "NbO2",
                 "recipe": "relaxation",
                 "structures": [structures[0].name],
+                "methods": {"mlip": MLIP},
                 "output_root": "runs",
             }
         )
@@ -789,6 +795,7 @@ def test_default_output_root_is_next_to_the_contract_file(system, monkeypatch):
                 "formula": "NbO2",
                 "recipe": "relaxation",
                 "structures": [structures[0].name],
+                "methods": {"mlip": MLIP},
             }
         )
     )

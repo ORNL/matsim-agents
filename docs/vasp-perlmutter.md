@@ -171,8 +171,8 @@ RUN_TAG per case (`vars.RUN_TAG` in each `examples/paper_cases/al_*.yaml`):
 | hea_fcc | `cantor-fcc-al-001` |
 | hea_bcc | `hea-bcc-al-001` |
 
-> `zn_formate` defaults to `al_zn_formate_uma.yaml` when `MLIP_BACKEND=uma`
-> (the job script overrides the CASE→YAML map), so its RUN_TAG is the `-uma-`
+> `zn_formate` runs `al_zn_formate_uma.yaml` when the selected MLIP (the job's
+> `MLIP_CONFIG`, UMA by default) has `backend: uma`, so its RUN_TAG is the `-uma-`
 > one. A *legitimate* resume (prior iterations hold real energies) needs **no**
 > archiving — only archive when the prior state is known-bad.
 
@@ -194,7 +194,14 @@ Perlmutter").
 
 Submit a paper case with
 [`deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`](../deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh)
-(`CASE=<name>`). The script defaults to `-N 1` (serial DFT).
+(`CASE=<name>`). `MLIP_CONFIG` selects the model: a YAML with an `mlip:` block,
+forwarded as `--mlip-config`, that replaces the paper case's own model. It
+defaults to `examples/mlip/uma-s-1p1-omat.yaml` (`uma-s-1p1-omol.yaml` for
+`zn_formate`); set `MLIP_CONFIG=` (empty) to run the case's HydraGNN block. The
+job activates the venv of the selected backend. HydraGNN retrains each
+iteration and UMA and MACE run frozen unless `RETRAIN=1` (`RETRAIN=0` freezes
+HydraGNN); fine-tuning runs through
+`deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh`. The script defaults to `-N 1` (serial DFT).
 
 **DFT concurrency = `SLURM_JOB_NUM_NODES / nodes_per_job`.** Request more nodes
 to parallelize the VASP single-points:

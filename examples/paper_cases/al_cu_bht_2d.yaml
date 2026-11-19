@@ -24,7 +24,7 @@
 
 vars:
   PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
-  TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_hydragnn-train-step-perlmutter.sh
+  TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh
   RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
   HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
   RUN_TAG:      cu-bht-2d-al-001
@@ -36,26 +36,18 @@ vars:
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
 
 mlip:
-  # Surrogate selector — switch backend with one env var, no file edits:
-  #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
-  #   MLIP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    logdir:         ${INITIAL_LOGDIR}
-    hydragnn_root:  ${HYDRAGNN_DIR}
-    checkpoint:     best_model.pt
-    mlp_checkpoint: null
-    precision:  fp32
-    mlp_device: cuda
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
-    task_name:  omat          # 2D metal-organic framework; try omol/odac if linker chemistry dominates
-    device:     cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  # Default model (HydraGNN, retrained each iteration). Any supported MLIP can
+  # replace this block at run time, with no file edits:
+  #   matsim-agents al run <cfg> --mlip-config examples/mlip/<model>.yaml
+  backend: hydragnn
+  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  logdir:         ${INITIAL_LOGDIR}
+  hydragnn_root:  ${HYDRAGNN_DIR}
+  checkpoint:     best_model.pt
+  mlp_checkpoint: null
+  precision:  fp32
+  device: cuda
+  ensemble_models: []
 
 md:
   seed_source:
@@ -117,7 +109,6 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
 

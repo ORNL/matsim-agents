@@ -2,7 +2,7 @@
 # Run one staged E2 DFT case: segmented, resumable ISIF=3 relaxation -> static -> summary.json.
 # Usage: run-e2-dft-case-aurora.sh <case_dir>   (MATSIM_ASSIGNED_NODES selects the node)
 set -uo pipefail
-CASE="$(realpath -e "$1")"
+CASE="$(CDPATH= cd -P -- "$1" && pwd -P)"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PY="${REPO}/.venv/bin/python"
 MAX_SEGMENTS="${E2_MAX_SEGMENTS:-6}"

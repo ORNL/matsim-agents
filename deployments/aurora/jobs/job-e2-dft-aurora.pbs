@@ -11,8 +11,8 @@
 # One node per staged E2 case. Pass E2_REPO and E2_CASES_ROOT with qsub -v.
 # Resubmitting resumes every unaccepted case from its last relaxation geometry.
 set -uo pipefail
-REPO="$(realpath -e "${E2_REPO:?}")"
-CASES_ROOT="$(realpath -e "${E2_CASES_ROOT:?}")"
+REPO="$(CDPATH= cd -P -- "${E2_REPO:?}" && pwd -P)"
+CASES_ROOT="$(CDPATH= cd -P -- "${E2_CASES_ROOT:?}" && pwd -P)"
 RUNNER="${REPO}/deployments/aurora/launchers/run-e2-dft-case-aurora.sh"
 mapfile -t NODES < <(sort -u "${PBS_NODEFILE}")
 mapfile -t CASES < <(find "${CASES_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort)

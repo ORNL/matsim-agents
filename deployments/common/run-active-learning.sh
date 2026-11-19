@@ -46,18 +46,16 @@ else:
 retrain = os.environ.get("MATSIM_RETRAIN", "0") == "1"
 trainer = {"enabled": False, "promote_model": False, "promotion_approved": False}
 if retrain:
-    train_script = os.environ.get("MATSIM_TRAIN_SCRIPT")
-    if not train_script:
-        raise SystemExit("MATSIM_RETRAIN=1 requires MATSIM_TRAIN_SCRIPT")
-    trainer.update({"enabled": True, "train_script": train_script,
+    trainer.update({"enabled": True,
                     "train_launcher": os.environ.get("MATSIM_TRAIN_LAUNCHER")})
 
 cfg = {
-    "mlip": {"backend": "hydragnn", "hydragnn": {
+    "mlip": {
+        "backend": "hydragnn",
         "logdir": os.environ["LOGDIR"],
         "mlp_checkpoint": os.environ["HYDRAGNN_BRANCH_MLP_CHECKPOINT"],
-        "mlp_device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
-    }},
+        "device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
+    },
     "md": {"seed_source": {"kind": "paths", "paths": os.environ["MATSIM_SEED_STRUCTURES"].split(":")},
            "n_steps": int(os.environ.get("MATSIM_MD_STEPS", "200")), "sample_every": 10,
            "temperature_K": float(os.environ.get("MATSIM_MD_TEMPERATURE_K", "600")),

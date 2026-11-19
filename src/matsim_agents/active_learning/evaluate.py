@@ -389,18 +389,8 @@ def evaluate_frames(
 
 def _apply_model_override(cfg: ALConfig, model_path: str | None) -> None:
     """Point the active backend at ``model_path`` (in place)."""
-    if model_path is None:
-        return
-    if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
-        cfg.mlip.hydragnn.logdir = Path(model_path)
-        cfg.mlip.hydragnn.checkpoint = None
-    elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-        cfg.mlip.uma.model_name = model_path
-    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        cfg.mlip.mace.family = "checkpoint"
-        cfg.mlip.mace.model = model_path
-    else:  # pragma: no cover — guarded by MLIPConfig validator
-        raise ValueError(f"Cannot apply model override for backend {cfg.mlip.backend!r}")
+    if model_path is not None:
+        cfg.mlip = cfg.mlip.with_checkpoint(model_path)
 
 
 def evaluate_promotion_candidate(
@@ -458,10 +448,7 @@ def evaluate_promotion_candidate(
         )
 
     incumbent_cfg = cfg.mlip.model_copy(deep=True)
-    candidate_cfg = cfg.mlip.model_copy(deep=True)
-    candidate_wrapper = cfg.model_copy(deep=True)
-    candidate_wrapper.mlip = candidate_cfg
-    _apply_model_override(candidate_wrapper, candidate_model_path)
+    candidate_cfg = cfg.mlip.with_checkpoint(candidate_model_path)
     incumbent_metrics, _ = evaluate_frames(
         incumbent_cfg,
         validation_frames,

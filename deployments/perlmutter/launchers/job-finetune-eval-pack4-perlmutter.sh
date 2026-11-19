@@ -19,23 +19,25 @@
 # Each campaign REUSES the tested single-campaign launcher
 # (job-finetune-eval-perlmutter.sh) unchanged: this script just pins it to a
 # distinct GPU (CUDA_VISIBLE_DEVICES) and hands it per-campaign env overrides,
-# so variant tags, caches and output dirs stay identical to the shared-queue
-# runs.
+# so caches and output dirs stay identical to the shared-queue runs. Each
+# campaign selects its own model, so one node can mix backends.
 #
 # Inputs (env)
 # ------------
-#   BACKEND   hydragnn | uma | mace   (shared by all campaigns on this node)
-#   EVALUATION_CONFIG  evaluation YAML shared by all campaigns (examples/evaluation/)
+#   EVALUATION_CONFIG  default evaluation YAML for campaigns that set none
 #   SPECS     up to 4 campaigns separated by ';'. Each campaign is a
 #             space-separated list of VAR=VAL overrides passed to the single
-#             launcher (CASE=... plus any variant knobs). Example:
+#             launcher: CASE and MLIP_CONFIG, plus optional EVALUATION_CONFIG,
+#             OUT_DIR, ... The matrix inputs under
+#             $RUNS_ROOT/finetune-eval/<variant>/<case>/ (written by
+#             finetune_eval_matrix.py) can be used directly. Example:
 #
-#     EVALUATION_CONFIG=$PWD/examples/evaluation/random-frame-interpolation.yaml \
-#     BACKEND=mace SPECS="\
-#       CASE=lifepo4-al-001 MACE_MODEL=medium; \
-#       CASE=hea-bcc-al-001 MACE_MODEL=medium; \
-#       CASE=cantor-fcc-al-001 MACE_MODEL=medium MACE_LORA=1; \
-#       CASE=phosphorene-2d-al-001 MACE_MODEL=large" \
+#     R=$RUNS_ROOT/finetune-eval
+#     EVALUATION_CONFIG=$PWD/examples/evaluation/random-frame-interpolation.yaml SPECS="\
+#       CASE=lifepo4-al-001 MLIP_CONFIG=$PWD/examples/mlip/mace-mp-medium.yaml; \
+#       CASE=hea-bcc-al-001 MLIP_CONFIG=$R/mace-lora/hea-bcc-al-001/mlip.yaml \
+#         EVALUATION_CONFIG=$R/mace-lora/hea-bcc-al-001/evaluation.yaml \
+#         OUT_DIR=$R/mace-lora/hea-bcc-al-001" \
 #       sbatch deployments/perlmutter/launchers/job-finetune-eval-pack4-perlmutter.sh
 #
 # Switch to the (free) regular queue with:  sbatch -q regular ...
@@ -53,11 +55,11 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 SINGLE="${REPO}/deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh"
 [[ ! -f "${SINGLE}" ]] && { echo "ERROR: single-campaign launcher not found: ${SINGLE}" >&2; exit 2; }
 
-BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
-SPECS="${SPECS:?set SPECS='CASE=...; CASE=...; ...' (up to 4, ';'-separated)}"
-EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>, see examples/evaluation/}"
-[[ ! -r "${EVALUATION_CONFIG}" ]] && { echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2; exit 2; }
-export EVALUATION_CONFIG
+SPECS="${SPECS:?set SPECS='CASE=... MLIP_CONFIG=...; ...' (up to 4, ';'-separated)}"
+if [[ -n "${EVALUATION_CONFIG:-}" ]]; then
+  [[ -r "${EVALUATION_CONFIG}" ]] || { echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2; exit 2; }
+  export EVALUATION_CONFIG
+fi
 LOGDIR="${SLURM_SUBMIT_DIR:-$PWD}"
 
 # Split SPECS on ';' into an array (trim surrounding whitespace per entry).
@@ -76,7 +78,6 @@ echo "=========================================="
 echo "[Perlmutter FT+eval PACK4]"
 echo "Date:    $(date)"
 echo "Job ID:  ${SLURM_JOB_ID:-N/A}   QOS: ${SLURM_JOB_QOS:-N/A}"
-echo "Backend: ${BACKEND}"
 echo "Node:    $(hostname)   GPUs: ${SLURM_GPUS_PER_NODE:-?}"
 echo "Campaigns (${n}):"
 for i in $(seq 0 $((n-1))); do echo "  gpu${i}: ${CLEAN[$i]}"; done
@@ -88,7 +89,7 @@ for i in $(seq 0 $((n-1))); do
   echo "[launch] gpu${i} -> ${gpu_log}"
   # Reuse the single-campaign launcher, pinned to one GPU with per-spec env.
   CUDA_VISIBLE_DEVICES="${i}" CUDA_DEVICE_ORDER=PCI_BUS_ID \
-    env BACKEND="${BACKEND}" ${CLEAN[$i]} bash "${SINGLE}" >"${gpu_log}" 2>&1 &
+    env ${CLEAN[$i]} bash "${SINGLE}" >"${gpu_log}" 2>&1 &
   PIDS[$i]=$!
   GPUOF[$i]="${CLEAN[$i]}"
 done
@@ -104,5 +105,5 @@ for i in $(seq 0 $((n-1))); do
   fi
 done
 
-echo "[$(date)] PACK4 complete (backend=${BACKEND}, ${n} campaigns, overall rc=${rc_total})."
+echo "[$(date)] PACK4 complete (${n} campaigns, overall rc=${rc_total})."
 exit "${rc_total}"

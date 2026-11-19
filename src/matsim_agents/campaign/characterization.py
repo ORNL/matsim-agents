@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.backends.dft.vasp_relax import VASPSettings
+from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.discovery.composition import parse_composition
@@ -167,8 +168,8 @@ REPORT_FILE = "characterization-report.json"
 class CharacterizationMethods(BaseModel):
     """How relaxations are computed."""
 
-    mlip: dict[str, Any] = Field(
-        default_factory=dict, description="MLIP settings, as for `matsim-agents relax`."
+    mlip: MLIPConfig | None = Field(
+        None, description="MLIP backend and its settings, as for `matsim-agents relax`."
     )
     dft: DFTBackendConfig | None = None
     dft_method_signature: str | None = Field(
@@ -713,13 +714,12 @@ def _method_record(
             software_versions=software_versions("ase"),
         )
     mlip = contract.methods.mlip
+    if mlip is None:
+        raise ValueError("MLIP steps require methods.mlip")
     return MethodRecord(
-        backend=str(mlip.get("mlip_backend", "hydragnn")),
-        model=next(
-            (str(mlip[key]) for key in ("uma_model_name", "mace_model", "logdir") if mlip.get(key)),
-            None,
-        ),
-        settings=dict(mlip),
+        backend=mlip.backend,
+        model=mlip.model_reference,
+        settings=mlip.model_dump(mode="json"),
         software_versions=software_versions("ase", "fairchem-core", "mace-torch"),
     )
 
@@ -1511,6 +1511,9 @@ def load_contract(path: str | Path) -> CharacterizationContract:
     for key in ("reference_energies", "output_root"):
         if key in data:
             data[key] = resolve(data[key])
+    mlip = (data.get("methods") or {}).get("mlip")
+    if isinstance(mlip, dict):
+        resolve_mlip_paths(mlip, path.parent)
     dft = (data.get("methods") or {}).get("dft")
     if isinstance(dft, dict):
         for key in ("pseudo_dir", "potcar_dir"):

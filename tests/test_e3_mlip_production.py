@@ -760,7 +760,7 @@ def test_timed_relaxations_reuse_calculator_and_save_completed_step(tmp_path, mo
     monkeypatch.setattr(
         relaxation,
         "_relaxation_calculator",
-        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+        lambda args: relaxation.RelaxCalculator(EMT(), 0, 0, None),
     )
     monkeypatch.setattr(
         "benchmarks.e3.production._verified_checkpoint",
@@ -885,13 +885,13 @@ def test_mof_bond_swap_rolls_back_relaxation(tmp_path, monkeypatch):
     monkeypatch.setattr(
         relaxation,
         "_relaxation_calculator",
-        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+        lambda args: relaxation.RelaxCalculator(EMT(), 0, 0, None),
     )
     result = relaxation.relax_with_mlip(
         relaxation.RelaxStructureInput(
             structure_path=str(source),
             output_dir=str(tmp_path),
-            mlip_backend="mace",
+            mlip={"backend": "mace"},
             relax_cell=True,
             maxiter=2,
         ),
@@ -929,7 +929,7 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
             self.calculator = EMT()
 
         def get(self, args):
-            return relaxation._RelaxCalculator(self.calculator, 0, 0, "")
+            return relaxation.RelaxCalculator(self.calculator, 0, 0, "")
 
     def fake_relax(args, *, calculators, step_guard):
         assert args.relax_cell

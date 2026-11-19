@@ -1,15 +1,16 @@
-# Active learning (HydraGNN and DFT)
+# Active learning (MLIP and DFT)
 
-## Active-learning loop (HydraGNN ↔ DFT)
+## Active-learning loop (MLIP ↔ DFT)
 
 The `matsim-agents al` subcommand runs an end-to-end active-learning loop
-that grows a HydraGNN training set from DFT labels of structures the
-current model is most uncertain about. Both **VASP 6.6** and **Quantum
+that grows a training set from DFT labels of structures the current MLIP
+(HydraGNN, UMA, or MACE, selected by the config's `mlip:` block) is most
+uncertain about. Both **VASP 6.6** and **Quantum
 ESPRESSO `pw.x`** are supported as the labeller — the choice is a single
 YAML field.
 
 ```
-  HydraGNN MLFF ── MD ──► candidates ────────────────────────────────────┐
+  MLIP ──────── MD ──► candidates ────────────────────────────────────┐
         ▲                       │                                            │
         │                       ▼                                            │
         │             ensemble / MC-dropout                                   │
@@ -39,8 +40,10 @@ export RUNS_ROOT=/lustre/orion/<proj>/scratch/$USER/runs
 export RUN_TAG=al-mptrj-001
 export DFT_BACKEND=qe          # or: vasp
 
-# 2. Validate the resolved config (no run)
+# 2. Validate the resolved config (no run); --mlip-config swaps in any model
 matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml \
+  --mlip-config examples/mlip/mace-mp-medium.yaml
 
 # 3. Submit on Frontier
 sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
@@ -98,7 +101,7 @@ never appears in the parsed `ALConfig`.
 
 VASP PAW totals and QE pseudopotential totals are **not** directly
 comparable. Every frame written to the dataset is tagged with
-`info["dft_backend"]`; never train one HydraGNN model on a mixed
+`info["dft_backend"]`; never train one MLIP on a mixed
 VASP+QE dataset without an explicit per-backend energy offset.
 
 ### Energy comparison and promotion

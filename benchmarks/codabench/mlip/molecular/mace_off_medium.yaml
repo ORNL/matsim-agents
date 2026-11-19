@@ -1,0 +1,7 @@
+# MACE-OFF23 medium (Codabench baseline; output predictions/mace_off_medium/).
+mlip:
+  backend: mace
+  family: mace_off
+  model: medium
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

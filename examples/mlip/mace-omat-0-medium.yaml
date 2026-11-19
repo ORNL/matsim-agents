@@ -1,0 +1,7 @@
+# MACE-OMAT-0 medium foundation model, trained on OMat24 (mace-torch).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: medium-omat-0
+  precision: fp64
+  device: cuda

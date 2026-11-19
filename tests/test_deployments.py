@@ -22,6 +22,30 @@ def test_deployment_assets_are_portable() -> None:
     assert module.validate() == []
 
 
+@pytest.mark.parametrize(
+    ("command", "portable"),
+    [
+        ('X="$(realpath -e "$1")"', False),
+        ('X="$(realpath -m "$1")"', False),
+        ('X="$(realpath --canonicalize-existing "$1")"', False),
+        ('X="$(CDPATH= cd -P -- "$1" && pwd -P)"', True),
+        ('X="$(realpath -- "$1")"', True),
+    ],
+)
+def test_deployment_shell_avoids_gnu_only_path_resolution(tmp_path, command, portable) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts" / "diagnostics" / "validate_deployments.py"
+    spec = importlib.util.spec_from_file_location("validate_deployments_portability", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    job = tmp_path / "job.pbs"
+    job.write_text(f"#!/bin/bash\nset -e\n{command}\n")
+    module.ROOT = tmp_path
+    errors = module._validate_shell(job)
+    assert (errors == []) is portable, errors
+
+
 def test_frozen_batch_manifest_paths_are_repository_relative() -> None:
     root = Path(__file__).resolve().parents[1]
     script = root / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
@@ -186,7 +210,8 @@ def test_qwen_e1_runner_rejects_full_graph_resource_override(tmp_path) -> None:
 def test_perlmutter_hydragnn_examples_pass_declared_checkout(case) -> None:
     root = Path(__file__).resolve().parents[1]
     config = yaml.safe_load((root / "examples/paper_cases" / case).read_text())
-    assert config["mlip"]["hydragnn"]["hydragnn_root"] == "${HYDRAGNN_DIR}"
+    assert config["mlip"]["backend"] == "hydragnn"
+    assert config["mlip"]["hydragnn_root"] == "${HYDRAGNN_DIR}"
 
 
 @pytest.mark.parametrize(
@@ -202,8 +227,8 @@ def test_perlmutter_hydragnn_examples_pass_declared_checkout(case) -> None:
 def test_frontier_newhead_examples_pass_finetuning_checkout(case) -> None:
     root = Path(__file__).resolve().parents[1]
     config = yaml.safe_load((root / case).read_text())
-    hydragnn = config.get("mlip", {}).get("hydragnn", config.get("hydragnn"))
-    assert hydragnn["ft_repo"] == "${HYDRAGNN_FT_REPO}"
+    assert config["mlip"]["backend"] == "hydragnn"
+    assert config["mlip"]["ft_repo"] == "${HYDRAGNN_FT_REPO}"
     assert "/lustre/orion/" in config["vars"]["HYDRAGNN_FT_REPO"]
 
 
@@ -216,7 +241,9 @@ def test_perlmutter_campaign_imports_current_checkout() -> None:
 
     source_path_export = 'export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"'
     assert source_path_export in content
-    assert content.index(source_path_export) < content.index(".venv-uma/bin/activate")
+    assert content.index(source_path_export) < content.index("source '$CAMPAIGN_VENV/bin/activate'")
+    assert '  uma) CAMPAIGN_VENV_DEFAULT="$REPO/.venv-uma" ;;' in content
+    assert '  mace) CAMPAIGN_VENV_DEFAULT="$REPO/.venv-mace" ;;' in content
 
     standalone = root / "deployments/perlmutter/jobs/campaign_formula_discovery.py"
     standalone_content = standalone.read_text(encoding="utf-8")
@@ -302,7 +329,7 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     assert '--surrogate-minimum-unique-unary "${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"' in content
 
 
-def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
+def test_perlmutter_campaign_supports_debate_only_and_mlip_only_modes() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (
         root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
@@ -326,7 +353,12 @@ def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
         '[[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == '
         '"single-llm-once" ]]' in content
     )
-    assert 'EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE")' in content
+    assert (
+        'EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"})'
+        in content
+    )
+    assert 'MLIP_ARGS=(--mlip-config "$MLIP_CONFIG")' in content
+    assert 'campaign_mlip_backend "$REPO" "$PYTHON" "${MLIP_CONFIG:-$AL_CONFIG}"' in content
     assert '[[ "$CAMPAIGN_MODE" == "dft" ]] && EXECUTION_ARGS+=(--approve-dft)' in content
     assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_DFT_REFINE:-1}"' in content
     assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}"' in content
@@ -508,7 +540,7 @@ def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
     monkeypatch.setattr(
         ALConfig,
         "from_yaml",
-        lambda _path: SimpleNamespace(
+        lambda _path, **_kwargs: SimpleNamespace(
             dft=SimpleNamespace(backend="qe"),
             trainer=SimpleNamespace(
                 validation_reference_set=None,
@@ -572,17 +604,19 @@ def test_bounded_campaign_settings_cover_all_scientific_stages(monkeypatch) -> N
 
 
 @pytest.mark.parametrize(
-    ("mode", "backend", "refine", "workflow"),
+    ("mode", "backend", "mlip", "refine", "workflow"),
     [
-        ("dft", "qe", "1", "7llm-uma-al-qe-hull"),
-        ("dft", "vasp", "1", "7llm-uma-al-vasp-hull"),
-        ("dft", "qe", "0", "7llm-uma-al-qe"),
-        ("uma-only", "qe", "0", "7llm-uma-screen"),
-        ("debate-only", "qe", "0", "7llm-debate"),
-        ("single-llm-once", "qe", "0", "1llm-debate"),
+        ("dft", "qe", "uma", "1", "7llm-uma-al-qe-hull"),
+        ("dft", "vasp", "mace", "1", "7llm-mace-al-vasp-hull"),
+        ("dft", "qe", "hydragnn", "0", "7llm-hydragnn-al-qe"),
+        ("mlip-only", "qe", "mace", "0", "7llm-mace-screen"),
+        ("mlip-only", "qe", "uma", "0", "7llm-uma-screen"),
+        ("mlip-only", "qe", "hydragnn", "0", "7llm-hydragnn-screen"),
+        ("debate-only", "qe", "", "0", "7llm-debate"),
+        ("single-llm-once", "qe", "", "0", "1llm-debate"),
     ],
 )
-def test_campaign_descriptive_run_naming(tmp_path, mode, backend, refine, workflow):
+def test_campaign_descriptive_run_naming(tmp_path, mode, backend, mlip, refine, workflow):
     root = Path(__file__).resolve().parents[1]
     subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
     subprocess.run(
@@ -612,7 +646,7 @@ def test_campaign_descriptive_run_naming(tmp_path, mode, backend, refine, workfl
     env["MATSIM_CAMPAIGN_DFT_REFINE"] = refine
     env["MATSIM_CAMPAIGN_RUN_TAG"] = "obsolete-custom-tag"
     command = (
-        'source "$1"; configure_campaign_run_name "$2" "$3" "$4"; '
+        'source "$1"; configure_campaign_run_name "$2" "$3" "$4" "$5"; '
         'printf "%s--j12345|%s" "$MATSIM_CAMPAIGN_RUN_TAG" '
         '"$MATSIM_CAMPAIGN_SOURCE_DIRTY"'
     )
@@ -626,6 +660,7 @@ def test_campaign_descriptive_run_naming(tmp_path, mode, backend, refine, workfl
         str(tmp_path),
         mode,
         backend,
+        mlip,
     ]
     assert subprocess.check_output(args, env=env, text=True) == (
         f"nb-ta-o--{workflow}--{sha}--j12345|0"
@@ -657,6 +692,93 @@ def test_campaign_descriptive_run_naming(tmp_path, mode, backend, refine, workfl
     assert subprocess.check_output(args, env=env, text=True) == (
         f"nb-ta-o--{workflow}--{sha}--j12345|0"
     )
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        ("campaign-nb-ta-o-uma-qe.yaml", "uma"),
+        ("campaign-nb-ta-o-uma-vasp.yaml", "uma"),
+        ("campaign-nb-ta-o-mace-omat-qe.yaml", "mace"),
+        ("campaign-nb-ta-o-hydragnn-qe.yaml", "hydragnn"),
+    ],
+)
+def test_campaign_run_name_uses_the_configured_mlip_backend(config, expected):
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    command = 'source "$1"; campaign_mlip_backend "$2" "$3" "$4"'
+    output = subprocess.check_output(
+        [
+            "bash",
+            "-eu",
+            "-c",
+            command,
+            "test",
+            str(root / "deployments/perlmutter/setup/campaign-naming.sh"),
+            str(root),
+            sys.executable,
+            str(root / "deployments/perlmutter/jobs/config" / config),
+        ],
+        env={**os.environ, "PROJECT_ROOT": str(root)},
+        text=True,
+    )
+    assert output.strip() == expected
+
+
+@pytest.mark.parametrize("mode", ["dft", "mlip-only"])
+def test_campaign_run_name_requires_the_mlip_backend(tmp_path, mode):
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    result = subprocess.run(
+        [
+            "bash",
+            "-u",
+            "-c",
+            'source "$1"; configure_campaign_run_name "$2" "$3" qe',
+            "test",
+            str(root / "deployments/perlmutter/setup/campaign-naming.sh"),
+            str(tmp_path),
+            mode,
+        ],
+        env={
+            **{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            "MATSIM_CAMPAIGN_SOURCE_REVISION": "0" * 40,
+            "MATSIM_CAMPAIGN_SOURCE_DIRTY": "0",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+
+
+def test_campaign_execution_has_only_backend_agnostic_modes():
+    root = Path(__file__).resolve().parents[1]
+    executor_path = root / "deployments/perlmutter/jobs/campaign_execute.py"
+    spec = importlib.util.spec_from_file_location("campaign_execute_modes", executor_path)
+    assert spec is not None and spec.loader is not None
+    executor = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(executor)
+    with pytest.raises(SystemExit):
+        executor.main(
+            [
+                "--campaign-state",
+                "missing.json",
+                "--al-config",
+                "missing.yaml",
+                "--model",
+                "a",
+                "vllm",
+                "m",
+                "http://localhost",
+                "--execution-mode",
+                "uma-only",
+            ]
+        )
+    script = (
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+    ).read_text()
+    assert "uma-only" not in script
 
 
 def test_campaign_launcher_uses_new_names_without_legacy_branch():

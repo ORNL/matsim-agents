@@ -4,7 +4,7 @@
 
 `matsim-agents` is designed to run **the same Python code path on three
 DOE leadership-class systems with three very different accelerators**.
-All heavy backends (HydraGNN MLFF inference/training, vLLM model
+All heavy backends (MLIP inference/training with HydraGNN, UMA, or MACE, vLLM model
 serving, VASP, and Quantum ESPRESSO) have validated build + launcher
 recipes per site, with all platform-specific gotchas (toolchains, MPI
 GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.

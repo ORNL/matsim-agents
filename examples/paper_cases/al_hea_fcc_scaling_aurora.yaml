@@ -28,25 +28,17 @@ vars:
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
 
 mlip:
-  # HydraGNN runs from .venv; MLIP_BACKEND=uma or mace uses .venv-uma / .venv-mace.
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    # The BEST6 multi-branch model REQUIRES its BranchWeightMLP; iter0_logdir has
-    # no mlp_weights/ dir, so point at the trained MLP shipped with the example.
-    mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
-    precision:  fp32
-    mlp_device: xpu
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     xpu
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  # Default model. Replace it with --mlip-config FILE (an `mlip:` block with
+  # device: xpu); UMA and MACE run from .venv-uma / .venv-mace.
+  backend: hydragnn
+  logdir:         ${INITIAL_LOGDIR}
+  checkpoint:     best_model.pt
+  # The BEST6 multi-branch model REQUIRES its BranchWeightMLP; iter0_logdir has
+  # no mlp_weights/ dir, so point at the trained MLP shipped with the example.
+  mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  precision:  fp32
+  device: xpu
+  ensemble_models: []
 
 md:
   seed_source:

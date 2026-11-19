@@ -1,0 +1,11 @@
+# MACE-MP-0 medium foundation model (mace-torch).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: medium
+  precision: fp64
+  device: cuda
+  dropout:
+    enabled: true
+    p: 0.1
+    target_layers: linear

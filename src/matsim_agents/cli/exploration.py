@@ -68,6 +68,8 @@ def check(
     result = _exploration().check_exploration(_load_config(config))
     console.print(f"Python: {result.python}", markup=False, soft_wrap=True)
     console.print(f"Preflight: {'passed' if result.ready else 'failed'}")
+    if result.model_identifier:
+        console.print(f"MLIP: {result.model_identifier}", markup=False, soft_wrap=True)
     if result.checkpoint_sha256:
         console.print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
     for note in result.notes:

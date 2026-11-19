@@ -52,8 +52,15 @@ RESOURCES="${MATSIM_RESOURCES:-$REPO/deployments/perlmutter/resources/discovery-
 
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$VENV"
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
+# or the HydraGNN foundation model above. The client runs in that backend's environment.
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
+activate_python_env "$VENV"
+
+# Offline compute nodes: stage the selected model's downloaded artifacts.
+source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_mlip_model_artifacts "$REPO" python "$MLIP_CONFIG"
 
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
 export PYTHONNOUSERSITE=1
@@ -104,10 +111,10 @@ else
   AL_ARGS+=( --al-dry-run )
 fi
 
+
 echo "[$(date)] Submitting discovery query to matsim-agents (managed vLLM, AL mode=$AL_MODE) ..."
 echo "$QUERY" | matsim-agents chat \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --mlip-config     "$MLIP_CONFIG" \
     --output-dir      "$OUTPUT_DIR" \
     --resources       "$RESOURCES" \
     --llm-peer-review \

@@ -1,0 +1,7 @@
+# MACE-OMOL-0 extra large (Codabench baseline; output predictions/mace_omol_extra_large/).
+mlip:
+  backend: mace
+  family: mace_omol
+  model: extra_large
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

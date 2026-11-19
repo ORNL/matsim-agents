@@ -312,13 +312,15 @@ def execute(args, rows, metadata, output: Path) -> int:
     if len(pool.slots) != args.devices:
         raise ValueError("Resolved worker count differs from requested device count")
     relax_args = {
-        "mlip_backend": args.backend,
-        "logdir": str(Path(metadata["config"]["path"]).parent),
-        "checkpoint": metadata["checkpoint"]["path"],
-        "hydragnn_branch_mlp_checkpoint": metadata["branch_checkpoint"]["path"],
-        "mlp_device": "xpu",
-        "precision": args.precision,
-        "mlp_precision": args.precision,
+        "mlip": {
+            "backend": args.backend,
+            "logdir": str(Path(metadata["config"]["path"]).parent),
+            "checkpoint": metadata["checkpoint"]["path"],
+            "mlp_checkpoint": metadata["branch_checkpoint"]["path"],
+            "device": "xpu",
+            "precision": args.precision,
+            "mlp_precision": args.precision,
+        },
         "optimizer": "FIRE",
         "fmax": args.fmax,
         "maxiter": args.max_steps,

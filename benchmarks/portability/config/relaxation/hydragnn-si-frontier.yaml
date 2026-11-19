@@ -14,10 +14,10 @@ geometry:
   preserve_symmetry: false
 
 mlip:
-  mlip_backend: hydragnn
+  backend: hydragnn
   logdir: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
-  hydragnn_branch_mlp_checkpoint: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
-  mlp_device: cuda  # ROCm PyTorch exposes the MI250X through the "cuda" device API
+  mlp_checkpoint: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  device: cuda  # ROCm PyTorch exposes the MI250X through the "cuda" device API
 
 max_steps: 200
 force_tolerance_eV_per_A: 0.02

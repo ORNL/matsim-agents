@@ -22,7 +22,7 @@ class WorkflowAdapter:
 
 
 ADAPTERS = {
-    "explore": WorkflowAdapter(("explore", "run"), True, "directory", "MACE phase exploration"),
+    "explore": WorkflowAdapter(("explore", "run"), True, "directory", "MLIP phase exploration"),
     "relax": WorkflowAdapter(("relax",), True, description="MLIP/DFT relaxation"),
     "characterize": WorkflowAdapter(("characterize",), True, "config", "Characterization recipes"),
     "debate": WorkflowAdapter(("debate",), True, description="Scientific LLM debate"),

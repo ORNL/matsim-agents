@@ -15,8 +15,9 @@
 #         -> retrain HydraGNN -> next iteration
 #
 # Runs `matsim-agents al run examples/paper_cases/al_<case>_frontier.yaml` with
-#   MLIP_BACKEND=hydragnn DFT_BACKEND=vasp
-# from the HydraGNN ROCm 7.2.0 venv (UMA/fairchem is NOT installed on Frontier).
+# DFT_BACKEND=vasp from the HydraGNN ROCm 7.2.0 venv (UMA/fairchem is NOT
+# installed on Frontier). MLIP_CONFIG (optional) is a YAML with an `mlip:` block
+# that replaces the paper case's HydraGNN model (`--mlip-config`).
 #
 # Select the case with the CASE env var (default: hea_bcc):
 #   CASE=lifepo4       sbatch deployments/frontier/jobs/job-active-learning-paper-cases-frontier.sh
@@ -47,7 +48,6 @@ RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 # ── case -> AL YAML mapping ───────────────────────────────────────────────────
 CASE="${CASE:-hea_bcc}"
-MLIP_BACKEND="${MLIP_BACKEND:-hydragnn}"
 declare -A CASE_YAML=(
   [lifepo4]=al_lifepo4_frontier.yaml
   [hea_bcc]=al_hea_bcc_frontier.yaml
@@ -73,6 +73,13 @@ else
   DFT_BACKEND="${DFT_BACKEND:-vasp}"
 fi
 
+MLIP_ARGS=()
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+  [[ -f "$MLIP_CONFIG" ]] || { echo "ERROR: MLIP config not found: $MLIP_CONFIG" >&2; exit 2; }
+  MLIP_CONFIG="$(cd "$(dirname "$MLIP_CONFIG")" && pwd)/$(basename "$MLIP_CONFIG")"
+  MLIP_ARGS=(--mlip-config "$MLIP_CONFIG")
+fi
+
 RUN_DIR="$RUNS_ROOT/al-paper-${CASE}-${SLURM_JOB_ID:-$$}"
 mkdir -p "$RUN_DIR"
 
@@ -84,8 +91,7 @@ source deployments/frontier/setup/setup_matsim_frontier.sh --rocm72
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
-# ── AL backend selection (consumed by the YAML via ${...} env interpolation) ──
-export MLIP_BACKEND
+# ── DFT backend (consumed by the YAML via ${...} env interpolation) ──────────
 export DFT_BACKEND
 
 echo "=========================================="
@@ -96,7 +102,7 @@ echo "Host:         $(hostname)"
 echo "Nodes:        ${SLURM_JOB_NUM_NODES:-1}"
 echo "Case:         $CASE"
 echo "AL config:    $AL_CONFIG"
-echo "MLIP backend: $MLIP_BACKEND"
+echo "MLIP config:  ${MLIP_CONFIG:-$AL_CONFIG}"
 echo "DFT backend:  $DFT_BACKEND"
 echo "Repo:         $REPO"
 echo "Run dir:      $RUN_DIR"
@@ -109,14 +115,14 @@ PY
 
 # ── validate then run the AL loop ─────────────────────────────────────────────
 echo "[$(date)] Validating AL config ..."
-matsim-agents al validate-config "$AL_CONFIG" >"$RUN_DIR/al-config.resolved.json" 2>&1 || {
+matsim-agents al validate-config "$AL_CONFIG" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"} >"$RUN_DIR/al-config.resolved.json" 2>&1 || {
   echo "[ERROR] AL config validation failed. See $RUN_DIR/al-config.resolved.json" >&2
   tail -n 30 "$RUN_DIR/al-config.resolved.json" >&2 || true
   exit 1
 }
 
 echo "[$(date)] Starting active-learning loop for case '$CASE' ..."
-matsim-agents al run "$AL_CONFIG" --log-level "${LOG_LEVEL:-INFO}" \
+matsim-agents al run "$AL_CONFIG" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"} --log-level "${LOG_LEVEL:-INFO}" \
     2>&1 | tee "$RUN_DIR/active-learning.log"
 
 echo "[$(date)] Active-learning loop complete for '$CASE'. Artifacts under $RUNS_ROOT (RUN_TAG from YAML)."

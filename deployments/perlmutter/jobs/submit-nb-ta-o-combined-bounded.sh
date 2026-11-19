@@ -1,12 +1,15 @@
 #!/bin/bash
 # Submit the seven-LLM Nb-Ta-O campaign with AL training and independent DFT hulls.
+# MLIP_CONFIG (optional) is a YAML whose mlip block replaces the AL config's model.
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 export PROJECT_ROOT="$REPO"
-source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
-configure_uma_model_artifacts "$REPO"
 export MATSIM_CAMPAIGN_MODE=dft
 export MATSIM_CAMPAIGN_AL_CONFIG="$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe-bounded.yaml"
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="$(cd "$(dirname "$MLIP_CONFIG")" && pwd)/$(basename "$MLIP_CONFIG")"
+  export MLIP_CONFIG
+fi
 export MATSIM_CAMPAIGN_MAX_ITERATIONS=3 MATSIM_CAMPAIGN_MAX_CANDIDATES=3
 export MATSIM_CAMPAIGN_MAX_DFT=64 MATSIM_CAMPAIGN_MAX_AL_ITERATIONS=3
 export MATSIM_CAMPAIGN_MAX_NODE_HOURS=5.5
@@ -24,7 +27,17 @@ export MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES=1 MATSIM_CAMPAIGN_SURROGATE_HULL=1
 export MATSIM_CAMPAIGN_PERTURBATION_TRIALS=3
 source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"
 unset MATSIM_CAMPAIGN_SOURCE_REVISION MATSIM_CAMPAIGN_SOURCE_DIRTY
-configure_campaign_run_name "$REPO" "$MATSIM_CAMPAIGN_MODE" qe
+PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
+MLIP="$(campaign_mlip_backend "$REPO" "$PYTHON" "${MLIP_CONFIG:-$MATSIM_CAMPAIGN_AL_CONFIG}")"
+source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+case "$MLIP" in
+  uma)
+    UMA_MODEL="$(PYTHONPATH="$REPO/src" mlip_uma_model_name "$PYTHON" "${MLIP_CONFIG:-$MATSIM_CAMPAIGN_AL_CONFIG}")"
+    configure_uma_model_artifacts "$REPO" "$UMA_MODEL"
+    ;;
+  mace) configure_mace_model_artifacts "$REPO" ;;
+esac
+configure_campaign_run_name "$REPO" "$MATSIM_CAMPAIGN_MODE" qe "$MLIP"
 cd "$REPO"
 sbatch -A m5216_g -q premium -N 16 -t 06:00:00 \
   --export=ALL --job-name=nb-ta-o-combined-bounded \

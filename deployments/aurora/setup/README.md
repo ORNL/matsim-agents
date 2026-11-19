@@ -136,8 +136,8 @@ Submit with your allocation (`qsub -A <project> ...`); none embed an account.
 
 | Script | Purpose |
 | --- | --- |
-| `launchers/_hydragnn-train-step-aurora.sh` | AL retraining step: one built-in HydraGNN fine-tuner on one XPU tile (`--device xpu`) |
-| `jobs/job-active-learning-paper-cases-aurora.sh` | Full AL loop for one paper case (`CASE=hea_bcc\|lifepo4\|phosphorene\|phosphorene_qe`) using `examples/paper_cases/al_<case>_aurora.yaml` |
+| `launchers/_mlip-train-step-aurora.sh` | AL retraining step (`trainer.train_launcher`): activates the HydraGNN, UMA, or MACE environment and runs the model's fine-tuner on the training pool's hosts and XPU tiles |
+| `jobs/job-active-learning-paper-cases-aurora.sh` | Full AL loop for one paper case (`CASE=hea_bcc\|lifepo4\|phosphorene\|phosphorene_qe`) using `examples/paper_cases/al_<case>_aurora.yaml`; optional `MLIP_CONFIG` (an `mlip:` YAML) replaces its model |
 | `jobs/submit-active-learning-paper-cases.sh` | Submit the paper-case job for every case |
 | `jobs/job-al-dft-scaling-aurora.sh` | One DFT strong-scaling point; node count from `PBS_NODEFILE` |
 | `jobs/submit-al-dft-scaling-sweep.sh` | Submit the scaling sweep over `NODES` x `REPS` |
@@ -187,12 +187,16 @@ forces for perturbed two-atom silicon. CPU fallback is a failure. This smoke
 test does not establish scientific accuracy or production scaling.
 
 Prepare checkpoint caches on a login node before submission; compute nodes run
-offline. The defaults are the local HydraGNN BEST6 logdir/BranchWeightMLP,
-UMA `uma-s-1p1`, and MACE-MP `small`. `MATSIM_HYDRAGNN_LOGDIR`,
-`HYDRAGNN_BRANCH_MLP_CHECKPOINT`, `MATSIM_UMA_MODEL_NAME`, `MATSIM_MACE_MODEL`,
-and `QUALIFICATION_RUN_DIR` override inputs/output. The model configuration
-accepts explicit `xpu` devices; actual support is determined by this test, not
-by configuration acceptance alone.
+offline. Each model is an `mlip:` block passed to `qualify_mlip_xpu.py
+--mlip-config FILE`; the block must select `device: xpu`, and anything else is
+rejected. Without `MLIP_CONFIG`, the job qualifies the three selections in
+`deployments/aurora/jobs/config/`: `mlip-xpu-hydragnn.yaml` (the BEST6
+logdir and BranchWeightMLP under `${HYDRAGNN_ROOT}`), `mlip-xpu-uma.yaml`
+(UMA `uma-s-1p1`), and `mlip-xpu-mace.yaml` (MACE-MP `small`). Set
+`MLIP_CONFIG` to an absolute or repository-relative YAML file to qualify one
+other model instead, and `QUALIFICATION_RUN_DIR` to choose the output
+location. Configuration acceptance of `xpu` does not establish support; this
+test does.
 
 Each model writes a timed `.progress.json` before imports, XPU setup, checkpoint
 loading, energy/force prediction, synchronization, and residency checks. Logs

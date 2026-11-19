@@ -6,7 +6,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_calculator
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.campaign.formula_execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate, SeedGenerationAction
@@ -44,16 +44,13 @@ def test_mace_ensemble_builds_primary_and_family_or_checkpoint_members(
     checkpoint = tmp_path / "member.model"
     checkpoint.touch()
     names = [str(checkpoint)] if family == "checkpoint" else ["large", str(checkpoint)]
-    cfg = MLIPConfig(
-        backend="mace",
-        mace=MACEConfig(
-            family=family,
-            model=str(primary) if family == "checkpoint" else "small",
-            device="cpu",
-            precision="fp64",
-            dispersion=family == "mace_mp",
-            ensemble_models=names,
-        ),
+    cfg = MACEConfig(
+        family=family,
+        model=str(primary) if family == "checkpoint" else "small",
+        device="cpu",
+        precision="fp64",
+        dispersion=family == "mace_mp",
+        ensemble_models=names,
     )
     calls = []
 
@@ -63,7 +60,7 @@ def test_mace_ensemble_builds_primary_and_family_or_checkpoint_members(
 
     monkeypatch.setattr("matsim_agents.backends.mlip.calculator.build_mace_calculator", build)
     assert build_ensemble(cfg, enable_mc_dropout=True) == list(range(1, len(names) + 2))
-    assert calls[0][0] == cfg.mace
+    assert calls[0][0] == cfg
     assert all(
         enabled and member.device == "cpu" and member.precision == "fp64"
         for member, enabled in calls
@@ -74,17 +71,14 @@ def test_mace_ensemble_builds_primary_and_family_or_checkpoint_members(
     if family != "checkpoint":
         assert calls[1][0].family == family
         assert calls[1][0].model == "large"
-        assert calls[1][0].dispersion == cfg.mace.dispersion
-    assert cfg.mace.family == family
+        assert calls[1][0].dispersion == cfg.dispersion
+    assert cfg.family == family
 
 
 def test_mace_checkpoint_ensemble_rejects_missing_member(tmp_path, monkeypatch):
     primary = tmp_path / "primary.model"
     primary.touch()
-    cfg = MLIPConfig(
-        backend="mace",
-        mace=MACEConfig(family="checkpoint", model=str(primary), ensemble_models=["missing.model"]),
-    )
+    cfg = MACEConfig(family="checkpoint", model=str(primary), ensemble_models=["missing.model"])
     monkeypatch.setattr(
         "matsim_agents.backends.mlip.calculator.build_mace_calculator",
         lambda *args, **kwargs: object(),
@@ -96,16 +90,14 @@ def test_mace_checkpoint_ensemble_rejects_missing_member(tmp_path, monkeypatch):
 def test_mace_ensemble_dispatches_actual_adapters(tmp_path, fake_mace):
     checkpoint = tmp_path / "member.model"
     checkpoint.touch()
-    cfg = MLIPConfig(
-        backend="mace",
-        mace=MACEConfig(
-            family="mace_mp",
-            model="small",
-            device="cpu",
-            precision="fp64",
-            ensemble_models=[str(checkpoint)],
-        ),
-    )
+    cfg = {
+        "backend": "mace",
+        "family": "mace_mp",
+        "model": "small",
+        "device": "cpu",
+        "precision": "fp64",
+        "ensemble_models": [str(checkpoint)],
+    }
     assert len(build_ensemble(cfg)) == 2
     assert fake_mace["mace_mp"]["model"] == "small"
     assert fake_mace["checkpoint"]["model_paths"] == [str(checkpoint)]
@@ -154,16 +146,16 @@ def test_mace_family_defaults_and_validation():
 def test_model_configs_forward_xpu_through_relaxation_schema(tmp_path, backend):
     models = {
         "hydragnn": HydraGNNConfig(
-            logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", mlp_device="xpu"
+            logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", device="xpu"
         ),
         "uma": UMAConfig(device="xpu"),
         "mace": MACEConfig(device="xpu"),
     }
-    cfg = SimpleNamespace(mlip=SimpleNamespace(backend=backend, **{backend: models[backend]}))
+    cfg = SimpleNamespace(mlip=models[backend])
     values = _exploration_kwargs(cfg, {})
     request = RelaxStructureInput(structure_path="structure.cif", **values)
-    assert request.mlp_device == "xpu"
-    assert request.mlip_backend == backend
+    assert request.mlip.device == "xpu"
+    assert request.mlip.backend == backend
 
 
 def test_campaign_forwards_mace_selection():
@@ -174,31 +166,22 @@ def test_campaign_forwards_mace_selection():
         precision="fp64",
         dispersion=True,
     )
-    cfg = SimpleNamespace(mlip=SimpleNamespace(backend="mace", mace=mace))
+    cfg = SimpleNamespace(mlip=mace)
 
-    values = _exploration_kwargs(cfg, {})
+    values = _exploration_kwargs(cfg, {"output_dir": "out"})
 
-    assert values == {
-        "mlip_backend": "mace",
-        "mace_family": "mace_mp",
-        "mace_model": "medium-omat-0",
-        "mace_dispersion": True,
-        "mace_head": None,
-        "mlp_device": "cpu",
-        "precision": "fp64",
-    }
+    assert values == {"mlip": mace, "output_dir": "out"}
 
 
 def test_relaxation_input_accepts_mace():
     args = RelaxStructureInput(
         structure_path="structure.cif",
-        mlip_backend="mace",
-        mace_family="mace_polar",
-        mace_model="polar-1-s",
+        mlip={"backend": "mace", "family": "mace_polar", "model": "polar-1-s"},
     )
 
-    assert args.mace_family == "mace_polar"
-    assert args.mace_model == "polar-1-s"
+    assert isinstance(args.mlip, MACEConfig)
+    assert args.mlip.family == "mace_polar"
+    assert args.mlip.model == "polar-1-s"
 
 
 def test_direct_mace_relaxation_preserves_default_precision(tmp_path, monkeypatch):
@@ -217,7 +200,7 @@ def test_direct_mace_relaxation_preserves_default_precision(tmp_path, monkeypatc
             RelaxStructureInput(
                 structure_path=str(tmp_path / "structure.extxyz"),
                 output_dir=str(tmp_path),
-                mlip_backend="mace",
+                mlip={"backend": "mace"},
             )
         )
 
@@ -245,16 +228,14 @@ def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
     explore_composition(
         "Nb",
         output_dir=str(tmp_path),
-        mlip_backend="mace",
-        mace_family="mace_omol",
-        mace_model="extra_large",
-        mace_dispersion=True,
+        mlip=MACEConfig(family="mace_mp", model="medium-omat-0", dispersion=True),
         relax_fn=relax,
     )
 
-    assert captured["mace_family"] == "mace_omol"
-    assert captured["mace_model"] == "extra_large"
-    assert captured["mace_dispersion"] is True
+    assert captured["mlip"]["backend"] == "mace"
+    assert captured["mlip"]["family"] == "mace_mp"
+    assert captured["mlip"]["model"] == "medium-omat-0"
+    assert captured["mlip"]["dispersion"] is True
 
 
 def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypatch):
@@ -290,9 +271,7 @@ def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypat
     result = explore_composition(
         "NaCl",
         output_dir=str(tmp_path),
-        mlip_backend="mace",
-        mace_family="mace_mp",
-        mace_model="medium-omat-0",
+        mlip=MACEConfig(family="mace_mp", model="medium-omat-0"),
         generation_action=action,
         relax_fn=fail_relaxation,
     )
@@ -300,7 +279,7 @@ def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypat
     assert generation_call["action"] == action
     assert generation_call["output_dir"].endswith("seeds/round-2-fu4")
     assert relaxation_calls[0].output_dir.endswith("relaxed/round-2-fu4")
-    assert relaxation_calls[0].mace_model == "medium-omat-0"
+    assert relaxation_calls[0].mlip.model == "medium-omat-0"
     assert result.failures
 
 
@@ -326,7 +305,7 @@ def test_exploration_reports_ranking_failure_after_convergence(
     result = explore_composition(
         "Si",
         output_dir=str(tmp_path),
-        mlip_backend="mace",
+        mlip=MACEConfig(),
         relax_fn=lambda request: fake_relaxation_result,
     )
 
@@ -360,7 +339,7 @@ def test_exploration_reports_non_convergence_when_residual_force_is_ineligible(
     result = explore_composition(
         "Si",
         output_dir=str(tmp_path),
-        mlip_backend="mace",
+        mlip=MACEConfig(),
         relax_fn=lambda request: fake_relaxation_result,
     )
 

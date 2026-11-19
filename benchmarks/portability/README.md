@@ -76,7 +76,7 @@ pseudopotentials at all sites. The facility jobs accept
 CI/release gate because it does not require external model or DFT assets.
 
 `config/relaxation/qe-si.yaml` and `config/relaxation/uma-si.yaml` are worked
-Perlmutter examples (NERSC paths, `mlp_device: cuda` on the A100s).
+Perlmutter examples (NERSC paths, `device: cuda` on the A100s).
 `config/relaxation/vasp-si.yaml` adds a third, optional Perlmutter case for
 the VASP DFT backend (`dft.launcher` at
 [`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh),

@@ -30,21 +30,42 @@ export ZE_FLAT_DEVICE_HIERARCHY=FLAT ZE_AFFINITY_MASK=0
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 ulimit -c 0
 cd "${REPO}"
-HYDRA_EXAMPLE="${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26"
+# MLIP_CONFIG selects one model (a YAML file with an mlip: block, device: xpu);
+# unset, the job qualifies the HydraGNN, UMA, and MACE selections in config/.
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+    configs=("${MLIP_CONFIG}")
+else
+    configs=("${REPO}"/deployments/aurora/jobs/config/mlip-xpu-{hydragnn,uma,mace}.yaml)
+fi
 failed=0
-for backend in hydragnn uma mace; do
+for config in "${configs[@]}"; do
+    if ! backend="$("${REPO}/.venv/bin/python" -I - "${config}" <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(((yaml.safe_load(handle) or {}).get("mlip") or {}).get("backend", ""))
+PY
+)"; then
+        printf 'Cannot read the mlip block of %s\n' "${config}" >&2
+        failed=1
+        continue
+    fi
     case "${backend}" in
         hydragnn) python="${REPO}/.venv/bin/python" ;;
         uma) python="${REPO}/.venv-uma/bin/python" ;;
         mace) python="${REPO}/.venv-mace/bin/python" ;;
+        *)
+            printf '%s: mlip.backend must be hydragnn, uma, or mace\n' "${config}" >&2
+            failed=1
+            continue
+            ;;
     esac
     if timeout --kill-after=30 480 mpiexec -n 1 --ppn 1 "${python}" \
         "${REPO}/deployments/aurora/jobs/qualify_mlip_xpu.py" \
-        --backend "${backend}" --output "${RUN_DIR}/${backend}.json" \
-        --hydragnn-logdir "${MATSIM_HYDRAGNN_LOGDIR:-${HYDRA_EXAMPLE}/multidataset_hpo-BEST6-fp64}" \
-        --hydragnn-mlp "${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRA_EXAMPLE}/mlp_branch_weights.pt}" \
-        --uma-model "${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}" \
-        --mace-model "${MATSIM_MACE_MODEL:-small}" >"${RUN_DIR}/${backend}.log" 2>&1; then
+        --mlip-config "${config}" --output "${RUN_DIR}/${backend}.json" \
+        >"${RUN_DIR}/${backend}.log" 2>&1; then
         printf '%s PASSED\n' "${backend}"
     else
         launcher_status=$?

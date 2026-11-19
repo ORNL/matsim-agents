@@ -388,7 +388,7 @@ MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint
 HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
 fine-tuner, and is not used by these configurations.
 AL forwards the configured charge/spin conditioning to both built-in trainers
-and `mlip.hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
+and `mlip.ft_repo` to the new-head trainer, including through HPC launchers.
 
 AL training requires references even with comparison and promotion disabled.
 Configure a verified manifest explicitly:
@@ -447,12 +447,11 @@ for dry-run, optimization, and validation losses. BF16 keeps FP32 master
 parameters and uses autocast for compute; single-head checkpoint inference
 also honors that setting. FP32/FP64 paths do not enable autocast.
 
-`trainer.train_script` must be one of the built-in fine-tuners,
-`training/finetune_hydragnn.py` or `training/finetune_hydragnn_newhead.py`.
-Launchers receive the manifest as positional argument eight, then optional
-checkpoint, branch-MLP, ft_repo, charge, spin, and HydraGNN-root arguments, and
-invoke the fine-tuner with `--output-dir`/`--gfm-logdir`. The fine-tuners are
-single-process, so configure one node/one rank when using a launcher.
+The fine-tuning recipe belongs to the model: `mlip.fine_tuner` is
+`finetune_hydragnn` (default; routed multi-head, needs `mlp_checkpoint`) or
+`finetune_hydragnn_newhead` (drops all heads and trains one new head). The
+fine-tuners are single-process, so configure one node/one rank for the
+`training` pool.
 
 #### Approved elemental DFT prerequisite
 
@@ -658,11 +657,16 @@ Other details:
   the model the run was configured with, on the cumulative dataset, so
   successive fine-tunes do not compound.
 - **Stress**: the UMA and HydraGNN fine-tuners train on energies and forces only.
-- **Launchers**: a UMA or MACE `train_launcher` receives
-  `<train_script> <dataset> <out_model_dir> <base model fields> <epochs> <nodes>`
-  `<ranks> <reference_manifest> <finetune_mode>` and must write the model and
-  `energy-alignment.json` to `<out_model_dir>`
-  (see `deployments/perlmutter/launchers/_mace-train-step-perlmutter.sh`).
+- **Launchers**: every backend uses the same `trainer.train_launcher` contract.
+  The trainer runs `bash <launcher> <backend> <nodes> <ranks_per_node> -m
+  <module> <args...>`, where the MLIP configuration builds the fine-tuner
+  module (`mlip.fine_tuner`) and its complete argument list. A launcher does not
+  interpret those arguments: it prepares the site environment of `<backend>`,
+  applies the training pool's placement (`MATSIM_ASSIGNED_NODES`,
+  `MATSIM_DEVICE_MASK`, `MATSIM_NODE_DEVICES`), and runs `python "$@"`. The
+  site launchers are `deployments/<facility>/launchers/_mlip-train-step-<facility>.sh`
+  (Perlmutter and Aurora: hydragnn, uma, mace; Frontier: hydragnn). Without a
+  launcher the fine-tuner runs in the driver's process environment on its node.
 
 ### Keeping the surrogate loaded across iterations
 

@@ -3,22 +3,20 @@
 Prereqs:
     1. Install Ollama:  https://ollama.com  (or `brew install ollama`)
     2. Pull Qwen 2.5:   `ollama pull qwen2.5:14b`
-    3. Have a HydraGNN logdir with a trained checkpoint and a
-       BranchWeightMLP `.pt` file.
+    3. Have a YAML file whose `mlip:` block selects the MLIP, e.g. one of
+       examples/mlip/*.yaml (HydraGNN, UMA, or MACE).
 
 Run:
-    python examples/discovery_chat.py \\
-        --logdir /path/to/multidataset_hpo-BEST6-fp64 \\
-        --mlp-checkpoint /path/to/mlp_branch_weights.pt
+    python examples/discovery_chat.py --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 What happens:
     * You chat with Qwen 2.5 about a target property (e.g. "I want a
       Pb-free halide perovskite for photovoltaics").
     * Each time the conversation produces a new chemical formula, the
-      user is asked whether to launch a HydraGNN-driven exploration.
+      user is asked whether to launch an MLIP-driven exploration.
     * If yes, the auxiliary wrapper enumerates plausible crystal phases
       (rocksalt, perovskite, zincblende, ...), relaxes each with the
-      ASE/HydraGNN calculator, and reports chemical / dynamical
+      ASE calculator of the selected MLIP, and reports chemical / dynamical
       stability proxies. Results are streamed back into the
       conversation so the LLM can refine its hypothesis.
     * If the relaxed phases show high uncertainty (low branch-weight
@@ -35,79 +33,76 @@ from __future__ import annotations
 
 import argparse
 
+from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
 from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, run_chat
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--logdir", required=True)
-    parser.add_argument("--mlp-checkpoint", required=True)
+    add_mlip_arguments(parser)
     parser.add_argument("--output-dir", default="./outputs")
-    parser.add_argument("--checkpoint", default=None)
-    parser.add_argument("--mlp-device", default="cuda", choices=["cuda", "cpu"])
-    parser.add_argument("--precision", default=None)
-    parser.add_argument("--mlp-precision", default=None)
     parser.add_argument("--ase-structure-optimizer", default="FIRE")
     parser.add_argument("--maxiter", type=int, default=200)
     parser.add_argument("--llm-provider", default="ollama")
     parser.add_argument("--llm-model", default="qwen2.5:14b")
     parser.add_argument("--llm-base-url", default=None)
-    parser.add_argument("--auto-confirm", action="store_true",
-                        help="Skip the y/N prompt for every detected composition.")
     parser.add_argument(
-      "--al-config",
-      default=None,
-      help=(
-        "Path to a base active-learning YAML. When high-UQ is detected in discovery, "
-        "the composition is handed off to AL by overriding seed_source to compositions."
-      ),
+        "--auto-confirm",
+        action="store_true",
+        help="Skip the y/N prompt for every detected composition.",
     )
     parser.add_argument(
-      "--no-al-handoff",
-      action="store_true",
-      help="Disable discovery->active-learning handoff even when UQ is high.",
+        "--al-config",
+        default=None,
+        help=(
+            "Path to a base active-learning YAML. When high-UQ is detected in discovery, "
+            "the composition is handed off to AL by overriding seed_source to compositions."
+        ),
     )
     parser.add_argument(
-      "--al-dry-run",
-      action="store_true",
-      help="Plan and report AL handoff parameters without running the AL loop.",
+        "--no-al-handoff",
+        action="store_true",
+        help="Disable discovery->active-learning handoff even when UQ is high.",
     )
     parser.add_argument(
-      "--uq-top-weight-threshold",
-      type=float,
-      default=0.6,
-      help="High-UQ gate: trigger handoff when mean top branch weight drops below this.",
+        "--al-dry-run",
+        action="store_true",
+        help="Plan and report AL handoff parameters without running the AL loop.",
     )
     parser.add_argument(
-      "--uq-min-unreliable-fraction",
-      type=float,
-      default=0.25,
-      help="High-UQ gate: trigger handoff when this fraction of relaxations is low-confidence.",
+        "--uq-top-weight-threshold",
+        type=float,
+        default=0.6,
+        help="High-UQ gate: trigger handoff when mean top branch weight drops below this.",
     )
     parser.add_argument(
-      "--uq-min-relaxations-for-handoff",
-      type=int,
-      default=3,
-      help="Require at least this many relaxations before evaluating AL handoff UQ criteria.",
+        "--uq-min-unreliable-fraction",
+        type=float,
+        default=0.25,
+        help="High-UQ gate: trigger handoff when this fraction of relaxations is low-confidence.",
     )
     parser.add_argument(
-      "--al-handoff-audit-path",
-      default=None,
-      help=(
-        "Optional JSONL artifact path for discovery->AL handoff audit records "
-        "(UQ metrics, trigger rationale, action)."
-      ),
+        "--uq-min-relaxations-for-handoff",
+        type=int,
+        default=3,
+        help="Require at least this many relaxations before evaluating AL handoff UQ criteria.",
+    )
+    parser.add_argument(
+        "--al-handoff-audit-path",
+        default=None,
+        help=(
+            "Optional JSONL artifact path for discovery->AL handoff audit records "
+            "(UQ metrics, trigger rationale, action)."
+        ),
     )
     args = parser.parse_args()
+    mlip = mlip_config_from_args(parser, args)
+    if mlip is None:
+        parser.error("--mlip-config is required")
 
     cfg = DiscoveryChatConfig(
-        logdir=args.logdir,
-        hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
+        mlip=mlip,
         output_dir=args.output_dir,
-        checkpoint=args.checkpoint,
-        mlp_device=args.mlp_device,
-        precision=args.precision,
-        mlp_precision=args.mlp_precision,
         optimizer=args.ase_structure_optimizer,
         maxiter=args.maxiter,
         llm_provider=args.llm_provider,

@@ -76,10 +76,10 @@ trajectory + walltime + convergence flag from the native output files
 > sampling. The standalone relaxers are intended for one-off DFT validation
 > work outside the AL pipeline.
 
-### HydraGNN warm-start benchmarks
+### MLIP warm-start benchmarks
 
 A second pair of sibling drivers wraps the standalone relaxers in a
-"cold start vs HydraGNN-warm start" experiment and emits a JSON summary
+"cold start vs MLIP-warm start" experiment and emits a JSON summary
 that the integration tests consume:
 
 | Module | Backend | CLI |
@@ -87,11 +87,13 @@ that the integration tests consume:
 | [`warmstart_benchmark_qe.py`](../../src/matsim_agents/workflows/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.workflows.warmstart_benchmark_qe …`   |
 | [`warmstart_benchmark_vasp.py`](../../src/matsim_agents/workflows/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.workflows.warmstart_benchmark_vasp …` |
 
-Each driver runs (1) HydraGNN ASE relaxation, (2) DFT relaxation from the
-*original* coordinates (cold), (3) DFT relaxation from the
-HydraGNN-relaxed coordinates (warm), then reports `Δ ionic-steps`,
-`Δ total-SCF-iterations`, `Δ energy`, and a `warm_helped` boolean. If
-HydraGNN is unavailable (or `--skip-hydragnn` is passed) only the cold
-DFT run is executed and the `warm` block is left `None`.
+Each driver runs (1) an MLIP ASE relaxation with the backend chosen by
+`--mlip-config FILE` (an `mlip:` block selecting `hydragnn`, `uma`, or `mace`),
+(2) DFT relaxation from the *original* coordinates (cold), (3) DFT
+relaxation from the MLIP-relaxed coordinates (warm), then reports
+`Δ ionic-steps`, `Δ total-SCF-iterations`, `Δ energy`, and a `warm_helped`
+boolean. The MLIP result is stored in the summary's `mlip` block. If the
+MLIP step fails (or `--skip-mlip` is passed) only the cold DFT run is
+executed and the `warm` block is left `None`.
 
 ---

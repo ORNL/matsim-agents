@@ -244,7 +244,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 ### `deployments/perlmutter/jobs/`
 | Script | Purpose |
 |---|---|
-| `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
+| `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + the selected MLIP (`MLIP_CONFIG`, default HydraGNN; FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
 | `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents relax` contract through the shared deployment runner. |
 | `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
 | `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
@@ -252,12 +252,17 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
 | `job-all-local-model-debate-perlmutter.sh` | Starts the seven Perlmutter-compatible local catalog models in one 15-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2, Devstral-2, and Mistral-Large-3 are excluded for the compatibility reasons below. |
 | `job-al-debate-portability-perlmutter.sh` | Same 15-node, seven-model debate panel plus a 16th dedicated node that runs a real UMA+QE active-learning iteration on the benchmark Si cell first; the debate then argues from that loop's labelled DFT evidence instead of the synthetic thermoelectric prompt (`benchmarks/portability/active_learning_scientific_debate.py`). |
-| `job-campaign-formula-discovery-all-models-perlmutter.sh` | Runs a bounded, resumable Nb-Ta-O campaign: 15 nodes serve the seven-model panel while a dedicated 16th node performs UMA phase exploration, UMA-MD acquisition, QE labelling, DFT relaxation, convex-hull ranking, and consensus-gated evidence reviews. The job generates bcc Nb, bcc Ta, and spin-polarized boxed O2 bootstrap references and records their method signature; set `MATSIM_CAMPAIGN_DFT_REFINE=0` to disable this stage. These bootstrap references support campaign steering, not publication thermochemistry without convergence and reference-correction studies. Set `MATSIM_CAMPAIGN_RETRAIN=1` for UMA fine-tuning; separately set `MATSIM_CAMPAIGN_PROMOTE_MODEL=1` to approve checkpoint promotion and post-training reevaluation. |
+| `job-campaign-formula-discovery-all-models-perlmutter.sh` | Runs a bounded, resumable Nb-Ta-O campaign: 15 nodes serve the seven-model panel while a dedicated 16th node performs UMA phase exploration, UMA-MD acquisition, QE labelling, DFT relaxation, convex-hull ranking, and consensus-gated evidence reviews. The job generates bcc Nb, bcc Ta, and spin-polarized boxed O2 bootstrap references and records their method signature; set `MATSIM_CAMPAIGN_DFT_REFINE=0` to disable this stage. These bootstrap references support campaign steering, not publication thermochemistry without convergence and reference-correction studies. Set `MATSIM_CAMPAIGN_RETRAIN=1` to fine-tune the selected MLIP (`mlip.fine_tuner`, optionally through `MATSIM_CAMPAIGN_TRAIN_LAUNCHER=deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh`); separately set `MATSIM_CAMPAIGN_PROMOTE_MODEL=1` to approve checkpoint promotion and post-training reevaluation. |
 | `job-campaign-formula-discovery-all-models-vasp-perlmutter.sh` | Runs the same seven-model Nb-Ta-O campaign with VASP 6.6.1/PBE.64 for AL labels, DFT relaxations, elemental references, and hull feedback. Defaults to the repository GPU build and POTCAR tree; override them with `MATSIM_VASP_BIN` and `MATSIM_VASP_POTCAR_DIR`. |
 | `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
 
-`campaign_execute.py` selects QE or VASP refinement from the active-learning
-configuration's `dft.backend`. Both paths reuse the matching numerical inputs
+`campaign_execute.py` takes the active-learning configuration with
+`--al-config FILE`; `--mlip-config FILE` (a YAML with an `mlip:` block, e.g.
+`examples/mlip/mace-omat-0-medium.yaml`) replaces that configuration's model, as
+for `matsim-agents al run`. The campaign launchers forward the optional
+`MLIP_CONFIG` environment variable as `--mlip-config` and pick the campaign venv
+and run name from its backend. `campaign_execute.py` selects QE or VASP
+refinement from the active-learning configuration's `dft.backend`. Both paths reuse the matching numerical inputs
 and launcher contract. Reference-energy sets persist their backend and cannot
 be reused after a QE/VASP switch; generate a new backend-specific reference
 manifest with `prepare_nb_ta_o_references.py --backend qe|vasp`.
@@ -338,9 +343,10 @@ so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 ## UMA MLIP Backend (fairchem-core)
 
 `matsim-agents` supports a second MLIP backend — Meta's Universal Model for Atoms
-(UMA) — via `matsim_agents.backends.mlip.calculator.build_uma_calculator` and
-the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
-`matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
+(UMA) — via `matsim_agents.backends.mlip.calculator.build_uma_calculator`,
+selected by an `mlip:` block with `backend: uma` (for example
+`examples/mlip/uma-s-1p1-omat.yaml`, passed with `--mlip-config`, or
+`UMAConfig` as `RelaxStructureInput.mlip`). The backend requires
 `fairchem-core`.
 
 ### Compatibility environment
@@ -366,13 +372,14 @@ UMA benchmark jobs activate the compatibility environment:
 # In a job script or interactive session:
 source $MATSIM_DIR/.venv-uma/bin/activate
 
-# Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
-export MATSIM_MLIP_BACKEND=uma
+# Active-learning launchers pick the venv from the backend of MLIP_CONFIG;
+# MATSIM_FAIRCHEM_VENV overrides the UMA venv path:
+export MLIP_CONFIG=$MATSIM_DIR/examples/mlip/uma-s-1p1-omat.yaml
 export MATSIM_FAIRCHEM_VENV=$MATSIM_DIR/.venv-uma
 ```
 
-The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)
-supports `mlip_backend: uma` in fixtures.yaml when run in this environment.
+The UMA warm-start tests (`test_uma_warmstart.py`, `test_uma_vasp_warmstart.py`)
+run in this environment.
 
 ### MACE compatibility environment
 

@@ -30,27 +30,20 @@ vars:
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
 
 mlip:
-  # HydraGNN runs from .venv; MLIP_BACKEND=uma or mace uses .venv-uma / .venv-mace.
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    hydragnn_root: ${HYDRAGNN_DIR}
-    ft_repo: ${HYDRAGNN_FT_REPO}
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    mlp_checkpoint: null
-    charge: 0.0
-    spin:   0.0
-    precision:  fp32
-    mlp_device: xpu
-    ensemble_paths: []       # optional; add sibling seed logdirs to switch to ensemble
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     xpu
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  # Default model. Replace it with --mlip-config FILE (an `mlip:` block with
+  # device: xpu); UMA and MACE run from .venv-uma / .venv-mace.
+  backend: hydragnn
+  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  hydragnn_root: ${HYDRAGNN_DIR}
+  ft_repo: ${HYDRAGNN_FT_REPO}
+  logdir:         ${INITIAL_LOGDIR}
+  checkpoint:     best_model.pt
+  mlp_checkpoint: null
+  charge: 0.0
+  spin:   0.0
+  precision:  fp32
+  device: xpu
+  ensemble_models: []       # optional; add sibling seed logdirs to switch to ensemble
 
 md:
   seed_source:
@@ -109,8 +102,7 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
-  train_launcher: ${PROJ_ROOT}/deployments/aurora/launchers/_hydragnn-train-step-aurora.sh
+  train_launcher: ${PROJ_ROOT}/deployments/aurora/launchers/_mlip-train-step-aurora.sh
   epochs_per_iter: 5
 
 loop:

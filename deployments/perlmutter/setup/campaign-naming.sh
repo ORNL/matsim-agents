@@ -1,7 +1,16 @@
 #!/bin/bash
 
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/../../common/runtime-env.sh"
+
+# Print the MLIP backend selected by a config's mlip block.
+campaign_mlip_backend() {
+  local python="$2" config="$3"
+  mlip_backend "$python" "$config"
+}
+
 configure_campaign_run_name() {
-  local repo="$1" mode="$2" backend="$3" workflow panel
+  local repo="$1" mode="$2" backend="$3" mlip="${4:-}" workflow panel
   if [[ -z "${MATSIM_CAMPAIGN_SOURCE_REVISION:-}" ]]; then
     MATSIM_CAMPAIGN_SOURCE_REVISION="$(git -C "$repo" rev-parse HEAD)" || return
     local status
@@ -15,9 +24,13 @@ configure_campaign_run_name() {
   [[ "$mode" != "single-llm-once" ]] || panel=1llm
   case "$mode" in
     single-llm-once|debate-only) workflow="$panel-debate" ;;
-    uma-only) workflow="$panel-uma-screen" ;;
+    mlip-only)
+      [[ -n "$mlip" ]] || { echo "ERROR: mlip-only naming requires the MLIP backend" >&2; return 2; }
+      workflow="$panel-$mlip-screen"
+      ;;
     dft)
-      workflow="$panel-uma-al-$backend"
+      [[ -n "$mlip" ]] || { echo "ERROR: dft naming requires the MLIP backend" >&2; return 2; }
+      workflow="$panel-$mlip-al-$backend"
       [[ "${MATSIM_CAMPAIGN_DFT_REFINE:-1}" != "1" ]] || workflow="$workflow-hull"
       ;;
     *) echo "ERROR: unsupported campaign naming mode: $mode" >&2; return 2 ;;

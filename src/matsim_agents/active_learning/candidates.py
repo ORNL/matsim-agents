@@ -14,6 +14,7 @@ calls ``calculator.calculate(atoms)`` via ASE and reads ``calc.results``.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -198,7 +199,6 @@ class _SeedTask:
 def _sample_seed_task(task: _SeedTask) -> list[Candidate]:
     """MLIP worker entry point: MD from one seed with the worker's own calculator."""
     from matsim_agents.backends.mlip.calculator import make_mlip_calculator
-    from matsim_agents.backends.mlip.config import MLIPConfig
     from matsim_agents.backends.mlip.pool import prepare_worker_device, release_device_memory
 
     prepare_worker_device()
@@ -209,7 +209,7 @@ def _sample_seed_task(task: _SeedTask) -> list[Candidate]:
             _WORKER_CALCULATORS.clear()
             release_device_memory()  # free the previous model before loading the next
         calculator = make_mlip_calculator(
-            MLIPConfig.model_validate_json(task.mlip_json),
+            json.loads(task.mlip_json),
             enable_mc_dropout=task.enable_mc_dropout,
         )
         _WORKER_CALCULATORS[key] = calculator

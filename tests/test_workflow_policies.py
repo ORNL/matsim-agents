@@ -7,6 +7,7 @@ from ase.io import write
 
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import LabelledFrame
+from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.datasets.governance import (
     structure_identity,
@@ -66,7 +67,7 @@ def test_completion_callback_failure_does_not_double_count_candidates(
     result = explore_composition(
         "Si",
         output_dir=str(tmp_path),
-        mlip_backend="uma",
+        mlip=UMAConfig(),
         relax_fn=relax,
         on_phase_done=callback,
     )
@@ -181,7 +182,7 @@ def test_relaxation_allowance_preserves_generation_and_counts_failures(
     result = explore_composition(
         "Si",
         output_dir=str(tmp_path),
-        mlip_backend="uma",
+        mlip=UMAConfig(),
         n_random=50,
         max_relaxations=allowance,
         relax_fn=fail,
@@ -249,11 +250,9 @@ def test_model_promotion_requires_retraining():
 
 
 def _training_inputs(tmp_path):
-    script = tmp_path / "train.py"
-    script.touch()
     references = tmp_path / "elemental-references.json"
     references.touch()
-    return {"enabled": True, "train_script": script, "validation_reference_set": references}
+    return {"enabled": True, "validation_reference_set": references}
 
 
 def test_training_requires_elemental_references(tmp_path):

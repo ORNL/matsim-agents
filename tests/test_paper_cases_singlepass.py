@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 
 from ase import Atoms
 from ase.io import write
+
+from matsim_agents.backends.mlip.config import UMAConfig
 
 SCRIPT = Path(__file__).resolve().parents[1] / "examples" / "paper_cases" / "singlepass.py"
 SPEC = importlib.util.spec_from_file_location("paper_cases_singlepass", SCRIPT)
@@ -44,21 +45,13 @@ def test_run_case_invokes_current_graph_with_staged_paths(tmp_path, monkeypatch)
             return {"analysis": "ranked", "results": []}
 
     monkeypatch.setattr(singlepass, "build_graph", FakeGraph)
-    args = Namespace(
-        mlip_backend="uma",
-        logdir=None,
-        hydragnn_branch_mlp_checkpoint=None,
-        checkpoint=None,
-        uma_model_name="uma-s-1p1",
-        uma_task="omat",
-        mlp_device="cpu",
-    )
+    mlip = UMAConfig(model_name="uma-s-1p1", task_name="omat", device="cpu")
 
-    singlepass.run_case("lifepo4", tmp_path / "run", args)
+    singlepass.run_case("lifepo4", tmp_path / "run", mlip)
 
     expected_seed = tmp_path / "run/lifepo4/seeds/lifepo4_olivine.extxyz"
     assert str(expected_seed.resolve()) in captured["state"].objective
-    assert captured["config"]["configurable"]["mlip_backend"] == "uma"
+    assert captured["config"]["configurable"]["mlip"] == mlip.model_dump(mode="json")
     assert (tmp_path / "run/lifepo4/analysis.txt").read_text() == "ranked\n"
 
 
@@ -98,17 +91,9 @@ def test_run_case_persists_energy_per_atom_ranking(tmp_path, monkeypatch) -> Non
             }
 
     monkeypatch.setattr(singlepass, "build_graph", FakeGraph)
-    args = Namespace(
-        mlip_backend="uma",
-        logdir=None,
-        hydragnn_branch_mlp_checkpoint=None,
-        checkpoint=None,
-        uma_model_name="uma-s-1p1",
-        uma_task="omat",
-        mlp_device="cpu",
-    )
+    mlip = UMAConfig(model_name="uma-s-1p1", task_name="omat", device="cpu")
 
-    singlepass.run_case("lifepo4", tmp_path / "run", args)
+    singlepass.run_case("lifepo4", tmp_path / "run", mlip)
 
     case_dir = tmp_path / "run/lifepo4"
     ranking = json.loads((case_dir / "energy_ranking.json").read_text())
@@ -119,3 +104,20 @@ def test_run_case_persists_energy_per_atom_ranking(tmp_path, monkeypatch) -> Non
     assert [row["energy_per_atom_eV"] for row in ranking] == [1.0, 1.5]
     report = (case_dir / "analysis.txt").read_text()
     assert "1. four.extxyz: 1.000000 eV/atom" in report
+
+
+def test_main_selects_the_mlip_from_the_config_file(tmp_path, monkeypatch) -> None:
+    mlip_file = tmp_path / "mlip.yaml"
+    mlip_file.write_text("mlip:\n  backend: mace\n  family: mace_mp\n  model: medium\n")
+    calls = []
+    monkeypatch.setattr(singlepass, "OUT_ROOT", tmp_path / "out")
+    monkeypatch.setattr(singlepass, "run_case", lambda case, run_dir, mlip: calls.append(mlip))
+    monkeypatch.setattr(
+        "sys.argv", ["singlepass.py", "--case", "lifepo4", "--mlip-config", str(mlip_file)]
+    )
+
+    singlepass.main()
+
+    assert [(mlip.backend, mlip.family, mlip.model) for mlip in calls] == [
+        ("mace", "mace_mp", "medium")
+    ]

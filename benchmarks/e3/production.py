@@ -1742,6 +1742,7 @@ def _execute_task(
     from ase.geometry import find_mic
     from ase.io import read, write
 
+    from matsim_agents.backends.mlip.config import MACEConfig
     from matsim_agents.backends.mlip.relaxation import (
         RelaxStructureInput,
         relax_with_mlip,
@@ -1809,9 +1810,7 @@ def _execute_task(
         relax_args = RelaxStructureInput(
             structure_path=str(clean_path),
             output_dir=str(attempt_dir),
-            mlip_backend="mace",
-            mace_family="checkpoint",
-            mace_model=str(checkpoint_path),
+            mlip=MACEConfig(family="checkpoint", model=str(checkpoint_path), device="cuda"),
             optimizer=OPTIMIZER_SETTINGS["optimizer"],
             maxiter=OPTIMIZER_SETTINGS["maxiter"],
             max_optimization_seconds=optimizer_settings["max_optimization_seconds"],
@@ -1828,7 +1827,6 @@ def _execute_task(
             max_cell_step_strain=optimizer_settings["max_cell_step_strain"],
             max_cell_total_strain=optimizer_settings["max_cell_total_strain"],
             require_native_stress=OPTIMIZER_SETTINGS["require_native_stress"],
-            mlp_device="cuda",
         )
         calculator_record = calculators.get(relax_args)
         calculator = calculator_record.calculator

@@ -57,9 +57,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import get_args
 
 import numpy as np
 
+from matsim_agents.backends.mlip.config import MACEConfig, MACEFamily
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
@@ -73,14 +75,7 @@ from matsim_agents.training.finetune_uma import (
 log = logging.getLogger(__name__)
 
 # Foundation families MACE ships; "checkpoint" continues from a local .model.
-_MACE_FAMILIES = {
-    "mace_mp",
-    "mace_off",
-    "mace_omol",
-    "mace_polar",
-    "mace_anicc",
-    "checkpoint",
-}
+_MACE_FAMILIES = set(get_args(MACEFamily))
 
 # Reference recipe defaults (run_mace_finetune.py): naive vs. LoRA fine-tune.
 _NAIVE_DEFAULTS = {"lr": 1e-3, "epochs": 50}
@@ -390,8 +385,8 @@ def finetune_mace(
     output_dir: str | Path,
     *,
     elemental_reference_manifest: str | Path,
-    family: str = "mace_mp",
-    base_model: str = "medium",
+    family: str | None = None,
+    base_model: str | None = None,
     model_id: str | None = None,
     precision: str | None = "fp64",
     epochs: int | None = None,
@@ -433,8 +428,16 @@ def finetune_mace(
         family = MACE_MODELS[model_id]["family"]
         base_model = MACE_MODELS[model_id]["model"]
 
-    if family not in _MACE_FAMILIES:
+    if family is not None and family not in _MACE_FAMILIES:
         raise ValueError(f"family must be one of {sorted(_MACE_FAMILIES)}, got {family!r}")
+    selection = MACEConfig(
+        **{
+            key: value
+            for key, value in {"family": family, "model": base_model}.items()
+            if value is not None
+        }
+    )
+    family, base_model = selection.family, selection.model
 
     _recipe = _LORA_DEFAULTS if lora else _NAIVE_DEFAULTS
     epochs = int(epochs if epochs is not None else _recipe["epochs"])
@@ -584,13 +587,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--family",
-        default="mace_mp",
+        default=None,
         choices=sorted(_MACE_FAMILIES),
-        help="MACE foundation-loader family or checkpoint (local .model).",
+        help="MACE foundation-loader family or checkpoint (default: MACEConfig's).",
     )
     parser.add_argument(
         "--base-model",
-        default="medium",
+        default=None,
         help=(
             "Size/variant (small|medium|large, or a release tag/URL), "
             "or a .model path for family=checkpoint."

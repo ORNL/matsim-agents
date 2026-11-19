@@ -18,6 +18,15 @@ EMBEDDED_ACCOUNT = re.compile(r"^#(?:SBATCH|PBS) -A\s+(?!<)", re.MULTILINE)
 ABSOLUTE_SCHEDULER_LOG = re.compile(r"^#SBATCH -[oe]\s+/", re.MULTILINE)
 SITE_PROJECT_PATH = re.compile(r"/(?:lustre/orion|lus/flare|global/cfs)/")
 NONEXISTENT_MAIN_MODULE = re.compile(r"python(?:3)?\s+-m\s+matsim_agents\.main\b")
+REMOVED_MLIP_OPTION = re.compile(
+    r"--(?:logdir|checkpoint|hydragnn-branch-mlp-checkpoint|mlp-checkpoint|mlp-device"
+    r"|mlp-precision|inference-head|hydragnn-inference-head|mlip-backend|uma-model-name"
+    r"|uma-task|mace-family|mace-model|mace-head)(?![\w-])"
+)
+# GNU-coreutils-only path resolution; the scripts also run locally under BSD tools.
+# Resolve directories with `CDPATH= cd -P -- DIR && pwd -P`.
+GNU_ONLY_PATH_RESOLUTION = re.compile(r"\brealpath\s+(?:-[a-zA-Z]*[em][a-zA-Z]*|--canonicalize)\b")
+SHELL_SUFFIXES = {".sh", ".pbs"}
 
 FACILITIES = ("frontier", "aurora", "perlmutter")
 SHARED_JOB_CONTRACTS = {
@@ -26,10 +35,30 @@ SHARED_JOB_CONTRACTS = {
 }
 
 
+def _validate_shell(path: Path) -> list[str]:
+    errors = []
+    rel = path.relative_to(ROOT)
+    text = path.read_text(encoding="utf-8")
+    if match := GNU_ONLY_PATH_RESOLUTION.search(text):
+        line = text.count("\n", 0, match.start()) + 1
+        errors.append(
+            f"{rel}:{line}: GNU-only {match.group(0)!r}; resolve directories with "
+            "`CDPATH= cd -P -- DIR && pwd -P`"
+        )
+    result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True, check=False)
+    if result.returncode:
+        errors.append(f"{rel}: bash -n failed: {result.stderr.strip()}")
+    return errors
+
+
 def validate() -> list[str]:
     errors: list[str] = []
     for path in sorted(DEPLOYMENTS.rglob("*")):
-        if not path.is_file() or path.suffix not in {".sh", ".py", ".md", ".yaml", ".json"}:
+        if not path.is_file():
+            continue
+        if path.suffix in SHELL_SUFFIXES:
+            errors.extend(_validate_shell(path))
+        if path.suffix not in {".sh", ".py", ".md", ".yaml", ".json"}:
             continue
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(ROOT)
@@ -43,25 +72,15 @@ def validate() -> list[str]:
                 line = text.count("\n", 0, match.start()) + 1
                 errors.append(f"{rel}:{line}: {label}: {match.group(0)!r}")
 
-        if (
-            "matsim-agents " in text
-            and "--mlp-checkpoint" in text
-            and "step2_perturbation_diagnostic.py" not in text
-        ):
+        if "matsim-agents " in text and (match := REMOVED_MLIP_OPTION.search(text)):
+            line = text.count("\n", 0, match.start()) + 1
             errors.append(
-                f"{rel}: obsolete matsim-agents option --mlp-checkpoint; "
-                "use --hydragnn-branch-mlp-checkpoint"
+                f"{rel}:{line}: removed matsim-agents MLIP option {match.group(0)}; "
+                "select the model with --mlip-config FILE (a YAML with an mlip: block)"
             )
 
         if match := NONEXISTENT_MAIN_MODULE.search(text):
             errors.append(f"{rel}: references nonexistent Python module: {match.group(0)!r}")
-
-        if path.suffix == ".sh":
-            result = subprocess.run(
-                ["bash", "-n", str(path)], capture_output=True, text=True, check=False
-            )
-            if result.returncode:
-                errors.append(f"{rel}: bash -n failed: {result.stderr.strip()}")
 
     for facility in FACILITIES:
         for pattern, shared_runner in SHARED_JOB_CONTRACTS.items():

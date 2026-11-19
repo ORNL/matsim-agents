@@ -15,9 +15,9 @@
 #      so `trainer.enabled: false`. The labelled DFT dataset still accumulates
 #      for optional offline fine-tuning.
 #   2. UMA has no native dropout, so `acquisition.strategy: mc_dropout` relies on
-#      TEST-TIME dropout injection (mlip.uma.dropout). This is a heuristic
+#      TEST-TIME dropout injection (mlip.dropout). This is a heuristic
 #      uncertainty; for a calibrated signal use `strategy: ensemble` with
-#      `mlip.uma.ensemble_models`.
+#      `mlip.ensemble_models`.
 #
 # How to run:
 #   pip install fairchem-core          # one-time; accept UMA license on HF
@@ -35,20 +35,19 @@ vars:
 
 mlip:
   backend: uma
-  uma:
-    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
-    task_name:  omol          # molecular/organic head — best fit for a hybrid MOF
-    device:     cuda
-    # Test-time dropout injection so mc_dropout yields non-zero variance.
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear   # inject after nn.Linear outputs
-    # For a calibrated ensemble instead, drop the mc_dropout strategy below and
-    # list additional UMA checkpoints here:
-    # ensemble_models:
-    #   - uma-s-1p1-seed2
-    #   - uma-s-1p1-seed3
+  model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+  task_name:  omol          # molecular/organic head — best fit for a hybrid MOF
+  device:     cuda
+  # Test-time dropout injection so mc_dropout yields non-zero variance.
+  dropout:
+    enabled: true
+    p: 0.1
+    target_layers: linear   # inject after nn.Linear outputs
+  # For a calibrated ensemble instead, drop the mc_dropout strategy below and
+  # list additional UMA checkpoints here:
+  # ensemble_models:
+  #   - uma-s-1p1-seed2
+  #   - uma-s-1p1-seed3
 
 md:
   seed_source:
@@ -67,7 +66,7 @@ md:
   max_displacement_A: 3.0
 
 acquisition:
-  strategy: mc_dropout        # uses injected test-time dropout (see mlip.uma.dropout)
+  strategy: mc_dropout        # uses injected test-time dropout (see mlip.dropout)
   mc_dropout_passes: 16
   mc_dropout_p: 0.1
   n_select: 64

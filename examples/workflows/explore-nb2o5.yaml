@@ -1,11 +1,29 @@
-# Edit checkpoint to point to a trusted local MACE checkpoint.
-# Paths are relative to this YAML file, not your working directory.
+# Bounded phase search with any MLIP backend supported by matsim-agents.
+# Select the model in the `mlip` block, exactly as in active-learning configs.
+# Relative paths are resolved against this YAML file, not your working directory.
 formula: Nb2O5
-checkpoint: /path/to/trusted/maceomat0mediummodel
-checkpoint_sha256: d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a
+mlip:
+  backend: mace  # hydragnn | uma | mace
+  family: mace_mp
+  model: medium-omat-0   # MACE-OMAT-0 medium, downloaded by mace-torch
+  device: cpu
+  precision: fp64
+  # Any other model replaces this whole block, e.g. (see examples/mlip/):
+  #   backend: uma
+  #   model_name: uma-s-1p1
+  #   task_name: omat
+  # or
+  #   backend: hydragnn
+  #   logdir: /path/to/hydragnn/logdir
+  #   checkpoint: best_model.pk   # required: names the weights the run records
+  #   mlp_checkpoint: /path/to/branch_weight_mlp.pt
+  # A trusted local MACE file is pinned by hash with
+  #   backend: mace
+  #   family: checkpoint
+  #   model: /path/to/trusted/maceomat0mediummodel
+# checkpoint_sha256 applies when the selected model is a local file.
+# checkpoint_sha256: d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a
 output_dir: ./nb2o5-runs
-device: cpu
-precision: fp64
 max_relaxations: 2
 # Every run is checkpointed; set iterations: 3 for three rounds.
 iterations: 1

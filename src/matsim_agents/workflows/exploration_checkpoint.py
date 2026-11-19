@@ -45,9 +45,11 @@ class Round(BaseModel):
 class RoundState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     config: ExplorationConfig
-    checkpoint_sha256: str
+    checkpoint_sha256: str | None
+    model_identifier: str
+    model_files: dict[str, str]
     compatibility: dict[str, str]
     rounds: list[Round] = Field(default_factory=list)
     artifacts: dict[str, str] = Field(default_factory=dict)
@@ -142,6 +144,9 @@ def _compatibility() -> dict[str, str]:
         result[module.__name__] = file_sha256(module.__file__)
     for package in (
         "mace-torch",
+        "fairchem-core",
+        "hydragnn",
+        "torch-geometric",
         "torch",
         "e3nn",
         "ase",
@@ -168,26 +173,25 @@ def _state(run: ScientificRunDirectory) -> RoundState:
             "Start a new run with explore run CONFIG."
         )
     raw = json.loads(path.read_text())
-    if not isinstance(raw, dict) or raw.get("schema_version") != 2:
+    if not isinstance(raw, dict) or raw.get("schema_version") != 3:
         raise ValueError(
-            "Unsupported exploration checkpoint version; this workflow requires version 2. "
+            "Unsupported exploration checkpoint version; this workflow requires version 3. "
             "Start a new run with explore run CONFIG."
         )
     return RoundState.model_validate(raw)
 
 
 def create_run(cfg: ExplorationConfig) -> ScientificRunDirectory:
+    # Persist absolute model paths so status, summary, and resume work from any directory.
     cfg = cfg.model_copy(
         update={
-            "checkpoint": cfg.checkpoint.expanduser().resolve(),
             "output_dir": cfg.output_dir.expanduser().resolve(),
+            "mlip": cfg.mlip.with_resolved_paths(Path.cwd()),
         }
     )
     check = check_exploration(cfg)
     if not check.ready:
         raise ValueError("Exploration preflight failed:\n" + "\n".join(check.errors))
-    if check.checkpoint_sha256 is None:
-        raise ValueError("Preflight did not identify checkpoint")
     run = ScientificRunDirectory.create(
         cfg.output_dir,
         workflow="exploration_rounds",
@@ -196,15 +200,19 @@ def create_run(cfg: ExplorationConfig) -> ScientificRunDirectory:
         provenance=ProvenanceRecord(
             workflow="exploration_rounds",
             evidence_level=EvidenceLevel.MLIP_RELAXATION,
+            backend=check.backend,
+            model_identifier=check.model_identifier,
             model_checkpoint_hash=check.checkpoint_sha256,
             numerical_settings=cfg.relaxation.model_dump(),
             random_seed=cfg.generation.random_seed,
         ),
     )
     state = RoundState(
-        schema_version=2,
+        schema_version=3,
         config=cfg,
         checkpoint_sha256=check.checkpoint_sha256,
+        model_identifier=check.model_identifier,
+        model_files=check.model_files,
         compatibility=_compatibility(),
     )
     run.write_json("rounds-state.json", state)
@@ -218,11 +226,17 @@ def validate_resume(run: ScientificRunDirectory, state: RoundState) -> None:
     if state.config != original_config:
         raise ValueError("Resume refused: checkpoint configuration differs from original run")
     check = check_exploration(state.config)
-    if not check.ready or check.checkpoint_sha256 != state.checkpoint_sha256:
-        raise ValueError(
-            "Resume preflight failed: "
-            + "; ".join([*check.errors, "checkpoint must match the original run"])
-        )
+    changed = [
+        f"model file changed or missing: {path}"
+        for path in sorted(state.model_files.keys() | check.model_files.keys())
+        if state.model_files.get(path) != check.model_files.get(path)
+    ]
+    if check.model_identifier != state.model_identifier:
+        changed.append("model selection differs from the original run")
+    if check.checkpoint_sha256 != state.checkpoint_sha256:
+        changed.append("checkpoint must match the original run")
+    if not check.ready or changed:
+        raise ValueError("Resume preflight failed: " + "; ".join([*check.errors, *changed]))
     if state.compatibility != _compatibility():
         raise ValueError("Resume refused: workflow code or scientific dependency versions changed")
     _verify_artifacts(run, state)

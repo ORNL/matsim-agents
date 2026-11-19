@@ -1,0 +1,7 @@
+# MACE-OMAT-0 small (Codabench baseline; output predictions/mace_omat_small/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: small-omat-0
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

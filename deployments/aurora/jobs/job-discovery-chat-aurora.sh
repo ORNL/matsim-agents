@@ -54,6 +54,10 @@ source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 # shellcheck disable=SC1091
 source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
+# or the HydraGNN foundation model above. The client runs in that backend's environment.
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+VENV="$(mlip_backend_venv "${REPO}" "$(mlip_backend "${VENV}/bin/python" "$MLIP_CONFIG")" "${VENV}")"
 activate_matsim_aurora_python "${REPO}" "${VENV}"
 
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
@@ -118,10 +122,10 @@ EOF
 )"
 fi
 
+
 echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --mlip-config     "$MLIP_CONFIG" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \

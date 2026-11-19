@@ -1,0 +1,6 @@
+# FAIR-Chem UMA small, inorganic bulk (OMat) task (output predictions/uma/).
+mlip:
+  backend: uma
+  model_name: uma-s-1p2
+  task_name: omat
+  device: ${MLIP_DEVICE:-cpu}

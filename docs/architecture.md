@@ -50,7 +50,7 @@ contention failure, rather than `flock`, which is unsupported on NERSC CFS
 compute nodes. The lock covers generation, attempts, and final reporting and is
 released on interruption; competing writers are still rejected.
 
-Only version-2 exploration checkpoints are supported; there is no legacy reader
+Only version-3 exploration checkpoints are supported; there is no legacy reader
 or migration layer. The separate advanced phase-exploration/active-learning
 workflow retains its own contracts and is not invoked by this config-driven API.
 
@@ -117,7 +117,7 @@ flowchart TD
 
     OP -->|HydraGNN, UMA, or MACE| X
     PP -->|HydraGNN, UMA, or MACE| X
-    IP -->|HydraGNN or UMA| X
+    IP -->|HydraGNN, UMA, or MACE| X
 
     subgraph SCIENCE[Shared scientific capabilities]
       X[Phase search and MLIP relaxation]

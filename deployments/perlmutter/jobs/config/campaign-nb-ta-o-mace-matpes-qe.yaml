@@ -1,10 +1,9 @@
 mlip:
   backend: mace
-  mace:
-    family: mace_mp
-    model: mace-matpes-pbe-0
-    device: cuda
-    precision: fp64
+  family: mace_mp
+  model: mace-matpes-pbe-0
+  device: cuda
+  precision: fp64
 
 md:
   seed_source:

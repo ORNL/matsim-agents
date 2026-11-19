@@ -148,7 +148,8 @@ hardware-specific launcher geometry. They delegate scientific configuration to:
 - `common/run-active-learning.sh` for validated `matsim-agents al run` jobs.
 
 The active-learning runner defaults to collecting DFT labels without
-retraining. `MATSIM_RETRAIN=1` additionally requires `MATSIM_TRAIN_SCRIPT`;
-model promotion remains disabled and must happen through an explicit reviewed
+retraining. `MATSIM_RETRAIN=1` fine-tunes with the model's `mlip.fine_tuner`;
+`MATSIM_TRAIN_LAUNCHER` optionally names the site launcher
+(`<facility>/launchers/_mlip-train-step-<facility>.sh`). Model promotion remains disabled and must happen through an explicit reviewed
 workflow. Set `MATSIM_DFT_BACKEND=qe|vasp` and provide the corresponding binary,
 pseudopotential/POTCAR, wrapper, and rank variables.

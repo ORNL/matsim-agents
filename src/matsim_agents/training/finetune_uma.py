@@ -47,11 +47,13 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
+from typing import get_args
 
 import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
+from matsim_agents.backends.mlip.config import UMAConfig, UMATask
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
@@ -59,7 +61,7 @@ from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 log = logging.getLogger(__name__)
 
 # UMA task heads: omat (inorganic bulk), omol (molecules/MOFs), oc20, odac, omc.
-_UMA_TASKS = {"omat", "omol", "oc20", "odac", "omc"}
+_UMA_TASKS = set(get_args(UMATask))
 
 
 # --------------------------------------------------------------------------- #
@@ -458,8 +460,8 @@ def finetune_uma(
     output_dir: str | Path,
     *,
     elemental_reference_manifest: str | Path,
-    base_model: str = "uma-s-1p1",
-    task_name: str = "omat",
+    base_model: str | None = None,
+    task_name: str | None = None,
     epochs: int = 20,
     batch_size: int = 4,
     lr: float = 1e-4,
@@ -491,8 +493,16 @@ def finetune_uma(
     """
     import torch
 
-    if task_name not in _UMA_TASKS:
+    if task_name is not None and task_name not in _UMA_TASKS:
         raise ValueError(f"task_name must be one of {sorted(_UMA_TASKS)}, got {task_name!r}")
+    selection = UMAConfig(
+        **{
+            key: value
+            for key, value in {"model_name": base_model, "task_name": task_name}.items()
+            if value is not None
+        }
+    )
+    base_model, task_name = selection.model_name, selection.task_name
 
     output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -622,10 +632,12 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Elemental DFT references that put the labels on the base model's energy scale.",
     )
-    parser.add_argument("--base-model", default="uma-s-1p1", help="Base UMA model name or path.")
+    parser.add_argument(
+        "--base-model", default=None, help="Base UMA model name or path (default: UMAConfig's)."
+    )
     parser.add_argument(
         "--task-name",
-        default="omat",
+        default=None,
         choices=sorted(_UMA_TASKS),
         help="UMA task (omat: inorganic bulk, omol: molecules/MOFs, ...).",
     )

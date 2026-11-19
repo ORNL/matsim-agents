@@ -132,7 +132,7 @@ trap finish EXIT
 [[ "${NBTAO5_RESOURCE_APPROVED:-}" == "YES" ]] || fail "preflight requires NBTAO5_RESOURCE_APPROVED=YES after actual approval"
 REPO="${NBTAO5_REPO_ROOT:?pass NBTAO5_REPO_ROOT as the absolute checkout path with qsub -v}"
 [[ "${REPO}" == /* ]] || fail "NBTAO5_REPO_ROOT must be absolute"
-REPO_REAL="$(realpath -e "${REPO}")"
+REPO_REAL="$(CDPATH= cd -P -- "${REPO}" && pwd -P)"
 case "${REPO_REAL}/" in
   /lus/flare/*) ;;
   *) fail "checkout is not on the requested Flare filesystem: ${REPO_REAL}" ;;
@@ -140,7 +140,7 @@ esac
 [[ -f "${REPO_REAL}/pyproject.toml" ]] || fail "checkout marker missing under ${REPO_REAL}"
 [[ "$(git -C "${REPO_REAL}" rev-parse --show-toplevel)" == "${REPO_REAL}" ]] || fail "NBTAO5_REPO_ROOT is not the Git checkout root"
 CASE_DIR="${NBTAO5_CASE_DIR:?pass NBTAO5_CASE_DIR as the fresh external case}"
-CASE_REAL="$(realpath -e "${CASE_DIR}")"
+CASE_REAL="$(CDPATH= cd -P -- "${CASE_DIR}" && pwd -P)"
 case "${CASE_REAL}/" in
   "${REPO_REAL}/"*) fail "Q1 case must be outside the checkout" ;;
 esac
@@ -185,7 +185,7 @@ grep -Eiq 'pals|mpich' <<<"${MODULES}" || fail "PALS/MPICH module family is not 
 
 MPIEXEC="$(command -v mpiexec || true)"
 [[ -x "${MPIEXEC}" ]] || fail "mpiexec is unavailable"
-MPIEXEC_PATH="$(realpath -e "${MPIEXEC}")"
+MPIEXEC_PATH="$(realpath -- "${MPIEXEC}")"
 MPI_VERSION="$(mpiexec --version 2>&1)" || fail "mpiexec --version failed"
 printf '%s\n' "${MPI_VERSION}"
 MPI_HELP="$(mpiexec --help 2>&1 || true)"

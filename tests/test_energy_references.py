@@ -10,7 +10,7 @@ from ase.io import write
 
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.evaluate import evaluate_frames, evaluate_promotion_candidate
-from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
@@ -62,7 +62,7 @@ def test_formation_comparison_removes_only_elemental_offsets(elemental_manifest,
         Atoms("Nb2O", info={"energy": -28.0}),
     ]
     metrics, parity = evaluate_frames(
-        MLIPConfig(backend="uma", uma=UMAConfig()),
+        UMAConfig(),
         frames,
         elemental_reference_manifest=manifest,
     )
@@ -87,7 +87,7 @@ def test_evaluation_only_probes_required_elements_from_superset_manifest(
         lambda _cfg: calculator,
     )
     metrics, _ = evaluate_frames(
-        MLIPConfig(backend="uma", uma=UMAConfig()),
+        UMAConfig(),
         [Atoms("NbO2", info={"energy": -23.0})],
         elemental_reference_manifest=manifest,
     )
@@ -140,15 +140,13 @@ def test_promotion_evaluates_each_models_elemental_baselines(
     calculators = []
 
     def build(cfg):
-        calculator = OffsetCalculator(
-            compound_error=0.6 if cfg.uma.model_name == "candidate" else 0
-        )
+        calculator = OffsetCalculator(compound_error=0.6 if cfg.model_name == "candidate" else 0)
         calculators.append(calculator)
         return calculator
 
     monkeypatch.setattr("matsim_agents.backends.mlip.calculator.make_mlip_calculator", build)
     cfg = SimpleNamespace(
-        mlip=MLIPConfig(backend="uma", uma=UMAConfig()),
+        mlip=UMAConfig(),
         trainer=TrainerConfig(
             validation_set=validation,
             validation_reference_set=reference_manifest,
@@ -168,7 +166,7 @@ def test_promotion_evaluates_each_models_elemental_baselines(
 def test_missing_manifest_is_not_replaced_by_fitted_offset():
     with pytest.raises(ValueError, match="elemental reference manifest"):
         evaluate_frames(
-            MLIPConfig(backend="uma", uma=UMAConfig()),
+            UMAConfig(),
             [Atoms("Nb", info={"energy": 0.0})],
         )
 
@@ -187,7 +185,7 @@ def test_force_only_evaluation_needs_neither_elemental_references_nor_model_ener
     )
     frame = Atoms("NbO2")
     frame.arrays["forces"] = np.zeros((3, 3))
-    metrics, parity = evaluate_frames(MLIPConfig(backend="uma", uma=UMAConfig()), [frame])
+    metrics, parity = evaluate_frames(UMAConfig(), [frame])
     assert metrics.force_mae_eV_per_A == pytest.approx(0.2)
     assert metrics.n_energy_frames_evaluated == 0
     assert np.isnan(metrics.formation_energy_mae_eV_per_atom)
@@ -269,7 +267,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
         "matsim_agents.backends.mlip.calculator.make_mlip_calculator", unexpected_model
     )
     monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
-    mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+    mlip = UMAConfig()
     with pytest.raises(ValueError, match="dataset sidecar|different DFT methods|hash"):
         if entrypoint == "evaluation":
             evaluate_frames(
@@ -288,8 +286,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
             finetune_eval.run_finetune_endpoints(
                 dataset,
                 tmp_path / "campaign",
-                backend="uma",
-                device="cpu",
+                mlip={"backend": "uma", "device": "cpu"},
                 elemental_reference_manifest=reference,
                 evaluation=_random_frame(),
             )
@@ -336,10 +333,9 @@ def test_finetune_split_preserves_verified_method(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, "_uma_endpoints", check_split)
+    monkeypatch.setattr(finetune_eval.UMAFineTune, "endpoints", check_split)
     kwargs = dict(
-        backend="uma",
-        device="cpu",
+        mlip={"backend": "uma", "device": "cpu"},
         elemental_reference_manifest=reference,
         evaluation=_random_frame(),
     )
@@ -404,13 +400,13 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, f"_{backend}_endpoints", check_split)
+    recipe = {"uma": finetune_eval.UMAFineTune, "mace": finetune_eval.MACEFineTune}[backend]
+    monkeypatch.setattr(recipe, "endpoints", check_split)
     with pytest.raises(StopBeforeTraining):
         finetune_eval.run_finetune_endpoints(
             dataset,
             output,
-            backend=backend,
-            device="cpu",
+            mlip={"backend": backend, "device": "cpu"},
             elemental_reference_manifest=reference,
             evaluation=_random_frame(),
         )
@@ -471,8 +467,7 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
         finetune_eval.run_finetune_endpoints(
             dataset,
             tmp_path / "campaign",
-            backend="uma",
-            device="cpu",
+            mlip={"backend": "uma", "device": "cpu"},
             elemental_reference_manifest=elemental_manifest({"Nb": -10.0}),
             evaluation=_random_frame(),
         )

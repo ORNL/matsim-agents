@@ -172,7 +172,7 @@ def test_parent_deadline_terminates_overdue_stage_retaining_evidence(qe_config, 
 def test_invalid_variant_policy(qe_config, change):
     cfg, _ = qe_config
     if change == "wrong_model":
-        Path(cfg.mlip.mace.model).write_bytes(b"wrong")
+        Path(cfg.mlip.model).write_bytes(b"wrong")
     elif change == "missing_trigger":
         cfg.trainer.force_error_trigger_eV_per_A = None
     elif change == "wrong_budget":
@@ -354,7 +354,7 @@ def test_geometry_worker_uses_and_records_promoted_checkpoint(tmp_path, monkeypa
 
     class Cache:
         def get(self, args):
-            assert args.mace_model == str(checkpoint)
+            assert args.mlip.model == str(checkpoint)
             assert args.relative_increase_threshold is None
             assert args.max_cell_step_strain is None
             assert args.max_cell_total_strain is None
@@ -509,7 +509,7 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
         captured["history"][0]["qe_audits_by_action"]["action-old"]["maximum_force_mae_eV_per_A"]
         == 0.4
     )
-    assert tasks[0]["active_model"]["path"] == cfg.mlip.mace.model
+    assert tasks[0]["active_model"]["path"] == cfg.mlip.model
     assert tasks[0]["optimizer"]["relative_increase_threshold"] is None
     assert tasks[0]["optimizer"]["max_cell_step_strain"] is None
     assert tasks[0]["optimizer"]["max_cell_total_strain"] is None
@@ -518,7 +518,7 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
     assert candidates[0].atoms.info["sampling_method"] == "e3_geometry_optimization"
     summary = json.loads((round_dir / "round-summary.json").read_text())
     compact = e3._compact_history(summary["action_outcomes"])[0]
-    assert compact["active_model"]["path"] == cfg.mlip.mace.model
+    assert compact["active_model"]["path"] == cfg.mlip.model
     assert compact["round"] == 2
     assert compact["evidence_id"] != "unscoped"
 

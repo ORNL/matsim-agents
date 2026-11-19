@@ -24,7 +24,7 @@ potentials can be added without changing orchestration logic.
 
 ## Start with a small phase search
 
-For a bounded MACE-only phase search, use one YAML file with
+For a bounded phase search with any supported MLIP, use one YAML file with
 `matsim-agents explore check`, `explore run`, and `explore summary`.
 Every run supports resume. Use `iterations: 3` for multiple rounds and `selection: diverse`
 to skip equivalent structures and prioritize structural diversity.
@@ -142,13 +142,26 @@ BOOTSTRAP_OLLAMA=1 OLLAMA_MODELS="qwen2.5:14b llama3.1:8b" \
 
 ## Quick start
 
+Every command that runs an MLIP takes `--mlip-config FILE`, a YAML file whose
+`mlip:` block selects the backend (`hydragnn`, `uma`, or `mace`) and its
+settings. `examples/mlip/` has ready-made files for UMA, MACE, and HydraGNN; an
+active-learning config works too. The examples below use a HydraGNN
+foundation model:
+
+```yaml
+# mlip.yaml (relative paths resolve against this file)
+mlip:
+  backend: hydragnn
+  logdir: ./multidataset_hpo-BEST6-fp64
+  mlp_checkpoint: ./mlp_branch_weights.pt
+```
+
 ### 1. Run the agent graph end-to-end
 
 ```bash
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and report the final energy." \
-  --logdir ./multidataset_hpo-BEST6-fp64 \
-  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
+  --mlip-config mlip.yaml \
   --llm-provider ollama --llm-model qwen2.5:14b
 ```
 
@@ -158,8 +171,7 @@ matsim-agents run \
 ollama pull qwen2.5:14b
 
 matsim-agents chat \
-  --logdir ./multidataset_hpo-BEST6-fp64 \
-  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
+  --mlip-config mlip.yaml \
   --n-random 50 --random-seed 0
 ```
 
@@ -188,8 +200,7 @@ you> Now suggest a Sb-substituted variant.
 
 ```bash
 matsim-agents supervisor-run Li2MnO3 \
-  --logdir ./multidataset_hpo-BEST6-fp64 \
-  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
+  --mlip-config mlip.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 ```
@@ -204,8 +215,7 @@ pyXtal characterize the configuration space:
 
 ```bash
 matsim-agents chat \
-  --logdir ./multidataset_hpo-BEST6-fp64 \
-  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
+  --mlip-config mlip.yaml \
   --n-random 200 --random-seed 42
 ```
 
@@ -254,7 +264,7 @@ matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents e1-development MANIFEST.json --output DIR [--max-new-requests N] [--retry-errors]  # run one candidate's E1 development questions; held-out questions are not accepted
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
-matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
+matsim-agents al      run CONFIG.yaml [--mlip-config FILE]  # active-learning loop (MLIP <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
@@ -270,26 +280,28 @@ Exit codes are the same for every command: `0` success, `1` the command ran but
 the scientific work, a preflight check or a required backend failed, and `2` a
 usage or configuration error (bad option, unreadable or invalid file).
 
-Common options (all commands that touch HydraGNN):
+Common options (all commands that run an MLIP):
 
 | Flag | Description |
 |---|---|
-| `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
-| `--hydragnn-branch-mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
-| `--hydragnn-inference-head NAME_OR_INDEX` | Use one decoder head directly, bypassing BranchWeightMLP and fused inference. |
-| `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
-| `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
-| `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
-| `--mlp-precision {fp32,fp64,bf16}` | MLP precision override. |
+| `--mlip-config FILE` | YAML with an `mlip:` block: `backend` plus that backend's settings. |
 | `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
 
+The `mlip:` block is flat; each backend accepts only its own fields:
+
+| Backend | Fields |
+|---|---|
+| `hydragnn` | `logdir` (with `config.json` and checkpoint), `checkpoint`, `mlp_checkpoint` (BranchWeightMLP `.pt`), `inference_head`, `precision`, `mlp_precision`, `hydragnn_root`, `newhead_ft_config`, `ft_repo`, `radius`, `max_neighbours`, `charge`, `spin` |
+| `uma` | `model_name`, `task_name` (`omat`, `omol`, `oc20`, `odac`, `omc`), `precision`, `charge`, `spin`, `dropout` |
+| `mace` | `family`, `model`, `head`, `precision`, `dispersion`, `dropout` |
+| all | `device` (`cuda`, `cpu`, `xpu`), `ensemble_models` |
+
 HydraGNN uses fused 16-head inference by default, which requires
-`--hydragnn-branch-mlp-checkpoint`. To pin one head for MLIP inference, pass a
-case-insensitive dataset name or its index, for example
-`--hydragnn-inference-head OMat24` or set `mlip.hydragnn.inference_head: OMat24` in an
-active-learning YAML. Pinned mode invokes only that decoder, does not require
+`mlp_checkpoint`. To pin one head for MLIP inference, set `inference_head` in the
+`mlip:` block to a case-insensitive dataset name or its index, for example
+`inference_head: OMat24`. Pinned mode invokes only that decoder, does not require
 the branch MLP, and does not report branch-weight uncertainty. It preserves
 the loader's precision/autocast context, including `bf16`, during energy and
 force inference.

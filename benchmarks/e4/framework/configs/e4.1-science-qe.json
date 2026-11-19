@@ -49,14 +49,16 @@
         "examples/paper_cases/seeds/zn_formate_alpha_relaxed.extxyz"
       ],
       "params": {
-        "mlip_backend": "hydragnn",
-        "logdir": "${E4_HYDRAGNN_LOGDIR}",
+        "mlip": {
+          "backend": "hydragnn",
+          "logdir": "${E4_HYDRAGNN_LOGDIR}",
+          "inference_head": "OMat24",
+          "device": "${E4_MLP_DEVICE}",
+          "precision": "fp64",
+          "mlp_precision": "fp64"
+        },
         "fmax": 0.02,
-        "maxiter": 200,
-        "hydragnn_inference_head": "OMat24",
-        "mlp_device": "${E4_MLP_DEVICE}",
-        "precision": "fp64",
-        "mlp_precision": "fp64"
+        "maxiter": 200
       },
       "tasks_per_node": 2,
       "strong_tasks": 128,

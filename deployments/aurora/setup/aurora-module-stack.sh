@@ -9,6 +9,9 @@
 #   load_aurora_oneapi_modules      — oneAPI compilers/MKL + GPU UMD for native
 #                                     builds (VASP). Honors ONEAPI_MODULE and
 #                                     GPU_UMD_MODULE.
+#   load_aurora_gpu_monitor_modules — xpu-smi, added on top of a loaded stack for
+#                                     GPU utilisation sampling. Honors
+#                                     XPU_SMI_MODULE.
 # Each function is a no-op when the `module` command is unavailable so that the
 # scripts stay testable off-system.
 
@@ -22,6 +25,11 @@ load_aurora_xpu_modules() {
     command -v module >/dev/null 2>&1 || return 0
     module load pti-gpu "${ONEAPI_MODULE:-oneapi/release/2026.1.0}" \
         "${GPU_UMD_MODULE:-intel_gpu_umd_aicoe}" hdf5
+}
+
+load_aurora_gpu_monitor_modules() {
+    command -v module >/dev/null 2>&1 || return 0
+    module load "${XPU_SMI_MODULE:-xpu-smi/1.3.5}"
 }
 
 load_aurora_oneapi_modules() {

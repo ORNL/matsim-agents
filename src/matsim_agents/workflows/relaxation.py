@@ -16,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.execution.contracts import (
@@ -39,8 +40,8 @@ class GeometryControls(BaseModel):
     relax_atoms: bool = True
     relax_cell: bool = False
     fixed_atom_indices: list[int] = Field(default_factory=list)
-    charge: float = 0.0
-    spin: float = 0.0
+    charge: float | None = None  # unset: the selected MLIP's configured charge
+    spin: float | None = None  # unset: the selected MLIP's configured spin
     pressure_GPa: float | None = None
     preserve_symmetry: bool = False
 
@@ -141,7 +142,9 @@ class ScientificRelaxationConfig(BaseModel):
     structure_path: str
     output_root: str = "./runs"
     geometry: GeometryControls = Field(default_factory=GeometryControls)
-    mlip: dict[str, Any] = Field(default_factory=dict)
+    mlip: MLIPConfig | None = Field(
+        None, description="MLIP backend and its settings; required for mlip modes."
+    )
     dft: DFTBackendConfig | None = None
     approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
     dft_approved: bool = False
@@ -157,6 +160,8 @@ class ScientificRelaxationConfig(BaseModel):
     def _mode_requirements(self) -> ScientificRelaxationConfig:
         if self.mode in {RelaxationMode.DFT, RelaxationMode.MLIP_DFT} and self.dft is None:
             raise ValueError(f"mode={self.mode.value!r} requires dft configuration")
+        if self.mode in {RelaxationMode.MLIP, RelaxationMode.MLIP_DFT} and self.mlip is None:
+            raise ValueError(f"mode={self.mode.value!r} requires an mlip configuration")
         if self.resources is not None and "dft" not in self.resources.pools:
             raise ValueError("resources: for a relaxation requires a dft pool")
         return self
@@ -216,21 +221,20 @@ def _mlip_stage(
     cfg: ScientificRelaxationConfig,
     runner: Callable[[RelaxStructureInput], RelaxationResult],
 ) -> RelaxationStageResult:
-    kwargs = dict(cfg.mlip)
     args = RelaxStructureInput(
         structure_path=input_path,
+        mlip=cfg.mlip,
         output_dir=str(run.path / "calculations" / "mlip"),
         maxiter=cfg.max_steps,
         fmax=cfg.force_tolerance_eV_per_A,
         relax_cell=cfg.geometry.relax_cell,
         charge=cfg.geometry.charge,
         spin=cfg.geometry.spin,
-        **kwargs,
     )
     result = runner(args)
     return RelaxationStageResult(
         stage="mlip_relaxation",
-        backend=str(kwargs.get("mlip_backend", "hydragnn")),
+        backend=cfg.mlip.backend,
         evidence_level=EvidenceLevel.MLIP_RELAXATION,
         input_structure_path=input_path,
         optimized_structure_path=result.optimized_structure_path,

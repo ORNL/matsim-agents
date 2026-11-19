@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 [[ $# -eq 1 ]] || { echo "Usage: $0 qualification|production" >&2; exit 2; }
 STAGE="$1"
-CASE_DIR="$(realpath -e "${NBTAO5_CASE_DIR:?set NBTAO5_CASE_DIR to an external staged case}")"
-REPO_REAL="$(realpath -e "${REPO}")"
+CASE_DIR="$(CDPATH= cd -P -- "${NBTAO5_CASE_DIR:?set NBTAO5_CASE_DIR to an external staged case}" && pwd -P)"
+REPO_REAL="$(CDPATH= cd -P -- "${REPO}" && pwd -P)"
 case "${CASE_DIR}/" in
   "${REPO_REAL}/"*) echo "Refusing run directory inside Git worktree." >&2; exit 2 ;;
 esac
@@ -103,11 +103,11 @@ done
   echo "Execution requires explicit approval of the homogeneous PAW release." >&2
   exit 2
 }
-PAW_ROOT="$(realpath -e "${NBTAO5_PAW_ROOT:?set NBTAO5_PAW_ROOT to the approved library}")"
+PAW_ROOT="$(CDPATH= cd -P -- "${NBTAO5_PAW_ROOT:?set NBTAO5_PAW_ROOT to the approved library}" && pwd -P)"
 "${REPO}/.venv/bin/python" "${REPO}/scripts/nbtao5_q1_gate.py" validate-case \
   --repo "${REPO}" --case "${CASE_DIR}" --paw-root "${PAW_ROOT}"
 
-LOCK_ROOT="$(realpath -e "${NBTAO5_LOCK_ROOT:?set a shared external lock root}")"
+LOCK_ROOT="$(CDPATH= cd -P -- "${NBTAO5_LOCK_ROOT:?set a shared external lock root}" && pwd -P)"
 case "${LOCK_ROOT}/" in
   "${REPO_REAL}/"*) echo "Lock root must be outside the Git worktree." >&2; exit 2 ;;
 esac

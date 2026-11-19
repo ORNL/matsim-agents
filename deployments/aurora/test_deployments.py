@@ -367,7 +367,7 @@ def test_aurora_multinode_serve_job_has_opt_in_smoke_mode():
 
 
 SHARED_ENTRY_POINTS = [
-    "launchers/_hydragnn-train-step-{f}.sh",
+    "launchers/_mlip-train-step-{f}.sh",
     "launchers/_qe-step-{f}.sh",
     "launchers/_vasp-step-{f}.sh",
     "launchers/launch-test-all-models-{f}.sh",

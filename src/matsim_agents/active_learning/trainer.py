@@ -19,6 +19,7 @@ import subprocess
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import singledispatch
 from pathlib import Path
 
 from ase import Atoms
@@ -28,7 +29,12 @@ from ase.io import write as ase_write
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+from matsim_agents.backends.mlip.config import (
+    HydraGNNConfig,
+    MACEConfig,
+    MLIPBackendConfig,
+    UMAConfig,
+)
 from matsim_agents.execution.placement import ProcessLaunch
 
 log = logging.getLogger(__name__)
@@ -120,7 +126,60 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 # --------------------------------------------------------------------------- #
 
 
-HYDRAGNN_FINETUNERS = frozenset({"finetune_hydragnn", "finetune_hydragnn_newhead"})
+def _check_fine_tune_launch(mlip_cfg: MLIPBackendConfig, launch: ProcessLaunch) -> None:
+    """Reject fine-tunes the built-in recipes cannot run, before any expensive setup."""
+    mlip_cfg.check_fine_tunable()
+    # The built-in fine-tuners are single-process; extra ranks would race on outputs.
+    if launch.total_ranks != 1:
+        raise ValueError(
+            f"Built-in fine-tuners run as one process ({mlip_cfg.fine_tuner}); set "
+            f"resources.pools.training to 1 node and 1 device (it resolved to "
+            f"{launch.node_count} node(s) x {launch.ranks_per_node} rank(s))"
+        )
+
+
+def _fine_tune_argv(
+    trainer_cfg: TrainerConfig,
+    mlip_cfg: MLIPBackendConfig,
+    launch: ProcessLaunch,
+    *,
+    dataset: Path,
+    out_dir: Path,
+    references: Path,
+) -> list[str]:
+    """Command that runs the backend's fine-tuner, directly or through the site launcher.
+
+    A launcher receives ``<backend> <nodes> <ranks_per_node> -m <module> <args...>``:
+    it prepares the backend's environment on the site and runs ``python`` with the
+    remaining arguments.
+    """
+    _check_fine_tune_launch(mlip_cfg, launch)
+    python_args = [
+        "-m",
+        mlip_cfg.fine_tuner_module,
+        *mlip_cfg.fine_tune_args(
+            dataset=dataset,
+            out_dir=out_dir,
+            epochs=trainer_cfg.epochs_per_iter,
+            references=references,
+            finetune_mode=trainer_cfg.finetune_mode,
+        ),
+    ]
+    if trainer_cfg.train_launcher is None:
+        log.warning(
+            "trainer.train_launcher not set; running the %s fine-tune in-process "
+            "(no srun, no module swap). For multi-node training set train_launcher.",
+            mlip_cfg.backend,
+        )
+        return [sys.executable, *python_args]
+    return [
+        "bash",
+        str(trainer_cfg.train_launcher),
+        mlip_cfg.backend,
+        str(launch.node_count),
+        str(launch.ranks_per_node),
+        *python_args,
+    ]
 
 
 def _require_direct_placement(trainer_cfg: TrainerConfig, launch: ProcessLaunch, what: str) -> None:
@@ -167,19 +226,7 @@ def retrain_hydragnn(
         log.info("trainer.enabled=False; skipping retrain at iteration %d", iteration)
         return Path(hydragnn_cfg.logdir)
 
-    train_script = Path(str(trainer_cfg.train_script))
-    script_name = train_script.stem
-    if script_name not in HYDRAGNN_FINETUNERS:
-        raise ValueError(
-            f"trainer.train_script must be one of the built-in HydraGNN fine-tuners "
-            f"({', '.join(sorted(HYDRAGNN_FINETUNERS))}); got {train_script}"
-        )
-    if launch.total_ranks != 1:
-        raise ValueError(
-            "Built-in HydraGNN fine-tuners run as one process; set resources.pools.training "
-            f"to 1 node and 1 device (it resolved to {launch.node_count} node(s) x "
-            f"{launch.ranks_per_node} rank(s))"
-        )
+    _check_fine_tune_launch(hydragnn_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "HydraGNN fine-tuning")
 
     from matsim_agents.active_learning.training_references import resolve_training_references
@@ -195,58 +242,14 @@ def retrain_hydragnn(
     dataset_sha256 = sha256_file(Path(dataset_path))
     out_logdir.mkdir(parents=True, exist_ok=True)
 
-    # Launchers receive script, dataset, output, resume, epochs, nodes, ranks,
-    # references, checkpoint, branch MLP, ft_repo, charge, spin and HydraGNN root.
-    # Without a launcher, invoke the script directly with Python.
-    if trainer_cfg.train_launcher is not None:
-        argv = [
-            "bash",
-            str(trainer_cfg.train_launcher),
-            str(train_script),
-            str(dataset_path),
-            str(out_logdir),
-            str(hydragnn_cfg.logdir),  # resume from current logdir
-            str(trainer_cfg.epochs_per_iter),
-            str(launch.node_count),
-            str(launch.ranks_per_node),
-            str(reference_manifest),
-            hydragnn_cfg.checkpoint or "",
-            str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
-            str(hydragnn_cfg.ft_repo or ""),
-            str(hydragnn_cfg.charge),
-            str(hydragnn_cfg.spin),
-            str(hydragnn_cfg.hydragnn_root or ""),
-        ]
-    else:
-        log.warning(
-            "trainer.train_launcher not set; running training in-process "
-            "(no srun, no module swap). For multi-node training set train_launcher."
-        )
-        argv = [
-            sys.executable,
-            str(train_script),
-            "--dataset",
-            str(dataset_path),
-            "--output-dir",
-            str(out_logdir),
-            "--gfm-logdir",
-            str(hydragnn_cfg.logdir),
-            "--epochs",
-            str(trainer_cfg.epochs_per_iter),
-            "--elemental-reference-manifest",
-            str(reference_manifest),
-        ]
-        if script_name == "finetune_hydragnn":
-            if hydragnn_cfg.hydragnn_branch_mlp_checkpoint is None:
-                raise ValueError("Routed HydraGNN training requires a branch MLP checkpoint")
-            argv.extend(["--branch-mlp", str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint)])
-        if hydragnn_cfg.checkpoint is not None:
-            argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
-        argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
-        if hydragnn_cfg.hydragnn_root is not None:
-            argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
-        if script_name == "finetune_hydragnn_newhead" and hydragnn_cfg.ft_repo is not None:
-            argv.extend(["--ft-repo", str(hydragnn_cfg.ft_repo)])
+    argv = _fine_tune_argv(
+        trainer_cfg,
+        hydragnn_cfg,
+        launch,
+        dataset=Path(dataset_path),
+        out_dir=out_logdir,
+        references=reference_manifest,
+    )
 
     log.info("Launching retrain: %s", " ".join(argv))
     log_path = out_logdir / "train.log"
@@ -356,10 +359,7 @@ def retrain_uma(
     Returns the fine-tuned ``inference_ckpt.pt``, which becomes
     ``UMAConfig.model_name`` when the model is promoted. The labels are aligned
     to the base model's energy scale with the training references (see
-    :mod:`matsim_agents.training.finetune_uma`). A launcher receives
-    ``<train_script> <dataset_path> <out_model_dir> <base_model> <task_name>``
-    ``<epochs> <nodes> <ranks> <reference_manifest> <finetune_mode>`` and must
-    run the fine-tune with ``--output-dir <out_model_dir>``.
+    :mod:`matsim_agents.training.finetune_uma`).
     """
     from matsim_agents.datasets.governance import sha256_file
 
@@ -368,6 +368,7 @@ def retrain_uma(
         log.info("trainer.enabled=False; skipping UMA fine-tune at iteration %d", iteration)
         return Path(str(uma_cfg.model_name))
 
+    _check_fine_tune_launch(uma_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "UMA fine-tuning")
     manifest = _references_for_training(
         trainer_cfg,
@@ -380,51 +381,22 @@ def retrain_uma(
     dataset_sha256 = sha256_file(Path(dataset_path))
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
-    if trainer_cfg.train_launcher is not None:
-        argv = [
-            "bash",
-            str(trainer_cfg.train_launcher),
-            str(trainer_cfg.train_script),
-            str(dataset_path),
-            str(out_model_dir),
-            str(uma_cfg.model_name),
-            str(uma_cfg.task_name),
-            str(trainer_cfg.epochs_per_iter),
-            str(launch.node_count),
-            str(launch.ranks_per_node),
-            str(manifest),
-            trainer_cfg.finetune_mode,
-        ]
-    else:
-        log.warning(
-            "trainer.train_launcher not set; running UMA fine-tune in-process "
-            "(no srun, no module swap). For multi-node training set train_launcher."
-        )
-        argv = [
-            sys.executable,
-            str(trainer_cfg.train_script),
-            "--dataset",
-            str(dataset_path),
-            "--output-dir",
-            str(out_model_dir),
-            "--base-model",
-            str(uma_cfg.model_name),
-            "--task-name",
-            str(uma_cfg.task_name),
-            "--epochs",
-            str(trainer_cfg.epochs_per_iter),
-            "--elemental-reference-manifest",
-            str(manifest),
-        ]
-        if trainer_cfg.finetune_mode == "lora":
-            argv.append("--lora")
+    argv = _fine_tune_argv(
+        trainer_cfg,
+        uma_cfg,
+        launch,
+        dataset=Path(dataset_path),
+        out_dir=out_model_dir,
+        references=manifest,
+    )
 
     log_path = out_model_dir / "train.log"
     _run_trainer(argv, log_path, launch, trainer_cfg.train_launcher is None, "UMA fine-tune")
 
-    from matsim_agents.backends.mlip.calculator import _resolve_finetuned_uma_checkpoint
-
-    checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
+    try:
+        checkpoint = uma_cfg.with_checkpoint(out_model_dir).local_checkpoint()
+    except ValueError:
+        checkpoint = None
     if checkpoint is None:
         raise RuntimeError(
             "UMA fine-tune exited successfully but did not produce an inference_ckpt.pt "
@@ -451,11 +423,7 @@ def retrain_mace(
     Returns the fine-tuned ``mace_finetuned.model``, which becomes the model
     (``MACEConfig.family='checkpoint'``) when it is promoted. The labels are
     aligned to the base model's energy scale with the training references (see
-    :mod:`matsim_agents.training.finetune_mace`). A launcher receives
-    ``<train_script> <dataset_path> <out_model_dir> <family> <base_model>``
-    ``<epochs> <nodes> <ranks> <reference_manifest> <finetune_mode>`` and must
-    write ``mace_finetuned.model`` to ``<out_model_dir>``. With no launcher, the
-    built-in ``finetune_mace`` CLI runs in-process.
+    :mod:`matsim_agents.training.finetune_mace`).
     """
     from matsim_agents.datasets.governance import sha256_file
 
@@ -465,6 +433,7 @@ def retrain_mace(
         # Point downstream at the existing base model (checkpoint path or variant).
         return Path(str(mace_cfg.model))
 
+    _check_fine_tune_launch(mace_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "MACE fine-tuning")
     manifest = _references_for_training(
         trainer_cfg,
@@ -477,45 +446,14 @@ def retrain_mace(
     dataset_sha256 = sha256_file(Path(dataset_path))
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
-    if trainer_cfg.train_launcher is not None:
-        argv = [
-            "bash",
-            str(trainer_cfg.train_launcher),
-            str(trainer_cfg.train_script),
-            str(dataset_path),
-            str(out_model_dir),
-            str(mace_cfg.family),
-            str(mace_cfg.model),
-            str(trainer_cfg.epochs_per_iter),
-            str(launch.node_count),
-            str(launch.ranks_per_node),
-            str(manifest),
-            trainer_cfg.finetune_mode,
-        ]
-    else:
-        log.warning(
-            "trainer.train_launcher not set; running MACE fine-tune in-process "
-            "(no srun, no module swap). For multi-node training set train_launcher."
-        )
-        argv = [
-            sys.executable,
-            "-m",
-            "matsim_agents.training.finetune_mace",
-            "--dataset",
-            str(dataset_path),
-            "--output-dir",
-            str(out_model_dir),
-            "--family",
-            str(mace_cfg.family),
-            "--base-model",
-            str(mace_cfg.model),
-            "--epochs",
-            str(trainer_cfg.epochs_per_iter),
-            "--elemental-reference-manifest",
-            str(manifest),
-        ]
-        if trainer_cfg.finetune_mode == "lora":
-            argv.append("--lora")
+    argv = _fine_tune_argv(
+        trainer_cfg,
+        mace_cfg,
+        launch,
+        dataset=Path(dataset_path),
+        out_dir=out_model_dir,
+        references=manifest,
+    )
 
     log_path = out_model_dir / "train.log"
     _run_trainer(argv, log_path, launch, trainer_cfg.train_launcher is None, "MACE fine-tune")
@@ -526,3 +464,27 @@ def retrain_mace(
         )
     _check_energy_alignment(out_model_dir, Path(dataset_path), dataset_sha256, manifest)
     return finetuned
+
+
+@singledispatch
+def retrain(mlip_cfg: MLIPBackendConfig, trainer_cfg: TrainerConfig, *, out_dir: Path, **kwargs):
+    """Fine-tune ``mlip_cfg``'s model with its backend's recipe; return the trained model.
+
+    ``kwargs`` are the backend-independent inputs (dataset, iteration, launches).
+    """
+    raise NotImplementedError(f"no fine-tuning registered for {type(mlip_cfg).__name__}")
+
+
+@retrain.register
+def _(mlip_cfg: HydraGNNConfig, trainer_cfg: TrainerConfig, *, out_dir: Path, **kwargs) -> Path:
+    return retrain_hydragnn(trainer_cfg, mlip_cfg, out_logdir=out_dir, **kwargs)
+
+
+@retrain.register
+def _(mlip_cfg: UMAConfig, trainer_cfg: TrainerConfig, *, out_dir: Path, **kwargs) -> Path:
+    return retrain_uma(trainer_cfg, mlip_cfg, out_model_dir=out_dir, **kwargs)
+
+
+@retrain.register
+def _(mlip_cfg: MACEConfig, trainer_cfg: TrainerConfig, *, out_dir: Path, **kwargs) -> Path:
+    return retrain_mace(trainer_cfg, mlip_cfg, out_model_dir=out_dir, **kwargs)

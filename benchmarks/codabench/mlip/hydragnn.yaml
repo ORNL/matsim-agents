@@ -1,0 +1,6 @@
+# HydraGNN baseline (output predictions/hydragnn/). HYDRAGNN_LOGDIR is the
+# trained logdir containing config.json and the checkpoint.
+mlip:
+  backend: hydragnn
+  logdir: ${HYDRAGNN_LOGDIR:?set HYDRAGNN_LOGDIR to a trained HydraGNN logdir}
+  device: ${MLIP_DEVICE:-cpu}

@@ -1,13 +1,12 @@
 mlip:
   backend: uma
-  uma:
-    model_name: uma-s-1p1
-    task_name: omat
-    device: cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  model_name: uma-s-1p1
+  task_name: omat
+  device: cuda
+  dropout:
+    enabled: true
+    p: 0.1
+    target_layers: linear
 
 md:
   seed_source:

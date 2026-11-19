@@ -10,10 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.dft.config import DFTConfig
-from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.backends.mlip.config import MLIPBackendConfig, MLIPConfig
 from matsim_agents.execution.placement import ResourcePlan
 
 
@@ -183,6 +183,8 @@ class TrainerConfig(BaseModel):
     the foundation model and only accumulate labels.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = Field(
         False,
         description="Opt in to retraining; collecting DFT labels without it is the safe default.",
@@ -273,22 +275,14 @@ class TrainerConfig(BaseModel):
         ),
     )
     promotion_min_evaluated_frames: int = Field(1, ge=1)
-    train_script: Path | None = Field(
-        None,
-        description=(
-            "Path to a backend training script. Required when enabled=True. "
-            "HydraGNN scripts receive --dataset/--logdir/--resume_from in the "
-            "direct Python path; UMA scripts receive --dataset/--output-dir/"
-            "--base-model/--task-name. Launcher scripts may define their own "
-            "site-specific command using the positional arguments passed by "
-            "matsim-agents."
-        ),
-    )
     train_launcher: Path | None = Field(
         None,
         description=(
-            "Optional bash launcher that wraps `srun python train.py ...`. If unset, "
-            "the trainer falls back to running train_script in the current process."
+            "Optional site launcher for the fine-tune. It receives "
+            "`<backend> <nodes> <ranks_per_node> -m <module> <args...>`, prepares that "
+            "backend's environment, and runs `python` with the remaining arguments "
+            "(e.g. under srun). If unset, the selected MLIP's fine-tuner "
+            "(mlip.fine_tuner) runs in the current process."
         ),
     )
     epochs_per_iter: int = 5
@@ -306,15 +300,13 @@ class TrainerConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _check_train_script(self) -> TrainerConfig:
+    def _check_training_inputs(self) -> TrainerConfig:
         for field_name in ("validation_set", "validation_reference_set"):
             validation_path = getattr(self, field_name)
             if validation_path is not None and not validation_path.is_file():
                 raise ValueError(
                     f"trainer.{field_name} must be an existing file: {validation_path}"
                 )
-        if self.enabled and self.train_script is None:
-            raise ValueError("trainer.enabled=True requires trainer.train_script.")
         if (
             self.enabled
             and self.training_references is None
@@ -440,19 +432,29 @@ class ALConfig(BaseModel):
         return references.manifest if references is not None else None
 
     @model_validator(mode="after")
+    def _check_fine_tunable(self) -> ALConfig:
+        if self.trainer.enabled:
+            self.mlip.check_fine_tunable()
+        return self
+
+    @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:
         s = self.acquisition.strategy
         needs_ensemble = s in {"ensemble", "ensemble_then_dropout"}
-        if needs_ensemble and not self.mlip.ensemble_paths:
+        if needs_ensemble and not self.mlip.ensemble_models:
             raise ValueError(
                 f"acquisition.strategy={s!r} requires at least one additional model: "
-                "set mlip.hydragnn.ensemble_paths (HydraGNN) or mlip.uma.ensemble_models (UMA)."
+                "set mlip.ensemble_models."
             )
         return self
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> ALConfig:
+    def from_yaml(cls, path: str | Path, *, mlip: MLIPBackendConfig | None = None) -> ALConfig:
         """Load and validate an active-learning config YAML.
+
+        ``mlip`` replaces the file's ``mlip`` block, so one campaign definition
+        runs with any backend (see ``--mlip-config``); the replaced block is
+        neither expanded nor validated.
 
         Supports shell-style variable substitution in **all string values**:
 
@@ -484,8 +486,13 @@ class ALConfig(BaseModel):
             preview = {}
         vars_block = preview.get("vars") if isinstance(preview, dict) else None
         defaults = variable_defaults(vars_block, source=path)
+        if mlip is not None and isinstance(preview, dict):
+            preview.pop("mlip", None)
+            raw_text = yaml.safe_dump(preview, sort_keys=False)
         substituted = expand_variables(raw_text, defaults, source=path)
         data = yaml.safe_load(substituted)
         if isinstance(data, dict):
             data.pop("vars", None)
+            if mlip is not None:
+                data["mlip"] = mlip
         return cls.model_validate(data)

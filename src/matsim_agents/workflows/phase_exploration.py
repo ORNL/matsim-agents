@@ -143,6 +143,8 @@ def _recordable_exploration_options(
         if callable(value) or (name in runtime_names and value is not None):
             omitted.append(name)
             continue
+        if isinstance(value, BaseModel):
+            value = value.model_dump(mode="json")
         try:
             json.dumps(value)
         except (TypeError, ValueError):

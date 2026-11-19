@@ -14,7 +14,7 @@ from matsim_agents.active_learning.evaluate import (
     evaluate_frames,
     evaluate_promotion_candidate,
 )
-from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import UMAConfig
 
 
 def _metrics(
@@ -48,8 +48,6 @@ def _metrics(
 
 
 def _trainer(tmp_path: Path) -> TrainerConfig:
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     validation_set = tmp_path / "held-out.extxyz"
     validation_set.touch()
     references = tmp_path / "elemental-references.json"
@@ -59,7 +57,6 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
         validation_reference_set=references,
         promote_model=True,
         promotion_approved=True,
-        train_script=train_script,
         validation_set=validation_set,
         promotion_max_energy_mae_eV_per_atom=0.1,
         promotion_max_force_mae_eV_per_A=0.2,
@@ -87,7 +84,7 @@ def test_cross_composition_comparison_requires_pure_element_references(
         Atoms("NbTaO", positions=np.zeros((3, 3)), info={"energy": 0.0}),
         Atoms("Nb2O", positions=np.zeros((3, 3)), info={"energy": 0.0}),
     ]
-    mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+    mlip = UMAConfig()
 
     with pytest.raises(ValueError, match="elemental reference manifest"):
         evaluate_frames(mlip, frames)
@@ -212,10 +209,8 @@ def test_promotion_policy_rejects_invalid_thresholds(tmp_path, field, value, con
     from matsim_agents.campaign.formula_execution import CampaignRetrainingConfig
 
     config_type = TrainerConfig if config_kind == "trainer" else CampaignRetrainingConfig
-    script = tmp_path / "train.py"
-    script.touch()
     with pytest.raises(ValidationError):
-        config_type(train_script=script, **{field: value})
+        config_type(**{field: value})
 
 
 @pytest.mark.parametrize("label", ["energy", "force"])

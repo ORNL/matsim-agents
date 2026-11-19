@@ -113,9 +113,12 @@ flowchart TD
 - **Selectable surrogate backend for geometry relaxation**:
   - **HydraGNN** fused MLFF + branch-weight MLP stack (default), or one
     explicitly selected decoder head for dataset-specific inference.
-  - **UMA** (Universal Models for Atoms) via fairchem (`--mlip-backend uma`).
+  - **UMA** (Universal Models for Atoms) via fairchem (`backend: uma`).
   - **MACE** open foundation-model families and user checkpoints
-    (`--mlip-backend mace`), isolated from UMA in multi-model validation.
+    (`backend: mace`), isolated from UMA in multi-model validation.
+  - Every command selects the backend with `--mlip-config FILE`, a YAML whose
+    `mlip:` block holds `backend` and that backend's settings (see
+    `examples/mlip/`).
   - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
     HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
     MACE relaxations do not emit branch-weight metrics.
@@ -173,12 +176,12 @@ flowchart TD
 - **Two complementary graph entry points**:
   - `matsim-agents run` for planner-executor-analyst task execution.
   - `matsim-agents supervisor-run` for discovery exploration + UQ-based decisioning + optional AL handoff.
-- **Surrogate backend switch for AL/supervisor flows**: choose HydraGNN or
-  UMA in the same YAML via `mlip.backend` (commonly
-  `backend: ${MLIP_BACKEND:-hydragnn}`) and run with:
-  - `matsim-agents al run <config.yaml>` (HydraGNN default)
-  - `MLIP_BACKEND=uma matsim-agents al run <config.yaml>` (frozen UMA)
-  - `MLIP_BACKEND=uma matsim-agents supervisor-run <composition> ...` (UMA in supervisor path)
+- **Surrogate backend switch for AL/supervisor flows**: an AL config's `mlip`
+  block selects its model; `--mlip-config` replaces it at run time, so one
+  config runs with any backend:
+  - `matsim-agents al run <config.yaml>` (the config's own model)
+  - `matsim-agents al run <config.yaml> --mlip-config examples/mlip/uma-s-1p1-omat.yaml` (frozen UMA)
+  - `matsim-agents supervisor-run <composition> --mlip-config examples/mlip/uma-s-1p1-omat.yaml ...` (UMA in supervisor path)
 
 ## Graph orchestration modes
 
@@ -227,10 +230,11 @@ before building a workflow on top of it.
 
 ### Available today
 
-- **Single-point energies and forces** from a HydraGNN MLFF checkpoint
-  through an ASE calculator interface.
-- **Geometry relaxation** of atoms and (optionally) cell, driven by
-  HydraGNN through the upstream `structure_optimization_ASE.py` wrapper.
+- **Single-point energies and forces** from any supported MLIP (HydraGNN,
+  UMA, or MACE, selected by an `mlip:` block) through an ASE calculator
+  interface.
+- **Geometry relaxation** of atoms and (optionally) cell with the selected
+  MLIP.
 - **Isotropic lattice scans** to locate equilibrium volume / lattice
   constant.
 - **Random-shuffle ordering enumeration** for disordered sites,

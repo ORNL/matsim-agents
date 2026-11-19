@@ -1,0 +1,7 @@
+# MACE-MP-0 large (Codabench baseline; output predictions/mace_mp_large/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: large
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

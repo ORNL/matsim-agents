@@ -1,0 +1,7 @@
+# MACE-MATPES r2SCAN (Codabench baseline; output predictions/mace_matpes_r2scan/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: mace-matpes-r2scan-0
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

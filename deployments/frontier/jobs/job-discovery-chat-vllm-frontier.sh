@@ -28,6 +28,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/runtime-env.sh"
 VENV=$REPO/.venv
 VLLM_VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
@@ -46,7 +48,11 @@ source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 
-source activate "$VENV"
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
+# or the HydraGNN foundation model above. The client runs in that backend's environment.
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
+activate_python_env "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
@@ -137,10 +143,10 @@ export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 # ── discovery query ──────────────────────────────────────────────────────────
 QUERY=${MATSIM_DISCOVERY_QUERY:-"Propose 3 to 5 candidate inorganic materials with concise physical justification, then relax each structure with the MLFF and report final energies and relative stability."}
 
+
 echo "[$(date)] Submitting discovery query to matsim-agents ..."
 echo "$QUERY" | matsim-agents chat \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --mlip-config     "$MLIP_CONFIG" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    vllm \
     --llm-model       "$MODEL_NAME" \

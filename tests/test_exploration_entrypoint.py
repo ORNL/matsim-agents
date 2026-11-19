@@ -11,7 +11,8 @@ from ase.calculators.emt import EMT
 from ase.io import write
 from typer.testing import CliRunner
 
-from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
+from matsim_agents.backends.mlip.config import HydraGNNConfig
+from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
@@ -39,7 +40,13 @@ def config_path(tmp_path):
         yaml.safe_dump(
             {
                 "formula": "Cu",
-                "checkpoint": "model.model",
+                "mlip": {
+                    "backend": "mace",
+                    "family": "checkpoint",
+                    "model": "model.model",
+                    "device": "cpu",
+                    "precision": "fp64",
+                },
                 "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
                 "output_dir": "runs",
                 "generation": {"pyxtal_count": 0, "max_aflow_candidates": 3},
@@ -78,7 +85,7 @@ def emt_workflow(monkeypatch, available_dependencies):
 
     def calculator(args):
         calls["loads"] += 1
-        return _RelaxCalculator(EMT(), 0, 0, None)
+        return RelaxCalculator(EMT(), 0, 0, None)
 
     monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.generate_seed_action", generate)
     monkeypatch.setattr("matsim_agents.backends.mlip.relaxation._relaxation_calculator", calculator)
@@ -90,8 +97,101 @@ def test_paths_resolve_relative_to_config_not_cwd(config_path, tmp_path, monkeyp
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
     cfg = load_exploration_config(config_path)
-    assert cfg.checkpoint == config_path.parent / "model.model"
+    assert cfg.mlip.model == str(config_path.parent / "model.model")
     assert cfg.output_dir == config_path.parent / "runs"
+
+
+def _backend_mlip_block(backend: str, root: Path) -> dict:
+    if backend == "hydragnn":
+        logdir = root / "hydragnn-logdir"
+        logdir.mkdir()
+        (logdir / "config.json").write_text("{}")
+        (logdir / "best_model.pk").write_bytes(b"test weights, never deserialized")
+        mlp = root / "branch.pt"
+        mlp.write_bytes(b"test branch weights, never deserialized")
+        return {
+            "backend": "hydragnn",
+            "logdir": "hydragnn-logdir",
+            "checkpoint": "best_model.pk",
+            "mlp_checkpoint": "branch.pt",
+        }
+    if backend == "uma":
+        return {"backend": "uma", "model_name": "uma-s-1p1", "device": "cpu"}
+    return {
+        "backend": "mace",
+        "family": "mace_mp",
+        "model": "medium-omat-0",
+        "device": "cpu",
+    }
+
+
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+def test_every_mlip_backend_runs_the_same_exploration(tmp_path, emt_workflow, monkeypatch, backend):
+    import matsim_agents.workflows.exploration_rounds as workflow
+
+    requests = []
+    original = workflow.relax_with_mlip
+
+    def relax(args, **kwargs):
+        requests.append(args)
+        return original(args, **kwargs)
+
+    monkeypatch.setattr(workflow, "relax_with_mlip", relax)
+    path = tmp_path / "explore.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "formula": "Cu",
+                "mlip": _backend_mlip_block(backend, tmp_path),
+                "output_dir": "runs",
+                "generation": {"pyxtal_count": 0, "max_aflow_candidates": 2},
+                "relaxation": {"maxiter": 2},
+            }
+        )
+    )
+    cfg = load_exploration_config(path)
+    check = check_exploration(cfg)
+    assert check.ready, check.errors
+    assert check.backend == backend
+    assert check.model_identifier.startswith(f"{backend}:")
+    summary = run_exploration(cfg)
+    assert summary.status == "completed"
+    assert {request.mlip.backend for request in requests} == {backend}
+    provenance = json.loads((Path(summary.run_directory) / "provenance.json").read_text())
+    assert provenance["backend"] == backend
+    assert provenance["model_identifier"] == check.model_identifier
+    if backend == "hydragnn":
+        logdir = tmp_path / "hydragnn-logdir"
+        assert requests[0].mlip.logdir == logdir
+        assert requests[0].mlip.mlp_checkpoint == tmp_path / "branch.pt"
+        assert set(check.model_files) == {
+            str(logdir / "config.json"),
+            str(logdir / "best_model.pk"),
+            str(tmp_path / "branch.pt"),
+        }
+    elif backend == "uma":
+        assert check.model_files == {}
+        assert requests[0].mlip.model_name == "uma-s-1p1"
+    else:
+        assert requests[0].mlip.model == "medium-omat-0"
+
+
+def test_exploration_requires_an_mlip_block(config_path):
+    raw = yaml.safe_load(config_path.read_text())
+    raw.pop("mlip")
+    with pytest.raises(ValueError, match="mlip"):
+        ExplorationConfig.model_validate(raw)
+
+
+def test_hash_pin_requires_a_local_model_file(tmp_path, available_dependencies):
+    cfg = ExplorationConfig(
+        formula="Cu",
+        mlip={"backend": "uma", "model_name": "uma-s-1p1"},
+        checkpoint_sha256="0" * 64,
+    )
+    result = check_exploration(cfg)
+    assert not result.ready
+    assert any("requires a local model file" in error for error in result.errors)
 
 
 @pytest.mark.parametrize(
@@ -207,16 +307,16 @@ def test_preflight_reports_wrong_environment_and_missing_checkpoint(config_path,
         "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: None
     )
     cfg = load_exploration_config(config_path)
-    cfg.checkpoint.unlink()
+    Path(cfg.mlip.model).unlink()
     result = check_exploration(cfg)
     assert not result.ready
     assert any("Missing mace" in error for error in result.errors)
-    assert any("Checkpoint does not exist" in error for error in result.errors)
+    assert any("Required mace model file does not exist" in error for error in result.errors)
 
 
 def test_hash_mismatch_blocks_execution(config_path, emt_workflow):
     cfg = load_exploration_config(config_path)
-    cfg.checkpoint.write_text("changed checkpoint")
+    Path(cfg.mlip.model).write_text("changed checkpoint")
     with pytest.raises(ValueError, match="SHA-256"):
         run_exploration(cfg)
     assert emt_workflow["loads"] == 0
@@ -277,7 +377,7 @@ def test_full_relaxation_options_reach_calculator(config_path, emt_workflow, mon
     for request in captured:
         for name, value in cfg.relaxation.model_dump().items():
             assert getattr(request, name) == value
-        assert request.precision == cfg.precision
+        assert request.mlip == cfg.mlip
 
 
 def test_backend_errors_are_persisted_and_cli_returns_failure(
@@ -382,12 +482,12 @@ def test_cli_bad_config_and_missing_evidence_are_readable(config_path, tmp_path)
 
 
 def test_cli_preflight_failure_is_nonzero(config_path, available_dependencies):
-    (config_path.parent / "model.model").unlink()
     runner = CliRunner()
+    (config_path.parent / "model.model").unlink()
     for action in ("check", "run"):
         result = runner.invoke(app, ["explore", action, str(config_path)])
-        assert result.exit_code == 1
-        assert "Checkpoint does not exist" in result.output
+        assert result.exit_code == 2
+        assert "requires model to be an existing file" in result.output
 
 
 def test_example_contract_is_valid():
@@ -457,3 +557,56 @@ def test_single_round_cli_resumes_interrupted_work(config_path, emt_workflow, mo
     before = {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
     assert resume_exploration(directory) == summary
     assert before == {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+
+
+def test_hydragnn_exploration_requires_a_pinned_checkpoint(tmp_path, available_dependencies):
+    block = _backend_mlip_block("hydragnn", tmp_path)
+    block.pop("checkpoint")
+    cfg = ExplorationConfig(
+        formula="Cu", mlip=HydraGNNConfig(**{**block, "logdir": tmp_path / block["logdir"]})
+    )
+    check = check_exploration(cfg)
+    assert not check.ready
+    assert any("set mlip.checkpoint" in error for error in check.errors)
+
+
+def test_resume_refuses_a_changed_model_file(tmp_path, emt_workflow):
+    path = tmp_path / "explore.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "formula": "Cu",
+                "mlip": _backend_mlip_block("hydragnn", tmp_path),
+                "output_dir": "runs",
+                "generation": {"pyxtal_count": 0, "max_aflow_candidates": 2},
+                "relaxation": {"maxiter": 2},
+            }
+        )
+    )
+    run = Path(run_exploration(load_exploration_config(path)).run_directory)
+    (tmp_path / "hydragnn-logdir" / "best_model.pk").write_bytes(b"replaced weights")
+    with pytest.raises(ValueError, match="model file changed or missing: .*best_model.pk"):
+        resume_exploration(run)
+
+
+def test_relative_model_paths_are_persisted_absolute(tmp_path, emt_workflow, monkeypatch):
+    work = tmp_path / "work"
+    work.mkdir()
+    block = _backend_mlip_block("hydragnn", work)
+    monkeypatch.chdir(work)
+    summary = run_exploration(
+        ExplorationConfig(
+            formula="Cu",
+            mlip=block,
+            output_dir="runs",
+            generation={"pyxtal_count": 0, "max_aflow_candidates": 2},
+            relaxation={"maxiter": 2},
+        )
+    )
+    run = Path(summary.run_directory)
+    stored = json.loads((run / "resolved_config.json").read_text())["mlip"]
+    assert stored["logdir"] == str(work / "hydragnn-logdir")
+    assert stored["mlp_checkpoint"] == str(work / "branch.pt")
+    monkeypatch.chdir(tmp_path)
+    assert summarize_exploration(run) == summary
+    assert resume_exploration(run) == summary

@@ -15,8 +15,8 @@
 # qwen3-235b-a22b-instruct-2507, qwen3-235b-a22b-thinking-2507, gemma-4-31b-it,
 # gemma-4-26b-a4b-it -- deepseek-v3.2 and devstral-2 excluded), then runs either
 # formula-discovery debate alone or a bounded, resumable campaign on the 16th
-# node. MATSIM_CAMPAIGN_MODE selects debate-only, uma-only MLIP polymorph
-# labelling, or the existing DFT workflow. The panel and its placement come from
+# node. MATSIM_CAMPAIGN_MODE selects debate-only, mlip-only polymorph labelling
+# with the selected MLIP backend (hydragnn, uma, or mace), or the DFT workflow. The panel and its placement come from
 # deployments/perlmutter/resources/campaign-panel{,-debate,-single}.yaml
 # (override with MATSIM_RESOURCES; MODEL_ROOT defaults to $PROJ/models), served
 # by `matsim-agents resources serve`.
@@ -24,13 +24,19 @@
 # Required at submission (Slurm spools this script, so it cannot self-locate
 # the checkout):
 #   PROJECT_ROOT   matsim-agents checkout
-#   MATSIM_CAMPAIGN_MODE=single-llm-once|debate-only|uma-only|dft (default: dft)
+#   MATSIM_CAMPAIGN_MODE=single-llm-once|debate-only|mlip-only|dft (default: dft)
+#   MATSIM_CAMPAIGN_AL_CONFIG=...  AL config whose mlip block selects the MLIP
+#   MLIP_CONFIG=...                optional YAML whose mlip block replaces the AL
+#                                  config's (forwarded as --mlip-config)
+#   MATSIM_CAMPAIGN_VENV=...       campaign environment (default: the one providing that MLIP)
 # Optional retraining controls:
-#   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate UMA checkpoint; needs
+#   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate MLIP checkpoint; needs
 #                                          elemental DFT references to train against:
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET=/path/to/elemental-references.json
 #                                          (or trainer.training_references in the AL config)
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
+#   MATSIM_CAMPAIGN_TRAIN_LAUNCHER=$PROJECT_ROOT/deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh
+#                                          site launcher for the model's fine-tuner
 #   MATSIM_CAMPAIGN_PROMOTE_MODEL=1        approve promotion and reevaluation
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET=/path/to/held-out.extxyz
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION=0.2  alternative fresh-label split
@@ -50,7 +56,7 @@
 #   MATSIM_CAMPAIGN_UNARY_RELAX_STEPS=200     MLIP unary relaxation steps
 #
 # Submit with:
-#   PROJECT_ROOT=$PWD MATSIM_CAMPAIGN_MODE=uma-only sbatch -A m5216_g -q premium \
+#   PROJECT_ROOT=$PWD MATSIM_CAMPAIGN_MODE=mlip-only sbatch -A m5216_g -q premium \
 #     deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh
 # Submit single-llm-once with -N 1 and debate-only with -N 15.
 # ---------------------------------------------------------------------------
@@ -58,17 +64,17 @@
 set -euo pipefail
 export MATSIM_CAMPAIGN_MAX_DFT="${MATSIM_CAMPAIGN_MAX_DFT:-32}"
 CAMPAIGN_MODE="${MATSIM_CAMPAIGN_MODE:-dft}"
-[[ "$CAMPAIGN_MODE" == "single-llm-once" || "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ]] || {
-  echo "ERROR: MATSIM_CAMPAIGN_MODE must be single-llm-once, debate-only, uma-only, or dft" >&2
+[[ "$CAMPAIGN_MODE" == "single-llm-once" || "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "mlip-only" || "$CAMPAIGN_MODE" == "dft" ]] || {
+  echo "ERROR: MATSIM_CAMPAIGN_MODE must be single-llm-once, debate-only, mlip-only, or dft" >&2
   exit 2
 }
-if [[ "$CAMPAIGN_MODE" == "uma-only" ]]; then
+if [[ "$CAMPAIGN_MODE" == "mlip-only" ]]; then
   [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "0" && "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "0" ]] || {
-    echo "ERROR: uma-only mode forbids retraining and model promotion" >&2
+    echo "ERROR: mlip-only mode forbids retraining and model promotion" >&2
     exit 2
   }
   [[ "${MATSIM_CAMPAIGN_DFT_REFINE:-0}" == "0" ]] || {
-    echo "ERROR: uma-only mode forbids DFT refinement" >&2
+    echo "ERROR: mlip-only mode forbids DFT refinement" >&2
     exit 2
   }
 fi
@@ -76,6 +82,12 @@ fi
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
+MLIP_ARGS=()
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+  [[ -f "$MLIP_CONFIG" ]] || { echo "ERROR: MLIP config not found: $MLIP_CONFIG" >&2; exit 2; }
+  MLIP_CONFIG="$(cd "$(dirname "$MLIP_CONFIG")" && pwd)/$(basename "$MLIP_CONFIG")"
+  MLIP_ARGS=(--mlip-config "$MLIP_CONFIG")
+fi
 if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
   "$PYTHON" - "$AL_CONFIG" "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" <<'PY'
 import sys
@@ -104,7 +116,18 @@ export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
 MODELS_ROOT="${MODEL_ROOT:-$PROJ/models}"
 source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"
-configure_campaign_run_name "$REPO" "$CAMPAIGN_MODE" "${MATSIM_CAMPAIGN_REFERENCE_BACKEND:-qe}"
+MLIP=""
+if [[ "$CAMPAIGN_MODE" == "mlip-only" || "$CAMPAIGN_MODE" == "dft" ]]; then
+  MLIP="$(campaign_mlip_backend "$REPO" "$PYTHON" "${MLIP_CONFIG:-$AL_CONFIG}")"
+fi
+# The campaign driver runs in the environment that provides the configured MLIP.
+case "$MLIP" in
+  uma) CAMPAIGN_VENV_DEFAULT="$REPO/.venv-uma" ;;
+  mace) CAMPAIGN_VENV_DEFAULT="$REPO/.venv-mace" ;;
+  *) CAMPAIGN_VENV_DEFAULT="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}" ;;
+esac
+CAMPAIGN_VENV="${MATSIM_CAMPAIGN_VENV:-$CAMPAIGN_VENV_DEFAULT}"
+configure_campaign_run_name "$REPO" "$CAMPAIGN_MODE" "${MATSIM_CAMPAIGN_REFERENCE_BACKEND:-qe}" "$MLIP"
 CAMPAIGN_RUN_TAG="$MATSIM_CAMPAIGN_RUN_TAG"
 RUN_NAME="${CAMPAIGN_RUN_TAG}--j${SLURM_JOB_ID}"
 OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/${RUN_NAME}"
@@ -142,7 +165,7 @@ EXPECTED_NODES=16
   exit 2
 }
 CAMPAIGN_NODE=""
-if [[ "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ]]; then
+if [[ "$CAMPAIGN_MODE" == "mlip-only" || "$CAMPAIGN_MODE" == "dft" ]]; then
   CAMPAIGN_NODE="${ALL_NODES[15]}"
 fi
 
@@ -216,7 +239,6 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
   TRAIN_ARGS=(
     --retrain
     --approve-retraining
-    --train-script "$REPO/src/matsim_agents/training/finetune_uma.py"
     --train-epochs "${MATSIM_CAMPAIGN_TRAIN_EPOCHS:-5}"
   )
   if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then
@@ -280,7 +302,7 @@ if (( ${#DFT_REFINEMENT_ARGS[@]} > 0 )); then
   printf -v DFT_REFINEMENT_ARGS_QUOTED '%q ' "${DFT_REFINEMENT_ARGS[@]}"
 fi
 TRAIN_ARGS_QUOTED="$DFT_REFINEMENT_ARGS_QUOTED$TRAIN_ARGS_QUOTED"
-EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE")
+EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"})
 [[ "$CAMPAIGN_MODE" == "dft" ]] && EXECUTION_ARGS+=(--approve-dft)
 printf -v EXECUTION_ARGS_QUOTED '%q ' "${EXECUTION_ARGS[@]}"
 VALIDATION_ARGS=(
@@ -300,7 +322,7 @@ VALIDATION_ARGS=(
   --surrogate-unary-maxstep "${MATSIM_CAMPAIGN_UNARY_MAXSTEP:-0.01}"
   --surrogate-minimum-unique-unary "${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"
 )
-if [[ ( "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ) && "${MATSIM_CAMPAIGN_SURROGATE_HULL:-1}" == "1" ]]; then
+if [[ ( "$CAMPAIGN_MODE" == "mlip-only" || "$CAMPAIGN_MODE" == "dft" ) && "${MATSIM_CAMPAIGN_SURROGATE_HULL:-1}" == "1" ]]; then
   SURROGATE_REFERENCE_DIR="$OUTPUT/campaign/surrogate-references"
   "$PYTHON" "$REPO/deployments/perlmutter/jobs/prepare_nb_ta_o_references.py" \
     --output-dir "$SURROGATE_REFERENCE_DIR" \
@@ -323,7 +345,12 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
     load_perlmutter_modules_gpu
     source '$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh'
     configure_mace_model_artifacts '$REPO'
-    source '$REPO/.venv-uma/bin/activate'
+    if [[ -f '$CAMPAIGN_VENV/bin/activate' ]]; then
+      source '$CAMPAIGN_VENV/bin/activate'
+    else
+      source \"\$(conda info --base)/etc/profile.d/conda.sh\"
+      conda activate '$CAMPAIGN_VENV'
+    fi
     export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 CUDA_DEVICE_ORDER=PCI_BUS_ID
     export HF_HUB_OFFLINE=\"\${HF_HUB_OFFLINE:-1}\" TRANSFORMERS_OFFLINE=\"\${TRANSFORMERS_OFFLINE:-1}\"
     export PROJECT_ROOT='$REPO'

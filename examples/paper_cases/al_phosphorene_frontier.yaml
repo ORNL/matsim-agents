@@ -42,24 +42,16 @@ vars:
 
 mlip:
   # Frontier's venv is HydraGNN/ROCm; UMA (fairchem) is not installed there.
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    hydragnn_root: ${HYDRAGNN_DIR}
-    ft_repo: ${HYDRAGNN_FT_REPO}
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    mlp_checkpoint: null
-    precision:  fp32
-    mlp_device: cuda           # torch HIP maps the "cuda" device string on MI250X
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  backend: hydragnn
+  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  hydragnn_root: ${HYDRAGNN_DIR}
+  ft_repo: ${HYDRAGNN_FT_REPO}
+  logdir:         ${INITIAL_LOGDIR}
+  checkpoint:     best_model.pt
+  mlp_checkpoint: null
+  precision:  fp32
+  device: cuda           # torch HIP maps the "cuda" device string on MI250X
+  ensemble_models: []
 
 md:
   seed_source:
@@ -121,8 +113,7 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
-  train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
+  train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_mlip-train-step-frontier.sh
   epochs_per_iter: 5
 
 loop:

@@ -214,8 +214,8 @@ def surrogate(monkeypatch):
     loads, releases, pools = [], [], []
 
     def make(mlip_cfg, enable_mc_dropout):
-        loads.append((mlip_cfg.hydragnn.logdir, enable_mc_dropout))
-        return SimpleNamespace(model=mlip_cfg.hydragnn.logdir)
+        loads.append((mlip_cfg.logdir, enable_mc_dropout))
+        return SimpleNamespace(model=mlip_cfg.logdir)
 
     class Pool:
         def __init__(self):
@@ -238,9 +238,9 @@ def surrogate(monkeypatch):
 
 
 def _mlip(logdir):
-    from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPConfig
+    from matsim_agents.backends.mlip.config import HydraGNNConfig
 
-    return MLIPConfig(backend="hydragnn", hydragnn=HydraGNNConfig(logdir=logdir))
+    return HydraGNNConfig(logdir=logdir)
 
 
 def test_models_stay_loaded_until_the_model_changes(tmp_path, surrogate):

@@ -54,26 +54,32 @@ the competition. To switch to final ranking, change the key prefix from
 
 ### Baselines
 
-Four baselines are provided in `benchmarks/codabench/baselines/`:
+Two baseline adapters are provided in `benchmarks/codabench/baselines/`:
+`mlip/` builds any matsim-agents MLIP from an `mlip:` YAML block, and
+`allscaip/` wraps AllScAIP. Curated MLIP selections live in
+`benchmarks/codabench/mlip/`:
 
-| Baseline | Architecture | Source |
+| Selection | Architecture | Source |
 |----------|-------------|--------|
-| **MACE-MP-0** | Equivariant GNN (MACE) | Universal MLIP (Cambridge) |
-| **HydraGNN** | Multi-headed graph NN | This repo / ORNL |
-| **UMA** (`uma-s-1p2`) | Transformer-based universal model | Meta / fairchem |
-| **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN | Meta / OMol25 |
+| `mlip/materials/*.yaml` (14), `mlip/molecular/*.yaml` (8) | Equivariant GNN (MACE) | MACE foundation models (Cambridge) |
+| `mlip/hydragnn.yaml` | Multi-headed graph NN | This repo / ORNL |
+| `mlip/uma.yaml` (`uma-s-1p2`) | Transformer-based universal model | Meta / fairchem |
+| `--allscaip` (`allscaip-md-conserving-all-omol`) | Message-passing NN | Meta / OMol25 |
 
 Run any or all baselines. Every energy run requires the organizer-supplied
-elemental manifest:
+elemental manifest. `--mlip-config FILE` is repeatable and accepts several
+files; each writes `predictions/<file stem>/` and runs on its block's
+`device` (the curated files read `MLIP_DEVICE`, default `cpu`):
 
 ```bash
 cd benchmarks/codabench
 REF=public_data/elemental_references.json
-python run_baselines.py --model mace --mace-variant materials --elemental-reference-manifest "$REF"
-python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
-python run_baselines.py --model uma --elemental-reference-manifest "$REF"
-python run_baselines.py --model allscaip --elemental-reference-manifest "$REF"
-python run_baselines.py --model all --relax --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/materials/*.yaml --elemental-reference-manifest "$REF"
+HYDRAGNN_LOGDIR=/path/to/model python run_baselines.py --mlip-config mlip/hydragnn.yaml --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/uma.yaml --elemental-reference-manifest "$REF"
+python run_baselines.py --allscaip --elemental-reference-manifest "$REF"
+HYDRAGNN_LOGDIR=/path/to/model python run_baselines.py --relax --allscaip \
+    --mlip-config mlip/materials/*.yaml mlip/hydragnn.yaml mlip/uma.yaml --elemental-reference-manifest "$REF"
 ```
 
 UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
@@ -122,16 +128,15 @@ evidence of real MLIP/DFT scientific accuracy or completed competition data.
 ```
 benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
-├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
+├── run_baselines.py             # entry point: --mlip-config FILE... and/or --allscaip
 ├── evaluate.py                  # submitted-model inference + reference subtraction
 ├── requirements.txt             # backend-neutral competition dependencies
 ├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
 ├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
 ├── baselines/
-│   ├── mace_mp0/model.py        # MACE-MP-0 baseline
-│   ├── hydragnn/model.py        # HydraGNN baseline
-│   ├── uma/model.py             # UMA (fairchem) baseline
+│   ├── mlip/model.py            # any mlip: block (MACE, HydraGNN, UMA)
 │   └── allscaip/model.py        # AllScAIP (fairchem) baseline
+├── mlip/                        # curated mlip: selections (materials/, molecular/, hydragnn, uma)
 ├── scoring_program/
 │   └── score.py                 # Codabench scorer (public + private partitions)
 ├── reference_data/

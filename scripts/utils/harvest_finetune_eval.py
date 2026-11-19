@@ -30,7 +30,8 @@ CASES = [
 ]
 
 # (row label, variant directory, endpoint) where endpoint is "before" (iter0)
-# or "after" (last iter). Variant dirs follow the launcher's VARIANT_TAG scheme.
+# or "after" (last iter). Variant dirs are the variant names of
+# deployments/perlmutter/launchers/config/finetune-eval-matrix.yaml.
 ROWS = [
     ("HydraGNN zero-shot", "hydragnn", "before"),
     ("\\quad routed", "hydragnn", "after"),

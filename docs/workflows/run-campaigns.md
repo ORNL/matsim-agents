@@ -288,8 +288,8 @@ For example, an objective wrapper is:
 workflow: objective
 arguments:
   - "Find a candidate Nb oxide structure"
-  - --mlip-backend
-  - mace
+  - --mlip-config
+  - examples/mlip/mace-mp-medium.yaml
 output_root: ./workflow-records
 ```
 

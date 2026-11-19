@@ -54,8 +54,15 @@ RUN_DIR="$RUNS_ROOT/al-scaling-N${NNODES}-r${REP}-${SLURM_JOB_ID:-$$}"
 mkdir -p "$RUN_DIR"
 
 # ── backends ──────────────────────────────────────────────────────────────────
-export MLIP_BACKEND="${MLIP_BACKEND:-hydragnn}"
+# MLIP_CONFIG (optional) is a YAML with an `mlip:` block that replaces the
+# config's HydraGNN model.
 export DFT_BACKEND="${DFT_BACKEND:-vasp}"
+MLIP_ARGS=()
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+  [[ -f "$MLIP_CONFIG" ]] || { echo "ERROR: MLIP config not found: $MLIP_CONFIG" >&2; exit 2; }
+  MLIP_CONFIG="$(cd "$(dirname "$MLIP_CONFIG")" && pwd)/$(basename "$MLIP_CONFIG")"
+  MLIP_ARGS=(--mlip-config "$MLIP_CONFIG")
+fi
 
 # ── modules & venv (HydraGNN ROCm 7.2.0) ──────────────────────────────────────
 cd "$REPO"
@@ -78,18 +85,19 @@ echo "Nodes:     ${NNODES}  (=> ${NNODES}-way DFT concurrency, nodes_per_job=1)"
 echo "Repeat:    ${REP}  (AL_SEED=${AL_SEED})"
 echo "SCALE_TAG: ${SCALE_TAG}"
 echo "AL config: ${AL_CONFIG}"
+echo "MLIP:      ${MLIP_CONFIG:-$AL_CONFIG}"
 echo "Run dir:   ${RUN_DIR}"
 echo "=========================================="
 
 # ── run one AL iteration ──────────────────────────────────────────────────────
-matsim-agents al validate-config "$AL_CONFIG" >"$RUN_DIR/al-config.resolved.json" 2>&1 || {
+matsim-agents al validate-config "$AL_CONFIG" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"} >"$RUN_DIR/al-config.resolved.json" 2>&1 || {
   echo "[ERROR] config validation failed; see $RUN_DIR/al-config.resolved.json" >&2
   tail -n 30 "$RUN_DIR/al-config.resolved.json" >&2 || true
   exit 1
 }
 
 echo "[$(date)] Starting scaling point (N=${NNODES}) ..."
-matsim-agents al run "$AL_CONFIG" --log-level "${LOG_LEVEL:-INFO}" \
+matsim-agents al run "$AL_CONFIG" ${MLIP_ARGS[@]+"${MLIP_ARGS[@]}"} --log-level "${LOG_LEVEL:-INFO}" \
     2>&1 | tee "$RUN_DIR/scaling.log"
 
 echo "[$(date)] Scaling point N=${NNODES} complete. State under ${RUNS_ROOT}/${SCALE_TAG}."

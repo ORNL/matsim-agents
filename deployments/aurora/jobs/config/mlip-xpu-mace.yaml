@@ -1,0 +1,7 @@
+# Aurora XPU qualification: MACE-MP-0 small foundation model.
+mlip:
+  backend: mace
+  family: mace_mp
+  model: small
+  precision: fp32
+  device: xpu

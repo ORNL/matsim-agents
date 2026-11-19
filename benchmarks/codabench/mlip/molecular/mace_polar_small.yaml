@@ -1,0 +1,7 @@
+# MACE-Polar-1 small (Codabench baseline; output predictions/mace_polar_small/).
+mlip:
+  backend: mace
+  family: mace_polar
+  model: polar-1-s
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

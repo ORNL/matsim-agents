@@ -13,6 +13,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from matsim_agents.active_learning.config import ALConfig  # noqa: E402
+from matsim_agents.backends.mlip.arguments import (  # noqa: E402
+    add_mlip_arguments,
+    mlip_config_from_args,
+)
 from matsim_agents.campaign.acquisition import CampaignAcquisitionPolicy  # noqa: E402
 from matsim_agents.campaign.formula_execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
@@ -68,9 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--final-review", action="store_true")
     parser.add_argument(
         "--execution-mode",
-        choices=["dft", "uma-only"],
+        choices=["dft", "mlip-only"],
         default="dft",
+        help="mlip-only labels polymorphs with the selected MLIP, without DFT.",
     )
+    add_mlip_arguments(parser)
     parser.add_argument("--formulas-per-iteration", type=int, default=1)
     parser.add_argument(
         "--acquisition-mode",
@@ -139,11 +145,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--retrain", action="store_true")
     parser.add_argument("--approve-retraining", action="store_true")
     parser.add_argument(
-        "--train-script",
+        "--train-launcher",
         type=Path,
-        default=ROOT / "src" / "matsim_agents" / "training" / "finetune_uma.py",
+        help="Site launcher for the selected MLIP's fine-tuner (see trainer.train_launcher).",
     )
-    parser.add_argument("--train-launcher", type=Path)
     parser.add_argument("--train-epochs", type=int, default=5)
     parser.add_argument("--promote-model", action="store_true")
     parser.add_argument("--approve-model-promotion", action="store_true")
@@ -168,11 +173,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.execution_mode == "dft" and not args.approve_dft:
         parser.error("real campaign execution requires --approve-dft")
-    if args.execution_mode == "uma-only":
+    if args.execution_mode == "mlip-only":
         if args.approve_dft or args.dft_reference_structures or args.dft_method_signature:
-            parser.error("uma-only execution forbids all DFT approval and reference options")
+            parser.error("mlip-only execution forbids all DFT approval and reference options")
         if args.retrain or args.promote_model:
-            parser.error("uma-only execution forbids retraining and model promotion")
+            parser.error("mlip-only execution forbids retraining and model promotion")
     if args.retrain and not args.approve_retraining:
         parser.error("--retrain requires --approve-retraining")
     if args.promote_model and not args.retrain:
@@ -213,7 +218,13 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     campaign = CampaignState.load(args.campaign_state)
-    al_config = ALConfig.from_yaml(args.al_config)
+    mlip = mlip_config_from_args(parser, args)
+    al_config = ALConfig.from_yaml(args.al_config, mlip=mlip)
+    if args.retrain:
+        try:
+            al_config.mlip.check_fine_tunable()
+        except ValueError as error:
+            parser.error(f"--retrain: {error}")
     # An explicit --promotion-validation-reference-set overrides the AL config's.
     if args.promotion_validation_reference_set is None:
         args.promotion_validation_reference_set = al_config.trainer.validation_reference_set
@@ -339,7 +350,8 @@ def main(argv: list[str] | None = None) -> int:
     formula_runner = make_formula_runner(
         CampaignFormulaExecutionConfig(
             active_learning_config=args.al_config,
-            execution_mode=("uma_only" if args.execution_mode == "uma-only" else "dft"),
+            mlip=mlip,
+            execution_mode=("mlip_only" if args.execution_mode == "mlip-only" else "dft"),
             phase_policy=phase_policy,
             exploration_kwargs={
                 "n_random": args.n_random,
@@ -359,7 +371,6 @@ def main(argv: list[str] | None = None) -> int:
             surrogate_minimum_unique_unary=args.surrogate_minimum_unique_unary,
             retraining=(
                 CampaignRetrainingConfig(
-                    train_script=args.train_script,
                     train_launcher=args.train_launcher,
                     epochs=args.train_epochs,
                     promote_model=args.promote_model,

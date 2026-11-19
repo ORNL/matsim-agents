@@ -26,6 +26,9 @@
 # (hea-fcc-scaling-aurora-N<nodes>-r<rep>) so points never collide. REP/AL_SEED
 # randomize the workload per repeat (fixed across node counts within a repeat).
 #
+# MLIP_CONFIG (optional) is a YAML with an `mlip:` block that replaces the
+# config's HydraGNN model; the job activates the venv of its backend.
+#
 # Paths default to the checkout containing this script and are env-overridable:
 #   PROJECT_ROOT, RUNS_ROOT, HYDRAGNN_DIR.
 # ---------------------------------------------------------------------------
@@ -45,7 +48,7 @@ AL_CONFIG="${REPO}/examples/paper_cases/al_hea_fcc_scaling_aurora.yaml"
 [[ -f "${AL_CONFIG}" ]] || { echo "ERROR: missing ${AL_CONFIG}" >&2; exit 2; }
 
 # ── per-(N,repeat) run tag (consumed by the YAML via ${SCALE_TAG}) ───────────
-NNODES="$(sort -u "${PBS_NODEFILE:-/dev/null}" 2>/dev/null | wc -l)"
+NNODES="$(sort -u "${PBS_NODEFILE:-/dev/null}" 2>/dev/null | wc -l | tr -d '[:space:]')"
 [[ "${NNODES}" -ge 1 ]] || NNODES=1
 REP="${REP:-1}"
 export AL_SEED="${AL_SEED:-$((12 + REP))}"
@@ -53,13 +56,25 @@ export SCALE_TAG="hea-fcc-scaling-aurora-N${NNODES}-r${REP}"
 RUN_DIR="${RUNS_ROOT}/al-scaling-aurora-N${NNODES}-r${REP}-${PBS_JOBID:-$$}"
 mkdir -p "${RUN_DIR}"
 
-export MLIP_BACKEND="${MLIP_BACKEND:-hydragnn}"
 export DFT_BACKEND="${DFT_BACKEND:-vasp}"
+MLIP_ARGS=()
+if [[ -n "${MLIP_CONFIG:-}" ]]; then
+  [[ -f "${MLIP_CONFIG}" ]] || { echo "ERROR: MLIP config not found: ${MLIP_CONFIG}" >&2; exit 2; }
+  MLIP_CONFIG="$(cd "$(dirname "${MLIP_CONFIG}")" && pwd)/$(basename "${MLIP_CONFIG}")"
+  MLIP_ARGS=(--mlip-config "${MLIP_CONFIG}")
+fi
+source "${REPO}/deployments/perlmutter/setup/campaign-naming.sh"
+MLIP="$(campaign_mlip_backend "${REPO}" "${MATSIM_AURORA_VENV:-${REPO}/.venv}/bin/python" "${MLIP_CONFIG:-${AL_CONFIG}}")"
 
-# ── modules & venv ──────────────────────────────────────────────────────────
+# ── modules & venv (backend-specific) ───────────────────────────────────────
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
-VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
+case "${MLIP}" in
+  uma)  VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}" ;;
+  mace) VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}" ;;
+  *)    VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}" ;;
+esac
+[[ -f "${VENV}/bin/activate" ]] || { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 
@@ -77,19 +92,20 @@ echo "Nodes:     ${NNODES}  (=> ${NNODES}-way DFT concurrency, nodes_per_job=1)"
 echo "Repeat:    ${REP}  (AL_SEED=${AL_SEED})"
 echo "SCALE_TAG: ${SCALE_TAG}"
 echo "AL config: ${AL_CONFIG}"
+echo "MLIP:      ${MLIP} (${MLIP_CONFIG:-${AL_CONFIG}})"
 echo "Run dir:   ${RUN_DIR}"
 echo "=========================================="
 
 # ── run one AL iteration ────────────────────────────────────────────────────
 cd "${REPO}"
-matsim-agents al validate-config "${AL_CONFIG}" >"${RUN_DIR}/al-config.resolved.json" 2>&1 || {
+matsim-agents al validate-config "${AL_CONFIG}" "${MLIP_ARGS[@]}" >"${RUN_DIR}/al-config.resolved.json" 2>&1 || {
   echo "[ERROR] config validation failed; see ${RUN_DIR}/al-config.resolved.json" >&2
   tail -n 30 "${RUN_DIR}/al-config.resolved.json" >&2 || true
   exit 1
 }
 
 echo "[$(date)] Starting scaling point (N=${NNODES}) ..."
-matsim-agents al run "${AL_CONFIG}" --log-level "${LOG_LEVEL:-INFO}" \
+matsim-agents al run "${AL_CONFIG}" "${MLIP_ARGS[@]}" --log-level "${LOG_LEVEL:-INFO}" \
     2>&1 | tee "${RUN_DIR}/scaling.log"
 
 echo "[$(date)] Scaling point N=${NNODES} complete. State under ${RUNS_ROOT}/${SCALE_TAG}."

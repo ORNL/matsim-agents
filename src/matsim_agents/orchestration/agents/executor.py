@@ -11,21 +11,22 @@ import os
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
-from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
+from matsim_agents.backends.mlip.config import MLIPConfig, load_mlip_config, parse_mlip_config
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.orchestration.state import MatSimState
 
 
-def _cfg_or_env(
-    cfg: dict,
-    cfg_key: str,
-    env_key: str,
-    default: str | None = None,
-) -> str | None:
-    value = cfg.get(cfg_key)
-    if value is not None:
-        return str(value)
-    return os.environ.get(env_key, default)
+def _mlip_config(cfg: dict) -> MLIPConfig:
+    """The run's MLIP selection, or the mlip block named by MATSIM_MLIP_CONFIG."""
+    if cfg.get("mlip") is not None:
+        return parse_mlip_config(cfg["mlip"])
+    path = os.environ.get("MATSIM_MLIP_CONFIG")
+    if path:
+        return load_mlip_config(path)
+    raise ValueError(
+        "Missing MLIP selection. Pass --mlip-config or set MATSIM_MLIP_CONFIG to a YAML "
+        "file with an mlip block."
+    )
 
 
 def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> dict:
@@ -35,34 +36,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
-    mlip_backend = _cfg_or_env(cfg, "mlip_backend", "MATSIM_MLIP_BACKEND", "hydragnn")
-    logdir = _cfg_or_env(cfg, "logdir", "MATSIM_HYDRAGNN_LOGDIR")
-    hydragnn_branch_mlp_checkpoint = _cfg_or_env(
-        cfg,
-        "hydragnn_branch_mlp_checkpoint",
-        "HYDRAGNN_BRANCH_MLP_CHECKPOINT",
-    )
-    checkpoint = _cfg_or_env(cfg, "checkpoint", "MATSIM_HYDRAGNN_CHECKPOINT")
-    hydragnn_inference_head = _cfg_or_env(
-        cfg,
-        "hydragnn_inference_head",
-        "MATSIM_HYDRAGNN_INFERENCE_HEAD",
-    )
-
-    if mlip_backend == "hydragnn":
-        if not logdir:
-            raise ValueError(
-                "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
-            )
-        if (
-            not hydragnn_branch_mlp_checkpoint
-            and hydragnn_inference_head is None
-            and not has_declared_hydragnn_checkpoint(logdir)
-        ):
-            raise ValueError(
-                "Missing BranchWeightMLP checkpoint. Provide via run config or set "
-                "HYDRAGNN_BRANCH_MLP_CHECKPOINT."
-            )
+    mlip = _mlip_config(cfg)
 
     if task.kind != "relax":
         return {
@@ -72,24 +46,13 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
 
     args = RelaxStructureInput(
         structure_path=task.structure_path,
-        mlip_backend=mlip_backend,
-        logdir=logdir,
-        hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
-        hydragnn_inference_head=hydragnn_inference_head,
-        checkpoint=checkpoint,
-        uma_model_name=str(
-            cfg.get("uma_model_name") or os.environ.get("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1"
-        ),
-        uma_task=str(cfg.get("uma_task") or os.environ.get("MATSIM_UMA_TASK") or "omat"),
+        mlip=mlip,
         optimizer=task.optimizer,
         maxiter=task.maxiter,
         maxstep=task.maxstep,
         charge=task.charge,
         spin=task.spin,
         random_displacement=task.random_displacement,
-        precision=cfg.get("precision"),
-        mlp_precision=cfg.get("mlp_precision"),
-        mlp_device=cfg.get("mlp_device", "cuda"),
         output_dir=cfg.get("output_dir"),
     )
 

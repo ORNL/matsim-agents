@@ -9,12 +9,15 @@ from ase.filters import ExpCellFilter
 from ase.io import read, write
 from ase.optimize import FIRE
 
+from matsim_agents.backends.mlip.config import MACEConfig
 from matsim_agents.backends.mlip.relaxation import (
+    RelaxCalculator,
     RelaxStructureInput,
     _NumericalStressCalculator,
-    _RelaxCalculator,
     relax_with_mlip,
 )
+
+MACE_CPU = MACEConfig(device="cpu")
 
 
 class _ForcesOnlyEMT(EMT):
@@ -67,14 +70,13 @@ def _relax_emt(tmp_path, monkeypatch, **options):
     write(source, atoms)
     monkeypatch.setattr(
         "matsim_agents.backends.mlip.relaxation._relaxation_calculator",
-        lambda args: _RelaxCalculator(EMT(), 0, 0, None),
+        lambda args: RelaxCalculator(EMT(), 0, 0, None),
     )
     guard = options.pop("step_guard", None)
     result = relax_with_mlip(
         RelaxStructureInput(
             structure_path=str(source),
-            mlip_backend="mace",
-            mlp_device="cpu",
+            mlip=MACE_CPU,
             relax_cell=True,
             maxiter=2,
             relative_increase_threshold=100.0,
@@ -153,11 +155,11 @@ def test_in_plane_convergence_ignores_out_of_plane_stress(tmp_path, monkeypatch)
     write(source, bulk("Cu", "fcc", a=3.8, cubic=True))
     monkeypatch.setattr(
         "matsim_agents.backends.mlip.relaxation._relaxation_calculator",
-        lambda args: _RelaxCalculator(OutOfPlaneStress(), 0, 0, None),
+        lambda args: RelaxCalculator(OutOfPlaneStress(), 0, 0, None),
     )
     args = RelaxStructureInput(
         structure_path=str(source),
-        mlip_backend="mace",
+        mlip=MACE_CPU,
         relax_cell=True,
         cell_mask=(True, True, False, False, False, True),
         require_native_stress=True,
@@ -212,11 +214,11 @@ def test_native_stress_requirement_rejects_forces_only(tmp_path, monkeypatch):
     write(source, bulk("Cu", "fcc", a=3.8))
     monkeypatch.setattr(
         "matsim_agents.backends.mlip.relaxation._relaxation_calculator",
-        lambda args: _RelaxCalculator(_ForcesOnlyEMT(), 0, 0, None),
+        lambda args: RelaxCalculator(_ForcesOnlyEMT(), 0, 0, None),
     )
     args = RelaxStructureInput(
         structure_path=str(source),
-        mlip_backend="mace",
+        mlip=MACE_CPU,
         relax_cell=True,
         require_native_stress=True,
         output_dir=str(tmp_path),
@@ -249,7 +251,7 @@ def test_optional_force_growth_threshold(tmp_path, monkeypatch, threshold, steps
     write(source, atoms)
     monkeypatch.setattr(
         "matsim_agents.backends.mlip.relaxation._relaxation_calculator",
-        lambda args: _RelaxCalculator(GrowingForce(), 0, 0, None),
+        lambda args: RelaxCalculator(GrowingForce(), 0, 0, None),
     )
 
     def step(optimizer):
@@ -262,7 +264,7 @@ def test_optional_force_growth_threshold(tmp_path, monkeypatch, threshold, steps
         RelaxStructureInput(
             structure_path=str(source),
             output_dir=str(tmp_path),
-            mlip_backend="mace",
+            mlip=MACE_CPU,
             maxiter=3,
             relative_increase_threshold=threshold,
         )
@@ -276,11 +278,11 @@ def test_force_growth_rejects_invalid_threshold(threshold):
     with pytest.raises(ValueError):
         RelaxStructureInput(
             structure_path="input.extxyz",
-            mlip_backend="mace",
+            mlip=MACE_CPU,
             relative_increase_threshold=threshold,
         )
 
 
 def test_force_growth_default():
-    args = RelaxStructureInput(structure_path="input.extxyz", mlip_backend="mace")
+    args = RelaxStructureInput(structure_path="input.extxyz", mlip=MACE_CPU)
     assert args.relative_increase_threshold == 0.2

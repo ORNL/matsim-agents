@@ -261,7 +261,7 @@ def test_worker_times_cached_calculator_and_synchronizes(tmp_path, monkeypatch):
         "structure": row.model_dump(mode="json"),
         "mode": "inference",
         "result_path": str(tmp_path / "result.json"),
-        "args": {"structure_path": str(path), "mlip_backend": "mace", "mlp_device": "xpu"},
+        "args": {"structure_path": str(path), "mlip": {"backend": "mace", "device": "xpu"}},
         "submitted_at": 0,
     }
     first, second = worker_task(payload), worker_task(payload)
@@ -527,7 +527,7 @@ def test_pilot_resource_cap_retains_partial_relaxation(tmp_path, monkeypatch):
     directory.mkdir()
     result = pilot.bounded_relaxation(
         {"path": str(path), "structure_id": "test"},
-        {"mlip_backend": "mace", "mlp_device": "xpu"},
+        {"mlip": {"backend": "mace", "device": "xpu"}},
         directory,
         deadline=0,
     )

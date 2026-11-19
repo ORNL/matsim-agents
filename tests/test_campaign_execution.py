@@ -11,7 +11,12 @@ from ase.io import read, write
 from pydantic import ValidationError
 
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import (
+    HydraGNNConfig,
+    MACEConfig,
+    UMAConfig,
+    parse_mlip_config,
+)
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.formula_execution import (
     CampaignDFTRefinementConfig,
@@ -96,10 +101,9 @@ def _config_yaml(tmp_path, pseudopotentials: str) -> str:
     return f"""
 mlip:
   backend: uma
-  uma:
-    model_name: uma-s-1p1
-    task_name: omat
-    device: cuda
+  model_name: uma-s-1p1
+  task_name: omat
+  device: cuda
 md:
   seed_source:
     kind: paths
@@ -764,9 +768,44 @@ def test_perturbation_robustness_records_each_seed(tmp_path):
     assert evidence["robust_fraction"] == 1.0
 
 
-def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp_path):
+_MLIP_SELECTIONS = {
+    "uma": {"backend": "uma", "model_name": "uma-m-1p1", "device": "cpu"},
+    "mace": {
+        "backend": "mace",
+        "family": "mace_mp",
+        "model": "mh-1",
+        "head": "omat_pbe",
+        "device": "cpu",
+    },
+    "hydragnn": {
+        "backend": "hydragnn",
+        "logdir": "/models/hydragnn-logdir",
+        "mlp_checkpoint": "/models/branch.pt",
+        "device": "cpu",
+    },
+}
+
+_MODEL_REFERENCES = {
+    "uma": "uma-m-1p1",
+    "mace": "mh-1:omat_pbe",
+    "hydragnn": "/models/hydragnn-logdir",
+}
+
+
+@pytest.mark.parametrize("backend", ["uma", "mace", "hydragnn"])
+def test_mlip_only_execution_labels_polymorphs_with_any_backend(tmp_path, backend):
+    """One AL config drives an MLIP-only campaign with whichever backend ``mlip=`` selects."""
+    from ase.calculators.emt import EMT
+
+    scored_backends = []
+
+    def calculator(mlip_cfg, **_kwargs):
+        scored_backends.append(mlip_cfg.backend)
+        return EMT()
+
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    selected = parse_mlip_config(_MLIP_SELECTIONS[backend])
     structure = tmp_path / "NbO2.extxyz"
     write(
         structure,
@@ -782,9 +821,11 @@ def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp
         num_steps=4,
         converged=True,
     )
+    exploration_kwargs = []
 
     def phase_runner(formula, *, policy, **kwargs):
         assert policy.active_learning is False
+        exploration_kwargs.append(kwargs["exploration_kwargs"])
         composition = parse_composition(formula)
         assert composition is not None
         return PhaseExplorationWorkflowResult(
@@ -804,24 +845,30 @@ def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp
         )
 
     def forbidden(*args, **kwargs):
-        raise AssertionError("UMA-only execution invoked a forbidden DFT/AL path")
+        raise AssertionError("MLIP-only execution invoked a forbidden DFT/AL path")
 
     result = run_formula_with_active_learning(
         "NbO2",
         str(tmp_path / "formula"),
         config=CampaignFormulaExecutionConfig(
             active_learning_config=config_path,
-            execution_mode="uma_only",
+            mlip=_MLIP_SELECTIONS[backend],
+            execution_mode="mlip_only",
             phase_policy=PhaseExplorationPolicy(active_learning=False),
         ),
         al_runner=forbidden,
         phase_runner=phase_runner,
         relaxation_runner=forbidden,
+        calculator_factory=calculator,
     )
 
+    assert exploration_kwargs[0]["mlip"] == selected
+    assert scored_backends == [backend]
     evidence = result.active_learning_result
     assert evidence is not None
-    assert evidence["execution_mode"] == "uma_only"
+    assert evidence["execution_mode"] == "mlip_only"
+    assert evidence["backend"] == backend
+    assert evidence["model_identifier"] == _MODEL_REFERENCES[backend]
     assert evidence["evidence_level"] == "mlip_prediction"
     assert evidence["n_dft_calculations"] == 0
     assert evidence["mlip_labels"] == [
@@ -838,43 +885,20 @@ def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp
     ]
 
 
-def test_uma_only_execution_rejects_dft_or_active_learning_configuration(tmp_path):
+def test_mlip_only_execution_rejects_dft_or_active_learning_configuration(tmp_path):
     config_path = tmp_path / "al.yaml"
     config_path.touch()
     with pytest.raises(ValueError, match="disables active learning"):
         CampaignFormulaExecutionConfig(
             active_learning_config=config_path,
-            execution_mode="uma_only",
+            execution_mode="mlip_only",
             phase_policy=PhaseExplorationPolicy(active_learning=True, dft_approved=True),
-        )
-
-
-def test_uma_only_execution_rejects_non_uma_backend(tmp_path, monkeypatch):
-    config_path = tmp_path / "al.yaml"
-    config_path.touch()
-    monkeypatch.setattr(
-        "matsim_agents.campaign.formula_execution.ALConfig.from_yaml",
-        lambda path: SimpleNamespace(mlip=SimpleNamespace(backend="mace")),
-    )
-
-    with pytest.raises(ValueError, match="requires mlip.backend='uma'"):
-        run_formula_with_active_learning(
-            "NbO2",
-            str(tmp_path / "formula"),
-            config=CampaignFormulaExecutionConfig(
-                active_learning_config=config_path,
-                execution_mode="uma_only",
-                phase_policy=PhaseExplorationPolicy(active_learning=False),
-            ),
-            phase_runner=lambda *args, **kwargs: pytest.fail("phase runner was invoked"),
         )
 
 
 def test_dft_ranking_after_promotion_requires_post_training_reexploration(tmp_path):
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     validation_set = tmp_path / "validation.extxyz"
     validation_set.touch()
 
@@ -893,7 +917,6 @@ def test_dft_ranking_after_promotion_requires_post_training_reexploration(tmp_pa
                     promotion_approved=True,
                 ),
                 retraining=CampaignRetrainingConfig(
-                    train_script=train_script,
                     promote_model=True,
                     promotion_approved=True,
                     validation_set=validation_set,
@@ -923,10 +946,9 @@ def _vasp_config_yaml(tmp_path) -> str:
     return f"""
 mlip:
     backend: uma
-    uma:
-        model_name: uma-s-1p1
-        task_name: omat
-        device: cuda
+    model_name: uma-s-1p1
+    task_name: omat
+    device: cuda
 md:
     seed_source:
         kind: paths
@@ -1008,8 +1030,9 @@ def test_formula_execution_rewrites_al_template_and_reports_usage(tmp_path):
         active_learning_runner,
     ):
         assert policy.active_learning
-        assert exploration_kwargs["mlip_backend"] == "uma"
-        assert exploration_kwargs["uma_model_name"] == "uma-s-1p1"
+        assert exploration_kwargs["mlip"] == UMAConfig(
+            model_name="uma-s-1p1", task_name="omat", device="cuda"
+        )
         al_result = active_learning_runner(
             formula, output_dir, False, policy.promote_model, policy.promotion_approved
         )
@@ -1143,8 +1166,6 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
         "Nb2O4": -42.0,
     }
     observed_settings = []
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     promotion_validation_set = tmp_path / "promotion-validation.extxyz"
     promotion_validation_set.touch()
 
@@ -1251,7 +1272,6 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
                 promotion_approved=True,
             ),
             retraining=CampaignRetrainingConfig(
-                train_script=train_script,
                 promote_model=True,
                 promotion_approved=True,
                 validation_set=promotion_validation_set,
@@ -1667,8 +1687,6 @@ def test_formula_execution_applies_retraining_and_promotion(
         _config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"),
         encoding="utf-8",
     )
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     validation_set = tmp_path / "held-out.extxyz"
     validation_set.touch()
     checkpoint = tmp_path / "promoted" / "inference_ckpt.pt"
@@ -1709,7 +1727,7 @@ def test_formula_execution_applies_retraining_and_promotion(
         return _empty_result(formula, al_result)
 
     def capture_cross_model(_exploration, configs, **_kwargs):
-        observed["post_promotion_model"] = configs[0].mlip.uma.model_name
+        observed["post_promotion_model"] = configs[0].mlip.model_name
         return {"models": {}, "ranking_disagreement": False, "rankings": {}}
 
     monkeypatch.setattr(execution, "_cross_model_scores", capture_cross_model)
@@ -1729,7 +1747,6 @@ def test_formula_execution_applies_retraining_and_promotion(
                 retraining_approved=True,
             ),
             retraining=CampaignRetrainingConfig(
-                train_script=train_script,
                 epochs=3,
                 promotion_min_relative_improvement=0.1,
                 promote_model=True,
@@ -1743,6 +1760,7 @@ def test_formula_execution_applies_retraining_and_promotion(
     )
 
     assert observed["trainer"]["enabled"] is True
+    assert "train_script" not in observed["trainer"]
     assert observed["trainer"]["epochs_per_iter"] == 3
     assert "promotion_max_relative_regression" not in observed["trainer"]
     assert observed["trainer"]["promotion_min_relative_improvement"] == 0.1
@@ -1752,8 +1770,11 @@ def test_formula_execution_applies_retraining_and_promotion(
     )
     assert observed["trainer"]["validation_fraction"] == validation_fraction
     assert result.model_promoted is True
+    assert result.active_learning_result["promoted_model_path"] == str(checkpoint)
     assert result.active_learning_result["exploration_kwargs"] == {
-        "uma_model_name": str(checkpoint)
+        "mlip": UMAConfig(model_name=str(checkpoint), task_name="omat", device="cuda").model_dump(
+            mode="json"
+        )
     }
     assert result.active_learning_result["md_candidate_uncertainty"] == {"md-001": 0.75}
     assert result.active_learning_result["candidate_uncertainty"] == {}
@@ -1765,46 +1786,34 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 
     promoted = tmp_path / "promoted-model"
     cfg = SimpleNamespace(
-        mlip=MLIPConfig(
-            backend="hydragnn",
-            hydragnn=HydraGNNConfig(
-                logdir=tmp_path / "incumbent",
-                checkpoint="incumbent.pk",
-            ),
-        )
+        mlip=HydraGNNConfig(logdir=tmp_path / "incumbent", checkpoint="incumbent.pk")
     )
 
     execution._apply_model_override(cfg, str(promoted))
 
-    assert cfg.mlip.hydragnn.logdir == promoted
-    assert cfg.mlip.hydragnn.checkpoint is None
-    assert _exploration_kwargs(cfg, {})["checkpoint"] is None
+    assert cfg.mlip.logdir == promoted
+    assert cfg.mlip.checkpoint is None
+    assert _exploration_kwargs(cfg, {})["mlip"].checkpoint is None
 
 
 def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
-    cfg = SimpleNamespace(
-        mlip=MLIPConfig(
-            backend="mace",
-            mace=MACEConfig(family="mace_mp", model="medium", dispersion=True),
-        )
-    )
+    cfg = SimpleNamespace(mlip=MACEConfig(family="mace_mp", model="medium", dispersion=True))
 
     import matsim_agents.campaign.formula_execution as execution
 
     execution._apply_model_override(cfg, str(tmp_path / "promoted.model"))
 
-    assert cfg.mlip.mace.family == "checkpoint"
-    assert cfg.mlip.mace.dispersion is False
-    assert _exploration_kwargs(cfg, {})["mace_dispersion"] is False
+    assert cfg.mlip.family == "checkpoint"
+    assert cfg.mlip.dispersion is False
+    assert _exploration_kwargs(cfg, {})["mlip"].dispersion is False
 
 
 def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path):
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
         _config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}").replace(
-            "backend: uma\n  uma:\n    model_name: uma-s-1p1\n"
-            "    task_name: omat\n    device: cuda",
-            "backend: mace\n  mace:\n    family: mace_mp\n    model: medium\n    device: cuda",
+            "backend: uma\n  model_name: uma-s-1p1\n  task_name: omat\n  device: cuda",
+            "backend: mace\n  family: mace_mp\n  model: medium\n  device: cuda",
         ),
         encoding="utf-8",
     )
@@ -1834,8 +1843,6 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
         observed.update(result["exploration_kwargs"])
         return _empty_result(formula, result)
 
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     validation_set = tmp_path / "validation.extxyz"
     validation_set.touch()
     run_formula_with_active_learning(
@@ -1850,7 +1857,6 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
                 retraining_approved=True,
             ),
             retraining=CampaignRetrainingConfig(
-                train_script=train_script,
                 promote_model=True,
                 promotion_approved=True,
                 validation_set=validation_set,
@@ -1860,26 +1866,22 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
         phase_runner=phase_runner,
     )
 
-    assert observed == {
-        "mace_family": "checkpoint",
-        "mace_model": str(checkpoint),
-        "mace_dispersion": False,
-    }
+    promoted = observed["mlip"]
+    assert promoted["backend"] == "mace"
+    assert promoted["family"] == "checkpoint"
+    assert promoted["model"] == str(checkpoint)
+    assert promoted["dispersion"] is False
 
 
 def test_retraining_rejects_unapproved_promotion(tmp_path):
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     with pytest.raises(ValueError, match="promotion requires explicit approval"):
-        CampaignRetrainingConfig(train_script=train_script, promote_model=True)
+        CampaignRetrainingConfig(promote_model=True)
 
 
 @pytest.mark.parametrize("controls", [(False, True), (True, False)])
 def test_campaign_callback_rejects_promotion_control_mismatch_before_al(tmp_path, controls):
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"))
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     calls = []
 
     def phase_runner(formula, *, output_dir, active_learning_runner, **_kwargs):
@@ -1900,7 +1902,6 @@ def test_campaign_callback_rejects_promotion_control_mismatch_before_al(tmp_path
                     promotion_approved=True,
                 ),
                 retraining=CampaignRetrainingConfig(
-                    train_script=train_script,
                     promote_model=True,
                     promotion_approved=True,
                     validation_fraction=0.2,
@@ -1913,15 +1914,10 @@ def test_campaign_callback_rejects_promotion_control_mismatch_before_al(tmp_path
 
 
 def test_retraining_requires_held_out_promotion_data(tmp_path):
-    train_script = tmp_path / "train.py"
-    train_script.touch()
     with pytest.raises(ValueError, match="requires a held-out"):
-        CampaignRetrainingConfig(
-            train_script=train_script, promote_model=True, promotion_approved=True
-        )
+        CampaignRetrainingConfig(promote_model=True, promotion_approved=True)
     with pytest.raises(ValueError, match="mutually exclusive"):
         CampaignRetrainingConfig(
-            train_script=train_script,
             validation_set=tmp_path / "held-out.extxyz",
             validation_fraction=0.2,
         )
@@ -1961,23 +1957,7 @@ def test_dft_refinement_rejects_legacy_reference_inputs():
 def test_hydragnn_model_identifier_includes_checkpoint(tmp_path):
     def config(checkpoint):
         return SimpleNamespace(
-            mlip=SimpleNamespace(
-                backend="hydragnn",
-                uma=None,
-                mace=None,
-                hydragnn=SimpleNamespace(
-                    logdir=tmp_path / "model",
-                    checkpoint=checkpoint,
-                    inference_head=None,
-                    hydragnn_branch_mlp_checkpoint=None,
-                    newhead_ft_config=None,
-                    radius=None,
-                    max_neighbours=None,
-                    charge=0.0,
-                    spin=0.0,
-                    precision=None,
-                ),
-            )
+            mlip=HydraGNNConfig(logdir=tmp_path / "model", checkpoint=checkpoint)
         )
 
     assert _model_identifier(config("best.pt")) != _model_identifier(config("latest.pt"))
@@ -1985,31 +1965,15 @@ def test_hydragnn_model_identifier_includes_checkpoint(tmp_path):
 
 
 def test_model_identifier_includes_calculator_settings(tmp_path):
-    base = SimpleNamespace(
-        mlip=MLIPConfig(
-            backend="uma",
-            uma=UMAConfig(model_name="uma-s-1p1", task_name="omat"),
+    for base, change in [
+        (UMAConfig(model_name="uma-s-1p1", task_name="omat"), {"precision": "fp64"}),
+        (MACEConfig(family="mace_mp", model="medium"), {"dispersion": True}),
+        (HydraGNNConfig(logdir=tmp_path / "hydragnn", checkpoint="best.pt"), {"radius": 6.0}),
+    ]:
+        changed = base.model_copy(update=change)
+        assert _model_identifier(SimpleNamespace(mlip=base)) != _model_identifier(
+            SimpleNamespace(mlip=changed)
         )
-    )
-
-    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
-    changed.mlip.uma.precision = "fp64"
-    assert _model_identifier(base) != _model_identifier(changed)
-
-    base.mlip.backend = "mace"
-    base.mlip.mace = MACEConfig(family="mace_mp", model="medium")
-    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
-    changed.mlip.mace.dispersion = True
-    assert _model_identifier(base) != _model_identifier(changed)
-
-    base.mlip.backend = "hydragnn"
-    base.mlip.hydragnn = HydraGNNConfig(
-        logdir=tmp_path / "hydragnn",
-        checkpoint="best.pt",
-    )
-    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
-    changed.mlip.hydragnn.radius = 6.0
-    assert _model_identifier(base) != _model_identifier(changed)
 
 
 def test_relaxation_energy_ranking_normalizes_cell_size(tmp_path):
