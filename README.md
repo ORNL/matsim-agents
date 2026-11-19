@@ -1,6 +1,10 @@
 # matsim-agents
 
-[<img src="matsim-agents-qr.png" alt="QR code linking to the matsim-agents GitHub repository" width="200">](https://github.com/ORNL/matsim-agents)
+<img src="assets/matsim-agents-logo-wide.png" alt="MATSIM-AGENTS logo" width="800">
+
+| Logo mark | Repository QR code |
+|:--:|:--:|
+| <img src="assets/matsim-agents-logo-mark.png" alt="MATSIM-AGENTS symbol" width="180"> | [<img src="matsim-agents-qr.png" alt="QR code linking to the matsim-agents GitHub repository" width="180">](https://github.com/ORNL/matsim-agents) |
 
 **Multi-agent AI framework for atomistic materials simulation and discovery.**
 
