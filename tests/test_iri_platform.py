@@ -108,10 +108,10 @@ def test_request_overrides_facility_queue_and_account():
     assert "gpu_cores_per_process" not in spec["resources"]
 
 
-def test_submit_generates_idempotency_key():
+def test_submit_omits_idempotency_key_by_default():
     transport = FakeTransport([(200, {"id": "1"})])
     frontier(transport).submit(["true"], resources=ResourceRequest(), workdir="/tmp")
-    assert transport.calls[0]["headers"]["Idempotency-Key"]
+    assert "Idempotency-Key" not in transport.calls[0]["headers"]
 
 
 def test_submit_without_job_id_raises():

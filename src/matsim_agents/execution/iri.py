@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -262,11 +261,10 @@ class IRIPlatform:
         """Launch *command* on the facility compute resource and return the job id."""
 
         spec = self.job_spec(command, resources=resources, workdir=workdir, env=env)
+        # OLCF S3M returns 501 for Idempotency-Key unless it has an idempotency store.
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
         response = self._request(
-            "POST",
-            self._resource_path("compute/job"),
-            payload=spec,
-            extra_headers={"Idempotency-Key": idempotency_key or str(uuid.uuid4())},
+            "POST", self._resource_path("compute/job"), payload=spec, extra_headers=headers
         )
         job_id = (response or {}).get("id") or (response or {}).get("job_id")
         if not job_id:
