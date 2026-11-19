@@ -30,8 +30,6 @@ from matsim_agents.cli.options import (
     opt_uq_top_weight_threshold,
     path_or_none,
 )
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState
 
 
 def _build_run_config(
@@ -131,6 +129,9 @@ def run(
     ),
 ):
     """Run the planner -> executor -> analyst graph for a given objective."""
+    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.orchestration.state import MatSimState
+
     graph = build_graph()
     state = MatSimState(
         objective=objective,
@@ -172,10 +173,25 @@ def run(
 
 
 @app.command()
-def plan(objective: str):
-    """Run the planner only and print the proposed task list as JSON."""
+def plan(
+    objective: str,
+    as_json: bool = typer.Option(False, "--json", help="Print the task list as JSON."),
+):
+    """Run the planner only and print the proposed task list."""
     from matsim_agents.orchestration.agents.planner import planner_node
+    from matsim_agents.orchestration.state import MatSimState
 
     state = MatSimState(objective=objective)
     out = planner_node(state)
-    console.print_json(json.dumps([t.model_dump() for t in out["plan"]]))
+    if as_json:
+        console.print_json(json.dumps([t.model_dump() for t in out["plan"]]))
+        return
+    console.print(f"Planned {len(out['plan'])} task(s) for: {objective}", markup=False)
+    for index, task in enumerate(out["plan"], 1):
+        console.print(
+            f"  {index}. {task.kind} {task.structure_path} "
+            f"({task.optimizer}, maxiter={task.maxiter})",
+            markup=False,
+            soft_wrap=True,
+        )
+    console.print("Nothing was executed. Use `matsim-agents run` to execute the objective.")

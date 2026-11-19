@@ -12,7 +12,22 @@ Subpackages (see ``docs/architecture.md`` for the full layer description):
     - cli: ``matsim-agents`` command-line interface
 """
 
-from matsim_agents.orchestration.state import MatSimState
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 __all__ = ["MatSimState", "__version__"]
 __version__ = "0.1.0"
+
+
+def __getattr__(name: str) -> Any:
+    # Deferred: the state module imports LangGraph, which is slow to load.
+    if name == "MatSimState":
+        from matsim_agents.orchestration.state import MatSimState
+
+        return MatSimState
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+if TYPE_CHECKING:
+    from matsim_agents.orchestration.state import MatSimState

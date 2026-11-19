@@ -44,7 +44,7 @@ The fixed qualification deck contains four workflows / eight VASP invocations, c
 
 ### Runtime and Licensed Inputs
 
-The intended platform is Aurora PBS on Intel Data Center GPU Max/PVC. The exact configured executable is `external/vasp6/src/vasp.6.6.1/bin/vasp_std`, SHA-256 `ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552`, ELF Build ID `c5b42590e997f741d6c32cf8ed0ef4f7c06e17c1`. It was fingerprinted but not executed. The launcher loads `oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`. See [vasp_runtime_manifest.json](../research/nb-ta-o/pilot/vasp_runtime_manifest.json) for the hash record.
+The intended platform is Aurora PBS on Intel Data Center GPU Max/PVC. The exact configured executable is `external/vasp6/src/vasp.6.6.1/bin/vasp_std`, SHA-256 `ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552`, ELF Build ID `c5b42590e997f741d6c32cf8ed0ef4f7c06e17c1`. It was fingerprinted but not executed. The launcher loads `oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`. See [vasp_runtime_manifest.json](../../research/nb-ta-o/pilot/vasp_runtime_manifest.json) for the hash record.
 
 The selected POSCAR/POTCAR component order is `Nb_pv`, `Ta_pv`, `O`, with local component hashes respectively `086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114`, `ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa`, and `8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64`. The user approved using these exact files from the VASP source tree. The approval and local hashes do not independently establish a homogeneous official release identifier; do not claim that provenance is verified. No POTCAR bytes are tracked in Git; assembled copies remain only in external run directories.
 

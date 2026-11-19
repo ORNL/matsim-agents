@@ -400,7 +400,12 @@ def test_cli_reports_an_invalid_contract_without_calculating(system, tmp_path):
     )
     result = CliRunner().invoke(app, ["characterize", str(path)])
     assert result.exit_code == 1
-    assert '"invalid_protocol"' in result.output
+    assert "Characterization cli (thermodynamic_stability): invalid_protocol" in result.output
+    assert "Missing:" in result.output or "Limitation:" in result.output
+
+    as_json = CliRunner().invoke(app, ["characterize", str(path), "--json"])
+    assert as_json.exit_code == 1
+    assert json.loads(as_json.stdout)["status"] == "invalid_protocol"
 
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "characterization"

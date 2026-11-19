@@ -134,7 +134,7 @@ def test_legacy_dry_run_skips_seed_only_materials_without_splitting(
         "benchmarks/e3/run.py",
         "benchmarks/e3/README.md",
         "research/paper/e3/README.md",
-        "docs/e3-vasp-primary-design.md",
+        "docs/project/e3-vasp-primary-design.md",
     ],
 )
 def test_no_obsolete_strategy_labels(path):

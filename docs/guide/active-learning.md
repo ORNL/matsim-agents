@@ -1,0 +1,171 @@
+# Active learning (HydraGNN and DFT)
+
+## Active-learning loop (HydraGNN ↔ DFT)
+
+The `matsim-agents al` subcommand runs an end-to-end active-learning loop
+that grows a HydraGNN training set from DFT labels of structures the
+current model is most uncertain about. Both **VASP 6.6** and **Quantum
+ESPRESSO `pw.x`** are supported as the labeller — the choice is a single
+YAML field.
+
+```
+  HydraGNN MLFF ── MD ──► candidates ────────────────────────────────────┐
+        ▲                       │                                            │
+        │                       ▼                                            │
+        │             ensemble / MC-dropout                                   │
+        │             uncertainty + diversity                                 │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             top-K most informative                                  │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             DFT backend (parallel, in-allocation)                   │
+        │             vasp_std  │  pw.x  (one toggle)                         │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             dataset.extxyz / dataset.db  (tagged with backend)      │
+        │                       │                                            │
+        │                       ├── default: retain validated labels          │
+        │                       ▼                                            │
+        └─ optional train + approved promotion ── next iteration ────────────┘
+```
+
+### Quick start
+
+```bash
+# 1. Edit the templated example, or override via env vars at runtime
+export PROJ_ROOT=$PWD
+export RUNS_ROOT=/lustre/orion/<proj>/scratch/$USER/runs
+export RUN_TAG=al-mptrj-001
+export DFT_BACKEND=qe          # or: vasp
+
+# 2. Validate the resolved config (no run)
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+
+# 3. Submit on Frontier
+sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
+    -N 64 -t 12:00:00 \
+    deployments/frontier/launchers/run-active-learning-frontier.sh
+```
+
+### Backend toggle
+
+The example YAML carries both backend sub-blocks; flip `dft.backend:` to
+select one. The unused sub-block is ignored.
+
+```yaml
+dft:
+  backend: ${DFT_BACKEND:-vasp}    # vasp | qe
+  vasp:
+    vasp_bin: ${VASP_BIN}
+    potcar_dir: ${POTCAR_DIR}
+    incar_template: ${PROJ_ROOT}/examples/active_learning/INCAR.template
+  qe:
+    pw_bin: ${PW_BIN}
+    pseudo_dir: ${PSEUDO_DIR}
+    pw_template: ${PROJ_ROOT}/examples/active_learning/pw.template
+```
+
+### Variable substitution in YAMLs
+
+All AL example configs use shell-style placeholders that are expanded
+at load time by `ALConfig.from_yaml`:
+
+| Syntax                  | Meaning                                          |
+| ----------------------- | ------------------------------------------------ |
+| `${VAR}`                | required; raises if unset                        |
+| `${VAR:-default}`       | falls back to `default` if unset                 |
+| `${VAR:?error message}` | aborts with `error message`                      |
+
+Resolution order: (1) `os.environ`, (2) optional top-level `vars:`
+block in the YAML itself. Nested references inside `vars:` resolve
+iteratively, so `VASP_BIN: ${PROJ_ROOT}/external/.../vasp_std` just
+works. The `vars:` block is consumed before pydantic validation and
+never appears in the parsed `ALConfig`.
+
+### Seed sources for MD
+
+`md.seed_source.kind` selects how initial MD structures are obtained:
+
+- `paths` — a curated list of POSCAR / CIF / XYZ files on disk.
+- `prompt` — the LLM proposes plausible compositions for a target
+  objective (e.g. *“Pb-free halide perovskites for PV”*) and the loop
+  materialises seed structures by running the same crystal-prototype
+  enumerator used by the discovery wrapper. No curated structure
+  collection is required.
+
+### Energy-reference warning
+
+VASP PAW totals and QE pseudopotential totals are **not** directly
+comparable. Every frame written to the dataset is tagged with
+`info["dft_backend"]`; never train one HydraGNN model on a mixed
+VASP+QE dataset without an explicit per-backend energy offset.
+
+### Energy comparison and promotion
+
+For each method `m`, the comparison uses:
+
+```text
+formation_energy_m = (compound_total_m - sum_i(n_i * elemental_energy_per_atom_m[i])) / N
+```
+
+Each MLIP first evaluates the same fixed elemental geometries supplied with
+the test. Its compound totals subtract **its own predictions**, while DFT
+totals subtract **DFT elemental energies**. Do not subtract DFT references
+from raw MLIP totals. O2 and other molecular references are divided by their
+actual atom count. References are not independently relaxed by each model.
+
+Use this for held-out evaluation of incumbent/candidate models and promotion:
+
+```yaml
+trainer:
+  # Add these to an otherwise valid training configuration.
+  compare_after_training: true
+  validation_set: /path/to/held-out.extxyz
+  validation_reference_set: /path/to/elemental_references.json
+  promotion_max_energy_mae_eV_per_atom: 0.1
+```
+
+Promotion still requires its separate approval flags and force/regression
+checks. `promotion_max_energy_mae_eV_per_atom` now limits
+`formation_energy_mae_eV_per_atom`, not compound-fitted energy offsets.
+Recalibrate historical thresholds on real held-out data; the value above is
+an example, not a scientifically qualified recommendation.
+
+For standalone energy evaluation:
+
+```bash
+python -m matsim_agents.active_learning.evaluate \
+  --al-config /path/to/al-config.yaml \
+  --test-set /path/to/held-out.extxyz \
+  --elemental-reference-manifest /path/to/elemental_references.json \
+  --out-json /path/to/metrics.json
+```
+
+Raw energy errors and elemental-baseline errors remain diagnostic outputs,
+alongside force errors. Force-only evaluation needs no elemental manifest.
+Training without model comparison, MD acquisition, within-method
+fixed-composition ranking, and method-specific hull construction are unchanged.
+Formation subtraction does not authorize pooling incompatible DFT methods
+into a training dataset or hull.
+
+The caller must supply converged pure-element DFT calculations; these
+evaluators do not launch them. Campaign comparisons check coverage and the
+DFT method signature before candidate training. Separate DFT protocols require
+separate matching manifests, even when the comparison geometries are identical.
+File-based energy comparisons and promotion require a matching compound
+`*.extxyz.manifest.json` sidecar containing the data hash, DFT backend, and
+method signature; missing metadata is an error. Fine-tune/evaluation propagates
+verified method metadata into newly generated train/test split sidecars.
+Campaign AL training accumulates within each formula's dataset across iterations
+and restarts. Existing train/held-out assignments never change. Small batches
+are retained, with training and promotion explicitly deferred until the
+cumulative training and validation partitions meet their minimum sizes;
+there is no automatic pooling across formulas or increase in DFT selection.
+See [the manifest schema and compatibility checks](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
+
+Full walkthrough — including templated INCAR / `pw.in` files, in-allocation
+launcher details, and per-backend ROCm/MPI gotchas — lives in
+[`examples/active_learning/README.md`](../../examples/active_learning/README.md).
+
+---

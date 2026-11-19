@@ -48,6 +48,7 @@ def ledger_show(
     hypothesis: str | None = typer.Option(
         None, "--hypothesis", help="Print every revision of this hypothesis instead."
     ),
+    as_json: bool = typer.Option(False, "--json", help="Print the full summary as JSON."),
 ):
     """Print a summary: record counts and the current revision of every hypothesis."""
 
@@ -61,4 +62,21 @@ def ledger_show(
             raise typer.Exit(code=1)
         console.print_json(json.dumps(history))
         return
-    console.print_json(json.dumps(opened.summary()))
+    summary = opened.summary()
+    if as_json:
+        console.print_json(json.dumps(summary))
+        return
+    console.print(
+        f"{summary['path']}: {summary['records']} record(s), "
+        f"{summary['evidence']} evidence, {summary['decisions']} decision(s)",
+        markup=False,
+    )
+    for name, current in summary["hypotheses"].items():
+        support = f", support={current['support_level']}" if current["support_level"] else ""
+        console.print(
+            f"  {name}: {current['status']}{support} "
+            f"(revision {current['revisions']}, {len(current['evidence_ids'])} evidence)",
+            markup=False,
+        )
+        console.print(f"    {current['claim']}", markup=False, soft_wrap=True)
+    console.print("Use --hypothesis NAME for its full history, or --json for every field.")

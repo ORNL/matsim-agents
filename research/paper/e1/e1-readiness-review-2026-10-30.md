@@ -56,7 +56,7 @@ The current owner-only file and its digest provide a controlled copy, not a clea
 
 ## E1-E4 and Manuscript Contributions
 
-The table separates source-code or deployment support from scientific evaluation. The live manuscript is `research/paper/manuscript/main.tex`; planned scopes and evidence restrictions are in `docs/numerical-results-run-plan.md`.
+The table separates source-code or deployment support from scientific evaluation. The live manuscript is `research/paper/manuscript/main.tex`; planned scopes and evidence restrictions are in `docs/project/numerical-results-run-plan.md`.
 
 | Contribution | Evaluation mapping | Evidence status |
 |---|---|---|
