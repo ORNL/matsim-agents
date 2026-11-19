@@ -437,7 +437,7 @@ def _evaluate(
     out_json.write_text(json.dumps(asdict(metrics), indent=2))
     np.savez_compressed(
         out_json.with_name(out_json.stem + "_parity.npz"),
-        **_subsample(parity, max_parity_points),
+        **_subsample(parity, max_parity_points, seed=stream_seed(seed, "parity-plot")),
     )
     log.info(
         "%s %s on %s: raw_E_MAE=%.4f (formation %.4f) eV/atom  F_MAE=%.4f eV/A",

@@ -34,7 +34,7 @@ are valid and never alias positive ones.
 | Campaign | the AL template's `random_seed` | `("formula-acquisition", iteration)`; each formula attempt gets `("formula", formula, attempt)`, and within it `generation`, the AL streams, `candidate-uncertainty`, `perturbation`, and `dft-refinement` |
 | Fine-tuning (`finetune_*`) | `--seed` (required) | split from the root stream; global Python, NumPy, and PyTorch state from `training`; `mace_run_train --seed` from `mace_run_train` |
 | Fine-tune evaluation | split `seed`, training seeds | group-bootstrap intervals from `bootstrap` |
-| Held-out evaluation (`evaluate`) | the AL config's `random_seed` | parity-plot atoms from `parity-plot` (whole atoms, so x/y/z stay balanced) |
+| Held-out evaluation (`evaluate`, fine-tune evaluation) | the AL config's `random_seed` / the evaluation `seed` | parity-plot atoms from `parity-plot` (whole atoms, so x/y/z stay balanced) |
 | Dataset splits | `split.seed` | root stream |
 | Relaxation with `random_displacement` | `displacement_seed` (required) | root stream |
 
