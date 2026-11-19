@@ -1,5 +1,8 @@
 # Separate DFT-backed AL example, not the frozen E3-MLIP benchmark.
 # Instructions: nb2o5-qe-mace-reproduction.txt.
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 20261113
+
 mlip:
   backend: mace
   family: checkpoint
@@ -13,8 +16,6 @@ md:
     compositions: [Nb2O5]
     max_phases_per_composition: 2
     n_random: 0
-    random_seed: 20261113
-  random_seed: 20261113
   timestep_fs: 0.5
   n_steps: 40
   temperature_K: 300.0

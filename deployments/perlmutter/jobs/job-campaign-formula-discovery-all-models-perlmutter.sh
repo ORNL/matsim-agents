@@ -316,7 +316,6 @@ VALIDATION_ARGS=(
   --validation-python "$HYDRAGNN_PYTHON"
   --perturbation-trials "${MATSIM_CAMPAIGN_PERTURBATION_TRIALS:-5}"
   --perturbation-scale-A "${MATSIM_CAMPAIGN_PERTURBATION_SCALE_A:-0.05}"
-  --perturbation-seed "${MATSIM_CAMPAIGN_PERTURBATION_SEED:-20261001}"
   --surrogate-unary-max-steps "${MATSIM_CAMPAIGN_UNARY_RELAX_STEPS:-200}"
   --surrogate-unary-fmax "${MATSIM_CAMPAIGN_UNARY_FMAX:-0.02}"
   --surrogate-unary-maxstep "${MATSIM_CAMPAIGN_UNARY_MAXSTEP:-0.01}"
@@ -365,7 +364,6 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       \${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-} \
       --formulas-per-iteration \"\${MATSIM_CAMPAIGN_FORMULAS_PER_ITERATION:-1}\" \
       --acquisition-mode \"\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\" \
-      --acquisition-seed \"\${MATSIM_CAMPAIGN_ACQUISITION_SEED:-0}\" \
       --lambda-initial \"\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\" \
       --lambda-maximum \"\${MATSIM_CAMPAIGN_LAMBDA_MAXIMUM:-0.8}\" \
       --lambda-update-rate \"\${MATSIM_CAMPAIGN_LAMBDA_UPDATE_RATE:-0.15}\" \

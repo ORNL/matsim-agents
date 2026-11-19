@@ -72,7 +72,7 @@ def test_formula_runner_wires_remaining_mlip_allowance_without_changing_seeds(
     def callback():
         pass
 
-    def run(formula, output_dir, *, config):
+    def run(formula, output_dir, *, config, random_seed):
         captured.append(config)
         return PhaseExplorationWorkflowResult(
             composition=formula,
@@ -85,7 +85,11 @@ def test_formula_runner_wires_remaining_mlip_allowance_without_changing_seeds(
         "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
     )
     make_formula_runner(config)(
-        "NbO", str(tmp_path), mlip_allowance=1, on_mlip_relaxation_attempt=callback
+        "NbO",
+        str(tmp_path),
+        random_seed=0,
+        mlip_allowance=1,
+        on_mlip_relaxation_attempt=callback,
     )
     assert captured[0].exploration_kwargs["max_relaxations"] == 1
     assert captured[0].exploration_kwargs["n_random"] == 50
@@ -99,6 +103,7 @@ def _config_yaml(tmp_path, pseudopotentials: str) -> str:
     (pseudo_dir / "Nb.upf").write_text("Nb", encoding="utf-8")
     (pseudo_dir / "O.upf").write_text("O", encoding="utf-8")
     return f"""
+random_seed: 0
 mlip:
   backend: uma
   model_name: uma-s-1p1
@@ -758,13 +763,16 @@ def test_perturbation_robustness_records_each_seed(tmp_path):
             active_learning_config=config_path,
             phase_policy=PhaseExplorationPolicy(),
             perturbation_trials=3,
-            perturbation_seed=17,
         ),
         tmp_path / "robustness",
         relaxation_runner=runner,
     )
 
-    assert [trial["seed"] for trial in evidence["trials"]] == [17, 18, 19]
+    from matsim_agents.seeding import stream_seed
+
+    assert [trial["seed"] for trial in evidence["trials"]] == [
+        stream_seed(cfg.random_seed, "perturbation", index) for index in range(3)
+    ]
     assert evidence["robust_fraction"] == 1.0
 
 
@@ -860,6 +868,7 @@ def test_mlip_only_execution_labels_polymorphs_with_any_backend(tmp_path, backen
         phase_runner=phase_runner,
         relaxation_runner=forbidden,
         calculator_factory=calculator,
+        random_seed=0,
     )
 
     assert exploration_kwargs[0]["mlip"] == selected
@@ -928,6 +937,7 @@ def test_dft_ranking_after_promotion_requires_post_training_reexploration(tmp_pa
             phase_runner=lambda *args, **kwargs: pytest.fail(
                 "campaign ran without post-promotion reevaluation"
             ),
+            random_seed=0,
         )
 
 
@@ -944,6 +954,7 @@ def _vasp_config_yaml(tmp_path) -> str:
     )
     potcar_dir.mkdir()
     return f"""
+random_seed: 0
 mlip:
     backend: uma
     model_name: uma-s-1p1
@@ -1051,6 +1062,7 @@ def test_formula_execution_rewrites_al_template_and_reports_usage(tmp_path):
         ),
         al_runner=al_runner,
         phase_runner=phase_runner,
+        random_seed=0,
     )
 
     assert observed["seed_kind"] == "compositions"
@@ -1253,6 +1265,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
             ),
             phase_runner=phase_runner,
             relaxation_runner=relaxation_runner,
+            random_seed=0,
         )
     assert observed_settings == []
 
@@ -1281,6 +1294,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
         al_runner=al_runner,
         phase_runner=phase_runner,
         relaxation_runner=relaxation_runner,
+        random_seed=0,
     )
 
     report = result.initial.stability
@@ -1333,6 +1347,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
         ),
         phase_runner=phase_runner,
         relaxation_runner=relaxation_runner,
+        random_seed=0,
     )
     assert resumed.active_learning_result["dft_refinement"]["reference_calculations"] == 0
     assert len(observed_settings) == 6
@@ -1517,6 +1532,7 @@ def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):
                 ),
             ),
             al_runner=lambda _: None,
+            random_seed=0,
         )
 
 
@@ -1602,6 +1618,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
             ),
             phase_runner=phase_runner,
             relaxation_runner=relaxation_runner,
+            random_seed=0,
         )
     with pytest.raises(ValueError, match="lack backend provenance"):
         run_formula_with_active_learning(
@@ -1621,6 +1638,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
             ),
             phase_runner=phase_runner,
             relaxation_runner=relaxation_runner,
+            random_seed=0,
         )
 
     result = run_formula_with_active_learning(
@@ -1651,6 +1669,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
         ),
         phase_runner=phase_runner,
         relaxation_runner=relaxation_runner,
+        random_seed=0,
     )
 
     assert len(observed) == 2
@@ -1757,6 +1776,7 @@ def test_formula_execution_applies_retraining_and_promotion(
         ),
         al_runner=al_runner,
         phase_runner=phase_runner,
+        random_seed=0,
     )
 
     assert observed["trainer"]["enabled"] is True
@@ -1793,7 +1813,7 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 
     assert cfg.mlip.logdir == promoted
     assert cfg.mlip.checkpoint is None
-    assert _exploration_kwargs(cfg, {})["mlip"].checkpoint is None
+    assert _exploration_kwargs(cfg, {}, generation_seed=0)["mlip"].checkpoint is None
 
 
 def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
@@ -1805,7 +1825,7 @@ def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
 
     assert cfg.mlip.family == "checkpoint"
     assert cfg.mlip.dispersion is False
-    assert _exploration_kwargs(cfg, {})["mlip"].dispersion is False
+    assert _exploration_kwargs(cfg, {}, generation_seed=0)["mlip"].dispersion is False
 
 
 def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path):
@@ -1864,6 +1884,7 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
         ),
         al_runner=al_runner,
         phase_runner=phase_runner,
+        random_seed=0,
     )
 
     promoted = observed["mlip"]
@@ -1909,6 +1930,7 @@ def test_campaign_callback_rejects_promotion_control_mismatch_before_al(tmp_path
             ),
             al_runner=lambda cfg: calls.append(cfg),
             phase_runner=phase_runner,
+            random_seed=0,
         )
     assert calls == []
 
@@ -2014,16 +2036,16 @@ def test_latest_promoted_model_recovers_checkpoint_from_state(tmp_path):
                 formula="NbO2",
                 status=WorkflowStatus.COMPLETE,
                 iteration=2,
-                model_promoted=True,
-                evidence={
-                    "iteration_states": [
-                        {
-                            "model_promoted": True,
-                            "new_logdir": str(tmp_path / "inference_ckpt.pt"),
-                        }
-                    ]
-                },
-            )
+                model_promoted=False,
+                promoted_checkpoint=str(tmp_path / "inference_ckpt.pt"),
+                promotion_sequence=0,
+            ),
+            "NbO": FormulaRunRecord(
+                formula="NbO",
+                status=WorkflowStatus.COMPLETE,
+                iteration=3,
+                promoted_checkpoint=str(tmp_path / "older.pt"),
+            ),
         },
     )
 
@@ -2067,6 +2089,7 @@ def test_formula_execution_releases_exploration_models_before_active_learning(
             ),
             al_runner=al_runner,
             phase_runner=phase_runner,
+            random_seed=0,
         )
     assert events == ["explore", "close", "release", "active_learning", "close"]
 
@@ -2116,5 +2139,48 @@ def test_campaign_driver_mlip_work_runs_on_the_mlip_device(tmp_path, monkeypatch
                 phase_policy=PhaseExplorationPolicy(active_learning=False, dft_approved=True),
             ),
             phase_runner=phase_runner,
+            random_seed=0,
         )
     assert events == [("enter", True), ("score",), ("exit",)]
+
+
+def test_generation_action_carries_the_attempt_generation_seed():
+    from types import SimpleNamespace
+
+    from matsim_agents.backends.mlip.config import MACEConfig
+    from matsim_agents.discovery.seeds import SeedGenerationAction
+
+    action = SeedGenerationAction(
+        action_id="a", formula="NbO", formula_units=1, pyxtal_count=1, random_seed=1
+    )
+    cfg = SimpleNamespace(mlip=MACEConfig(device="cpu"))
+
+    values = _exploration_kwargs(cfg, {"generation_action": action}, generation_seed=77)
+
+    assert values["random_seed"] is None
+    assert values["generation_action"].random_seed == 77
+    assert action.random_seed == 1
+
+
+def test_formula_runner_adopts_a_promotion_committed_before_a_failure(tmp_path, monkeypatch):
+    config = CampaignFormulaExecutionConfig(
+        active_learning_config=tmp_path / "unused.yaml",
+        phase_policy=PhaseExplorationPolicy(),
+        model_override="foundation.ckpt",
+    )
+    promoted = str(tmp_path / "promoted.ckpt")
+
+    def run(formula, output_dir, *, config, random_seed):
+        iteration = Path(output_dir) / "active_learning" / "iteration_0000"
+        iteration.mkdir(parents=True)
+        (iteration / "state.json").write_text(
+            json.dumps({"status": "complete", "model_promoted": True, "new_logdir": promoted})
+        )
+        raise RuntimeError("DFT refinement failed after promotion")
+
+    monkeypatch.setattr(
+        "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
+    )
+    with pytest.raises(RuntimeError, match="after promotion"):
+        make_formula_runner(config)("NbO", str(tmp_path / "attempt"), random_seed=0)
+    assert config.model_override == promoted

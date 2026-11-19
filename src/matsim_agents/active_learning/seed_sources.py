@@ -33,6 +33,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from matsim_agents.seeding import stream_seed
+
 if TYPE_CHECKING:
     from matsim_agents.active_learning.config import LLMSeedConfig, SeedSourceConfig
 
@@ -140,7 +142,8 @@ def _compositions_to_seed_files(
 
     Per composition we keep ``max_phases_per_composition`` prototype-derived
     seeds plus all ``n_random`` pyXtal random-search seeds (the latter are
-    flagged ``needs_dft_verification`` upstream).
+    flagged ``needs_dft_verification`` upstream). Each formula's random search
+    uses its own stream of *random_seed*.
     """
     from matsim_agents.discovery import generate_seeds, parse_composition
 
@@ -157,7 +160,7 @@ def _compositions_to_seed_files(
             comp,
             str(phase_dir),
             n_random=n_random,
-            random_seed=random_seed,
+            random_seed=stream_seed(random_seed, comp.formula),
         )
         if not candidates:
             log.warning("No seeds built for %s", comp.formula)
@@ -186,6 +189,8 @@ def _compositions_to_seed_files(
 def resolve_seed_structures(
     cfg: SeedSourceConfig,
     out_dir: Path,
+    *,
+    random_seed: int,
 ) -> list[Path]:
     """Resolve a :class:`SeedSourceConfig` to a concrete list of seed files.
 
@@ -196,6 +201,8 @@ def resolve_seed_structures(
     out_dir
         Directory under which generated prototype structures are written
         (one subdirectory per formula). Ignored when ``cfg.kind == 'paths'``.
+    random_seed
+        Seed of the pyXtal random search; each formula uses its own stream.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -217,7 +224,7 @@ def resolve_seed_structures(
             out_dir,
             max_phases_per_composition=cfg.max_phases_per_composition,
             n_random=cfg.n_random,
-            random_seed=cfg.random_seed,
+            random_seed=random_seed,
         )
 
     if cfg.kind == "prompt":
@@ -249,7 +256,7 @@ def resolve_seed_structures(
             out_dir,
             max_phases_per_composition=cfg.max_phases_per_composition,
             n_random=cfg.n_random,
-            random_seed=cfg.random_seed,
+            random_seed=random_seed,
         )
 
     raise ValueError(f"Unknown seed_source.kind: {cfg.kind!r}")

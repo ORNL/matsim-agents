@@ -17,6 +17,7 @@ from matsim_agents.datasets.energy_alignment import (
 )
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.seeding import stream_seed
 
 # -- energy alignment -----------------------------------------------------------
 
@@ -162,6 +163,7 @@ def test_mace_trains_on_aligned_energies_with_foundation_atomic_energies(tmp_pat
         lora=True,
         lora_rank=4,
         lora_alpha=1.0,
+        seed=5,
         with_stress=True,
     )
     cmd = commands[0]
@@ -170,6 +172,7 @@ def test_mace_trains_on_aligned_energies_with_foundation_atomic_energies(tmp_pat
         return cmd[cmd.index(flag) + 1]
 
     assert value("--E0s") == "foundation"
+    assert value("--seed") == str(stream_seed(5, "mace_run_train"))
     assert value("--multiheads_finetuning") == "False"
     assert value("--loss") == "stress" and value("--stress_key") == "REF_stress"
     assert value("--compute_stress") == "True" and value("--lora") == "True"
@@ -362,7 +365,15 @@ def test_mace_cli_takes_the_elemental_references(tmp_path, references):
         atoms.arrays["forces"] = np.zeros((1, 3))
         frames.append(atoms)
     write(path, frames)
-    argv = ["--dataset", str(path), "--output-dir", str(tmp_path / "out"), "--dry-run"]
+    argv = [
+        "--dataset",
+        str(path),
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--dry-run",
+        "--seed",
+        "0",
+    ]
     with pytest.raises(SystemExit):
         finetune_mace.main(argv)  # the references are required
     assert finetune_mace.main([*argv, "--elemental-reference-manifest", str(references)]) == 0

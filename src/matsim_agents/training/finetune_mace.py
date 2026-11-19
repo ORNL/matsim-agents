@@ -64,6 +64,7 @@ import numpy as np
 from matsim_agents.backends.mlip.config import MACEConfig, MACEFamily
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.seeding import seed_process, stream_seed
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 from matsim_agents.training.finetune_uma import (
     _load_labeled_frames,
@@ -294,6 +295,7 @@ def _run_mace_train(
     lora: bool,
     lora_rank: int,
     lora_alpha: float,
+    seed: int,
     with_stress: bool = False,
 ) -> None:
     """Invoke ``mace_run_train`` with the fine-tuning recipe (module docstring)."""
@@ -343,6 +345,8 @@ def _run_mace_train(
         str(with_stress),
         "--log_level",
         "WARNING",
+        "--seed",
+        str(stream_seed(seed, "mace_run_train")),
     ]
     if with_stress:
         cmd += ["--stress_key", "REF_stress"]
@@ -396,7 +400,7 @@ def finetune_mace(
     lora_rank: int | None = None,
     lora_alpha: float | None = None,
     weight_decay: float = 0.0,
-    seed: int = 0,
+    seed: int,
     device: str | None = None,
     run: bool = True,
     # mace_run_train handles parameter-efficient freezing through LoRA; a plain
@@ -452,6 +456,7 @@ def finetune_mace(
             "for parameter-efficient fine-tuning."
         )
 
+    seed_process(seed, "training")
     output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     dest_ckpt = output_dir / "mace_finetuned.model"
@@ -550,6 +555,7 @@ def finetune_mace(
             lora=bool(lora),
             lora_rank=int(lora_rank),
             lora_alpha=float(lora_alpha),
+            seed=seed,
             with_stress=with_stress,
         )
     if sampler.peak_gb:
@@ -623,7 +629,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lora-rank", type=int, default=None, help="LoRA rank (default: 4).")
     parser.add_argument("--lora-alpha", type=float, default=None, help="LoRA alpha (default: 1.0).")
     parser.add_argument("--weight-decay", type=float, default=0.0)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, required=True, help="Seed of every random stream.")
     parser.add_argument(
         "--validation-dataset",
         default=None,

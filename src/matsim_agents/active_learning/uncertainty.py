@@ -32,6 +32,7 @@ from ase import Atoms
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import AcquisitionConfig
 from matsim_agents.backends.mlip.dropout import enable_dropout
+from matsim_agents.seeding import numpy_rng, seeded_torch
 
 log = logging.getLogger(__name__)
 
@@ -61,9 +62,12 @@ def score_ensemble(candidates: Sequence[Candidate], calculators: Sequence) -> np
 
 
 def score_mc_dropout(
-    candidates: Sequence[Candidate], calculator, passes: int, p: float
+    candidates: Sequence[Candidate], calculator, passes: int, p: float, *, seed: int
 ) -> np.ndarray:
-    """K stochastic forward passes; score = RMS std of forces across passes."""
+    """K stochastic forward passes; score = RMS std of forces across passes.
+
+    The dropout masks come from the ``"mc-dropout"`` stream of *seed*.
+    """
     # Most ASE-style HydraGNN calculators expose the underlying torch model
     # via ``calculator.model``. We toggle dropout layers into train() mode
     # while keeping the rest of the model in eval() (no BatchNorm updates).
@@ -82,16 +86,18 @@ def score_mc_dropout(
                 m.p = float(p)
 
     out = np.zeros(len(candidates), dtype=np.float64)
-    for i, cand in enumerate(candidates):
-        per_pass = []
-        for _ in range(passes):
-            enable_dropout(calculator.model)
-            reset = getattr(calculator, "reset", None)
-            if callable(reset):
-                reset()
-            per_pass.append(_forces_from(calculator, cand.atoms))
-        stack = np.stack(per_pass, axis=0)
-        out[i] = float(np.sqrt(np.mean(stack.std(axis=0) ** 2)))
+    devices = {parameter.device for parameter in calculator.model.parameters()}
+    with seeded_torch(seed, "mc-dropout", devices=devices):
+        for i, cand in enumerate(candidates):
+            per_pass = []
+            for _ in range(passes):
+                enable_dropout(calculator.model)
+                reset = getattr(calculator, "reset", None)
+                if callable(reset):
+                    reset()
+                per_pass.append(_forces_from(calculator, cand.atoms))
+            stack = np.stack(per_pass, axis=0)
+            out[i] = float(np.sqrt(np.mean(stack.std(axis=0) ** 2)))
     # Restore eval()
     calculator.model.eval()
     return out
@@ -157,9 +163,13 @@ def select_candidates(
     cfg: AcquisitionConfig,
     primary_calculator,
     ensemble_calculators: Sequence | None = None,
-    seed: int = 0,
+    *,
+    seed: int,
 ) -> tuple[list[Candidate], np.ndarray]:
     """Score and down-select candidates.
+
+    *seed* drives every random choice: the random-strategy scores (its root
+    stream) and the MC-dropout masks.
 
     Returns (selected_candidates, full_score_array). ``full_score_array`` has
     one entry per *input* candidate so downstream code can log distributions.
@@ -167,17 +177,15 @@ def select_candidates(
     if not candidates:
         return [], np.zeros(0, dtype=np.float64)
 
-    rng = np.random.default_rng(seed)
-
     if cfg.strategy == "random":
-        scores = score_random(candidates, rng)
+        scores = score_random(candidates, numpy_rng(seed))
     elif cfg.strategy == "ensemble":
         if not ensemble_calculators or len(ensemble_calculators) < 2:
             raise ValueError("ensemble strategy requires >=2 ensemble_calculators")
         scores = score_ensemble(candidates, ensemble_calculators)
     elif cfg.strategy == "mc_dropout":
         scores = score_mc_dropout(
-            candidates, primary_calculator, cfg.mc_dropout_passes, cfg.mc_dropout_p
+            candidates, primary_calculator, cfg.mc_dropout_passes, cfg.mc_dropout_p, seed=seed
         )
     elif cfg.strategy == "ensemble_then_dropout":
         if not ensemble_calculators or len(ensemble_calculators) < 2:
@@ -191,6 +199,7 @@ def select_candidates(
             primary_calculator,
             cfg.mc_dropout_passes,
             cfg.mc_dropout_p,
+            seed=seed,
         )
         scores = np.full(len(candidates), -np.inf, dtype=np.float64)
         scores[top] = refined
@@ -329,6 +338,7 @@ def validation_uncertainty_report(
     mc_dropout_passes: int = 8,
     mc_dropout_p: float = 0.1,
     partition: str = "validation",
+    seed: int,
 ) -> dict:
     """Score labelled frames, compute the primary model's force errors, and calibrate."""
     candidates = [
@@ -340,7 +350,7 @@ def validation_uncertainty_report(
         method = "ensemble"
     elif mc_dropout_calculator is not None:
         scores = score_mc_dropout(
-            candidates, mc_dropout_calculator, mc_dropout_passes, mc_dropout_p
+            candidates, mc_dropout_calculator, mc_dropout_passes, mc_dropout_p, seed=seed
         )
         method = "mc_dropout"
     else:

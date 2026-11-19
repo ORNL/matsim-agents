@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from matsim_agents.discovery.composition import Composition, parse_composition
+from matsim_agents.seeding import numpy_rng, python_rng
 
 if TYPE_CHECKING:
     from pymatgen.core import Structure
@@ -105,7 +106,7 @@ class SeedGenerationAction(BaseModel):
     prototype_ids: list[str] = Field(default_factory=list)
     space_groups: list[int] = Field(default_factory=list)
     pyxtal_count: int = Field(default=0, ge=0)
-    random_seed: int = 0
+    random_seed: int
 
     @model_validator(mode="after")
     def _validate_requested_sources(self) -> SeedGenerationAction:
@@ -372,13 +373,15 @@ def random_search(
     comp: Composition,
     n: int = 50,
     *,
-    seed: int = 0,
+    seed: int,
     formula_units: int = 1,
     space_groups: list[int] | None = None,
     max_attempts_factor: int = 4,
-    seed_proposals: bool = False,
 ) -> list[tuple[Structure, int]]:
     """Generate up to ``n`` random crystal structures across the 230 space groups.
+
+    ``seed`` determines both the space groups and pyXtal's atom placement, so
+    the same seed reproduces the same structures.
 
     Returns a list of ``(pymatgen Structure, space_group)`` tuples.
     Returns ``[]`` (with a warning) if pyXtal is not installed.
@@ -399,13 +402,11 @@ def random_search(
         )
         return []
 
-    import random as _random
-
     from pymatgen.analysis.structure_matcher import StructureMatcher
     from pymatgen.core import Structure
     from pyxtal import pyxtal
 
-    rng = _random.Random(seed)
+    rng = python_rng(seed)
     elements = list(comp.elements.keys())
     counts = [comp.elements[e] * formula_units for e in elements]
     allowed_groups = tuple(space_groups) if space_groups is not None else tuple(range(1, 231))
@@ -420,12 +421,13 @@ def random_search(
         spg = rng.choice(allowed_groups)
         try:
             x = pyxtal()
-            proposal_args = {}
-            if seed_proposals:
-                import numpy as np
-
-                proposal_args["random_state"] = np.random.default_rng(rng.getrandbits(32))
-            x.from_random(dim=3, group=spg, species=elements, numIons=counts, **proposal_args)
+            x.from_random(
+                dim=3,
+                group=spg,
+                species=elements,
+                numIons=counts,
+                random_state=numpy_rng(rng.getrandbits(32)),
+            )
             if not x.valid:
                 continue
             pmg = x.to_pymatgen()
@@ -460,7 +462,7 @@ def generate_seeds(
     *,
     n_random: int = 50,
     fmt: str = "vasp",
-    random_seed: int = 0,
+    random_seed: int | None = None,
     formula_units: int | None = None,
     include_aflow: bool = True,
     max_aflow_prototypes: int | None = None,
@@ -483,7 +485,8 @@ def generate_seeds(
     fmt:
         ASE-compatible structure format (``"vasp"``, ``"cif"``, ``"xyz"``).
     random_seed:
-        Seed for the pyXtal RNG (reproducibility).
+        Seed of the pyXtal search (space groups and atom placement); required
+        when ``n_random`` is positive.
     formula_units:
         Requested number of reduced formula units. AFLOW cells are replicated
         only when their existing formula-unit count divides this value; pyXtal
@@ -637,13 +640,17 @@ def generate_seeds(
 
     # --- 2. pyXtal random search -------------------------------------------
     requested_formula_units = formula_units or 1
-    random_hits = random_search(
-        composition,
-        n=n_random,
-        seed=random_seed,
-        formula_units=requested_formula_units,
-        space_groups=space_groups,
-    )
+    random_hits: list[tuple[Structure, int]] = []
+    if n_random > 0:
+        if random_seed is None:
+            raise ValueError("a pyXtal random search (n_random > 0) needs random_seed")
+        random_hits = random_search(
+            composition,
+            n=n_random,
+            seed=random_seed,
+            formula_units=requested_formula_units,
+            space_groups=space_groups,
+        )
     for r_idx, (struct, spg) in enumerate(random_hits):
         actual_formula_units = struct.num_sites // composition.total_atoms
         prior_structures = seen_by_size.setdefault(actual_formula_units, [])

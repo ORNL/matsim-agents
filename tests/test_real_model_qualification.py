@@ -97,7 +97,7 @@ def test_resume_uses_distinct_reproducible_batches_and_preserves_partitions(tmp_
 
     def run(config):
         index = config.loop.n_iterations - 1
-        seeds.append(config.md.random_seed)
+        seeds.append(config.random_seed)
         write(al / "dataset.extxyz", frames[2 * index : 2 * index + 2], append=True)
         complete = {
             **state,
@@ -114,6 +114,7 @@ def test_resume_uses_distinct_reproducible_batches_and_preserves_partitions(tmp_
 
     monkeypatch.setattr(qualification, "run_active_learning", run)
     result = qualification.resume(tmp_path)
-    assert seeds == [43, 44]
+    # The loop derives each iteration's MD batch from the unchanged root seed.
+    assert seeds == [cfg.random_seed, cfg.random_seed]
     assert result["training_count"] == 5
     assert (iteration0 / "state.json").read_text() == original

@@ -69,6 +69,7 @@ def test_trainer_rejects_moved_placement_fields():
 
 def _al(tmp_path: Path, *, resources=None, trainer=None) -> dict:
     data = {
+        "random_seed": 0,
         "mlip": {"backend": "uma", "model_name": "uma-s-1p1"},
         "md": {"seed_source": {"kind": "paths", "paths": ["/tmp/seed.vasp"]}},
         "acquisition": {"strategy": "random", "n_select": 1},

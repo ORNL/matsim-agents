@@ -13,17 +13,18 @@ import numpy as np
 from ase.build import bulk
 from ase.io import read, write
 
-from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig
-from matsim_agents.datasets.governance import structure_identity
-from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
 from matsim_agents.active_learning.loop import _dft_method_signature, run_active_learning
 from matsim_agents.active_learning.trainer import retrain_hydragnn, retrain_mace
 from matsim_agents.active_learning.uncertainty import score_ensemble
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
+from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig
+from matsim_agents.datasets.governance import structure_identity
 from matsim_agents.discovery.wrapper import explore_composition
+from matsim_agents.seeding import stream_seed
 
 
 def require(condition: bool, message: str) -> None:
@@ -78,13 +79,13 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
         raise ValueError(f"Unknown DFT backend: {backend}")
     return ALConfig.model_validate(
         {
+            "random_seed": 42,
             "mlip": {"backend": "uma", "device": "cuda"},
             "md": {
                 "seed_source": {"kind": "paths", "paths": [str(root / "Si.extxyz")]},
                 "n_steps": 20,
                 "sample_every": 5,
                 "temperature_K": 300,
-                "random_seed": 42,
             },
             "acquisition": {"strategy": "random", "n_select": 2, "diversity_filter": False},
             "dft": dft,
@@ -170,6 +171,7 @@ def bootstrap(repo: Path, root: Path, backend: str = "qe") -> dict:
         mlip=cfg.mlip,
         output_dir=str(root / "budget-check"),
         n_random=0,
+        random_seed=None,
         max_relaxations=1,
         maxiter=5,
     )
@@ -194,7 +196,6 @@ def resume(root: Path) -> dict:
     old_validation = identities(validation)
     original = json.loads((root / "al/iteration_0000/state.json").read_text())
     for iteration in (1, 2):
-        cfg.md.random_seed = 42 + iteration
         cfg.loop.n_iterations = iteration + 1
         run_active_learning(cfg)
     require(old_training <= identities(training), "Restart moved old training membership")
@@ -266,6 +267,7 @@ def mace(repo: Path, root: Path) -> dict:
         root / "al/dataset.extxyz",
         1,
         root / "mace-training",
+        seed=stream_seed(cfg.random_seed, "qualification", "mace-training"),
         launch=cfg.resources.place().pool("training").launches[0],
     )
     require(checkpoint.is_file(), "MACE training did not produce an inference checkpoint")
@@ -343,6 +345,7 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
                 mlip=hydragnn,
                 maxiter=20,
                 random_displacement=True,
+                displacement_seed=stream_seed(cfg.random_seed, "qualification", label),
             )
         )
         require(
@@ -386,6 +389,7 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
             dataset,
             1,
             out,
+            seed=stream_seed(cfg.random_seed, "qualification", script),
             launch=placement.pool("training").launches[0],
             dft_config=cfg.dft,
             dft_launch=placement.pool("dft").launches[0],

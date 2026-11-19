@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from matsim_agents.discovery.composition import parse_composition  # noqa: E402
 from matsim_agents.discovery.seeds import generate_seeds  # noqa: E402
+from matsim_agents.seeding import stream_seed  # noqa: E402
 
 DEFAULT_COMPETING_FORMULAS = [
     "NbTa",
@@ -149,7 +150,7 @@ def main() -> int:
 
     if args.expand_unary_polymorphs:
         unary_root = args.output_dir / "unary_candidates"
-        for element_index, element in enumerate(("Nb", "Ta", "O")):
+        for element in ("Nb", "Ta", "O"):
             composition = parse_composition(element)
             if composition is None:  # pragma: no cover - fixed valid symbols
                 raise ValueError(f"could not parse unary element {element!r}")
@@ -158,7 +159,7 @@ def main() -> int:
                 str(unary_root / element),
                 n_random=args.unary_random,
                 fmt="extxyz",
-                random_seed=args.unary_random_seed + element_index,
+                random_seed=stream_seed(args.unary_random_seed, element),
             )
             for index, candidate in enumerate(candidates):
                 source_label = "aflow" if candidate.source == "prototype" else "pyxtal"

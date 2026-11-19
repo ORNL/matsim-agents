@@ -55,6 +55,7 @@ from matsim_agents.backends.mlip.hydragnn_newhead import (
     apply_newhead_surgery,
     load_update_model,
 )
+from matsim_agents.seeding import seed_process
 from matsim_agents.training.cost import CostReport, count_parameters, track_cost
 from matsim_agents.training.finetune_hydragnn import (
     _atoms_to_data,
@@ -493,7 +494,7 @@ def finetune_hydragnn_newhead(
     lr: float = 1e-4,
     batch_size: int = 4,
     val_fraction: float = 0.1,
-    seed: int = 0,
+    seed: int,
     energy_weight: float | None = None,
     force_weight: float | None = None,
     normalize: bool = True,
@@ -537,6 +538,7 @@ def finetune_hydragnn_newhead(
         save_hydragnn_energy_convention,
     )
 
+    seed_process(seed, "training")
     output_dir = Path(output_dir).expanduser().resolve()
     frames = prepare_hydragnn_training_frames(
         dataset_path, output_dir, elemental_reference_manifest
@@ -760,7 +762,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Validation partition for keeping the best epoch (replaces --val-fraction).",
     )
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, required=True, help="Seed of every random stream.")
     parser.add_argument("--energy-weight", type=float, default=None)
     parser.add_argument("--force-weight", type=float, default=None)
     parser.add_argument(

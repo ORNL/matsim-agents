@@ -229,17 +229,19 @@ def run_phase_exploration(
             raise PermissionError("model promotion requires explicit approval")
 
         if not policy.relax_structures:
-            from matsim_agents.discovery.composition import parse_composition
-            from matsim_agents.discovery.seeds import generate_seeds
+            from matsim_agents.discovery.wrapper import generate_composition_candidates
 
-            parsed = parse_composition(composition)
-            if parsed is None:
-                raise ValueError(f"Could not parse composition {composition!r}")
-            candidates = generate_seeds(
-                parsed,
-                str(calculations_dir / parsed.formula / "seeds"),
+            if "random_seed" not in kwargs:
+                raise ValueError(
+                    "exploration_kwargs must set random_seed (None only without pyXtal "
+                    "draws or with a generation_action)"
+                )
+            parsed, candidates, _ = generate_composition_candidates(
+                composition,
+                str(calculations_dir),
                 n_random=kwargs.get("n_random", 50),
-                random_seed=kwargs.get("random_seed", 0),
+                random_seed=kwargs["random_seed"],
+                generation_action=kwargs.get("generation_action"),
             )
             initial = CompositionExplorationResult(
                 composition=parsed,

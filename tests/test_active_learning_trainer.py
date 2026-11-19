@@ -43,7 +43,7 @@ def _uma_finetuner(tmp_path, monkeypatch, checkpoint="inference_ckpt.pt"):
 import argparse
 p = argparse.ArgumentParser()
 for flag in ("--dataset", "--output-dir", "--base-model", "--task-name", "--epochs",
-             "--elemental-reference-manifest", "--device"):
+             "--elemental-reference-manifest", "--device", "--seed"):
     p.add_argument(flag)
 p.add_argument("--lora", action="store_true")
 a = p.parse_args()
@@ -93,6 +93,7 @@ def test_retrain_uma_returns_verified_checkpoint(tmp_path, monkeypatch, referenc
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
 
     assert checkpoint == output / "inference_ckpt.pt"
@@ -113,6 +114,7 @@ def test_retrain_uma_finds_nested_fairchem_checkpoint(tmp_path, monkeypatch, ref
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
 
     assert checkpoint == output / "run-1" / "checkpoints" / "final" / "inference_ckpt.pt"
@@ -135,6 +137,7 @@ def test_retrain_rejects_a_model_trained_on_other_data(tmp_path, monkeypatch, re
             iteration=0,
             out_model_dir=tmp_path / "model",
             launch=LAUNCH,
+            seed=0,
         )
 
 
@@ -151,7 +154,7 @@ def test_retrain_mace_launcher_gets_references_and_mode(tmp_path, references):
 import argparse
 p = argparse.ArgumentParser()
 for flag in ("--dataset", "--output-dir", "--family", "--base-model", "--precision",
-             "--epochs", "--elemental-reference-manifest", "--device"):
+             "--epochs", "--elemental-reference-manifest", "--device", "--seed"):
     p.add_argument(flag)
 p.add_argument("--lora", action="store_true")
 a = p.parse_args(sys.argv[3:])
@@ -175,6 +178,7 @@ align(out, a.dataset, a.elemental_reference_manifest)
         iteration=0,
         out_model_dir=output,
         launch=LAUNCH,
+        seed=0,
     )
     assert model == output / "mace_finetuned.model"
     argv = json.loads((output / "argv.json").read_text())
@@ -199,6 +203,7 @@ def test_retrain_mace_requires_the_finetuned_model(tmp_path, references):
             iteration=0,
             out_model_dir=tmp_path / "model",
             launch=LAUNCH,
+            seed=0,
         )
 
 
@@ -213,10 +218,22 @@ def test_direct_training_must_be_local_and_single_process(tmp_path, backend):
     def run(launch):
         if backend == "uma":
             return retrain_uma(
-                config, UMAConfig(), tmp_path / "d.extxyz", 0, tmp_path / "o", launch=launch
+                config,
+                UMAConfig(),
+                tmp_path / "d.extxyz",
+                0,
+                tmp_path / "o",
+                launch=launch,
+                seed=0,
             )
         return retrain_mace(
-            config, MACEConfig(), tmp_path / "d.extxyz", 0, tmp_path / "o", launch=launch
+            config,
+            MACEConfig(),
+            tmp_path / "d.extxyz",
+            0,
+            tmp_path / "o",
+            launch=launch,
+            seed=0,
         )
 
     remote = LAUNCH.model_copy(update={"hosts": ("some-other-node",)})
@@ -259,6 +276,7 @@ def test_fine_tune_argv_runs_each_backends_module(tmp_path, references, backend,
         dataset=tmp_path / "d.extxyz",
         out_dir=tmp_path / "out",
         references=tmp_path / "refs.json",
+        seed=11,
     )
     prefix = ["bash", str(script), mlip.backend, "1", "1"] if launcher else [sys.executable]
     assert argv[: len(prefix) + 2] == [*prefix, "-m", module]
@@ -269,11 +287,13 @@ def test_fine_tune_argv_runs_each_backends_module(tmp_path, references, backend,
         epochs=3,
         references=tmp_path / "refs.json",
         finetune_mode=config.finetune_mode,
+        seed=11,
     )
     flags = dict(zip(args[::2], args[1::2], strict=False))
     assert flags["--dataset"] == str(tmp_path / "d.extxyz")
     assert flags["--output-dir"] == str(tmp_path / "out")
     assert flags["--epochs"] == "3"
+    assert flags["--seed"] == "11"
     assert flags["--elemental-reference-manifest"] == str(tmp_path / "refs.json")
 
 
@@ -289,6 +309,7 @@ def test_swapping_the_mlip_block_swaps_the_fine_tuner(tmp_path, references):
             dataset=tmp_path / "d.extxyz",
             out_dir=tmp_path / "out",
             references=tmp_path / "refs.json",
+            seed=0,
         )
         return argv[argv.index("-m") + 1]
 
@@ -307,6 +328,7 @@ def test_routed_hydragnn_fine_tune_requires_a_branch_mlp(tmp_path, references):
             dataset=tmp_path / "d.extxyz",
             out_dir=tmp_path / "out",
             references=tmp_path / "refs.json",
+            seed=0,
         )
 
 
@@ -332,7 +354,7 @@ def test_multirank_fine_tunes_are_rejected_before_any_setup(
     two_ranks = LAUNCH.model_copy(update={"ranks_per_node": 2})
     config = _trainer(references, train_launcher=tmp_path / "launcher.sh")
     with pytest.raises(ValueError, match="run as one process"):
-        retrain(config, mlip, tmp_path / "d.extxyz", 0, tmp_path / "out", launch=two_ranks)
+        retrain(config, mlip, tmp_path / "d.extxyz", 0, tmp_path / "out", seed=0, launch=two_ranks)
 
 
 @pytest.mark.parametrize(
@@ -355,6 +377,7 @@ def test_fine_tuning_rejects_devices_the_recipe_cannot_train_on(references, mlip
             dataset=Path("d.extxyz"),
             out_dir=Path("o"),
             references=references,
+            seed=0,
         )
 
     if supported:

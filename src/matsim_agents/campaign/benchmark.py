@@ -12,6 +12,7 @@ import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.execution.contracts import ComputeBudget
+from matsim_agents.seeding import numpy_rng
 
 
 class BenchmarkArm(StrEnum):
@@ -188,7 +189,7 @@ def compare_paired_metric(
     metric: BenchmarkMetric,
     confidence_level: float = 0.95,
     bootstrap_samples: int = 10_000,
-    random_seed: int = 0,
+    random_seed: int,
 ) -> PairedComparison:
     """Estimate a paired effect, bootstrap interval, and sign-flip p-value."""
     differences = np.asarray(
@@ -203,7 +204,7 @@ def compare_paired_metric(
     if differences.size < 2:
         raise ValueError("paired comparison requires at least two complete seed pairs")
     mean_difference = float(np.mean(differences))
-    rng = np.random.default_rng(random_seed)
+    rng = numpy_rng(random_seed)
     draws = rng.choice(differences, size=(bootstrap_samples, differences.size), replace=True)
     bootstrap_means = np.mean(draws, axis=1)
     alpha = 1.0 - confidence_level

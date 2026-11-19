@@ -204,7 +204,7 @@ def test_select_candidates_ensemble_requires_two_calculators() -> None:
 
 def test_select_candidates_empty_input_returns_empty() -> None:
     cfg = AcquisitionConfig(strategy="random", n_select=5)
-    selected, scores = select_candidates([], cfg, primary_calculator=None)
+    selected, scores = select_candidates([], cfg, primary_calculator=None, seed=0)
     assert selected == []
     assert scores.shape == (0,)
 
@@ -253,13 +253,13 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
 
     # 1) No dropout layers -> every pass identical -> zero variance.
     calc = _TorchForceCalc()
-    before = score_mc_dropout(cands, calc, passes=8, p=0.1)
+    before = score_mc_dropout(cands, calc, passes=8, p=0.1, seed=0)
     assert np.allclose(before, 0.0)
 
     # 2) Inject dropout -> stochastic passes -> positive variance.
     n = inject_inference_dropout(calc.model, p=0.2, target_layers="linear")
     assert n >= 1
-    after = score_mc_dropout(cands, calc, passes=16, p=0.2)
+    after = score_mc_dropout(cands, calc, passes=16, p=0.2, seed=0)
     assert (after > 0).all()
 
     # 3) Injection is dormant for ordinary (eval-mode) prediction: two plain
@@ -295,7 +295,9 @@ def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
             self.results["forces"] = np.full((len(atoms), 3), float(self.calls))
 
     calculator = CachedCalculator()
-    scores = score_mc_dropout([_make_candidate(idx=0, n_atoms=2)], calculator, passes=4, p=0.5)
+    scores = score_mc_dropout(
+        [_make_candidate(idx=0, n_atoms=2)], calculator, passes=4, p=0.5, seed=0
+    )
 
     assert calculator.calls == 4
     assert scores[0] > 0.0

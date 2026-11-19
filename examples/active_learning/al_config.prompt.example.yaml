@@ -16,6 +16,9 @@
 #       matsim-agents al validate-config examples/active_learning/al_config.prompt.example.yaml
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 0
+
 vars:
   PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
   RUNS_ROOT:    /lustre/orion/mat746/proj-shared/runs
@@ -67,7 +70,6 @@ md:
     max_compositions: 6                # cap on LLM output
     max_phases_per_composition: 2      # discovery returns up to N prototypes/formula
     n_random: 0                        # optional pyXtal random-search seeds (requires pyxtal)
-    random_seed: 0
   timestep_fs: 1.0
   n_steps: 200
   temperature_K: 600.0
@@ -103,7 +105,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_mlip-train-step-frontier.sh
   epochs_per_iter: 5
 

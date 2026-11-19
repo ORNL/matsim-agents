@@ -53,6 +53,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
         charge=task.charge,
         spin=task.spin,
         random_displacement=task.random_displacement,
+        displacement_seed=task.displacement_seed,
         output_dir=cfg.get("output_dir"),
     )
 

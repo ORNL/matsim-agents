@@ -231,6 +231,7 @@ class AgentEvalConfig(BaseModel):
         description="(treatment, control) pairs; pairs with an unconfigured arm are skipped.",
     )
     confidence_level: float = Field(0.95, gt=0.0, lt=1.0)
+    bootstrap_seed: int = Field(0, description="Seed of the paired bootstrap intervals.")
 
     @model_validator(mode="after")
     def _validate(self) -> AgentEvalConfig:
@@ -828,6 +829,7 @@ def run_agent_eval(
                         control=control,
                         metric=metric,
                         confidence_level=config.confidence_level,
+                        random_seed=config.bootstrap_seed,
                     )
                 )
             except ValueError:

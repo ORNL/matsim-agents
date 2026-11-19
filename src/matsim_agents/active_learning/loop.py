@@ -80,6 +80,7 @@ from matsim_agents.datasets.governance import (
     write_dataset_manifest,
 )
 from matsim_agents.execution.placement import Placement
+from matsim_agents.seeding import numpy_rng, stream_seed
 
 log = logging.getLogger(__name__)
 
@@ -189,7 +190,7 @@ def _split_training_validation_frames(
     pinned = existing_training_trajectories | existing_validation_trajectories
     members = [indices for key, indices in groups.items() if key not in pinned]
     n_validation = max(len(validation_indices), target - existing_validation_count)
-    for group in np.random.default_rng(seed).permutation(len(members)):
+    for group in numpy_rng(seed).permutation(len(members)):
         if len(validation_indices) + len(members[group]) <= n_validation:
             validation_indices.update(members[group])
     training = [frame for index, frame in enumerate(frames) if index not in validation_indices]
@@ -199,6 +200,47 @@ def _split_training_validation_frames(
 
 def _trajectory_ids(frames: list[Any]) -> set[str]:
     return {str(f.info["trajectory_id"]) for f in frames if "trajectory_id" in f.info}
+
+
+_ROOT_SEED_FILE = "random-seed.json"
+
+
+def _prior_run_artifacts(root: Path) -> list[str]:
+    """Evidence a previous run left in *root*: iterations, datasets, and seed structures."""
+    names = ["dataset.extxyz", "dataset.db", "validation.extxyz", "seeds"]
+    found = [name for name in names if (root / name).exists()]
+    return found + sorted(path.name for path in root.glob("iteration_*"))
+
+
+def _bind_root_seed(cfg: ALConfig, root: Path) -> None:
+    """Record the run's root seed; existing evidence must already carry the same one.
+
+    Checked before seed structures are resolved or written. A resume must match the
+    recorded seed. Artifacts without a recorded seed (from before seed recording) and,
+    for a fresh run, any prior artifacts are rejected, so retained datasets are never
+    reused under a seed that did not produce them.
+    """
+    path = root / _ROOT_SEED_FILE
+    artifacts = _prior_run_artifacts(root)
+    if path.exists():
+        recorded = int(json.loads(path.read_text())["random_seed"])
+        if not cfg.loop.resume:
+            raise ValueError(
+                f"{root} already holds a run (random_seed {recorded}); set loop.resume to "
+                "continue it or choose a new out_dir"
+            )
+        if recorded != cfg.random_seed:
+            raise ValueError(
+                f"{root} was started with random_seed {recorded}; resuming it with "
+                f"{cfg.random_seed} would mix two seed streams in one run"
+            )
+        return
+    if artifacts:
+        raise ValueError(
+            f"{root} holds artifacts {artifacts} without a recorded random_seed; they "
+            "cannot be attributed to a seed; choose a new out_dir"
+        )
+    path.write_text(json.dumps({"random_seed": cfg.random_seed}) + "\n")
 
 
 def _scan_resume(root: Path) -> tuple[int, Path | None]:
@@ -297,7 +339,7 @@ def _select_for_labelling(
         cfg.acquisition,
         primary_calculator=primary_calc,
         ensemble_calculators=ensemble_calcs or None,
-        seed=42 + i,
+        seed=stream_seed(cfg.random_seed, "acquisition", i),
     )
     if cfg.loop.max_dft_calculations is not None:
         remaining_dft = cfg.loop.max_dft_calculations - completed_dft
@@ -497,7 +539,7 @@ def _append_labelled_frames(
     training_frames, validation_frames = _split_training_validation_frames(
         frames,
         validation_fraction=cfg.trainer.validation_fraction,
-        seed=cfg.trainer.validation_split_seed + i,
+        seed=stream_seed(cfg.random_seed, "validation-split", i),
         existing_training_count=len(existing_training_frames),
         existing_validation_count=len(existing_validation_frames),
         existing_training_trajectories=_trajectory_ids(existing_training_frames),
@@ -646,6 +688,7 @@ def _retrain_candidate(
     common = {
         "dataset_path": dataset_path,
         "iteration": i,
+        "seed": stream_seed(cfg.random_seed, "training", i),
         "launch": placement.pool("training").launches[0],
         "dft_config": cfg.dft,
         "dft_launch": placement.pool("dft").launches[0],
@@ -796,6 +839,7 @@ def run_active_learning(
     comparison_enabled = _validate_comparison_inputs(cfg)
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
+    _bind_root_seed(cfg, root)
     placement = cfg.resources.place(root)
     # Driver-side MLIP work (model loading, single-seed MD, scoring, model
     # comparison) runs on the mlip pool's device, not on device 0.
@@ -810,7 +854,11 @@ def run_active_learning(
         # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
         seeds_dir = root / "seeds"
         seed_paths = (
-            resolve_seed_structures(cfg.md.seed_source, seeds_dir)
+            resolve_seed_structures(
+                cfg.md.seed_source,
+                seeds_dir,
+                random_seed=stream_seed(cfg.random_seed, "seed-source"),
+            )
             if candidate_sampler is None
             else []
         )
@@ -950,6 +998,7 @@ def _run_iterations(
                         primary_calc,
                         md_dir,
                         seed_paths=seed_paths,
+                        random_seed=stream_seed(cfg.random_seed, "md", i),
                         mlip_pool=md_pool,
                         mlip_cfg=cfg.mlip,
                         enable_mc_dropout=enable_drop,

@@ -787,7 +787,6 @@ def _pyxtal_oxide_candidates(
             seed=seed,
             formula_units=tier,
             space_groups=list(space_groups) or None,
-            seed_proposals=True,
         )
     except ImportError as exc:
         raise StructureGenerationError("PyXtal oxide generation requires pymatgen.") from exc

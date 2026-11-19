@@ -6,6 +6,9 @@
 # active_learning_scientific_debate.py owns the output location, matching the
 # structure_path/output_root override convention in qualification.py.
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 0
+
 mlip:
   backend: uma
   model_name: uma-s-1p1

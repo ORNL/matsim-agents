@@ -37,6 +37,7 @@ def _al_yaml(tmp_path: Path) -> Path:
     path.write_text(
         yaml.safe_dump(
             {
+                "random_seed": 0,
                 "mlip": {"backend": "hydragnn", "logdir": "${UNSET_HYDRAGNN_LOGDIR}"},
                 "md": {"seed_source": {"kind": "paths", "paths": [str(seed)]}, "n_steps": 5},
                 "acquisition": {"strategy": "random", "n_select": 1},
@@ -257,7 +258,7 @@ def test_discovery_relaxations_keep_the_configured_conditioning(tmp_path, monkey
 
     monkeypatch.setattr(wrapper, "relax_with_mlip", relax)
     wrapper.explore_composition(
-        "Cu", mlip=_conditioned_hydragnn(tmp_path), output_dir=tmp_path / "out"
+        "Cu", mlip=_conditioned_hydragnn(tmp_path), output_dir=tmp_path / "out", random_seed=0
     )
     assert requests and set(requests) == {(2.0, 1.0)}
 

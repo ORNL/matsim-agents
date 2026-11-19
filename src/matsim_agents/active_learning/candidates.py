@@ -28,6 +28,7 @@ from ase.io import write as ase_write
 from matsim_agents.active_learning.config import MDConfig
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
+from matsim_agents.seeding import numpy_rng
 
 log = logging.getLogger(__name__)
 
@@ -64,27 +65,12 @@ def _max_displacement(start: np.ndarray, current: np.ndarray) -> float:
     return float(np.max(np.linalg.norm(current - start, axis=1)))
 
 
-def seed_rngs(random_seed: int | None, count: int) -> list[np.random.Generator | None]:
-    """One independent random stream per seed, derived from ``md.random_seed``.
-
-    Each seed's trajectory depends only on ``random_seed`` and the seed's
-    position in the list, so seeds can run in any order or concurrently and
-    still reproduce. ``None`` keeps sampling stochastic.
-    """
-
-    if random_seed is None:
-        return [None] * count
-    return [
-        np.random.default_rng(child) for child in np.random.SeedSequence(random_seed).spawn(count)
-    ]
-
-
 def _sample_seed(
     md_cfg: MDConfig,
     calculator,
     seed_path: str,
     out_dir: Path,
-    rng: np.random.Generator | None,
+    rng: np.random.Generator,
 ) -> list[Candidate]:
     """Run MD from one seed and return its accepted snapshots in step order."""
     from ase import units
@@ -96,10 +82,7 @@ def _sample_seed(
     atoms = _read_structure(seed_path)
     atoms.calc = calculator
 
-    if rng is not None:
-        MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K, rng=rng)
-    else:
-        MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K)
+    MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K, rng=rng)
 
     timestep = md_cfg.timestep_fs * units.fs
     if md_cfg.thermostat == "langevin":
@@ -193,7 +176,7 @@ class _SeedTask:
     enable_mc_dropout: bool
     seed_path: str
     out_dir: str
-    rng: np.random.Generator | None
+    rng: np.random.Generator
 
 
 def _sample_seed_task(task: _SeedTask) -> list[Candidate]:
@@ -223,6 +206,7 @@ def sample_md_candidates(
     out_dir: str | Path,
     seed_paths: list | None = None,
     *,
+    random_seed: int,
     mlip_pool: MLIPWorkerPool | None = None,
     mlip_cfg: MLIPConfig | None = None,
     enable_mc_dropout: bool = False,
@@ -231,7 +215,7 @@ def sample_md_candidates(
 
     The MD driver uses ASE's ``Langevin`` (or ``NVTBerendsen``/``VelocityVerlet``).
     Trajectories are written to ``out_dir/traj_<seed_stem>.extxyz`` for
-    inspection. Every seed draws from its own random stream (:func:`seed_rngs`),
+    inspection. Seed structure ``k`` draws from stream ``k`` of *random_seed*,
     so the candidate pool is the same whether seeds run one after another or
     concurrently.
 
@@ -246,6 +230,9 @@ def sample_md_candidates(
     seed_paths
         Resolved list of seed structure files (the AL loop computes this
         from ``md_cfg.seed_source`` once per iteration and passes it in).
+    random_seed
+        Seed of this sampling (the AL loop passes its ``"md"`` stream for the
+        iteration).
     mlip_pool, mlip_cfg, enable_mc_dropout
         With a pool that has worker processes, seeds run concurrently, one per
         device; each worker builds its own calculator from *mlip_cfg*.
@@ -260,7 +247,7 @@ def sample_md_candidates(
             "The AL loop computes this from md_cfg.seed_source."
         )
     seeds = [str(path) for path in seed_paths]
-    rngs = seed_rngs(md_cfg.random_seed, len(seeds))
+    rngs = [numpy_rng(random_seed, index) for index in range(len(seeds))]
 
     if mlip_pool is None or not mlip_pool.uses_workers or len(seeds) < 2:
         candidates: list[Candidate] = []

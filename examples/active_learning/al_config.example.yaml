@@ -23,6 +23,9 @@
 #       matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 42
+
 vars:
   # Project + scratch roots (override via env to redeploy on another machine).
   PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
@@ -138,7 +141,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_mlip-train-step-frontier.sh
   epochs_per_iter: 5
 

@@ -302,3 +302,30 @@ def test_promotion_rejects_rotated_reordered_translated_molecule(tmp_path, with_
     )
     with pytest.raises(ValueError, match="overlapping geometries"):
         evaluate_promotion_candidate(cfg, "candidate", iteration=1, training_set=training_set)
+
+
+def test_parity_subsample_keeps_cartesian_components_balanced() -> None:
+    from matsim_agents.active_learning.evaluate import _subsample
+
+    forces = np.tile([1.0, 2.0, 3.0], 19_999)
+    kept = _subsample({"f_ref_eV_per_A": forces, "f_pred_eV_per_A": forces}, 20_000, seed=0)
+
+    values = kept["f_ref_eV_per_A"]
+    counts = [int((values == component).sum()) for component in (1.0, 2.0, 3.0)]
+    assert values.size <= 20_000
+    assert counts[0] == counts[1] == counts[2] > 0
+
+
+def test_parity_subsample_does_not_alias_alternating_species() -> None:
+    from matsim_agents.active_learning.evaluate import _subsample
+
+    # 13,331 atoms alternating between two species; evenly spaced indices would
+    # keep only the even (first-species) atoms.
+    species = np.repeat(np.arange(13_331) % 2, 3).astype(float)
+    kept = _subsample({"f_ref_eV_per_A": species, "f_pred_eV_per_A": species}, 20_000, seed=0)
+
+    per_atom = kept["f_ref_eV_per_A"].reshape(-1, 3)
+    assert (per_atom == per_atom[:, :1]).all()
+    assert 0.4 < per_atom[:, 0].mean() < 0.6
+    repeat = _subsample({"f_ref_eV_per_A": species, "f_pred_eV_per_A": species}, 20_000, seed=0)
+    assert np.array_equal(repeat["f_ref_eV_per_A"], kept["f_ref_eV_per_A"])

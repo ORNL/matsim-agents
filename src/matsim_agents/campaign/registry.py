@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from matsim_agents.campaign.acquisition import FormulaAcquisitionMetrics
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.seeding import python_rng
 
 
 class StructureCandidateRecord(BaseModel):
@@ -326,10 +327,12 @@ def select_dft_refinement_candidates(
     max_candidates: int,
     policy: CandidateSelectionPolicy,
     uncertainty_by_candidate: dict[str, float] | None = None,
+    random_seed: int,
 ) -> tuple[list[Any], dict[str, CandidateSelectionScore]]:
-    """Select non-equivalent relaxed structures for DFT with branch quotas."""
-    import random
+    """Select non-equivalent relaxed structures for DFT with branch quotas.
 
+    Random mode shuffles with *random_seed*.
+    """
     temporary = CandidateRegistry()
     ids = ingest_exploration_result(
         temporary,
@@ -386,7 +389,7 @@ def select_dft_refinement_candidates(
     limit = min(max_candidates, len(converged_ids))
     if policy.mode == "random":
         ordered = sorted(converged_ids)
-        random.Random(0).shuffle(ordered)
+        python_rng(random_seed).shuffle(ordered)
     elif policy.mode == "exploitation":
         ordered = sorted(converged_ids, key=lambda key: (-scores[key].exploitation_score, key))
     elif policy.mode == "exploration":

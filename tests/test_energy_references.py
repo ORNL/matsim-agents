@@ -289,6 +289,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
                 mlip={"backend": "uma", "device": "cpu"},
                 elemental_reference_manifest=reference,
                 evaluation=_random_frame(),
+                seed=0,
             )
 
 
@@ -340,7 +341,7 @@ def test_finetune_split_preserves_verified_method(
         evaluation=_random_frame(),
     )
     with pytest.raises(StopBeforeTraining):
-        finetune_eval.run_finetune_endpoints(str(dataset), output, **kwargs)
+        finetune_eval.run_finetune_endpoints(str(dataset), output, **kwargs, seed=0)
     if reuse_defect is not None:
         test_path = output / "split/test.extxyz"
         if reuse_defect == "missing":
@@ -349,10 +350,10 @@ def test_finetune_split_preserves_verified_method(
             with test_path.open("a") as stream:
                 stream.write("\n")
         with pytest.raises(ValueError, match="dataset sidecar|hash|changed"):
-            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs)
+            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs, seed=0)
     else:
         with pytest.raises(StopBeforeTraining):
-            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs)
+            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs, seed=0)
 
 
 @pytest.mark.parametrize("backend", ["uma", "mace"])
@@ -409,6 +410,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
             mlip={"backend": backend, "device": "cpu"},
             elemental_reference_manifest=reference,
             evaluation=_random_frame(),
+            seed=0,
         )
 
 
@@ -470,6 +472,7 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
             mlip={"backend": "uma", "device": "cpu"},
             elemental_reference_manifest=elemental_manifest({"Nb": -10.0}),
             evaluation=_random_frame(),
+            seed=0,
         )
     assert not (tmp_path / "campaign/ft").exists()
     assert not (tmp_path / "campaign/split/train.extxyz").exists()

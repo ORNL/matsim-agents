@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from matsim_agents.seeding import python_rng
 
 
 class FormulaAcquisitionMetrics(BaseModel):
@@ -35,9 +37,11 @@ class AcquisitionWeights(BaseModel):
 class CampaignAcquisitionPolicy(BaseModel):
     """Versioned controls for selecting formulas within each campaign batch."""
 
+    # Unknown keys fail, so removed seed fields cannot be silently ignored.
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = False
     mode: Literal["random", "exploitation", "exploration", "adaptive"] = "adaptive"
-    random_seed: int = 0
     lambda_initial: float = Field(0.5, ge=0.0, le=1.0)
     lambda_minimum: float = Field(0.2, ge=0.0, le=1.0)
     lambda_maximum: float = Field(0.8, ge=0.0, le=1.0)
@@ -124,10 +128,12 @@ def select_formula_batch(
     iteration: int,
     policy: CampaignAcquisitionPolicy,
     state: CampaignAcquisitionState,
+    random_seed: int,
 ) -> AcquisitionSelectionRecord:
-    """Select a reproducible batch while preserving minimum branch quotas."""
-    import random
+    """Select a reproducible batch while preserving minimum branch quotas.
 
+    Random mode draws from the iteration's stream of *random_seed* (the campaign seed).
+    """
     lambda_value = state.lambda_value
     if lambda_value is None:
         lambda_value = policy.lambda_initial
@@ -143,7 +149,7 @@ def select_formula_batch(
     limit = min(batch_size, len(eligible))
     if policy.mode == "random":
         ordered = list(sorted(eligible))
-        random.Random(policy.random_seed + iteration).shuffle(ordered)
+        python_rng(random_seed, "formula-acquisition", iteration).shuffle(ordered)
         selected = ordered[:limit]
         for formula in selected:
             scores[formula].assigned_branch = "random"

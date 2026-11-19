@@ -56,7 +56,7 @@ def test_nb2o5_qe_mace_example_config(nb2o5_qe_mace_example):
     assert cfg.mlip.backend == "mace"
     assert cfg.mlip.family == "checkpoint"
     assert cfg.md.seed_source.compositions == ["Nb2O5"]
-    assert cfg.md.random_seed == 20261113
+    assert cfg.random_seed == 20261113
     assert cfg.dft.backend == "qe"
     assert cfg.dft.qe.pseudopotentials == {"Nb": "Nb.UPF", "O": "O.UPF"}
     assert cfg.dft.qe.extra_control == {"tstress": True, "tprnfor": True}
@@ -131,6 +131,7 @@ def _minimal_yaml(
         )
 
     return (
+        "random_seed: 0\n"
         "mlip:\n"
         "  backend: hydragnn\n"
         "  logdir: ${LOGDIR}\n"

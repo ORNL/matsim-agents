@@ -97,6 +97,14 @@ never appears in the parsed `ALConfig`.
   enumerator used by the discovery wrapper. No curated structure
   collection is required.
 
+### Random seed
+
+The required top-level `random_seed` is the root of every random draw in the
+run: pyXtal seed structures, MD velocities and thermostat noise, acquisition
+(random scores and MC-dropout masks), the validation split, and each
+iteration's fine-tuning. Each draw uses its own named stream of the seed; see
+[Reproducibility and random seeds](../reproducibility.md).
+
 ### Energy-reference warning
 
 VASP PAW totals and QE pseudopotential totals are **not** directly

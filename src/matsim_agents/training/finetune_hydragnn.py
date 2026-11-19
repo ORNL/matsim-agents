@@ -46,6 +46,7 @@ from ase import Atoms
 from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
 from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.seeding import numpy_rng, seed_process
 from matsim_agents.training.branch_routing import (
     BRANCH_DATASETS,
     branch_weights_for_frames,
@@ -304,7 +305,7 @@ def finetune_hydragnn(
     lr: float = 1e-3,
     batch_size: int = 4,
     val_fraction: float = 0.1,
-    seed: int = 0,
+    seed: int,
     energy_weight: float | None = None,
     force_weight: float | None = None,
     unfreeze_backbone: bool = False,
@@ -329,6 +330,7 @@ def finetune_hydragnn(
         save_hydragnn_energy_convention,
     )
 
+    seed_process(seed, "training")
     output_dir = Path(output_dir).expanduser().resolve()
     frames = prepare_hydragnn_training_frames(
         dataset_path, output_dir, elemental_reference_manifest
@@ -577,7 +579,7 @@ def _find_gfm_checkpoint(logdir: Path, checkpoint: str | None) -> Path:
 
 
 def _split(graphs, val_fraction, seed):
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     idx = np.arange(len(graphs))
     rng.shuffle(idx)
     n_val = max(1, int(round(len(graphs) * val_fraction))) if len(graphs) > 1 else 0
@@ -610,7 +612,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Validation partition for keeping the best epoch (replaces --val-fraction).",
     )
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, required=True, help="Seed of every random stream.")
     parser.add_argument("--energy-weight", type=float, default=None)
     parser.add_argument("--force-weight", type=float, default=None)
     parser.add_argument("--unfreeze-backbone", action="store_true")

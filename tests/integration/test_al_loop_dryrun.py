@@ -194,6 +194,7 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
     out_dir.mkdir()
 
     return ALConfig(
+        random_seed=0,
         mlip=HydraGNNConfig(logdir=logdir),
         md=MDConfig(
             seed_source=SeedSourceConfig(kind="paths", paths=[seed]),
@@ -265,7 +266,7 @@ def _patch_runtime(
     monkeypatch.setattr(
         loop_mod,
         "resolve_seed_structures",
-        lambda src, out_dir: [Path(path) for path in src.paths],
+        lambda src, out_dir, **_: [Path(path) for path in src.paths],
     )
     monkeypatch.setattr(
         loop_mod,
@@ -477,6 +478,8 @@ def test_nonempty_unsigned_dataset_cannot_be_appended(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": cfg.random_seed}))
     dataset_path = cfg.loop.out_dir / "dataset.extxyz"
     atoms = _make_candidate(0).atoms
     atoms.info["energy"] = -1.0
@@ -508,7 +511,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     cfg.loop.n_iterations = 2
     cfg.acquisition.n_select = 4
     cfg.trainer.validation_fraction = 0.25
-    cfg.trainer.validation_split_seed = 2
+    cfg.random_seed = 2
 
     import matsim_agents.active_learning.loop as loop_mod
 
@@ -708,7 +711,6 @@ def test_holdout_split_compares_candidate_without_promotion(
     cfg.trainer = TrainerConfig(
         enabled=True,
         validation_fraction=0.2,
-        validation_split_seed=7,
         compare_after_training=True,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
@@ -1165,6 +1167,7 @@ def test_resume_applies_last_promoted_model_for_all_backends(
         else:
             cfg.mlip.checkpoint = "incumbent.pk"
     cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": cfg.random_seed}))
     iteration_dir = cfg.loop.out_dir / "iteration_0000"
     iteration_dir.mkdir()
     (iteration_dir / "state.json").write_text(
@@ -1176,7 +1179,7 @@ def test_resume_applies_last_promoted_model_for_all_backends(
             }
         )
     )
-    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *args: [])
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *args, **_: [])
 
     loop_mod.run_active_learning(cfg)
 
@@ -1265,3 +1268,60 @@ def test_benchmark_sets_need_elemental_references(tmp_path: Path) -> None:
     data["loop"]["benchmark_sets"] = [BenchmarkSet(name="frozen", dataset=benchmark)]
     with pytest.raises(ValueError, match="need elemental DFT references"):
         ALConfig.model_validate(data)
+
+
+def test_resume_rejects_a_different_root_seed_before_writing_seed_structures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": 1}))
+    cfg.random_seed = 2
+    resolved = []
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *a, **k: resolved.append(1))
+
+    with pytest.raises(ValueError, match="started with random_seed 1"):
+        loop_mod.run_active_learning(cfg)
+    assert resolved == []
+
+
+def test_resume_rejects_legacy_iterations_without_a_recorded_seed(tmp_path: Path) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    iteration_dir = cfg.loop.out_dir / "iteration_0000"
+    iteration_dir.mkdir()
+    (iteration_dir / "state.json").write_text(json.dumps({"status": "complete", "iteration": 0}))
+
+    with pytest.raises(ValueError, match="without a recorded random_seed"):
+        loop_mod.run_active_learning(cfg)
+    assert not (cfg.loop.out_dir / "random-seed.json").exists()
+
+
+def test_resume_rejects_unseeded_partial_iterations_before_recording_a_seed(
+    tmp_path: Path,
+) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "iteration_0000").mkdir()  # partial: no state.json
+
+    with pytest.raises(ValueError, match="without a recorded random_seed"):
+        loop_mod.run_active_learning(cfg)
+    assert not (cfg.loop.out_dir / "random-seed.json").exists()
+
+
+def test_fresh_run_rejects_an_existing_run_directory(tmp_path: Path) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = False
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": 5}))
+
+    with pytest.raises(ValueError, match="already holds a run"):
+        loop_mod.run_active_learning(cfg)
+    assert json.loads((cfg.loop.out_dir / "random-seed.json").read_text()) == {"random_seed": 5}

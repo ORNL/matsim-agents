@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.campaign.acquisition import (
     CampaignAcquisitionPolicy,
@@ -35,12 +35,16 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.seeding import stream_seed
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
 class CampaignRunPolicy(BaseModel):
     """Control limits and failure behavior for a campaign run."""
+
+    # Unknown keys fail, so removed seed fields cannot be silently ignored.
+    model_config = ConfigDict(extra="forbid")
 
     formulas_per_iteration: int = Field(1, ge=1)
     max_iterations: int | None = Field(None, ge=1)
@@ -55,6 +59,13 @@ class CampaignRunPolicy(BaseModel):
     require_low_uncertainty_near_hull: bool = False
     low_uncertainty_threshold: float = Field(0.1, ge=0.0, le=1.0)
     acquisition: CampaignAcquisitionPolicy = Field(default_factory=CampaignAcquisitionPolicy)
+    random_seed: int = Field(
+        0,
+        description=(
+            "Root seed of the campaign: random formula acquisition and the seed of every "
+            "formula attempt derive from it (docs/reproducibility.md)."
+        ),
+    )
 
 
 class CampaignReviewDecision(BaseModel):
@@ -569,6 +580,7 @@ def _select_batch(
             iteration=campaign.iteration,
             policy=policy.acquisition,
             state=campaign.acquisition,
+            random_seed=policy.random_seed,
         )
         batch = selection.selected_formulas
     else:
@@ -576,18 +588,47 @@ def _select_batch(
     return batch, selection
 
 
+# Progress already charged from the current attempt's directory; a new attempt has none.
+_ATTEMPT_USAGE_BASELINES = (
+    "accounted_active_learning_dft_calculations",
+    "accounted_active_learning_node_hours",
+    "accounted_active_learning_iterations",
+    "accounted_refinement_stage_attempts",
+    "accounted_refinement_stage_node_hours",
+)
+
+
 def _start_formula_record(
-    campaign: CampaignState, formula: str, formula_dir: Path, selection: Any
+    campaign: CampaignState,
+    formula: str,
+    formula_root: Path,
+    selection: Any,
+    *,
+    random_seed: int,
 ) -> FormulaRunRecord:
-    """Reset the formula's run record for a new attempt in this iteration."""
+    """Reset the formula's run record for a new attempt in this iteration.
+
+    A new attempt draws a new seed from the campaign's *random_seed* and gets its
+    own directory, so a retry explores new structures without resuming the previous
+    attempt's artifacts. An interrupted attempt keeps its number, seed, and
+    directory, and replays.
+    """
     record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
+    if record.status == WorkflowStatus.RUNNING and record.random_seed is None:
+        raise ValueError(
+            f"{formula} has an interrupted attempt from a checkpoint without attempt seeds; "
+            "it cannot be recovered without abandoning its artifacts; start a new campaign"
+        )
+    if record.status != WorkflowStatus.RUNNING:
+        record.attempts += 1
+        record.random_seed = stream_seed(random_seed, "formula", formula, record.attempts)
+        # Usage baselines are per attempt directory; cumulative totals stay on the record.
+        for key in _ATTEMPT_USAGE_BASELINES:
+            record.evidence[key] = 0
     record.status = WorkflowStatus.RUNNING
     record.iteration = campaign.iteration
-    record.attempts += 1
-    record.output_dir = str(formula_dir)
+    record.output_dir = str(formula_root / f"attempt-{record.attempts:04d}")
     record.failure_reason = None
-    record.evidence["accounted_refinement_stage_attempts"] = 0
-    record.evidence["accounted_refinement_stage_node_hours"] = 0.0
     if selection is not None:
         record.acquisition_branch = selection.scores[formula].assigned_branch
     campaign.formula_runs[formula] = record
@@ -697,18 +738,7 @@ def _account_completed_formula(
         previous_node_hours + additional_al_node_hours + current_refinement_node_hours
     )
     record.model_promoted = result.model_promoted
-    if result.model_promoted:
-        record.promotion_sequence = (
-            max(
-                (
-                    item.promotion_sequence
-                    for item in campaign.formula_runs.values()
-                    if item.promotion_sequence is not None
-                ),
-                default=-1,
-            )
-            + 1
-        )
+    _record_promotion(campaign, record, al_result.get("iteration_states", []))
     record.evidence = {
         key: value for key, value in al_result.items() if key != "exploration_kwargs"
     }
@@ -838,7 +868,38 @@ def _ingest_formula_outcome(
     )
 
 
-def _account_failed_formula(record: FormulaRunRecord, formula_dir: Path) -> None:
+def _record_promotion(
+    campaign: CampaignState, record: FormulaRunRecord, iteration_states: list[dict[str, Any]]
+) -> None:
+    """Keep the newest checkpoint this attempt promoted as durable formula history.
+
+    The current attempt's evidence is replaced on every attempt; the promoted
+    checkpoint is not, so a later attempt that promotes nothing cannot erase it.
+    """
+    promoted = [
+        str(state["new_logdir"])
+        for state in iteration_states
+        if state.get("model_promoted") and state.get("new_logdir")
+    ]
+    if not promoted or promoted[-1] == record.promoted_checkpoint:
+        return
+    record.promoted_checkpoint = promoted[-1]
+    record.promotion_sequence = (
+        max(
+            (
+                item.promotion_sequence
+                for item in campaign.formula_runs.values()
+                if item.promotion_sequence is not None
+            ),
+            default=-1,
+        )
+        + 1
+    )
+
+
+def _account_failed_formula(
+    campaign: CampaignState, record: FormulaRunRecord, formula_dir: Path
+) -> None:
     """Charge durable partial progress from a failed formula attempt."""
     partial = _recover_partial_formula_evidence(formula_dir)
     previous_al_dft = int(record.evidence.get("accounted_active_learning_dft_calculations", 0))
@@ -866,12 +927,11 @@ def _account_failed_formula(record: FormulaRunRecord, formula_dir: Path) -> None
         0.0,
         partial["refinement_node_hours"] - previous_refinement_stage_node_hours,
     )
+    additional_al_iterations = max(0, len(partial["iteration_states"]) - previous_al_iterations)
     record.n_dft_calculations += additional_al_dft + additional_refinement_dft
     record.node_hours += additional_al_node_hours + additional_refinement_node_hours
-    record.n_active_learning_iterations = max(
-        record.n_active_learning_iterations,
-        len(partial["iteration_states"]),
-    )
+    record.n_active_learning_iterations += additional_al_iterations
+    _record_promotion(campaign, record, partial["iteration_states"])
     record.evidence.update(
         {
             "partial_campaign_stages": partial["stages"],
@@ -937,6 +997,30 @@ def run_campaign(
                 f"saved campaign_id {saved.campaign_id!r} does not match {campaign.campaign_id!r}"
             )
         campaign = saved
+    legacy = sorted(
+        formula
+        for formula, record in campaign.formula_runs.items()
+        if record.status == WorkflowStatus.RUNNING and record.random_seed is None
+    )
+    if legacy:
+        raise ValueError(
+            f"interrupted attempts of {legacy} come from a checkpoint without attempt seeds; "
+            "they cannot be recovered without abandoning their artifacts; start a new campaign"
+        )
+    if campaign.random_seed is None:
+        prior = sorted(f for f, record in campaign.formula_runs.items() if record.attempts)
+        if prior:
+            raise ValueError(
+                f"the campaign has prior attempts ({prior}) but no recorded random_seed; it "
+                "predates seed and promotion recording, so its seeds and promoted models "
+                "cannot be verified; start a new campaign"
+            )
+        campaign.random_seed = policy.random_seed
+    elif campaign.random_seed != policy.random_seed:
+        raise ValueError(
+            f"campaign was started with random_seed {campaign.random_seed}; resuming it with "
+            f"{policy.random_seed} would mix two seed streams in one campaign"
+        )
 
     root.mkdir(parents=True, exist_ok=True)
     ledger = open_campaign_ledger(campaign, root)
@@ -1000,8 +1084,14 @@ def run_campaign(
             if budget_reason:
                 stop_reason = budget_reason
                 break
-            formula_dir = root / "formulas" / formula
-            record = _start_formula_record(campaign, formula, formula_dir, selection)
+            record = _start_formula_record(
+                campaign,
+                formula,
+                root / "formulas" / formula,
+                selection,
+                random_seed=policy.random_seed,
+            )
+            formula_dir = Path(record.output_dir)
             campaign.save(state_path)
             try:
                 dft_allowance, mlip_allowance = _formula_allowances(campaign)
@@ -1018,19 +1108,23 @@ def run_campaign(
                     attempt_record.n_mlip_relaxations += 1
                     campaign.save(state_path)
 
+                attempt_seed = record.random_seed
                 result = (
                     formula_runner(
                         formula,
                         str(formula_dir),
                         dft_allowance,
+                        random_seed=attempt_seed,
                         mlip_allowance=mlip_allowance,
                         on_mlip_relaxation_attempt=record_mlip_attempt,
                     )
                     if mlip_allowance is not None
                     else (
-                        formula_runner(formula, str(formula_dir), dft_allowance)
+                        formula_runner(
+                            formula, str(formula_dir), dft_allowance, random_seed=attempt_seed
+                        )
                         if dft_allowance is not None
-                        else formula_runner(formula, str(formula_dir))
+                        else formula_runner(formula, str(formula_dir), random_seed=attempt_seed)
                     )
                 )
                 exploration = result.after_retraining or result.initial
@@ -1055,7 +1149,7 @@ def run_campaign(
                 record.status = WorkflowStatus.COMPLETE
                 completed.append(formula)
             except Exception as exc:  # noqa: BLE001
-                _account_failed_formula(record, formula_dir)
+                _account_failed_formula(campaign, record, formula_dir)
                 record.status = WorkflowStatus.FAILED
                 record.failure_reason = repr(exc)
                 failed.append(formula)

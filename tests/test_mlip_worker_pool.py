@@ -215,6 +215,7 @@ def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path
         on_phase_start=lambda cand: events.append(("start", cand.prototype_id)),
         on_relaxation_attempt=lambda: events.append(("attempt",)),
         on_phase_done=lambda cand, res: events.append(("done", cand.prototype_id)),
+        random_seed=0,
     )
     assert [args.structure_path for args in pool.inputs] == [
         c.structure_path for c in candidates[:3]
@@ -247,6 +248,7 @@ def test_exploration_rejects_both_relax_fn_and_pool(tmp_path):
             output_dir=str(tmp_path),
             relax_fn=lambda args: None,
             mlip_pool=MLIPWorkerPool(),
+            random_seed=0,
         )
 
 

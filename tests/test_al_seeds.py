@@ -42,7 +42,7 @@ def test_paths_round_trip(tmp_path: Path) -> None:
     _write_dummy_structure(b)
 
     cfg = SeedSourceConfig(kind="paths", paths=[a, b])
-    out = resolve_seed_structures(cfg, tmp_path / "seeds_out")
+    out = resolve_seed_structures(cfg, tmp_path / "seeds_out", random_seed=0)
     assert [p.name for p in out] == ["a.vasp", "b.vasp"]
 
 
@@ -51,7 +51,7 @@ def test_paths_missing_file_raises(tmp_path: Path) -> None:
     _write_dummy_structure(a)
     cfg = SeedSourceConfig(kind="paths", paths=[a, tmp_path / "ghost.vasp"])
     with pytest.raises(FileNotFoundError):
-        resolve_seed_structures(cfg, tmp_path / "seeds_out")
+        resolve_seed_structures(cfg, tmp_path / "seeds_out", random_seed=0)
 
 
 # --------------------------------------------------------------------------- #
@@ -137,7 +137,7 @@ def test_prompt_uses_llm_and_persists_proposal(
         max_compositions=2,
     )
     out_dir = tmp_path / "seeds"
-    seeds = resolve_seed_structures(cfg, out_dir)
+    seeds = resolve_seed_structures(cfg, out_dir, random_seed=0)
 
     # Every formula yielded one fake prototype seed.
     assert len(seeds) == 2
@@ -160,7 +160,7 @@ def test_prompt_with_unparseable_llm_output_raises(
         llm=LLMSeedConfig(),
     )
     with pytest.raises(RuntimeError, match=r"did not return any usable compositions"):
-        resolve_seed_structures(cfg, tmp_path / "seeds")
+        resolve_seed_structures(cfg, tmp_path / "seeds", random_seed=0)
 
 
 def test_prompt_strips_markdown_code_fences(
@@ -177,5 +177,5 @@ def test_prompt_strips_markdown_code_fences(
         llm=LLMSeedConfig(),
         max_compositions=1,
     )
-    seeds = resolve_seed_structures(cfg, tmp_path / "seeds")
+    seeds = resolve_seed_structures(cfg, tmp_path / "seeds", random_seed=0)
     assert [p.name for p in seeds] == ["Si_proto.vasp"]

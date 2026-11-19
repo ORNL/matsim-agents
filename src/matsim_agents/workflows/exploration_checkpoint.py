@@ -116,6 +116,7 @@ class RoundState(BaseModel):
 def _compatibility() -> dict[str, str]:
     # Refuse to combine evidence produced by changed workflow/optimizer code
     # or scientific dependencies. Users can inspect the original run instead.
+    from matsim_agents import seeding
     from matsim_agents.backends.mlip import calculator, mace_inference, relaxation
     from matsim_agents.discovery import composition, seeds, selection, stability
     from matsim_agents.workflows import (
@@ -128,6 +129,7 @@ def _compatibility() -> dict[str, str]:
 
     result = {"python": platform.python_version()}
     for module in (
+        seeding,
         calculator,
         mace_inference,
         relaxation,

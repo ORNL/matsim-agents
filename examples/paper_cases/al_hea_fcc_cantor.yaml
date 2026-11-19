@@ -19,6 +19,9 @@
 #     and set smearing/degauss as below.
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 13
+
 vars:
   PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
   TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh
@@ -56,7 +59,6 @@ md:
       - CrMn2FeCoNi            # Mn-enriched
     max_phases_per_composition: 3    # FCC, HCP, BCC
     n_random: 4
-    random_seed: 13
   timestep_fs: 2.0
   n_steps: 400
   temperature_K: 1000.0
@@ -100,7 +102,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
 

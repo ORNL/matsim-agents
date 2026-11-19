@@ -970,7 +970,13 @@ def replay_material(
                 min_uncertainty_eV_per_A=params["min_uncertainty_eV_per_A"],
             )
             calculators = [StoredForces(committee[name]) for name in names]
-            chosen, scores = select_candidates(candidates, cfg, None, calculators)
+            # The ensemble strategy draws nothing; the seed only fixes the replay contract.
+            replay_seed = int(
+                sha256_bytes(f"{protocol['protocol_id']}|{material}|replay".encode())[:8], 16
+            )
+            chosen, scores = select_candidates(
+                candidates, cfg, None, calculators, seed=replay_seed
+            )
             score = dict(zip([c.candidate_id for c in candidates], scores, strict=True))
             selections = [
                 {

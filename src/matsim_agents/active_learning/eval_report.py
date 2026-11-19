@@ -26,6 +26,8 @@ from pathlib import Path
 
 import numpy as np
 
+from matsim_agents.seeding import numpy_rng
+
 METRIC_DEFINITIONS = {
     "force_mae_eV_per_A": "Mean absolute error over all Cartesian force components (eV/A).",
     "force_vector_mae_eV_per_A": (
@@ -60,7 +62,7 @@ def _bootstrap(group_values: dict[str, list[float]], *, seed: int, n: int) -> li
     groups = list(group_values)
     if len(groups) < 2:
         return None
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     sums = np.array([np.sum(group_values[g]) for g in groups])
     counts = np.array([len(group_values[g]) for g in groups])
     picks = rng.integers(0, len(groups), size=(n, len(groups)))
@@ -72,7 +74,7 @@ def group_report(
     parity: dict[str, np.ndarray],
     group_ids: Sequence[str],
     *,
-    seed: int = 0,
+    seed: int,
     n_bootstrap: int = 2000,
 ) -> dict:
     """Per-frame, per-group, and overall summaries of one evaluation.
@@ -110,7 +112,7 @@ def group_report(
     return report
 
 
-def paired_difference(after: dict, before: dict, *, seed: int = 0, n_bootstrap: int = 2000) -> dict:
+def paired_difference(after: dict, before: dict, *, seed: int, n_bootstrap: int = 2000) -> dict:
     """``after - before`` per metric on identical groups, with a group bootstrap interval."""
     result = {}
     for metric in FRAME_ERRORS:
@@ -125,7 +127,7 @@ def paired_difference(after: dict, before: dict, *, seed: int = 0, n_bootstrap: 
         weights = np.array([a["per_group"][g]["n_frames"] for g in groups], dtype=float)
         interval = None
         if len(groups) >= 2:
-            rng = np.random.default_rng(seed)
+            rng = numpy_rng(seed)
             picks = rng.integers(0, len(groups), size=(n_bootstrap, len(groups)))
             means = (diffs[picks] * weights[picks]).sum(axis=1) / weights[picks].sum(axis=1)
             interval = [float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))]

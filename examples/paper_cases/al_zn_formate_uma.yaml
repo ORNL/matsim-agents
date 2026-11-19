@@ -24,6 +24,9 @@
 #   matsim-agents al validate-config examples/paper_cases/al_zn_formate_uma.yaml
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 23
+
 vars:
   PROJ_ROOT:  /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
   RUNS_ROOT:  /global/cfs/projectdirs/m5216/mlupopa/runs
@@ -55,7 +58,6 @@ md:
     paths:
       - ${SEED_XYZ}
     n_random: 3
-    random_seed: 23
   timestep_fs: 0.5
   n_steps: 200
   temperature_K: 300.0

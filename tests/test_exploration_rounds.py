@@ -18,6 +18,7 @@ from matsim_agents.workflows import (
     run_exploration,
     summarize_exploration,
 )
+from matsim_agents.workflows.exploration_rounds import round_seed
 
 
 @pytest.fixture
@@ -84,7 +85,7 @@ def test_three_rounds_reuse_one_model_and_rank_cumulatively(setup):
     assert result.status == "completed"
     assert result.rounds_completed == result.rounds_requested == 3
     assert result.counts["attempted"] == result.counts["converged"] == 6
-    assert calls["seeds"] == [10, 11, 12]
+    assert calls["seeds"] == [round_seed(10, index) for index in range(3)]
     assert calls["loads"] == result.calculator_loads == 1
     ranking = json.loads((Path(result.run_directory) / "cumulative-ranking.json").read_text())
     assert len(ranking["ranking"]) == 6
@@ -120,7 +121,7 @@ def test_interrupt_resume_reuses_completed_attempts_and_generation(setup, monkey
     resumed = resume_exploration(directory)
     assert resumed.status == "completed"
     assert resumed.counts["attempted"] == 6
-    assert calls["seeds"] == [10, 11, 12]
+    assert calls["seeds"] == [round_seed(10, index) for index in range(3)]
     assert calls["relax"].count(first) == 1
     assert resumed.calculator_loads == calls["loads"] == 2
 
@@ -186,7 +187,7 @@ def test_exploration_runs_and_resumes_when_cfs_rejects_flock(setup, monkeypatch,
     monkeypatch.setattr(fcntl, "flock", unavailable)
     result = run_exploration(cfg)
     assert result.rounds_completed == iterations
-    assert calls["seeds"] == [10 + index for index in range(iterations)]
+    assert calls["seeds"] == [round_seed(10, index) for index in range(iterations)]
     assert result.counts["attempted"] == 2 * iterations
     assert not (Path(result.run_directory) / ".exploration.lock").exists()
     assert resume_exploration(result.run_directory) == result
@@ -379,7 +380,7 @@ def test_diverse_resume_uses_saved_nonsequential_selection(diverse_setup, monkey
     result = resume_exploration(directory)
     assert result.counts["attempted"] == 3
     assert len(selections) == 2  # only the outstanding rounds
-    assert calls["seeds"] == [10, 11, 12]
+    assert calls["seeds"] == [round_seed(10, index) for index in range(3)]
     assert calls["relax"][0].endswith("round-0001/seeds/seed-0.extxyz")
     assert calls["relax"][1].endswith("round-0001/seeds/seed-2.extxyz")
     assert result.calculator_loads == 2
@@ -694,3 +695,9 @@ def test_interrupted_journal_write_does_not_publish_uncommitted_attempt(setup, m
     assert state["rounds"][0]["attempts"] == []
     assert all("/attempt-" not in path for path in state["artifacts"])
     assert resume_exploration(directory).counts["attempted"] == 6
+
+
+def test_checkpoint_compatibility_covers_the_seeding_module():
+    from matsim_agents.workflows.exploration_checkpoint import _compatibility
+
+    assert "matsim_agents.seeding" in _compatibility()

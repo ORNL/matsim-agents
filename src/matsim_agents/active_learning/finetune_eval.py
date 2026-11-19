@@ -76,6 +76,7 @@ from matsim_agents.datasets.splits import (
     load_split,
     make_split,
 )
+from matsim_agents.seeding import stream_seed
 
 log = logging.getLogger(__name__)
 
@@ -436,7 +437,7 @@ def _evaluate(
     out_json.write_text(json.dumps(asdict(metrics), indent=2))
     np.savez_compressed(
         out_json.with_name(out_json.stem + "_parity.npz"),
-        **_subsample(parity, max_parity_points),
+        **_subsample(parity, max_parity_points, seed=stream_seed(seed, "parity-plot")),
     )
     log.info(
         "%s %s on %s: raw_E_MAE=%.4f (formation %.4f) eV/atom  F_MAE=%.4f eV/A",
@@ -543,7 +544,7 @@ def run_finetune_endpoints(
     mlip: MLIPConfig | dict,
     elemental_reference_manifest: str | Path,
     evaluation: EvaluationConfig,
-    seed: int = 0,
+    seed: int,
     max_parity_points: int = 20000,
     eval_only: bool = False,
 ) -> Path:
@@ -752,7 +753,7 @@ def _run_repetition(
             groups,
             max_parity_points=max_parity_points,
             reference_manifest=reference_manifest,
-            seed=training_seed,
+            seed=stream_seed(training_seed, "bootstrap"),
             **kwargs,
         )
 
@@ -813,7 +814,15 @@ def _run_repetition(
                 iteration=n_iters,
             ),
         }
-    report = _report(manifest, mlip, recipe, chosen, evaluations, run_dir)
+    report = _report(
+        manifest,
+        mlip,
+        recipe,
+        chosen,
+        evaluations,
+        run_dir,
+        seed=stream_seed(training_seed, "bootstrap"),
+    )
     (run_dir / "eval" / f"report{suffix}.json").write_text(json.dumps(report, indent=2))
     return {
         "training_seed": training_seed,
@@ -836,6 +845,8 @@ def _report(
     selection: dict,
     evaluations: dict,
     run_dir: Path,
+    *,
+    seed: int,
 ) -> dict:
     cost = run_dir / "ft" / "cost.json"
     return {
@@ -869,7 +880,9 @@ def _report(
             for name, models in evaluations.items()
         },
         "paired_finetuned_minus_baseline": {
-            name: paired_difference(models["finetuned"]["groups"], models["baseline"]["groups"])
+            name: paired_difference(
+                models["finetuned"]["groups"], models["baseline"]["groups"], seed=seed
+            )
             for name, models in evaluations.items()
         },
         "fine_tuning_cost": json.loads(cost.read_text()) if cost.is_file() else None,
@@ -906,7 +919,7 @@ def main(argv: list[str] | None = None) -> int:
         help="YAML evaluation config (objective, split, test domains, repetitions, "
         "selection, fine_tune recipe); see docs/mlip-evaluation.md and examples/evaluation/.",
     )
-    parser.add_argument("--seed", type=int, default=0, help="Fine-tuning seed.")
+    parser.add_argument("--seed", type=int, required=True, help="Fine-tuning seed.")
     parser.add_argument("--max-parity-points", type=int, default=20000)
     parser.add_argument(
         "--eval-only",

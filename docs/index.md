@@ -32,6 +32,7 @@ the framework.
 
 - [Interpret workflow results and recover safely](workflows/interpret-results.md)
 - [Run artifacts, provenance, and restarts](run-artifacts-and-restarts.md)
+- [Reproducibility and random seeds](reproducibility.md)
 - [Evidence ledger](evidence-ledger.md)
 - [Evaluating fine-tuned MLIPs](mlip-evaluation.md)
 

@@ -110,6 +110,7 @@ def test_registry_retains_lineage_when_seeds_collapse_to_one_family(tmp_path):
         max_candidates=2,
         policy=CandidateSelectionPolicy(enabled=True, maximum_per_relaxed_family=1),
         uncertainty_by_candidate={"NbO2-P0000": 0.1, "NbO2-R0000": 0.4},
+        random_seed=0,
     )
     assert len(selected) == 1
     assert set(scores) == {"NbO2-P0000", "NbO2-R0000"}
@@ -152,6 +153,7 @@ def test_registry_derives_atom_count_when_candidate_metadata_is_missing(tmp_path
         ),
         max_candidates=1,
         policy=CandidateSelectionPolicy(enabled=True),
+        random_seed=0,
     )
     assert np.isfinite(scores[candidate_ids[0]].exploitation_score)
 

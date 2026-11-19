@@ -146,6 +146,7 @@ def _fine_tune_argv(
     dataset: Path,
     out_dir: Path,
     references: Path,
+    seed: int,
 ) -> list[str]:
     """Command that runs the backend's fine-tuner, directly or through the site launcher.
 
@@ -163,6 +164,7 @@ def _fine_tune_argv(
             epochs=trainer_cfg.epochs_per_iter,
             references=references,
             finetune_mode=trainer_cfg.finetune_mode,
+            seed=seed,
         ),
     ]
     if trainer_cfg.train_launcher is None:
@@ -210,6 +212,7 @@ def retrain_hydragnn(
     iteration: int,
     out_logdir: str | Path,
     *,
+    seed: int,
     launch: ProcessLaunch,
     dft_config: DFTConfig | None = None,
     dft_launch: ProcessLaunch | None = None,
@@ -249,6 +252,7 @@ def retrain_hydragnn(
         dataset=Path(dataset_path),
         out_dir=out_logdir,
         references=reference_manifest,
+        seed=seed,
     )
 
     log.info("Launching retrain: %s", " ".join(argv))
@@ -349,6 +353,7 @@ def retrain_uma(
     iteration: int,
     out_model_dir: str | Path,
     *,
+    seed: int,
     launch: ProcessLaunch,
     dft_config: DFTConfig | None = None,
     dft_launch: ProcessLaunch | None = None,
@@ -388,6 +393,7 @@ def retrain_uma(
         dataset=Path(dataset_path),
         out_dir=out_model_dir,
         references=manifest,
+        seed=seed,
     )
 
     log_path = out_model_dir / "train.log"
@@ -413,6 +419,7 @@ def retrain_mace(
     iteration: int,
     out_model_dir: str | Path,
     *,
+    seed: int,
     launch: ProcessLaunch,
     dft_config: DFTConfig | None = None,
     dft_launch: ProcessLaunch | None = None,
@@ -453,6 +460,7 @@ def retrain_mace(
         dataset=Path(dataset_path),
         out_dir=out_model_dir,
         references=manifest,
+        seed=seed,
     )
 
     log_path = out_model_dir / "train.log"

@@ -70,6 +70,7 @@ def test_completion_callback_failure_does_not_double_count_candidates(
         mlip=UMAConfig(),
         relax_fn=relax,
         on_phase_done=callback,
+        random_seed=0,
     )
     assert result.candidate_counts == {
         "generated": 3,
@@ -186,6 +187,7 @@ def test_relaxation_allowance_preserves_generation_and_counts_failures(
         n_random=50,
         max_relaxations=allowance,
         relax_fn=fail,
+        random_seed=0,
     )
     assert generation == [50]
     assert len(result.phase_candidates) == 5
@@ -467,7 +469,7 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
     parsed = parse_composition("Si")
     assert parsed is not None
     monkeypatch.setattr(
-        "matsim_agents.discovery.seeds.generate_seeds",
+        "matsim_agents.discovery.wrapper.generate_seeds",
         lambda *args, **kwargs: [
             {"formula": "Si", "source": "prototype", "structure_path": "Si.vasp"}
         ],
@@ -477,9 +479,47 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
         "Si",
         policy=PhaseExplorationPolicy(relax_structures=False),
         output_dir=str(tmp_path),
+        exploration_kwargs={"random_seed": 0},
     )
 
     assert result.initial.outcome_class == "seed_only"
+
+
+def test_seed_only_phase_runs_the_campaign_generation_action(tmp_path, monkeypatch):
+    from matsim_agents.discovery.seeds import SeedGenerationAction
+
+    action = SeedGenerationAction(
+        action_id="attempt", formula="Si", formula_units=1, pyxtal_count=2, random_seed=77
+    )
+    calls = []
+
+    def generate(requested, output_dir):
+        calls.append((requested, output_dir))
+        return [PhaseCandidate(formula="Si", structure_path="Si.vasp")]
+
+    monkeypatch.setattr("matsim_agents.discovery.wrapper.generate_seed_action", generate)
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds",
+        lambda *a, **k: pytest.fail("the default 50-structure search ran"),
+    )
+
+    result = run_phase_exploration(
+        "Si",
+        policy=PhaseExplorationPolicy(relax_structures=False),
+        output_dir=str(tmp_path),
+        exploration_kwargs={"random_seed": None, "generation_action": action},
+    )
+
+    assert result.initial.outcome_class == "seed_only"
+    assert calls[0][0] == action and calls[0][1].endswith("Si/seeds/attempt")
+    wrong = action.model_copy(update={"formula": "Ge"})
+    with pytest.raises(ValueError, match="does not match"):
+        run_phase_exploration(
+            "Si",
+            policy=PhaseExplorationPolicy(relax_structures=False),
+            output_dir=str(tmp_path / "wrong"),
+            exploration_kwargs={"random_seed": None, "generation_action": wrong},
+        )
 
 
 def test_phase_run_persists_hull_follow_up_evidence_without_starting_campaign(

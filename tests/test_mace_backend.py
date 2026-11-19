@@ -152,8 +152,8 @@ def test_model_configs_forward_xpu_through_relaxation_schema(tmp_path, backend):
         "mace": MACEConfig(device="xpu"),
     }
     cfg = SimpleNamespace(mlip=models[backend])
-    values = _exploration_kwargs(cfg, {})
-    request = RelaxStructureInput(structure_path="structure.cif", **values)
+    values = _exploration_kwargs(cfg, {}, generation_seed=0)
+    request = RelaxStructureInput(structure_path="structure.cif", mlip=values["mlip"])
     assert request.mlip.device == "xpu"
     assert request.mlip.backend == backend
 
@@ -168,9 +168,9 @@ def test_campaign_forwards_mace_selection():
     )
     cfg = SimpleNamespace(mlip=mace)
 
-    values = _exploration_kwargs(cfg, {"output_dir": "out"})
+    values = _exploration_kwargs(cfg, {"output_dir": "out"}, generation_seed=0)
 
-    assert values == {"mlip": mace, "output_dir": "out"}
+    assert values == {"mlip": mace, "output_dir": "out", "random_seed": 0}
 
 
 def test_relaxation_input_accepts_mace():
@@ -230,6 +230,7 @@ def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
         output_dir=str(tmp_path),
         mlip=MACEConfig(family="mace_mp", model="medium-omat-0", dispersion=True),
         relax_fn=relax,
+        random_seed=0,
     )
 
     assert captured["mlip"]["backend"] == "mace"
@@ -273,6 +274,7 @@ def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypat
         output_dir=str(tmp_path),
         mlip=MACEConfig(family="mace_mp", model="medium-omat-0"),
         generation_action=action,
+        random_seed=None,
         relax_fn=fail_relaxation,
     )
 
@@ -307,6 +309,7 @@ def test_exploration_reports_ranking_failure_after_convergence(
         output_dir=str(tmp_path),
         mlip=MACEConfig(),
         relax_fn=lambda request: fake_relaxation_result,
+        random_seed=0,
     )
 
     assert result.outcome_class == "ranking_failure"
@@ -341,6 +344,7 @@ def test_exploration_reports_non_convergence_when_residual_force_is_ineligible(
         output_dir=str(tmp_path),
         mlip=MACEConfig(),
         relax_fn=lambda request: fake_relaxation_result,
+        random_seed=0,
     )
 
     assert result.outcome_class == "relaxation_non_convergence"

@@ -50,6 +50,7 @@ if retrain:
                     "train_launcher": os.environ.get("MATSIM_TRAIN_LAUNCHER")})
 
 cfg = {
+    "random_seed": int(os.environ.get("MATSIM_RANDOM_SEED", "0")),
     "mlip": {
         "backend": "hydragnn",
         "logdir": os.environ["LOGDIR"],
@@ -58,8 +59,7 @@ cfg = {
     },
     "md": {"seed_source": {"kind": "paths", "paths": os.environ["MATSIM_SEED_STRUCTURES"].split(":")},
            "n_steps": int(os.environ.get("MATSIM_MD_STEPS", "200")), "sample_every": 10,
-           "temperature_K": float(os.environ.get("MATSIM_MD_TEMPERATURE_K", "600")),
-           "random_seed": int(os.environ.get("MATSIM_RANDOM_SEED", "0"))},
+           "temperature_K": float(os.environ.get("MATSIM_MD_TEMPERATURE_K", "600"))},
     "acquisition": {"strategy": os.environ.get("MATSIM_ACQUISITION", "mc_dropout"),
                     "n_select": int(os.environ.get("MATSIM_N_SELECT", "8")),
                     "mc_dropout_passes": int(os.environ.get("MATSIM_MC_DROPOUT_PASSES", "8")),

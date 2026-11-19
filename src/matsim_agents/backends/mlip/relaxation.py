@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPBackendConfig, MLIPConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.seeding import numpy_rng
 
 
 class RelaxationSettings(BaseModel):
@@ -93,7 +94,9 @@ class RelaxStructureInput(RelaxationSettings):
     )
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
-    seed: int = 42
+    displacement_seed: int | None = Field(
+        None, description="Seed of the random displacement; required with random_displacement."
+    )
     output_dir: str | None = Field(
         None,
         description="Where to write the optimized structure, trajectory, and CSV log. "
@@ -102,6 +105,8 @@ class RelaxStructureInput(RelaxationSettings):
 
     @model_validator(mode="after")
     def _validate_model_inputs(self):
+        if self.random_displacement and self.displacement_seed is None:
+            raise ValueError("random_displacement requires displacement_seed")
         self.mlip.check_loadable()
         self.conditioned_mlip()
         return self
@@ -817,7 +822,8 @@ def relax_with_mlip(
     atoms.calc = calculator
 
     if args.random_displacement:
-        rng = np.random.default_rng(args.seed)
+        assert args.displacement_seed is not None
+        rng = numpy_rng(args.displacement_seed)
         atoms.set_positions(
             atoms.get_positions()
             + rng.uniform(

@@ -21,6 +21,9 @@
 #   PROJ_ROOT=$PWD RUNS_ROOT=/path/to/runs matsim-agents al run <cfg>
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 42
+
 vars:
   PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
   RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
@@ -61,7 +64,6 @@ md:
       - LiFePO4          # olivine prototype (AFLOW AB4C_oP12 / AB4CD_oP28)
     max_phases_per_composition: 4    # olivine + maricite + 2 others
     n_random: 4                      # pyXtal random-symmetry search (requires pyxtal)
-    random_seed: 42
   timestep_fs: 1.0
   n_steps: 300
   temperature_K: 800.0              # above Debye temp; samples broader config space
@@ -103,7 +105,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_mlip-train-step-frontier.sh
   epochs_per_iter: 5
 

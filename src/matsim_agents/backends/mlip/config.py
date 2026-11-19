@@ -212,6 +212,7 @@ class MLIPBackendConfig(BaseModel, ABC):
         epochs: int,
         references: Path,
         finetune_mode: str,
+        seed: int,
     ) -> list[str]:
         """Command-line arguments of :attr:`fine_tuner_module` for one fine-tune."""
 
@@ -358,12 +359,14 @@ class HydraGNNConfig(MLIPBackendConfig):
         epochs: int,
         references: Path,
         finetune_mode: str,
+        seed: int,
     ) -> list[str]:
         args = [
             "--dataset", str(dataset),
             "--output-dir", str(out_dir),
             "--gfm-logdir", str(self.logdir),
             "--epochs", str(epochs),
+            "--seed", str(seed),
             "--elemental-reference-manifest", str(references),
             "--device", self.device,
             "--charge", str(self.charge),
@@ -495,6 +498,7 @@ class UMAConfig(MLIPBackendConfig):
         epochs: int,
         references: Path,
         finetune_mode: str,
+        seed: int,
     ) -> list[str]:
         args = [
             "--dataset", str(dataset),
@@ -502,6 +506,7 @@ class UMAConfig(MLIPBackendConfig):
             "--base-model", str(self.model_name),
             "--task-name", str(self.task_name),
             "--epochs", str(epochs),
+            "--seed", str(seed),
             "--elemental-reference-manifest", str(references),
             "--device", self.device,
         ]  # fmt: skip
@@ -631,6 +636,7 @@ class MACEConfig(MLIPBackendConfig):
         epochs: int,
         references: Path,
         finetune_mode: str,
+        seed: int,
     ) -> list[str]:
         args = [
             "--dataset", str(dataset),
@@ -639,6 +645,7 @@ class MACEConfig(MLIPBackendConfig):
             "--base-model", str(self.model),
             "--precision", self.precision or "fp64",
             "--epochs", str(epochs),
+            "--seed", str(seed),
             "--elemental-reference-manifest", str(references),
             "--device", self.device,
         ]  # fmt: skip

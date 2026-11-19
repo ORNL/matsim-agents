@@ -22,6 +22,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
 # Lowest layer first. A unit may import only from units in strictly lower
 # layers (or from itself); units in the same layer must not import each other.
 LAYERS: list[set[str]] = [
+    {"seeding"},
     {"execution", "datasets"},
     {"backends.llm", "backends.dft", "backends.mlip"},
     {"discovery", "training"},

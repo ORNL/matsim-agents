@@ -101,7 +101,7 @@ def test_trainers_reject_missing_references_before_model_import(tmp_path, traine
     from importlib import import_module
 
     module = import_module(f"matsim_agents.training.{trainer_name}")
-    kwargs = {"gfm_logdir": tmp_path / "missing-foundation"}
+    kwargs = {"gfm_logdir": tmp_path / "missing-foundation", "seed": 0}
     if trainer_name == "finetune_hydragnn":
         kwargs["branch_mlp_path"] = tmp_path / "missing-mlp"
     with pytest.raises(ValueError, match="elemental_reference_manifest"):
@@ -127,7 +127,7 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
         raise RuntimeError("verified physical frames before model construction")
 
     monkeypatch.setattr(module, "_resolve_hydragnn_paths", check_preparation)
-    kwargs = {"gfm_logdir": tmp_path, "elemental_reference_manifest": manifest}
+    kwargs = {"gfm_logdir": tmp_path, "elemental_reference_manifest": manifest, "seed": 0}
     if trainer_name == "finetune_hydragnn":
         kwargs["branch_mlp_path"] = tmp_path / "mlp"
     with pytest.raises(RuntimeError, match="verified physical frames"):
@@ -620,6 +620,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         0,
         output,
         launch=LAUNCH,
+        seed=0,
     )
     assert result == output
     # The output is verified from its recorded hashes; the promotion comparison
@@ -662,6 +663,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             0,
             output,
             launch=LAUNCH,
+            seed=0,
         )
 
 
@@ -707,7 +709,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
 
     monkeypatch.setattr(factory, "build_hydragnn_calculator", unexpected_model_load)
     with pytest.raises(ValueError, match="does not match the requested training dataset"):
-        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH)
+        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH, seed=0)
 
 
 def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
@@ -730,7 +732,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     )
 
     with pytest.raises(ValueError, match="requested elemental reference manifest"):
-        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH)
+        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH, seed=0)
 
 
 def test_retrain_rejects_multirank_builtin_before_resolving_references(
@@ -759,6 +761,7 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
             0,
             tmp_path / "output",
             launch=two_nodes,
+            seed=0,
         )
 
 

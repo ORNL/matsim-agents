@@ -550,13 +550,12 @@ relaxations concurrently:
   for the whole session, including `/relax`. Campaign formula exploration uses
   the AL template's `mlip` pool when declared; perturbation-robustness trials
   reuse one in-process model.
-- **AL MD.** Each seed draws from its own random stream, spawned from
-  `md.random_seed` with NumPy's `SeedSequence`, so a seed's trajectory depends
-  only on `random_seed` and the seed's position in the list. Seeds then run
+- **AL MD.** Each seed structure draws from its own random stream of the
+  iteration's `"md"` stream of the run's `random_seed`
+  ([reproducibility](reproducibility.md)), so its trajectory depends only on the
+  seed, the iteration, and the structure's position in the list. Seeds then run
   concurrently on the `mlip` pool, one per device, and candidates are returned
-  in seed order; the result is identical to running them one after another.
-  Trajectories differ from runs made before this change, which drew every seed
-  from one shared stream. When the `mlip` pool shares devices with `dft` or
+  in seed order; the result is identical to running them one after another. When the `mlip` pool shares devices with `dft` or
   `training`, the MD workers exit after sampling so their device memory is free
   for DFT; when its devices are its own, the workers and the driver's
   calculators stay loaded across iterations and reload only after a promotion
