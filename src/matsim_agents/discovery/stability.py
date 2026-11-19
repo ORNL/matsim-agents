@@ -24,6 +24,7 @@ before any stability claim is published.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from itertools import combinations
@@ -377,7 +378,9 @@ def score_stability(
     candidates:
         Optional seed candidates to join against by ``structure_path`` so
         that the report can carry the ``source`` / ``prototype_id`` /
-        ``space_group`` / ``needs_dft_verification`` provenance. When
+        ``space_group`` / ``needs_dft_verification`` provenance. Paths are
+        compared after resolution, so relative and absolute spellings of one
+        file match; a relaxation without a candidate is an error. When
         omitted, all entries default to a "prototype" source.
     """
     if ranking_mode == RankingMode.CONVEX_HULL:
@@ -390,14 +393,19 @@ def score_stability(
 
     cand_by_path: dict[str, PhaseCandidate] = {}
     if candidates is not None:
-        cand_by_path = {c.structure_path: c for c in candidates}
+        cand_by_path = {os.path.realpath(c.structure_path): c for c in candidates}
 
     items: list[PhaseStability] = []
     for r in relaxations:
         composition = _composition_from_path(r.optimized_structure_path)
         n_atoms = int(sum(composition.values()))
         e_per_atom = r.final_energy_eV / max(n_atoms, 1)
-        cand = cand_by_path.get(r.structure_path)
+        cand = cand_by_path.get(os.path.realpath(r.structure_path))
+        if candidates is not None and cand is None:
+            raise ValueError(
+                f"relaxation of {r.structure_path} matches no generated candidate; "
+                "its source provenance would be lost"
+            )
         items.append(
             PhaseStability(
                 structure_path=r.structure_path,
