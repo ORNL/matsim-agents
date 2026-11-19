@@ -550,6 +550,34 @@ class TestDefaultScientificChatState:
         assert list((session.transcript.directory / "prompts").glob("*-assistant.json"))
         assert not any(isinstance(message, AIMessage) for message in session.messages)
 
+    def test_scientific_reply_in_one_json_fence_is_accepted(self, tmp_path, monkeypatch):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        reply = {
+            "response": "Li2MnO3 is a plausible cathode candidate.",
+            "scientific_hypotheses": [
+                {
+                    "id": "H1",
+                    "claim": "Li2MnO3 can host reversible Li extraction.",
+                    "prediction": "Delithiation keeps the layered framework.",
+                    "status": "proposed",
+                    "reason": "Initial proposal without computed evidence.",
+                    "evidence_ids": ["chat-user-0001"],
+                }
+            ],
+        }
+
+        class FencedModel:
+            def invoke(self, _messages):
+                return SimpleNamespace(content=f"```json\n{json.dumps(reply)}\n```")
+
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: FencedModel())
+        config = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path / "outputs"))
+        session = DiscoveryChatSession(config=config)
+
+        assert chat_once(session, "Could Li2MnO3 be a useful cathode?") == reply["response"]
+        assert session.scientific_hypotheses == reply["scientific_hypotheses"]
+
     def test_default_scientific_turn_cites_measured_tool_output(
         self, discovery_config, monkeypatch
     ):
