@@ -47,7 +47,10 @@ state records the root seed of its first run (`CampaignState.random_seed`);
 resuming with a different seed is rejected. Each new attempt is charged its own
 DFT calculations, node hours, and active-learning iterations, also when it fails.
 A promoted checkpoint is kept on the formula record (`promoted_checkpoint`), so
-a later attempt that promotes nothing does not erase it. An interrupted attempt from a checkpoint
+a later attempt that promotes nothing does not erase it; a promotion committed
+before a later stage fails is used by the next formula. A checkpoint with prior
+attempts but no recorded root seed predates seed and promotion recording and is
+rejected rather than resumed. An interrupted attempt from a checkpoint
 without attempt seeds cannot be recovered reproducibly and is rejected before
 the checkpoint is modified.
 

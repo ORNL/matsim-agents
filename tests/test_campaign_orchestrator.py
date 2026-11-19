@@ -270,6 +270,7 @@ def test_campaign_rejects_legacy_interrupted_attempt_before_touching_the_checkpo
 
 def test_campaign_retries_draw_new_seeds_and_recovery_keeps_the_attempt_seed(tmp_path):
     campaign = _campaign()
+    campaign.random_seed = 9
     campaign.formula_runs["NbO"] = FormulaRunRecord(
         formula="NbO", status=WorkflowStatus.RUNNING, attempts=1, random_seed=1234
     )
@@ -1087,3 +1088,24 @@ def test_failed_retries_accumulate_active_learning_iterations(tmp_path):
     assert record.attempts == 2
     assert record.n_active_learning_iterations == 2
     assert record.n_dft_calculations == 2
+
+
+def test_campaign_rejects_legacy_checkpoints_with_prior_attempts(tmp_path):
+    campaign = _campaign()
+    campaign.formula_runs["NbO2"] = FormulaRunRecord(
+        formula="NbO2", status=WorkflowStatus.COMPLETE, attempts=1, model_promoted=True
+    )
+
+    def runner(formula: str, output_dir: str, *, random_seed: int):
+        raise AssertionError("must not run")
+
+    with pytest.raises(ValueError, match="no recorded random_seed"):
+        run_campaign(
+            campaign,
+            output_dir=tmp_path,
+            formula_runner=runner,
+            policy=CampaignRunPolicy(max_iterations=1),
+            resume=False,
+        )
+    assert campaign.random_seed is None
+    assert not (tmp_path / "campaign_state.json").exists()

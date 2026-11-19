@@ -1008,6 +1008,13 @@ def run_campaign(
             "they cannot be recovered without abandoning their artifacts; start a new campaign"
         )
     if campaign.random_seed is None:
+        prior = sorted(f for f, record in campaign.formula_runs.items() if record.attempts)
+        if prior:
+            raise ValueError(
+                f"the campaign has prior attempts ({prior}) but no recorded random_seed; it "
+                "predates seed and promotion recording, so its seeds and promoted models "
+                "cannot be verified; start a new campaign"
+            )
         campaign.random_seed = policy.random_seed
     elif campaign.random_seed != policy.random_seed:
         raise ValueError(

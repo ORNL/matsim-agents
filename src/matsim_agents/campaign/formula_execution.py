@@ -1694,13 +1694,25 @@ def make_formula_runner(
                 "exploration_kwargs": exploration_kwargs,
             }
         )
-        result = run_formula_with_active_learning(
-            formula, output_dir, config=effective_config, random_seed=random_seed
-        )
-        if result.model_promoted and result.active_learning_result:
-            promoted = _promoted_model_path(result)
+        try:
+            result = run_formula_with_active_learning(
+                formula, output_dir, config=effective_config, random_seed=random_seed
+            )
+        except Exception:
+            # A promotion committed before a later stage failed is durable; the next
+            # formula must use it, as a restart from the campaign state would.
+            promoted = [
+                state["new_logdir"]
+                for state in _durable_iteration_states(Path(output_dir) / "active_learning")
+                if state.get("model_promoted") and state.get("new_logdir")
+            ]
             if promoted:
-                config.model_override = str(promoted)
+                config.model_override = str(promoted[-1])
+            raise
+        if result.model_promoted and result.active_learning_result:
+            promoted_path = _promoted_model_path(result)
+            if promoted_path:
+                config.model_override = str(promoted_path)
         return result
 
     return runner

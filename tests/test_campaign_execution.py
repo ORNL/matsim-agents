@@ -2160,3 +2160,27 @@ def test_generation_action_carries_the_attempt_generation_seed():
     assert values["random_seed"] is None
     assert values["generation_action"].random_seed == 77
     assert action.random_seed == 1
+
+
+def test_formula_runner_adopts_a_promotion_committed_before_a_failure(tmp_path, monkeypatch):
+    config = CampaignFormulaExecutionConfig(
+        active_learning_config=tmp_path / "unused.yaml",
+        phase_policy=PhaseExplorationPolicy(),
+        model_override="foundation.ckpt",
+    )
+    promoted = str(tmp_path / "promoted.ckpt")
+
+    def run(formula, output_dir, *, config, random_seed):
+        iteration = Path(output_dir) / "active_learning" / "iteration_0000"
+        iteration.mkdir(parents=True)
+        (iteration / "state.json").write_text(
+            json.dumps({"status": "complete", "model_promoted": True, "new_logdir": promoted})
+        )
+        raise RuntimeError("DFT refinement failed after promotion")
+
+    monkeypatch.setattr(
+        "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
+    )
+    with pytest.raises(RuntimeError, match="after promotion"):
+        make_formula_runner(config)("NbO", str(tmp_path / "attempt"), random_seed=0)
+    assert config.model_override == promoted
