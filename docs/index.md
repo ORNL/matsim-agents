@@ -49,6 +49,7 @@ the framework.
 - [Running on DOE supercomputers](guide/hpc.md)
 - [HPC platforms index](hpc-platforms.md) and [HPC validation matrix](hpc-validation.md)
 - [Resource dispatch for LLMs, MLIPs, and DFT](resource-dispatch.md)
+- [Running jobs through the DOE IRI Facility API](iri.md)
 - [Distributed DFT dispatch](distributed-dft-dispatch.md)
 - VASP: [installations and runtime](vasp-hpc-runtime.md), [Aurora](vasp-aurora.md),
   [Perlmutter](vasp-perlmutter.md)

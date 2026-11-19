@@ -23,6 +23,9 @@ Use the first-command patterns below from the repository root.
 If you need full context (toolchain pins, overrides, troubleshooting), continue
 to the detailed per-platform sections below.
 
+As an optional alternative to manual `sbatch`/`qsub`, jobs can also be submitted
+through the [DOE IRI Facility API](iri.md).
+
 ## Quantum ESPRESSO (DFT) by platform
 
 ### Frontier (OLCF, AMD MI250X)
