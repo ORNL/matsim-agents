@@ -166,11 +166,16 @@ REQUIRED_TASK_FIELDS = (
 )
 
 
-def validate_task(task: dict[str, Any]) -> None:
+def check_task_fields(task: dict[str, Any]) -> None:
     task_id = task.get("calculation_id", "<unknown task>")
     missing = [field for field in REQUIRED_TASK_FIELDS if field not in task]
     if missing:
         raise ValueError(f"{task_id}: missing required fields: {', '.join(missing)}")
+
+
+def validate_task(task: dict[str, Any]) -> None:
+    check_task_fields(task)
+    task_id = task["calculation_id"]
     input_hashes = task.get("input_hashes")
     missing_hashes = [
         name for name in ("START", "POSCAR", "KPOINTS", "POTCAR")
@@ -375,6 +380,8 @@ def validate_manifest_data(manifest: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("authorized manifest must carry a separate authorization ID")
     if not authorized and authorization is not None:
         raise ValueError("unauthorized manifest must not carry an authorization record")
+    for task in manifest["tasks"]:
+        check_task_fields(task)
     task_ids = [task["calculation_id"] for task in manifest["tasks"]]
     hashes = [task["source_poscar_sha256"] for task in manifest["tasks"]]
     if len(task_ids) != len(set(task_ids)) or len(hashes) != len(set(hashes)):
@@ -389,6 +396,11 @@ def validate_manifest_data(manifest: dict[str, Any]) -> dict[str, Any]:
         if tier["walltime_cap_hours"] > QUEUE_WALLTIME_HOURS:
             raise ValueError("tier exceeds the capacity queue walltime")
         if manifest["experiment"] == "weak":
+            if len(tier["node_assignments"]) > tier["nodes"]:
+                raise ValueError(
+                    f"weak {tier['nodes']}-node tier has {len(tier['node_assignments'])} "
+                    "node assignments; each wave must fit the allocation"
+                )
             assigned = [task_id for node in tier["node_assignments"] for task_id in node]
             if len(assigned) != tier["required_unique_tasks"] or len(set(assigned)) != len(
                 assigned
@@ -467,6 +479,21 @@ def print_dispatch_summary(summary: dict[str, Any]) -> None:
     print(f"execution_authorized={str(summary['execution_authorized']).lower()}")
 
 
+def output_root_blocker(output_root: Path) -> str | None:
+    if output_root.is_symlink() or output_root.exists():
+        return f"output root already exists: {output_root}"
+    ancestor = output_root.parent
+    while not ancestor.exists():
+        if ancestor.is_symlink():
+            return f"output path has a dangling symlink: {ancestor}"
+        ancestor = ancestor.parent
+    if not ancestor.is_dir():
+        return f"output path component is not a directory: {ancestor}"
+    if not os.access(ancestor, os.W_OK | os.X_OK):
+        return f"output path is not writable: {ancestor}"
+    return None
+
+
 def dispatch_preflight(
     manifest: dict[str, Any], nodes: int, segment_id: str | None
 ) -> dict[str, Any]:
@@ -497,11 +524,24 @@ def dispatch_preflight(
             / f"n{nodes:02d}" / (segment_id or "all")
         )
         summary["output_root"] = str(output_root)
-        if output_root.exists():
-            blockers.append(f"output root already exists: {output_root}")
+        blocker = output_root_blocker(output_root)
+        if blocker:
+            blockers.append(blocker)
     summary["ready"] = not blockers
     summary["blockers"] = blockers
     return summary
+
+
+def emit_preflight(report: dict[str, Any], json_output: bool) -> int:
+    if json_output:
+        print(json.dumps(report, indent=2))
+    else:
+        if "waves" in report:
+            print_dispatch_summary(report)
+        for blocker in report["blockers"]:
+            print(f"BLOCKED: {blocker}")
+        print(f"ready={str(report['ready']).lower()}")
+    return 0 if report["ready"] else 1
 
 
 def dispatch(
@@ -825,16 +865,10 @@ def dispatch(
     return 1 if failed else 0
 
 
-def dispatch_six_class(
-    manifest_path: Path,
-    material_class: str,
-    experiment: str,
-    nodes: int,
-    segment_id: str | None,
-    dry_run: bool,
-    *,
-    json_output: bool = False,
-) -> int:
+def six_class_tier_manifest(
+    manifest_path: Path, material_class: str, experiment: str, nodes: int
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return (dispatch manifest, None), or (None, blocked-tier status) if inputs aren't ready."""
     from benchmarks.e4.aurora_dft.planning import validate_six_class_workload_manifest
 
     manifest = json.loads(manifest_path.read_text())
@@ -851,31 +885,21 @@ def dispatch_six_class(
     if tier is None:
         raise ValueError(f"no {nodes}-node {experiment} plan for {material_class}")
     if not tier.get("inputs_ready", False):
-        print(
-            json.dumps(
-                {
-                    "material_class": material_class,
-                    "experiment": experiment,
-                    "nodes": nodes,
-                    "status": tier["status"],
-                    "queue_eligible": tier.get("queue_eligible"),
-                    "required_unique_calculations": tier.get(
-                        "required_unique_calculations", tier.get("required_unique_calculations")
-                    ),
-                    "available_unique_calculations": tier.get("available_unique_calculations"),
-                    "walltime_cap_hours": tier.get("walltime_cap_hours"),
-                    "node_hours_cap": tier.get("node_hours_cap"),
-                    "planning_cap_if_inputs_complete_node_hours": tier.get(
-                        "planning_cap_if_inputs_complete_node_hours"
-                    ),
-                    "execution_authorized": False,
-                },
-                indent=2,
-            )
-        )
-        if dry_run:
-            return 0
-        raise PermissionError("selected material/tier is blocked and not executable")
+        return None, {
+            "material_class": material_class,
+            "experiment": experiment,
+            "nodes": nodes,
+            "status": tier["status"],
+            "queue_eligible": tier.get("queue_eligible"),
+            "required_unique_calculations": tier.get("required_unique_calculations"),
+            "available_unique_calculations": tier.get("available_unique_calculations"),
+            "walltime_cap_hours": tier.get("walltime_cap_hours"),
+            "node_hours_cap": tier.get("node_hours_cap"),
+            "planning_cap_if_inputs_complete_node_hours": tier.get(
+                "planning_cap_if_inputs_complete_node_hours"
+            ),
+            "execution_authorized": False,
+        }
 
     selected_ids = tier["calculation_ids"]
     task_map = {
@@ -950,6 +974,25 @@ def dispatch_six_class(
         "tasks": tasks,
         "tiers": tiers,
     }
+    return normalized, None
+
+
+def dispatch_six_class(
+    manifest_path: Path,
+    material_class: str,
+    experiment: str,
+    nodes: int,
+    segment_id: str | None,
+    dry_run: bool,
+    *,
+    json_output: bool = False,
+) -> int:
+    normalized, blocked = six_class_tier_manifest(manifest_path, material_class, experiment, nodes)
+    if normalized is None:
+        print(json.dumps(blocked, indent=2))
+        if dry_run:
+            return 0
+        raise PermissionError("selected material/tier is blocked and not executable")
     return dispatch(
         manifest_path,
         nodes,
@@ -958,6 +1001,19 @@ def dispatch_six_class(
         manifest_override=normalized,
         json_output=json_output,
     )
+
+
+def preflight_six_class(
+    manifest_path: Path, material_class: str, experiment: str, nodes: int, segment_id: str | None
+) -> dict[str, Any]:
+    normalized, blocked = six_class_tier_manifest(manifest_path, material_class, experiment, nodes)
+    if normalized is None:
+        return {
+            **blocked,
+            "ready": False,
+            "blockers": [f"selected material/tier is blocked: {blocked['status']}"],
+        }
+    return dispatch_preflight(validate_manifest_data(normalized), nodes, segment_id)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -996,16 +1052,21 @@ def main(argv: list[str] | None = None) -> int:
         help="manifest to validate",
     )
 
-    dispatch_six = sub.add_parser(
-        "dispatch-six-class", help="dispatch one tier from a six-class manifest"
-    )
-    dispatch_six.add_argument("--manifest", type=Path, required=True, help="six-class manifest")
-    dispatch_six.add_argument("--material-class", required=True, help="material class name")
-    dispatch_six.add_argument("--experiment", choices=("strong", "weak"), required=True)
-    dispatch_six.add_argument("--nodes", type=int, required=True, help="nodes in this tier")
-    dispatch_six.add_argument("--segment-id", help="segment-1, segment-2, or all")
-    dispatch_six.add_argument("--dry-run", action="store_true", help="plan without launching VASP")
-    dispatch_six.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    for name, help_text in (
+        ("preflight-six-class", "report dispatch blockers for one six-class tier"),
+        ("dispatch-six-class", "dispatch one tier from a six-class manifest"),
+    ):
+        command = sub.add_parser(name, help=help_text)
+        command.add_argument("--manifest", type=Path, required=True, help="six-class manifest")
+        command.add_argument("--material-class", required=True, help="material class name")
+        command.add_argument("--experiment", choices=("strong", "weak"), required=True)
+        command.add_argument("--nodes", type=int, required=True, help="nodes in this tier")
+        command.add_argument("--segment-id", help="segment-1, segment-2, or all")
+        command.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+        if name == "dispatch-six-class":
+            command.add_argument(
+                "--dry-run", action="store_true", help="plan without launching VASP"
+            )
 
     freeze = sub.add_parser("freeze-manifests", help="freeze BCC strong and weak manifests")
     freeze.add_argument("--source-manifest", type=Path, required=True)
@@ -1030,6 +1091,8 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     args = parser.parse_args(argv)
+    if getattr(args, "json", False) and getattr(args, "dry_run", True) is False:
+        parser.error("--json is only supported with --dry-run; live dispatch prints progress text")
     try:
         if args.command == "plan-six-class":
             from benchmarks.e4.aurora_dft.planning import write_six_class_workload_manifest
@@ -1060,6 +1123,11 @@ def main(argv: list[str] | None = None) -> int:
                 args.dry_run,
                 json_output=args.json,
             )
+        if args.command == "preflight-six-class":
+            report = preflight_six_class(
+                args.manifest, args.material_class, args.experiment, args.nodes, args.segment_id
+            )
+            return emit_preflight(report, args.json)
         if args.command == "freeze-manifests":
             freeze_manifests(args.source_manifest, args.weak_inputs_manifest, args.output_dir)
             return 0
@@ -1073,14 +1141,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "preflight":
             manifest = validate_manifest(args.manifest)
             report = dispatch_preflight(manifest, args.nodes, args.segment_id)
-            if args.json:
-                print(json.dumps(report, indent=2))
-            else:
-                print_dispatch_summary(report)
-                for blocker in report["blockers"]:
-                    print(f"BLOCKED: {blocker}")
-                print(f"ready={str(report['ready']).lower()}")
-            return 0 if report["ready"] else 1
+            return emit_preflight(report, args.json)
         return dispatch(
             args.manifest,
             args.nodes,
@@ -1088,7 +1149,7 @@ def main(argv: list[str] | None = None) -> int:
             args.dry_run,
             json_output=args.json,
         )
-    except (FileExistsError, FileNotFoundError, KeyError, PermissionError, RuntimeError, ValueError) as error:
+    except (KeyError, OSError, RuntimeError, ValueError) as error:
         if args.debug:
             raise
         print(f"error: {error}", file=sys.stderr)
