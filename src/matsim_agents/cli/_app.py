@@ -21,6 +21,16 @@ class CLIState:
     debug: bool = False
 
 
+def describe_error(error: BaseException) -> str:
+    if isinstance(error, ValidationError):
+        lines = [f"invalid {error.title} ({error.error_count()} problem(s)):"]
+        for item in error.errors():
+            location = ".".join(str(part) for part in item["loc"]) or "(top level)"
+            lines.append(f"  {location}: {item['msg']}")
+        return "\n".join(lines)
+    return str(error)
+
+
 class FriendlyTyperGroup(TyperGroup):
     def invoke(self, ctx: click.Context):
         try:
@@ -31,7 +41,9 @@ class FriendlyTyperGroup(TyperGroup):
             state = ctx.find_root().ensure_object(CLIState)
             if state.debug:
                 raise
-            error_console.print(f"Error: {error}", style="red", markup=False, highlight=False)
+            error_console.print(
+                f"Error: {describe_error(error)}", style="red", markup=False, highlight=False
+            )
             error_console.print(
                 "Hint: rerun with --debug before the command for a traceback.", markup=False
             )

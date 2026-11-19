@@ -111,6 +111,51 @@ class _AnyConfig:
         return raw
 
 
+def test_validation_errors_list_one_line_per_field(tmp_path):
+    invalid = tmp_path / "relax.yaml"
+    invalid.write_text("mode: bogus\nmax_steps: -1\n")
+    result = CliRunner().invoke(app, ["relax", str(invalid)])
+    assert result.exit_code == 2
+    assert "invalid ScientificRelaxationConfig (3 problem(s)):" in result.output
+    assert "  mode: Input should be 'mlip', 'dft' or 'mlip-dft'" in result.output
+    assert "  structure_path: Field required" in result.output
+    assert "  max_steps: Input should be greater than or equal to 1" in result.output
+
+
+def test_config_init_copies_templates_without_overwriting(tmp_path):
+    from matsim_agents.cli.config_tools import CONFIG_KINDS, REPO
+
+    runner = CliRunner()
+    listed = runner.invoke(app, ["config", "list"])
+    assert listed.exit_code == 0
+    for kind, (_, example, _) in CONFIG_KINDS.items():
+        assert kind in listed.output
+        assert (REPO / example).is_file(), example
+    target = tmp_path / "relax.yaml"
+    created = runner.invoke(app, ["config", "init", "relax", str(target)])
+    assert created.exit_code == 0, created.output
+    assert "matsim-agents relax" in created.output
+    assert target.read_text() == (REPO / CONFIG_KINDS["relax"][1]).read_text()
+    again = runner.invoke(app, ["config", "init", "relax", str(target)])
+    assert again.exit_code != 0
+    assert "refusing to overwrite" in again.output
+    unknown = runner.invoke(app, ["config", "init", "nope", str(tmp_path / "x.yaml")])
+    assert unknown.exit_code == 2
+
+
+def test_config_schema_exports_every_kind(tmp_path):
+    from matsim_agents.cli.config_tools import CONFIG_KINDS
+
+    runner = CliRunner()
+    for kind in CONFIG_KINDS:
+        result = runner.invoke(app, ["config", "schema", kind])
+        assert result.exit_code == 0, (kind, result.output)
+        assert "properties" in json.loads(result.output)
+    written = tmp_path / "relax.schema.json"
+    assert runner.invoke(app, ["config", "schema", "relax", "-o", str(written)]).exit_code == 0
+    assert json.loads(written.read_text())["title"] == "ScientificRelaxationConfig"
+
+
 def test_relax_prints_a_summary_and_json_on_request(monkeypatch, tmp_path):
     from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
     from matsim_agents.workflows import relaxation

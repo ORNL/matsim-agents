@@ -1273,6 +1273,9 @@ reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
 
 ```text
 matsim-agents doctor [--require BACKEND]   # Python/backend preflight without loading models
+matsim-agents config list                  # configuration kinds, templates, and consuming commands
+matsim-agents config init KIND OUTPUT.yaml # copy an annotated starter config; never overwrites
+matsim-agents config schema KIND [-o FILE] # JSON Schema for editor validation and completion
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
