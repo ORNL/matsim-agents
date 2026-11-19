@@ -37,12 +37,12 @@ mlip_backend() {
     "${config}"
 }
 
-# Print the Python environment that runs BACKEND. HYDRAGNN_VENV is the site's
+# Print the Python environment that runs BACKEND. HYDRAGNN_ENV is the site's
 # HydraGNN environment; UMA and MACE use their isolated environments.
 mlip_backend_venv() {
-  local repo=$1 backend=$2 hydragnn_venv=$3
+  local repo=$1 backend=$2 hydragnn_env=$3
   case "${backend}" in
-    hydragnn) printf '%s\n' "${hydragnn_venv}" ;;
+    hydragnn) printf '%s\n' "${hydragnn_env}" ;;
     uma) printf '%s\n' "${MATSIM_FAIRCHEM_VENV:-${repo}/.venv-uma}" ;;
     mace) printf '%s\n' "${MATSIM_MACE_VENV:-${repo}/.venv-mace}" ;;
     *) echo "ERROR: unsupported MLIP backend: ${backend}" >&2; return 2 ;;
