@@ -1,5 +1,7 @@
 # matsim-agents
 
+[<img src="matsim-agents-qr.png" alt="QR code linking to the matsim-agents GitHub repository" width="200">](https://github.com/ORNL/matsim-agents)
+
 **Multi-agent AI framework for atomistic materials simulation and discovery.**
 
 `matsim-agents` orchestrates large language models, machine-learned
