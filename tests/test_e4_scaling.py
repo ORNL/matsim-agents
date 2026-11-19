@@ -373,6 +373,216 @@ def test_task_without_walltime_estimate_is_rejected():
         scaling.task_continuation_schedule({"calculation_id": "legacy-bcc"})
 
 
+def test_task_validation_reports_all_missing_required_fields():
+    with pytest.raises(ValueError) as error:
+        scaling.validate_task({"calculation_id": "incomplete"})
+    message = str(error.value)
+    assert "incomplete" in message
+    assert "case_dir" in message
+    assert "estimated_task_walltime_hours" in message
+
+
+def test_dispatch_dry_run_prints_readable_plan(monkeypatch, capsys):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    assert (
+        scaling.main(
+            [
+                "dispatch",
+                "--manifest",
+                str(PLANS / "strong-manifest.json"),
+                "--nodes",
+                "1",
+                "--segment-id",
+                "segment-1",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "E4 strong dispatch" in output
+    assert "wave 1:" in output
+    assert "execution_authorized=false" in output
+
+
+def test_preflight_reports_pbs_blockers(monkeypatch, capsys):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    monkeypatch.delenv("PBS_JOBID", raising=False)
+    monkeypatch.delenv("PBS_NODEFILE", raising=False)
+    monkeypatch.delenv("E4_SCALING_RUN_ID", raising=False)
+    assert (
+        scaling.main(
+            [
+                "preflight",
+                "--manifest",
+                str(PLANS / "strong-manifest.json"),
+                "--nodes",
+                "1",
+                "--segment-id",
+                "segment-1",
+            ]
+        )
+        == 1
+    )
+    output = capsys.readouterr().out
+    assert "BLOCKED: manifest is not execution-authorized" in output
+    assert "BLOCKED: PBS_JOBID is not set" in output
+    assert "ready=false" in output
+
+
+def test_main_formats_expected_errors_without_traceback(monkeypatch, capsys):
+    def invalid_manifest(path):
+        raise ValueError("task FCC-1 is missing source_poscar")
+
+    monkeypatch.setattr(scaling, "validate_manifest", invalid_manifest)
+    assert scaling.main(["validate", "missing.json"]) == 2
+    captured = capsys.readouterr()
+    assert "error: task FCC-1 is missing source_poscar" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_weak_tier_wider_than_its_allocation_is_rejected(monkeypatch):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    manifest = json.loads((PLANS / "weak-manifest.json").read_text())
+    tiers = {tier["nodes"]: tier for tier in manifest["tiers"]}
+    tiers[2]["node_assignments"] = tiers[4]["node_assignments"]
+    tiers[2]["required_unique_tasks"] = tiers[4]["required_unique_tasks"]
+    with pytest.raises(ValueError, match="each wave must fit the allocation"):
+        scaling.validate_manifest_data(manifest)
+
+
+def test_output_root_blocker_detects_unusable_paths(tmp_path):
+    run = tmp_path / "run"
+    root = run / "n01" / "all"
+    assert scaling.output_root_blocker(root) is None
+    run.write_text("")
+    assert "not a directory" in scaling.output_root_blocker(root)
+    run.unlink()
+    run.symlink_to(tmp_path / "missing")
+    assert "dangling symlink" in scaling.output_root_blocker(root)
+    run.unlink()
+    root.parent.mkdir(parents=True)
+    root.symlink_to(tmp_path / "missing")
+    assert "already exists" in scaling.output_root_blocker(root)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["dispatch", "--manifest", "m.json", "--nodes", "1"],
+        [
+            "dispatch-six-class",
+            "--manifest",
+            "m.json",
+            "--material-class",
+            "fcc_hea",
+            "--experiment",
+            "strong",
+            "--nodes",
+            "1",
+        ],
+    ],
+)
+def test_json_output_requires_dry_run(command, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        scaling.main([*command, "--json"])
+    assert exit_info.value.code == 2
+    assert "--json is only supported with --dry-run" in capsys.readouterr().err
+
+
+def test_validate_reports_missing_task_fields_before_manifest_checks(tmp_path, capsys):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "execution_authorized": False,
+                "authorization": None,
+                "tasks": [{"calculation_id": "incomplete"}],
+            }
+        )
+    )
+    assert scaling.main(["validate", str(path)]) == 2
+    err = capsys.readouterr().err
+    assert "incomplete: missing required fields" in err
+    assert "source_poscar_sha256" in err
+
+
+def test_filesystem_errors_are_reported_without_traceback(tmp_path, capsys):
+    assert scaling.main(["validate", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "Traceback" not in err
+
+
+def _six_class_manifest(task, *, inputs_ready):
+    tier = {
+        "nodes": 1,
+        "inputs_ready": inputs_ready,
+        "status": "ready" if inputs_ready else "blocked_inputs_incomplete",
+        "calculation_ids": [task["calculation_id"]],
+        "walltime_cap_hours": 50,
+        "node_hours_cap": 50,
+    }
+    return {
+        "execution_authorized": True,
+        "material_classes": [
+            {
+                "material_class": "fcc_hea",
+                "execution_authorized": True,
+                "authorization": {"id": "approved"},
+                "protocol": {"id": task["protocol_id"]},
+                "candidates": [{**task, "input_file_hashes": task["input_hashes"]}],
+                "strong_scaling": {
+                    "fixed_calculation_ids": [task["calculation_id"]],
+                    "tiers": [tier],
+                },
+                "weak_scaling": {"tiers": []},
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize("inputs_ready", [True, False])
+def test_six_class_preflight_checks_the_tier_dispatch_would_run(
+    monkeypatch, tmp_path, capsys, inputs_ready
+):
+    from benchmarks.e4.aurora_dft import planning
+
+    def no_launch(*args, **kwargs):
+        pytest.fail("preflight must not launch anything")
+
+    manifest, _ = _setup_single_fcc_dispatch(monkeypatch, tmp_path, no_launch)
+    monkeypatch.setattr(planning, "validate_six_class_workload_manifest", lambda m, **kw: None)
+    monkeypatch.setenv("E4_SCALING_RUN_ID", "E4-SIX-fcc_hea-strong-v1-r1")
+    path = tmp_path / "six-class.json"
+    path.write_text(
+        json.dumps(_six_class_manifest(manifest["tasks"][0], inputs_ready=inputs_ready))
+    )
+    arguments = [
+        "preflight-six-class",
+        "--manifest",
+        str(path),
+        "--material-class",
+        "fcc_hea",
+        "--experiment",
+        "strong",
+        "--nodes",
+        "1",
+        "--json",
+    ]
+    assert scaling.main(arguments) == (0 if inputs_ready else 1)
+    report = json.loads(capsys.readouterr().out)
+    assert report["material_class"] == "fcc_hea"
+    assert report["ready"] is inputs_ready
+    if inputs_ready:
+        assert report["waves"] == [["FCC-1"]]
+        assert report["blockers"] == []
+    else:
+        assert report["blockers"] == [
+            "selected material/tier is blocked: blocked_inputs_incomplete"
+        ]
+
+
 def _six_class_stub(authorized: bool, class_authorization):
     names = ("bcc_refractory", "fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof", "nb_ta_o")
     return {

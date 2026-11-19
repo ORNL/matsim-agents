@@ -105,6 +105,30 @@ def test_configured_native_adapter_arguments_parse(name, tmp_path, native_proces
     assert native_process == []
 
 
+def test_workflow_plan_and_run_dry_run_never_create_run_directory(workflow_yaml, native_process):
+    runner = CliRunner()
+    for command in (
+        ["workflow", "plan", str(workflow_yaml)],
+        ["workflow", "run", str(workflow_yaml), "--dry-run"],
+    ):
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0, result.output
+        assert "Command:" in result.output
+        assert "No run directory" in result.output
+        assert not (workflow_yaml.parent / "records").exists()
+    assert native_process == []
+
+
+def test_workflow_plan_json_is_machine_readable(workflow_yaml, native_process):
+    result = CliRunner().invoke(app, ["workflow", "plan", str(workflow_yaml), "--json"])
+    assert result.exit_code == 0, result.output
+    plan = json.loads(result.stdout)
+    assert plan["workflow"] == "objective"
+    assert plan["command"][-2:] == ["run", "Find a Cu structure"]
+    assert plan["would_execute"] is True
+    assert native_process == []
+
+
 def test_run_status_summary_and_report(workflow_yaml, native_process):
     result = CliRunner().invoke(app, ["workflow", "run", str(workflow_yaml)])
     assert result.exit_code == 0, result.output

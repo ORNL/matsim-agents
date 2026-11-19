@@ -9,6 +9,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -146,10 +147,45 @@ def task_record(case: dict[str, Any]) -> dict[str, Any]:
     } | {"estimated_task_walltime_hours": TASK_WALLTIME_HOURS}
 
 
+REQUIRED_TASK_FIELDS = (
+    "calculation_id",
+    "case_dir",
+    "source_poscar",
+    "source_poscar_sha256",
+    "composition",
+    "structure_id",
+    "protocol_id",
+    "input_hashes",
+    "prepared_input_bundle_sha256",
+    "paw_components",
+    "potcar_sha256",
+    "mpi_ranks",
+    "omp_threads_per_rank",
+    "ediffg_eV_per_A",
+    "estimated_task_walltime_hours",
+)
+
+
+def check_task_fields(task: dict[str, Any]) -> None:
+    task_id = task.get("calculation_id", "<unknown task>")
+    missing = [field for field in REQUIRED_TASK_FIELDS if field not in task]
+    if missing:
+        raise ValueError(f"{task_id}: missing required fields: {', '.join(missing)}")
+
+
 def validate_task(task: dict[str, Any]) -> None:
-    protocol_id = task.get("protocol_id")
+    check_task_fields(task)
+    task_id = task["calculation_id"]
+    input_hashes = task.get("input_hashes")
+    missing_hashes = [
+        name for name in ("START", "POSCAR", "KPOINTS", "POTCAR")
+        if not isinstance(input_hashes, dict) or name not in input_hashes
+    ]
+    if missing_hashes:
+        raise ValueError(f"{task_id}: missing input hashes: {', '.join(missing_hashes)}")
+    protocol_id = task["protocol_id"]
     if not isinstance(protocol_id, str) or not protocol_id:
-        raise ValueError(f"{task.get('calculation_id')}: protocol_id is required")
+        raise ValueError(f"{task_id}: protocol_id is required")
     bcc_task = protocol_id == PROTOCOL
     ranks = task.get("mpi_ranks")
     threads = task.get("omp_threads_per_rank")
@@ -344,6 +380,8 @@ def validate_manifest_data(manifest: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("authorized manifest must carry a separate authorization ID")
     if not authorized and authorization is not None:
         raise ValueError("unauthorized manifest must not carry an authorization record")
+    for task in manifest["tasks"]:
+        check_task_fields(task)
     task_ids = [task["calculation_id"] for task in manifest["tasks"]]
     hashes = [task["source_poscar_sha256"] for task in manifest["tasks"]]
     if len(task_ids) != len(set(task_ids)) or len(hashes) != len(set(hashes)):
@@ -358,6 +396,11 @@ def validate_manifest_data(manifest: dict[str, Any]) -> dict[str, Any]:
         if tier["walltime_cap_hours"] > QUEUE_WALLTIME_HOURS:
             raise ValueError("tier exceeds the capacity queue walltime")
         if manifest["experiment"] == "weak":
+            if len(tier["node_assignments"]) > tier["nodes"]:
+                raise ValueError(
+                    f"weak {tier['nodes']}-node tier has {len(tier['node_assignments'])} "
+                    "node assignments; each wave must fit the allocation"
+                )
             assigned = [task_id for node in tier["node_assignments"] for task_id in node]
             if len(assigned) != tier["required_unique_tasks"] or len(set(assigned)) != len(
                 assigned
@@ -403,6 +446,104 @@ def dispatch_plan(
     return [ids[index : index + tier_nodes] for index in range(0, len(ids), tier_nodes)]
 
 
+def dispatch_summary(manifest: dict[str, Any], nodes: int, segment_id: str | None) -> dict[str, Any]:
+    waves = dispatch_plan(manifest, nodes, segment_id)
+    tasks = [task_id for wave in waves for task_id in wave]
+    task_map = {task["calculation_id"]: task for task in manifest["tasks"]}
+    estimated_seconds = sum(
+        sum(segment["active_seconds"] for segment in task_continuation_schedule(task_map[task_id]))
+        for task_id in tasks
+    )
+    return {
+        "experiment": manifest["experiment"],
+        "material_class": manifest.get("material_class"),
+        "nodes": nodes,
+        "segment_id": segment_id or "all",
+        "waves": waves,
+        "planned_tasks": len(tasks),
+        "estimated_task_hours": round(estimated_seconds / 3600, 3),
+        "resource_request": manifest.get("resource_request"),
+        "execution_authorized": manifest["execution_authorized"],
+    }
+
+
+def print_dispatch_summary(summary: dict[str, Any]) -> None:
+    material_class = summary["material_class"] or "unspecified"
+    print(f"E4 {summary['experiment']} dispatch for {material_class}")
+    print(
+        f"nodes={summary['nodes']} segment={summary['segment_id']} "
+        f"tasks={summary['planned_tasks']} estimated_task_hours={summary['estimated_task_hours']}"
+    )
+    for index, wave in enumerate(summary["waves"], 1):
+        print(f"wave {index}: {', '.join(wave)}")
+    print(f"execution_authorized={str(summary['execution_authorized']).lower()}")
+
+
+def output_root_blocker(output_root: Path) -> str | None:
+    if output_root.is_symlink() or output_root.exists():
+        return f"output root already exists: {output_root}"
+    ancestor = output_root.parent
+    while not ancestor.exists():
+        if ancestor.is_symlink():
+            return f"output path has a dangling symlink: {ancestor}"
+        ancestor = ancestor.parent
+    if not ancestor.is_dir():
+        return f"output path component is not a directory: {ancestor}"
+    if not os.access(ancestor, os.W_OK | os.X_OK):
+        return f"output path is not writable: {ancestor}"
+    return None
+
+
+def dispatch_preflight(
+    manifest: dict[str, Any], nodes: int, segment_id: str | None
+) -> dict[str, Any]:
+    summary = dispatch_summary(manifest, nodes, segment_id)
+    blockers: list[str] = []
+    authorization = manifest.get("authorization") or {}
+    if manifest["execution_authorized"] is not True:
+        blockers.append("manifest is not execution-authorized")
+    if os.environ.get("E4_SCALING_AUTHORIZATION") != authorization.get("id"):
+        blockers.append("E4_SCALING_AUTHORIZATION does not match the manifest")
+    if not os.environ.get("PBS_JOBID"):
+        blockers.append("PBS_JOBID is not set")
+    nodefile = os.environ.get("PBS_NODEFILE")
+    if not nodefile:
+        blockers.append("PBS_NODEFILE is not set")
+    elif not Path(nodefile).is_file():
+        blockers.append(f"PBS_NODEFILE does not exist: {nodefile}")
+    else:
+        hosts = list(dict.fromkeys(Path(nodefile).read_text().split()))
+        if len(hosts) != nodes:
+            blockers.append(f"PBS allocation has {len(hosts)} unique nodes; expected {nodes}")
+    run_id = os.environ.get("E4_SCALING_RUN_ID", "")
+    if not re.fullmatch(re.escape(manifest["run_id_prefix"]) + r"-[A-Za-z0-9._-]+", run_id):
+        blockers.append("E4_SCALING_RUN_ID does not use the frozen campaign prefix")
+    else:
+        output_root = (
+            REPO / "runs" / "e4-scaling" / manifest["experiment"] / run_id
+            / f"n{nodes:02d}" / (segment_id or "all")
+        )
+        summary["output_root"] = str(output_root)
+        blocker = output_root_blocker(output_root)
+        if blocker:
+            blockers.append(blocker)
+    summary["ready"] = not blockers
+    summary["blockers"] = blockers
+    return summary
+
+
+def emit_preflight(report: dict[str, Any], json_output: bool) -> int:
+    if json_output:
+        print(json.dumps(report, indent=2))
+    else:
+        if "waves" in report:
+            print_dispatch_summary(report)
+        for blocker in report["blockers"]:
+            print(f"BLOCKED: {blocker}")
+        print(f"ready={str(report['ready']).lower()}")
+    return 0 if report["ready"] else 1
+
+
 def dispatch(
     manifest_path: Path,
     nodes: int,
@@ -410,6 +551,7 @@ def dispatch(
     dry_run: bool,
     *,
     manifest_override: dict[str, Any] | None = None,
+    json_output: bool = False,
 ) -> int:
     allocation_started = time.monotonic()
     manifest = (
@@ -418,21 +560,12 @@ def dispatch(
         else validate_manifest_data(manifest_override)
     )
     waves = dispatch_plan(manifest, nodes, segment_id)
+    summary = dispatch_summary(manifest, nodes, segment_id)
     if dry_run:
-        print(
-            json.dumps(
-                {
-                    "experiment": manifest["experiment"],
-                    "material_class": manifest.get("material_class"),
-                    "nodes": nodes,
-                    "segment_id": segment_id,
-                    "waves": waves,
-                    "resource_request": manifest.get("resource_request"),
-                    "execution_authorized": False,
-                },
-                indent=2,
-            )
-        )
+        if json_output:
+            print(json.dumps(summary, indent=2))
+        else:
+            print_dispatch_summary(summary)
         return 0
     authorization = manifest.get("authorization") or {}
     if manifest["execution_authorized"] is not True or os.environ.get(
@@ -441,6 +574,9 @@ def dispatch(
         raise PermissionError("separate E4 scaling authorization is required")
     if not os.environ.get("PBS_JOBID") or not os.environ.get("PBS_NODEFILE"):
         raise RuntimeError("dispatch must run inside its PBS allocation")
+    preflight = dispatch_preflight(manifest, nodes, segment_id)
+    if not preflight["ready"]:
+        raise RuntimeError("dispatch preflight failed: " + "; ".join(preflight["blockers"]))
     hosts = list(dict.fromkeys(Path(os.environ["PBS_NODEFILE"]).read_text().split()))
     if len(hosts) != nodes:
         raise RuntimeError(f"PBS allocation has {len(hosts)} unique nodes; tier requires {nodes}")
@@ -606,6 +742,11 @@ def dispatch(
                     raise FileExistsError(f"refusing to reuse task output root: {task_root}")
                 task_root.parent.mkdir(parents=True, exist_ok=True)
                 host = hosts[node_index]
+                print(
+                    f"starting {calc_id} on {host} "
+                    f"(wave {wave_index + 1}/{len(waves)}, output={root / calc_id})",
+                    flush=True,
+                )
                 with log_path.open("a") as stream:
                     stream.write(
                         json.dumps(
@@ -627,6 +768,11 @@ def dispatch(
                 failed = failed or result["task_status"] != "converged"
                 with log_path.open("a") as stream:
                     stream.write(json.dumps(result) + "\n")
+                print(
+                    f"finished {result['calculation_id']}: {result['task_status']} "
+                    f"(final={result['final_status']}, wrapper_exit={result['wrapper_exit_status']})",
+                    flush=True,
+                )
         if failed:
             break
         print(f"wave {wave_index + 1}/{len(waves)} completed in {time.monotonic() - started:.1f}s")
@@ -708,19 +854,21 @@ def dispatch(
         "science_config_sha256": protocol_hash,
         "resource_config_sha256": resource_hash,
     }
-    with (root / "measurements.jsonl").open("a", encoding="utf-8") as stream:
+    measurements_path = root / "measurements.jsonl"
+    with measurements_path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(measurement, sort_keys=True) + "\n")
+    outcome = "failed_or_incomplete" if failed else "converged"
+    print(
+        f"dispatch {outcome}: attempted={len(all_results)} converged={len(valid_ids)} "
+        f"failed={len(failed_ids)} measurements={measurements_path}"
+    )
     return 1 if failed else 0
 
 
-def dispatch_six_class(
-    manifest_path: Path,
-    material_class: str,
-    experiment: str,
-    nodes: int,
-    segment_id: str | None,
-    dry_run: bool,
-) -> int:
+def six_class_tier_manifest(
+    manifest_path: Path, material_class: str, experiment: str, nodes: int
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return (dispatch manifest, None), or (None, blocked-tier status) if inputs aren't ready."""
     from benchmarks.e4.aurora_dft.planning import validate_six_class_workload_manifest
 
     manifest = json.loads(manifest_path.read_text())
@@ -737,31 +885,21 @@ def dispatch_six_class(
     if tier is None:
         raise ValueError(f"no {nodes}-node {experiment} plan for {material_class}")
     if not tier.get("inputs_ready", False):
-        print(
-            json.dumps(
-                {
-                    "material_class": material_class,
-                    "experiment": experiment,
-                    "nodes": nodes,
-                    "status": tier["status"],
-                    "queue_eligible": tier.get("queue_eligible"),
-                    "required_unique_calculations": tier.get(
-                        "required_unique_calculations", tier.get("required_unique_calculations")
-                    ),
-                    "available_unique_calculations": tier.get("available_unique_calculations"),
-                    "walltime_cap_hours": tier.get("walltime_cap_hours"),
-                    "node_hours_cap": tier.get("node_hours_cap"),
-                    "planning_cap_if_inputs_complete_node_hours": tier.get(
-                        "planning_cap_if_inputs_complete_node_hours"
-                    ),
-                    "execution_authorized": False,
-                },
-                indent=2,
-            )
-        )
-        if dry_run:
-            return 0
-        raise PermissionError("selected material/tier is blocked and not executable")
+        return None, {
+            "material_class": material_class,
+            "experiment": experiment,
+            "nodes": nodes,
+            "status": tier["status"],
+            "queue_eligible": tier.get("queue_eligible"),
+            "required_unique_calculations": tier.get("required_unique_calculations"),
+            "available_unique_calculations": tier.get("available_unique_calculations"),
+            "walltime_cap_hours": tier.get("walltime_cap_hours"),
+            "node_hours_cap": tier.get("node_hours_cap"),
+            "planning_cap_if_inputs_complete_node_hours": tier.get(
+                "planning_cap_if_inputs_complete_node_hours"
+            ),
+            "execution_authorized": False,
+        }
 
     selected_ids = tier["calculation_ids"]
     task_map = {
@@ -836,91 +974,187 @@ def dispatch_six_class(
         "tasks": tasks,
         "tiers": tiers,
     }
+    return normalized, None
+
+
+def dispatch_six_class(
+    manifest_path: Path,
+    material_class: str,
+    experiment: str,
+    nodes: int,
+    segment_id: str | None,
+    dry_run: bool,
+    *,
+    json_output: bool = False,
+) -> int:
+    normalized, blocked = six_class_tier_manifest(manifest_path, material_class, experiment, nodes)
+    if normalized is None:
+        print(json.dumps(blocked, indent=2))
+        if dry_run:
+            return 0
+        raise PermissionError("selected material/tier is blocked and not executable")
     return dispatch(
         manifest_path,
         nodes,
         segment_id,
         dry_run,
         manifest_override=normalized,
+        json_output=json_output,
     )
 
 
+def preflight_six_class(
+    manifest_path: Path, material_class: str, experiment: str, nodes: int, segment_id: str | None
+) -> dict[str, Any]:
+    normalized, blocked = six_class_tier_manifest(manifest_path, material_class, experiment, nodes)
+    if normalized is None:
+        return {
+            **blocked,
+            "ready": False,
+            "blockers": [f"selected material/tier is blocked: {blocked['status']}"],
+        }
+    return dispatch_preflight(validate_manifest_data(normalized), nodes, segment_id)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Freeze, validate, preflight and dispatch E4 Aurora DFT campaigns.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  validate a frozen manifest:\n"
+            "    python -m benchmarks.e4.aurora_dft.scaling validate MANIFEST.json\n"
+            "  inspect a dispatch without submitting:\n"
+            "    python -m benchmarks.e4.aurora_dft.scaling dispatch "
+            "--manifest MANIFEST.json --nodes 4 --dry-run\n"
+            "  check PBS and authorization requirements:\n"
+            "    python -m benchmarks.e4.aurora_dft.scaling preflight "
+            "--manifest MANIFEST.json --nodes 4"
+        ),
+    )
+    parser.add_argument("--debug", action="store_true", help="show tracebacks for diagnostics")
     sub = parser.add_subparsers(dest="command", required=True)
-    plan_six = sub.add_parser("plan-six-class")
+
+    plan_six = sub.add_parser("plan-six-class", help="generate a six-class planning manifest")
     plan_six.add_argument(
         "--output",
         type=Path,
         default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
+        help="output path for the generated manifest",
     )
-    validate_six = sub.add_parser("validate-six-class")
+
+    validate_six = sub.add_parser("validate-six-class", help="validate a six-class manifest")
     validate_six.add_argument(
         "manifest",
         type=Path,
         nargs="?",
         default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
+        help="manifest to validate",
     )
-    dispatch_six = sub.add_parser("dispatch-six-class")
-    dispatch_six.add_argument("--manifest", type=Path, required=True)
-    dispatch_six.add_argument("--material-class", required=True)
-    dispatch_six.add_argument("--experiment", choices=("strong", "weak"), required=True)
-    dispatch_six.add_argument("--nodes", type=int, required=True)
-    dispatch_six.add_argument("--segment-id")
-    dispatch_six.add_argument("--dry-run", action="store_true")
-    freeze = sub.add_parser("freeze-manifests")
+
+    for name, help_text in (
+        ("preflight-six-class", "report dispatch blockers for one six-class tier"),
+        ("dispatch-six-class", "dispatch one tier from a six-class manifest"),
+    ):
+        command = sub.add_parser(name, help=help_text)
+        command.add_argument("--manifest", type=Path, required=True, help="six-class manifest")
+        command.add_argument("--material-class", required=True, help="material class name")
+        command.add_argument("--experiment", choices=("strong", "weak"), required=True)
+        command.add_argument("--nodes", type=int, required=True, help="nodes in this tier")
+        command.add_argument("--segment-id", help="segment-1, segment-2, or all")
+        command.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+        if name == "dispatch-six-class":
+            command.add_argument(
+                "--dry-run", action="store_true", help="plan without launching VASP"
+            )
+
+    freeze = sub.add_parser("freeze-manifests", help="freeze BCC strong and weak manifests")
     freeze.add_argument("--source-manifest", type=Path, required=True)
     freeze.add_argument("--weak-inputs-manifest", type=Path, required=True)
     freeze.add_argument("--output-dir", type=Path, required=True)
-    validate = sub.add_parser("validate")
-    validate.add_argument("manifest", type=Path)
-    run = sub.add_parser("dispatch")
-    run.add_argument("--manifest", type=Path, required=True)
-    run.add_argument("--nodes", type=int, required=True)
-    run.add_argument("--segment-id")
-    run.add_argument("--dry-run", action="store_true")
+
+    validate = sub.add_parser("validate", help="validate a frozen dispatch manifest")
+    validate.add_argument("manifest", type=Path, help="manifest to validate")
+
+    for name, help_text in (
+        ("preflight", "validate a tier and report dispatch blockers"),
+        ("dispatch", "dispatch or preview a tier"),
+    ):
+        command = sub.add_parser(name, help=help_text)
+        command.add_argument("--manifest", type=Path, required=True, help="dispatch manifest")
+        command.add_argument("--nodes", type=int, required=True, help="nodes in this tier")
+        command.add_argument("--segment-id", help="segment-1, segment-2, or all")
+        command.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+        if name == "dispatch":
+            command.add_argument(
+                "--dry-run", action="store_true", help="plan without launching VASP"
+            )
+
     args = parser.parse_args(argv)
-    if args.command == "plan-six-class":
-        from benchmarks.e4.aurora_dft.planning import write_six_class_workload_manifest
+    if getattr(args, "json", False) and getattr(args, "dry_run", True) is False:
+        parser.error("--json is only supported with --dry-run; live dispatch prints progress text")
+    try:
+        if args.command == "plan-six-class":
+            from benchmarks.e4.aurora_dft.planning import write_six_class_workload_manifest
 
-        manifest = write_six_class_workload_manifest(args.output)
-        print(
-            f"wrote six-class plan {args.output}; execution_authorized=false; "
-            f"scheduler_submissions={manifest['semantics']['scheduler_submissions']}"
-        )
-        return 0
-    if args.command == "validate-six-class":
-        from benchmarks.e4.aurora_dft.planning import (
-            validate_six_class_workload_manifest,
-        )
+            manifest = write_six_class_workload_manifest(args.output)
+            print(
+                f"wrote six-class plan {args.output}; execution_authorized=false; "
+                f"scheduler_submissions={manifest['semantics']['scheduler_submissions']}"
+            )
+            return 0
+        if args.command == "validate-six-class":
+            from benchmarks.e4.aurora_dft.planning import validate_six_class_workload_manifest
 
-        manifest = json.loads(args.manifest.read_text())
-        validate_six_class_workload_manifest(manifest)
-        print(
-            f"validated {len(manifest['material_classes'])} material classes; "
-            "execution_authorized=false"
-        )
-        return 0
-    if args.command == "dispatch-six-class":
-        return dispatch_six_class(
+            manifest = json.loads(args.manifest.read_text())
+            validate_six_class_workload_manifest(manifest)
+            print(
+                f"validated {len(manifest['material_classes'])} material classes; "
+                "execution_authorized=false"
+            )
+            return 0
+        if args.command == "dispatch-six-class":
+            return dispatch_six_class(
+                args.manifest,
+                args.material_class,
+                args.experiment,
+                args.nodes,
+                args.segment_id,
+                args.dry_run,
+                json_output=args.json,
+            )
+        if args.command == "preflight-six-class":
+            report = preflight_six_class(
+                args.manifest, args.material_class, args.experiment, args.nodes, args.segment_id
+            )
+            return emit_preflight(report, args.json)
+        if args.command == "freeze-manifests":
+            freeze_manifests(args.source_manifest, args.weak_inputs_manifest, args.output_dir)
+            return 0
+        if args.command == "validate":
+            manifest = validate_manifest(args.manifest)
+            print(
+                f"validated {manifest['experiment']} manifest; "
+                f"execution_authorized={str(manifest['execution_authorized']).lower()}"
+            )
+            return 0
+        if args.command == "preflight":
+            manifest = validate_manifest(args.manifest)
+            report = dispatch_preflight(manifest, args.nodes, args.segment_id)
+            return emit_preflight(report, args.json)
+        return dispatch(
             args.manifest,
-            args.material_class,
-            args.experiment,
             args.nodes,
             args.segment_id,
             args.dry_run,
+            json_output=args.json,
         )
-    if args.command == "freeze-manifests":
-        freeze_manifests(args.source_manifest, args.weak_inputs_manifest, args.output_dir)
-        return 0
-    if args.command == "validate":
-        manifest = validate_manifest(args.manifest)
-        print(
-            f"validated {manifest['experiment']} manifest; "
-            f"execution_authorized={manifest['execution_authorized']}"
-        )
-        return 0
-    return dispatch(args.manifest, args.nodes, args.segment_id, args.dry_run)
+    except (KeyError, OSError, RuntimeError, ValueError) as error:
+        if args.debug:
+            raise
+        print(f"error: {error}", file=sys.stderr)
+        print("hint: rerun with --debug before the command for a traceback", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
