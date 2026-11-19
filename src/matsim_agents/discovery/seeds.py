@@ -376,9 +376,11 @@ def random_search(
     formula_units: int = 1,
     space_groups: list[int] | None = None,
     max_attempts_factor: int = 4,
-    seed_proposals: bool = False,
 ) -> list[tuple[Structure, int]]:
     """Generate up to ``n`` random crystal structures across the 230 space groups.
+
+    ``seed`` determines both the space groups and pyXtal's atom placement, so
+    the same seed reproduces the same structures.
 
     Returns a list of ``(pymatgen Structure, space_group)`` tuples.
     Returns ``[]`` (with a warning) if pyXtal is not installed.
@@ -401,6 +403,7 @@ def random_search(
 
     import random as _random
 
+    import numpy as np
     from pymatgen.analysis.structure_matcher import StructureMatcher
     from pymatgen.core import Structure
     from pyxtal import pyxtal
@@ -420,12 +423,13 @@ def random_search(
         spg = rng.choice(allowed_groups)
         try:
             x = pyxtal()
-            proposal_args = {}
-            if seed_proposals:
-                import numpy as np
-
-                proposal_args["random_state"] = np.random.default_rng(rng.getrandbits(32))
-            x.from_random(dim=3, group=spg, species=elements, numIons=counts, **proposal_args)
+            x.from_random(
+                dim=3,
+                group=spg,
+                species=elements,
+                numIons=counts,
+                random_state=np.random.default_rng(rng.getrandbits(32)),
+            )
             if not x.valid:
                 continue
             pmg = x.to_pymatgen()

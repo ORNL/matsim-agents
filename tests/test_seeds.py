@@ -170,6 +170,8 @@ def test_random_search_uses_formula_unit_and_space_group_controls(monkeypatch):
         max_attempts_factor=1,
     )
 
+    assert len(calls) == 1
+    assert calls[0].pop("random_state") is not None
     assert calls == [
         {
             "dim": 3,
@@ -181,7 +183,7 @@ def test_random_search_uses_formula_unit_and_space_group_controls(monkeypatch):
 
 
 @requires_pymatgen
-def test_random_search_seeded_proposals_replay_the_same_structure(monkeypatch):
+def test_random_search_seed_replays_the_same_structure(monkeypatch):
     from pymatgen.core import Lattice, Structure
 
     random_values = []
@@ -204,8 +206,8 @@ def test_random_search_seeded_proposals_replay_the_same_structure(monkeypatch):
     monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
     monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
 
-    first = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
-    second = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
+    first = random_search(_comp("Si"), n=1, seed=31)
+    second = random_search(_comp("Si"), n=1, seed=31)
 
     assert len(first) == len(second) == 1
     assert random_values[0] == random_values[1]
@@ -325,3 +327,13 @@ def test_generate_seeds_random_flagged_for_verification(tmp_path: Path):
             assert c.needs_dft_verification is True
             assert c.prototype_id is None
             assert c.space_group is not None and 1 <= c.space_group <= 230
+
+
+def test_real_pyxtal_structures_are_reproducible_from_the_seed():
+    pytest.importorskip("pyxtal")
+    first = random_search(_comp("Nb2O5"), n=2, seed=20261113)
+    second = random_search(_comp("Nb2O5"), n=2, seed=20261113)
+    assert [group for _structure, group in first] == [group for _structure, group in second]
+    for (a, _), (b, _) in zip(first, second, strict=True):
+        assert a.lattice.abc == pytest.approx(b.lattice.abc)
+        assert a.frac_coords == pytest.approx(b.frac_coords)
