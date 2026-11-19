@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 import typer
 import yaml
 
 from matsim_agents.cli._app import app, console
-from matsim_agents.workflows.exploration import (
-    ExplorationConfig,
-    ExplorationSummary,
-    check_exploration,
-    load_exploration_config,
-    resume_exploration,
-    run_exploration,
-    summarize_exploration,
-)
+
+if TYPE_CHECKING:
+    from matsim_agents.workflows.exploration import ExplorationConfig, ExplorationSummary
 
 explore_app = typer.Typer(help="Check, run, and inspect a bounded MLIP-only phase search.")
 app.add_typer(explore_app, name="explore")
+
+
+def _exploration() -> ModuleType:
+    from matsim_agents.workflows import exploration
+
+    return exploration
 
 
 def _progress(message: str) -> None:
@@ -28,7 +30,7 @@ def _progress(message: str) -> None:
 
 def _load_config(path: Path) -> ExplorationConfig:
     try:
-        return load_exploration_config(path)
+        return _exploration().load_exploration_config(path)
     except (ValueError, OSError, yaml.YAMLError) as error:
         console.print(f"Configuration error: {error}", style="red", markup=False)
         raise typer.Exit(2) from error
@@ -63,7 +65,7 @@ def check(
     config: Path = typer.Argument(..., exists=True, dir_okay=False, help="Exploration YAML."),
 ) -> None:
     """Validate configuration and dependencies without running calculations."""
-    result = check_exploration(_load_config(config))
+    result = _exploration().check_exploration(_load_config(config))
     console.print(f"Python: {result.python}", markup=False, soft_wrap=True)
     console.print(f"Preflight: {'passed' if result.ready else 'failed'}")
     if result.checkpoint_sha256:
@@ -83,7 +85,7 @@ def run(
     """Generate, select, and relax checkpointed rounds; never submit a scheduler job."""
     cfg = _load_config(config)
     try:
-        summary = run_exploration(cfg, on_progress=_progress)
+        summary = _exploration().run_exploration(cfg, on_progress=_progress)
     except (ValueError, OSError) as error:
         console.print(f"Exploration error: {error}", style="red", markup=False)
         raise typer.Exit(1) from error
@@ -98,7 +100,7 @@ def summary(
 ) -> None:
     """Inspect saved evidence without loading a model or repeating work."""
     try:
-        result = summarize_exploration(run_directory)
+        result = _exploration().summarize_exploration(run_directory)
     except (ValueError, OSError) as error:
         console.print(f"Cannot read exploration evidence: {error}", style="red", markup=False)
         raise typer.Exit(1) from error
@@ -113,7 +115,7 @@ def resume(
 ) -> None:
     """Continue a checkpointed run; do not retry committed failures."""
     try:
-        result = resume_exploration(run_directory, on_progress=_progress)
+        result = _exploration().resume_exploration(run_directory, on_progress=_progress)
     except (ValueError, OSError) as error:
         console.print(f"Cannot resume exploration: {error}", style="red", markup=False)
         raise typer.Exit(1) from error
@@ -128,7 +130,7 @@ def status(
 ) -> None:
     """Read checkpoint progress without loading a model or probing a scheduler."""
     try:
-        result = summarize_exploration(run_directory)
+        result = _exploration().summarize_exploration(run_directory)
     except (ValueError, OSError) as error:
         console.print(f"Cannot read exploration status: {error}", markup=False)
         raise typer.Exit(1) from error

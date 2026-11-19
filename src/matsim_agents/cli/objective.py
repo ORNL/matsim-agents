@@ -30,8 +30,6 @@ from matsim_agents.cli.options import (
     opt_uq_top_weight_threshold,
     path_or_none,
 )
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState
 
 
 def _build_run_config(
@@ -131,6 +129,9 @@ def run(
     ),
 ):
     """Run the planner -> executor -> analyst graph for a given objective."""
+    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.orchestration.state import MatSimState
+
     graph = build_graph()
     state = MatSimState(
         objective=objective,
@@ -175,6 +176,7 @@ def run(
 def plan(objective: str):
     """Run the planner only and print the proposed task list as JSON."""
     from matsim_agents.orchestration.agents.planner import planner_node
+    from matsim_agents.orchestration.state import MatSimState
 
     state = MatSimState(objective=objective)
     out = planner_node(state)

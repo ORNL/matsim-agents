@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 from typer.testing import CliRunner
 
 from matsim_agents.cli import app, system
 from matsim_agents.cli._app import package_version
+
+
+def test_cli_help_does_not_load_langgraph_or_print_warnings():
+    probe = (
+        "import sys; from matsim_agents.cli import app; "
+        "from typer.testing import CliRunner; "
+        "assert CliRunner().invoke(app, ['--help']).exit_code == 0; "
+        "print(sorted(m for m in ('langgraph', 'langchain_core') if m in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-W", "default", "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
+    assert "Warning" not in result.stderr
 
 
 def test_root_help_and_version_are_available_without_a_command():
