@@ -357,3 +357,25 @@ def test_tool_execution_failures_exit_1(monkeypatch, failure):
     assert "Traceback" not in result.output
     debug = CliRunner().invoke(app, ["--debug", "tools", "run", "failing"])
     assert debug.exception is failure
+
+
+@pytest.mark.parametrize("code,expected", [("missing dft block", 2), (0, 0), (2, 2)])
+def test_tool_system_exits_keep_distinct_exit_codes(monkeypatch, code, expected):
+    import types
+
+    from matsim_agents.cli import tools
+
+    def main(argv=None):
+        raise SystemExit(code)
+
+    fake = types.ModuleType("exiting_tool")
+    fake.main = main
+    monkeypatch.setitem(tools.TOOLS, "exiting", ("exiting_tool", "test tool"))
+    monkeypatch.setitem(sys.modules, "exiting_tool", fake)
+    result = CliRunner().invoke(app, ["tools", "run", "exiting"])
+    assert result.exit_code == expected, result.output
+    if isinstance(code, str):
+        assert "Configuration error: missing dft block" in result.output
+    if expected == 2:
+        debug = CliRunner().invoke(app, ["--debug", "tools", "run", "exiting"])
+        assert isinstance(debug.exception, SystemExit)

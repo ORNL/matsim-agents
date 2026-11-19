@@ -320,7 +320,7 @@ def _execute_locked(run: ScientificRunDirectory, record: WorkflowInvocation) -> 
         raise typer.Exit(1)
     console.print(
         f"Next: `matsim-agents workflow summary {run.path}` for the report, or "
-        f"`workflow status {run.path}` later.",
+        f"`matsim-agents workflow status {run.path}` later.",
         markup=False,
         soft_wrap=True,
     )
@@ -410,7 +410,7 @@ def check(config: Path = typer.Argument(..., exists=True, dir_okay=False)) -> No
         console.print(note, markup=False)
     console.print(
         f"Next: `matsim-agents workflow plan {config}` to see the exact command, "
-        f"then `workflow run {config}`.",
+        f"then `matsim-agents workflow run {config}`.",
         markup=False,
         soft_wrap=True,
     )

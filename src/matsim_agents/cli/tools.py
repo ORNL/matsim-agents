@@ -113,6 +113,13 @@ def run_tool(
             "Hint: rerun with --debug before the command for a traceback.", markup=False
         )
         raise typer.Exit(1) from None
+    except SystemExit as error:
+        if isinstance(error.code, int):
+            raise
+        if ctx.find_root().ensure_object(CLIState).debug:
+            raise
+        error_console.print(f"Configuration error: {error.code}", style="red", markup=False)
+        raise typer.Exit(2) from None
     finally:
         sys.argv = saved
     raise typer.Exit(code or 0)

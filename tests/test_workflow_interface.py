@@ -57,6 +57,7 @@ def test_check_parses_native_cli_without_running(workflow_yaml, native_process):
     assert result.exit_code == 0, result.output
     assert "Preflight passed" in result.output
     assert f"Next: `matsim-agents workflow plan {workflow_yaml}`" in result.output
+    assert f"`matsim-agents workflow run {workflow_yaml}`" in result.output
     assert native_process == []
     assert not (workflow_yaml.parent / "records").exists()
 
@@ -161,7 +162,7 @@ def test_successful_run_suggests_summary_and_status(workflow_yaml, native_proces
     result = CliRunner().invoke(app, ["workflow", "run", str(workflow_yaml)])
     assert result.exit_code == 0, result.output
     assert "Next: `matsim-agents workflow summary" in result.output
-    assert "`workflow status" in result.output
+    assert "`matsim-agents workflow status" in result.output
 
 
 def test_failed_native_command_is_persisted(workflow_yaml, monkeypatch):

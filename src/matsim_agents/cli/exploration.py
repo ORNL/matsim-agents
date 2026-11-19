@@ -95,7 +95,7 @@ def run(
         raise typer.Exit(1)
     console.print(
         f"Next: `matsim-agents explore summary {summary.run_directory}` to review, or "
-        f"`explore resume {summary.run_directory}` to continue.",
+        f"`matsim-agents explore resume {summary.run_directory}` to continue.",
         markup=False,
         soft_wrap=True,
     )
