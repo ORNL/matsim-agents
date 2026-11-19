@@ -433,7 +433,7 @@ def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kin
     if checkout_kind == "selected":
         prefix = "HYDRAGNN"
         start = installer.index('if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]')
-        end = installer.index('[[ "$(realpath -m "${HYDRAGNN_INSTALLER_DIR}")"')
+        end = installer.index('[[ ! "${HYDRAGNN_INSTALLER_DIR}" -ef "${HYDRAGNN_DIR}" ]]')
     else:
         prefix = "HYDRAGNN_INSTALLER"
         start = installer.index('if [[ ! -d "${HYDRAGNN_INSTALLER_DIR}/.git" ]]')
@@ -964,3 +964,30 @@ def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:
         for fragment in obsolete:
             assert fragment not in text, f"{path.relative_to(ROOT)} contains {fragment!r}"
         assert re.search(r"bash[^\n`]*install_matsim_", text) is None, path
+
+
+@pytest.mark.parametrize(
+    ("installer_dir", "rejected"),
+    [("checkout", True), ("checkout-link", True), ("deps", False), ("missing", False)],
+)
+def test_aurora_dependency_source_must_differ_from_hydragnn_checkout(
+    tmp_path, installer_dir, rejected
+):
+    installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
+    start = installer.index('[[ ! "${HYDRAGNN_INSTALLER_DIR}" -ef "${HYDRAGNN_DIR}" ]]')
+    end = installer.index("\n", installer.index("|| die", start))
+    (tmp_path / "checkout").mkdir()
+    (tmp_path / "deps").mkdir()
+    (tmp_path / "checkout-link").symlink_to(tmp_path / "checkout")
+    script = 'set -euo pipefail\ndie() { echo "$1" >&2; exit 1; }\n' + installer[start:end]
+    environment = {
+        **os.environ,
+        "HYDRAGNN_DIR": str(tmp_path / "checkout"),
+        "HYDRAGNN_INSTALLER_DIR": str(tmp_path / installer_dir),
+    }
+    result = subprocess.run(
+        ["bash"], input=script, text=True, env=environment, capture_output=True, check=False
+    )
+    assert (result.returncode != 0) is rejected, result.stderr
+    if rejected:
+        assert "must not be the selected HydraGNN checkout" in result.stderr
