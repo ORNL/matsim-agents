@@ -6,7 +6,7 @@ Covers:
   the inline `vars:` block, env-overrides-vars precedence, and
   iterative resolution of nested references.
 * Validators: `dft.backend` requires the matching sub-block;
-  `acquisition.strategy='ensemble'` requires `mlip.hydragnn.ensemble_paths`.
+  `acquisition.strategy='ensemble'` requires `mlip.ensemble_models`.
 * The removed top-level `hydragnn:`/`vasp:` and `md.seed_structures:` layout is rejected.
 """
 
@@ -54,7 +54,7 @@ def test_nb2o5_qe_mace_example_config(nb2o5_qe_mace_example):
     """Schema/placement only: fixture files are not scientific DFT evidence."""
     cfg = ALConfig.from_yaml(nb2o5_qe_mace_example)
     assert cfg.mlip.backend == "mace"
-    assert cfg.mlip.mace.family == "checkpoint"
+    assert cfg.mlip.family == "checkpoint"
     assert cfg.md.seed_source.compositions == ["Nb2O5"]
     assert cfg.md.random_seed == 20261113
     assert cfg.dft.backend == "qe"
@@ -67,7 +67,7 @@ def test_nb2o5_qe_mace_example_config(nb2o5_qe_mace_example):
     assert cfg.trainer.validation_fraction == 0
     assert cfg.trainer.validation_set.is_file()
     assert cfg.trainer.validation_reference_set.is_file()
-    assert cfg.trainer.train_script.is_file()
+    assert cfg.mlip.fine_tuner_module == "matsim_agents.training.finetune_mace"
     assert cfg.trainer.train_launcher is None
     assert cfg.loop.n_iterations == 3
     assert cfg.acquisition.n_select * cfg.loop.n_iterations == cfg.loop.max_dft_calculations == 12
@@ -114,7 +114,7 @@ def _minimal_yaml(
     *,
     backend: str = "vasp",
     strategy: str = "random",
-    ensemble_paths: str = "",
+    ensemble_models: str = "",
     seeds_block: str = "      - __SEED_PATH__",
 ) -> str:
     """Return a syntactically valid AL config YAML body.
@@ -125,16 +125,15 @@ def _minimal_yaml(
     .format() escaping of ``${...}``).
     """
     ensemble = ""
-    if ensemble_paths:
-        ensemble = "    ensemble_paths:\n" + "".join(
-            f"  {line}\n" for line in ensemble_paths.splitlines()
+    if ensemble_models:
+        ensemble = "  ensemble_models:\n" + "".join(
+            f"  {line}\n" for line in ensemble_models.splitlines()
         )
 
     return (
         "mlip:\n"
         "  backend: hydragnn\n"
-        "  hydragnn:\n"
-        "    logdir: ${LOGDIR}\n"
+        "  logdir: ${LOGDIR}\n"
         f"{ensemble}"
         "md:\n"
         "  seed_source:\n"
@@ -154,7 +153,6 @@ def _minimal_yaml(
         "    potcar_dir: ${POTCAR_DIR}\n"
         "trainer:\n"
         "  enabled: false\n"
-        "  train_script: ${TRAIN_SCRIPT}\n"
         "loop:\n"
         "  n_iterations: 1\n"
         "  out_dir: ${OUT_DIR}\n"
@@ -189,8 +187,6 @@ def required_paths(tmp_path: Path) -> dict[str, str]:
     incar.write_text("ENCUT = 520\n")
     potcar_dir = tmp_path / "potcars"
     potcar_dir.mkdir()
-    train = tmp_path / "train.py"
-    train.write_text("# stub\n")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     return {
@@ -199,7 +195,6 @@ def required_paths(tmp_path: Path) -> dict[str, str]:
         "VASP_WRAPPER": str(wrapper),
         "INCAR": str(incar),
         "POTCAR_DIR": str(potcar_dir),
-        "TRAIN_SCRIPT": str(train),
         "OUT_DIR": str(out_dir),
         "seed_path": str(seed),
     }
@@ -227,7 +222,7 @@ def test_from_yaml_minimal_round_trip(
     assert cfg.dft.backend == "vasp"
     assert cfg.dft.vasp is not None
     assert str(cfg.dft.vasp.vasp_bin) == required_paths["VASP_BIN"]
-    assert str(cfg.mlip.hydragnn.logdir) == required_paths["LOGDIR"]
+    assert str(cfg.mlip.logdir) == required_paths["LOGDIR"]
     assert cfg.acquisition.strategy == "random"
     assert cfg.md.seed_source.kind == "paths"
     assert len(cfg.md.seed_source.paths) == 1
@@ -253,7 +248,6 @@ def test_promotion_examples_require_elemental_manifest(
         "${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}"
     )
     assert trainer.get("validation_fraction", 0) > 0 or trainer.get("validation_set")
-    trainer["train_script"] = required_paths["TRAIN_SCRIPT"]
     trainer.pop("train_launcher", None)
     if "validation_set" in trainer:
         validation = tmp_path / "heldout.extxyz"
@@ -285,7 +279,7 @@ def test_hydragnn_al_examples_use_native_single_process_finetuner():
         for path in sorted(
             (Path(__file__).resolve().parents[1] / "examples" / directory).glob("*.yaml")
         )
-        if yaml.safe_load(path.read_text()).get("trainer", {}).get("train_script")
+        if yaml.safe_load(path.read_text()).get("trainer", {}).get("enabled") not in (None, False)
         and yaml.safe_load(path.read_text()).get("mlip", {}).get("backend") == "hydragnn"
     ]
 
@@ -294,9 +288,9 @@ def test_hydragnn_al_examples_use_native_single_process_finetuner():
     for example in examples:
         config = yaml.safe_load(example.read_text())
         trainer = config["trainer"]
-        assert trainer["train_script"] == (
-            "${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py"
-        ), example
+        # The fine-tuning recipe belongs to the mlip block, not the trainer.
+        assert config["mlip"]["fine_tuner"] == "finetune_hydragnn_newhead", example
+        assert "train_script" not in trainer, example
         assert "nodes_for_train" not in trainer and "ranks_per_node" not in trainer, example
         training = config["resources"]["pools"]["training"]
         assert training["nodes"] == 1 and training["devices"] == 1, example
@@ -384,7 +378,6 @@ def test_inline_vars_block_and_iterative_resolution(
         f"  VASP_WRAPPER: ${{PROJ_ROOT}}/wrap.sh\n"
         f"  INCAR: ${{PROJ_ROOT}}/INCAR.template\n"
         f"  POTCAR_DIR: ${{PROJ_ROOT}}/potcars\n"
-        f"  TRAIN_SCRIPT: ${{PROJ_ROOT}}/train.py\n"
         f"  OUT_DIR: ${{PROJ_ROOT}}/out\n"
         f"  LOGDIR: ${{PROJ_ROOT}}/logdir\n"
     ) + body
@@ -441,12 +434,12 @@ def test_qe_backend_requires_qe_block(
         ALConfig.from_yaml(cfg_path)
 
 
-def test_ensemble_strategy_requires_ensemble_paths(
+def test_ensemble_strategy_requires_ensemble_models(
     tmp_path: Path,
     required_paths: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`acquisition.strategy='ensemble'` without ensemble_paths must fail."""
+    """`acquisition.strategy='ensemble'` without ensemble_models must fail."""
     body = _minimal_yaml(strategy="ensemble").replace("__SEED_PATH__", required_paths["seed_path"])
     cfg_path = _write(tmp_path, "al.yaml", body)
 
@@ -456,6 +449,13 @@ def test_ensemble_strategy_requires_ensemble_paths(
 
     with pytest.raises(ValueError, match=r"ensemble"):
         ALConfig.from_yaml(cfg_path)
+
+    member = str(tmp_path / "member-logdir")
+    body = _minimal_yaml(strategy="ensemble", ensemble_models=f"- {member}").replace(
+        "__SEED_PATH__", required_paths["seed_path"]
+    )
+    cfg = ALConfig.from_yaml(_write(tmp_path, "al-ensemble.yaml", body))
+    assert cfg.mlip.ensemble_models == [member]
 
 
 def test_dft_method_signature_excludes_operational_settings(
@@ -587,7 +587,6 @@ def test_top_level_hydragnn_vasp_and_seed_structures_are_rejected(
           potcar_dir: {POTCAR_DIR}
         trainer:
           enabled: false
-          train_script: {TRAIN_SCRIPT}
         loop:
           n_iterations: 1
           out_dir: {OUT_DIR}

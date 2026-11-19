@@ -8,20 +8,12 @@ import typer
 
 from matsim_agents.cli._app import app, console
 from matsim_agents.cli.options import (
+    load_mlip_option,
     opt_active_learning_config,
     opt_active_learning_dry_run,
     opt_al_handoff_audit_path,
-    opt_checkpoint,
-    opt_hydragnn_branch_mlp_checkpoint,
-    opt_hydragnn_inference_head,
-    opt_logdir,
-    opt_mlip_backend,
-    opt_mlp_device,
-    opt_mlp_precision,
-    opt_precision,
+    opt_mlip_config,
     opt_trigger_al_handoff,
-    opt_uma_model_name,
-    opt_uma_task,
     opt_uq_min_relaxations_for_handoff,
     opt_uq_min_unreliable_fraction,
     opt_uq_top_weight_threshold,
@@ -36,17 +28,10 @@ def chat(
         "--llm-only/--with-mlip",
         help="Run conversational LLMs only, without MLIP validation or atomistic tools.",
     ),
-    mlip_backend: str = opt_mlip_backend(),
-    logdir: Path | None = opt_logdir(),
-    hydragnn_branch_mlp_checkpoint: Path | None = opt_hydragnn_branch_mlp_checkpoint(),
-    hydragnn_inference_head: str | None = opt_hydragnn_inference_head(),
-    uma_model_name: str = opt_uma_model_name(),
-    uma_task: str = opt_uma_task(),
+    mlip_config: Path | None = opt_mlip_config(),
     output_dir: Path = typer.Option(
         Path("./outputs"), help="Root directory for discovery artifacts."
     ),
-    checkpoint: str | None = opt_checkpoint("HydraGNN checkpoint filename or path."),
-    mlp_device: str = opt_mlp_device(),
     resources: Path | None = typer.Option(
         None,
         "--resources",
@@ -66,8 +51,6 @@ def chat(
         "--critic-llm-servers",
         help="Comma-separated names of plan servers that critique with --llm-peer-review.",
     ),
-    precision: str | None = opt_precision("HydraGNN precision override."),
-    mlp_precision: str | None = opt_mlp_precision("MLP precision override."),
     optimizer: str = typer.Option(
         "FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."
     ),
@@ -183,20 +166,11 @@ def chat(
 
     cfg = DiscoveryChatConfig(
         llm_only=llm_only,
-        mlip_backend=mlip_backend,
-        logdir=path_or_none(logdir),
-        hydragnn_branch_mlp_checkpoint=path_or_none(hydragnn_branch_mlp_checkpoint),
-        hydragnn_inference_head=hydragnn_inference_head,
-        uma_model_name=uma_model_name,
-        uma_task=uma_task,
+        mlip=load_mlip_option(mlip_config),
         output_dir=str(output_dir),
-        checkpoint=checkpoint,
-        mlp_device=mlp_device,
         resources=path_or_none(resources),
         llm_server=llm_server,
         critic_llm_servers=[s.strip() for s in (critic_llm_servers or "").split(",") if s.strip()],
-        precision=precision,
-        mlp_precision=mlp_precision,
         optimizer=optimizer,
         maxiter=maxiter,
         fmax=fmax,

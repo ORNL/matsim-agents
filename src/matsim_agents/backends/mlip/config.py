@@ -1,11 +1,39 @@
-"""Configuration models for MLIP calculators (HydraGNN, UMA, MACE)."""
+"""MLIP backend configurations.
+
+Every MLIP is configured by one subclass of :class:`MLIPBackendConfig`. A
+subclass owns everything specific to its backend: defaults, file paths, how the
+ASE calculator is built, how a trained checkpoint replaces the foundation
+model, its provenance identity, and the Python modules it needs. Capabilities
+depend only on the base interface and accept :data:`MLIPConfig`, the
+discriminated union of the subclasses, so all backends are interchangeable::
+
+    mlip:
+      backend: mace          # hydragnn | uma | mace
+      model: medium-omat-0
+      device: cpu
+"""
 
 from __future__ import annotations
 
+import json
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+
+if TYPE_CHECKING:
+    from matsim_agents.backends.mlip.relaxation import RelaxCalculator
+
+UMATask = Literal["omat", "omol", "oc20", "odac", "omc"]
+MACEFamily = Literal[
+    "mace_mp",
+    "mace_off",
+    "mace_omol",
+    "mace_polar",
+    "mace_anicc",
+    "checkpoint",
+]
 
 HYDRAGNN_DATASET_HEADS = (
     "Alexandria",
@@ -27,6 +55,17 @@ HYDRAGNN_DATASET_HEADS = (
 )
 
 
+def _compact_json(value: dict[str, Any]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _resolve_path(base: Path, value: object) -> object:
+    if not isinstance(value, str | Path):
+        return value
+    path = Path(value).expanduser()
+    return str(path if path.is_absolute() else (base / path).resolve())
+
+
 def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
     """Resolve a HydraGNN dataset name or branch index to the canonical head index."""
     if value is None:
@@ -46,73 +85,8 @@ def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
     return by_name[normalized]
 
 
-# --------------------------------------------------------------------------- #
-# Sub-configs                                                                 #
-# --------------------------------------------------------------------------- #
-
-
-class HydraGNNConfig(BaseModel):
-    """Inputs needed to load and (optionally) retrain a HydraGNN MLFF model."""
-
-    # Accept both the field name and the YAML-facing alias 'mlp_checkpoint'.
-    model_config = ConfigDict(populate_by_name=True)
-
-    logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
-    hydragnn_root: Path | None = Field(
-        None,
-        description="HydraGNN source checkout used by built-in fine-tuners.",
-    )
-    checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
-    hydragnn_branch_mlp_checkpoint: Path | None = Field(
-        None,
-        alias="mlp_checkpoint",
-        description="Optional auxiliary BranchWeightMLP checkpoint (YAML key: mlp_checkpoint).",
-    )
-    newhead_ft_config: Path | None = Field(
-        None,
-        description=(
-            "For the 'drop-all-heads + new head' fine-tune: path to the "
-            "``newhead.json`` produced by finetune_hydragnn_newhead. When set, "
-            "the calculator rebuilds the backbone from ``config.json``, re-applies "
-            "the single-branch head surgery, loads ``checkpoint`` and uses direct "
-            "single-head inference (no BranchWeightMLP)."
-        ),
-    )
-    ft_repo: Path | None = Field(
-        None,
-        description="Path to ORNL/HydraGNN_GFM_FineTuning4Materials (for update_model).",
-    )
-    radius: float | None = Field(None, description="Override cutoff radius (Å).")
-    max_neighbours: int | None = Field(None, description="Override max neighbours.")
-    charge: float = 0.0
-    spin: float = 0.0
-    precision: str | None = None  # "fp32" | "fp64" | "bf16"
-    mlp_device: Literal["cuda", "cpu", "xpu"] = "cuda"
-    inference_head: str | int | None = Field(
-        None,
-        description=(
-            "Optional decoding head selected by canonical dataset name or index 0..15. "
-            "When set, inference bypasses BranchWeightMLP and uses only that head."
-        ),
-    )
-    ensemble_paths: list[Path] = Field(
-        default_factory=list,
-        description=(
-            "Paths to additional HydraGNN logdirs forming the ensemble. If "
-            "non-empty, ensemble disagreement is available as an acquisition."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def _validate_inference_head(self) -> HydraGNNConfig:
-        resolve_hydragnn_inference_head(self.inference_head)
-        if self.inference_head is not None and self.newhead_ft_config is not None:
-            raise ValueError("inference_head cannot be combined with a single new-head model")
-        return self
-
-
 class MCDropoutInjectionConfig(BaseModel):
-    """Test-time dropout injection for backends without native dropout (e.g. UMA).
+    """Test-time dropout injection for backends without native dropout (UMA, MACE).
 
     UMA and most production foundation MLIPs are trained *without* dropout, so
     ``acquisition.strategy: mc_dropout`` would otherwise return zero variance.
@@ -138,59 +112,367 @@ class MCDropoutInjectionConfig(BaseModel):
     )
 
 
-class UMAConfig(BaseModel):
-    """Inputs to load a UMA (fairchem) universal MLIP as an ASE calculator.
+# --------------------------------------------------------------------------- #
+# Backend interface                                                           #
+# --------------------------------------------------------------------------- #
 
-    By default UMA is used as a frozen foundation model, but the AL trainer can
-    optionally call a user-supplied FairChem/UMA fine-tuning launcher after each
-    DFT-labelled batch and use the resulting model path on the next iteration.
-    """
 
+class MLIPBackendConfig(BaseModel, ABC):
+    """Interface every MLIP backend configuration implements."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: str
+    # Name of the built-in fine-tuning module (matsim_agents.training.<fine_tuner>).
+    fine_tuner: str
+    device: Literal["cuda", "cpu", "xpu"] = "cuda"
+    precision: str | None = None
+    ensemble_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional models (names, checkpoints, or logdirs) forming a deep ensemble. "
+            "If non-empty, ensemble disagreement is available as an acquisition."
+        ),
+    )
+
+    # Importable modules this backend needs, beyond the shared ASE/Torch stack.
+    required_modules: ClassVar[tuple[str, ...]] = ()
+    # Fields holding file paths, resolved against the declaring YAML file.
+    path_fields: ClassVar[tuple[str, ...]] = ()
+
+    @abstractmethod
+    def build_calculator(self, *, enable_mc_dropout: bool = False) -> Any:
+        """Load the model and return its ASE calculator."""
+
+    @abstractmethod
+    def with_checkpoint(self, path: str | Path) -> MLIPBackendConfig:
+        """This configuration pointed at a trained or fine-tuned model."""
+
+    @abstractmethod
+    def ensemble_member(self, model: str) -> MLIPBackendConfig:
+        """This configuration with ``model`` as the loaded model (an ensemble member)."""
+
+    @abstractmethod
+    def model_identifier(self) -> str:
+        """Stable identity of the model and its prediction-relevant settings."""
+
+    @property
+    @abstractmethod
+    def model_reference(self) -> str:
+        """Short name or path of the model, for reports and evidence."""
+
+    def model_artifact(self) -> Path | None:
+        """Local model file whose SHA-256 identifies the model, if the backend uses one."""
+        return None
+
+    def check_loadable(self) -> None:
+        """Raise ``ValueError`` if inputs needed to load the model are missing."""
+
+    def required_paths(self) -> list[Path]:
+        """Local files and directories that must exist before the model can load."""
+        artifact = self.model_artifact()
+        return [artifact] if artifact is not None else []
+
+    @property
+    def fine_tuner_module(self) -> str:
+        """Module run as ``python -m <module>`` to fine-tune this model."""
+        return f"matsim_agents.training.{self.fine_tuner}"
+
+    @abstractmethod
+    def fine_tune_args(
+        self,
+        *,
+        dataset: Path,
+        out_dir: Path,
+        epochs: int,
+        references: Path,
+        finetune_mode: str,
+    ) -> list[str]:
+        """Command-line arguments of :attr:`fine_tuner_module` for one fine-tune."""
+
+    def ensemble_configs(self) -> list[MLIPBackendConfig]:
+        """The primary model followed by every ensemble member."""
+        return [self, *(self.ensemble_member(model) for model in self.ensemble_models)]
+
+    def relaxation_calculator(self, *, charge: float = 0.0, spin: float = 0.0) -> RelaxCalculator:
+        """Calculator for structure relaxation and its branch-weight UQ support."""
+        from matsim_agents.backends.mlip.relaxation import RelaxCalculator
+
+        return RelaxCalculator(
+            self.build_calculator(),
+            0,
+            0,
+            f"branch-weight UQ unavailable for {self.backend} backend",
+        )
+
+    @classmethod
+    def resolve_paths(cls, raw: dict[str, Any], base: Path) -> dict[str, Any]:
+        """Resolve this backend's file paths in a raw mapping against ``base``."""
+        for field in cls.path_fields:
+            if raw.get(field) is not None:
+                raw[field] = _resolve_path(base, raw[field])
+        return raw
+
+
+# --------------------------------------------------------------------------- #
+# Backends                                                                    #
+# --------------------------------------------------------------------------- #
+
+
+class HydraGNNConfig(MLIPBackendConfig):
+    """A HydraGNN multi-head model loaded from a training logdir."""
+
+    backend: Literal["hydragnn"] = "hydragnn"
+    logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
+    hydragnn_root: Path | None = Field(
+        None,
+        description="HydraGNN source checkout used by built-in fine-tuners.",
+    )
+    checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
+    mlp_checkpoint: Path | None = Field(
+        None,
+        description="Optional auxiliary BranchWeightMLP checkpoint.",
+    )
+    newhead_ft_config: Path | None = Field(
+        None,
+        description=(
+            "For the 'drop-all-heads + new head' fine-tune: path to the "
+            "``newhead.json`` produced by finetune_hydragnn_newhead. When set, "
+            "the calculator rebuilds the backbone from ``config.json``, re-applies "
+            "the single-branch head surgery, loads ``checkpoint`` and uses direct "
+            "single-head inference (no BranchWeightMLP)."
+        ),
+    )
+    ft_repo: Path | None = Field(
+        None,
+        description="Path to ORNL/HydraGNN_GFM_FineTuning4Materials (for update_model).",
+    )
+    radius: float | None = Field(None, description="Override cutoff radius (Å).")
+    max_neighbours: int | None = Field(None, description="Override max neighbours.")
+    charge: float = 0.0
+    spin: float = 0.0
+    precision: str | None = Field(None, description="Model precision (fp32|fp64|bf16).")
+    mlp_precision: str | None = Field(
+        None, description="BranchWeightMLP precision override (fp32|fp64|bf16)."
+    )
+    inference_head: str | int | None = Field(
+        None,
+        description=(
+            "Optional decoding head selected by canonical dataset name or index 0..15. "
+            "When set, inference bypasses BranchWeightMLP and uses only that head."
+        ),
+    )
+
+    fine_tuner: Literal["finetune_hydragnn", "finetune_hydragnn_newhead"] = Field(
+        "finetune_hydragnn",
+        description=(
+            "Fine-tuning recipe: finetune_hydragnn (routed multi-head, needs mlp_checkpoint) "
+            "or finetune_hydragnn_newhead (drop all heads and train one new head)."
+        ),
+    )
+
+    required_modules: ClassVar[tuple[str, ...]] = ("hydragnn", "torch_geometric")
+    path_fields: ClassVar[tuple[str, ...]] = (
+        "logdir",
+        "hydragnn_root",
+        "mlp_checkpoint",
+        "newhead_ft_config",
+        "ft_repo",
+    )
+
+    @model_validator(mode="after")
+    def _validate_inference_head(self) -> HydraGNNConfig:
+        resolve_hydragnn_inference_head(self.inference_head)
+        if self.inference_head is not None and self.newhead_ft_config is not None:
+            raise ValueError("inference_head cannot be combined with a single new-head model")
+        return self
+
+    def check_loadable(self) -> None:
+        from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
+
+        if (
+            self.mlp_checkpoint is None
+            and self.inference_head is None
+            and not has_declared_hydragnn_checkpoint(str(self.logdir))
+        ):
+            raise ValueError(
+                "HydraGNN requires mlp_checkpoint (BranchWeightMLP), an inference_head, "
+                "or a declared checkpoint."
+            )
+
+    def required_paths(self) -> list[Path]:
+        paths = [self.logdir, *super().required_paths()]
+        if self.mlp_checkpoint is not None:
+            paths.append(self.mlp_checkpoint)
+        return paths
+
+    def fine_tune_args(
+        self,
+        *,
+        dataset: Path,
+        out_dir: Path,
+        epochs: int,
+        references: Path,
+        finetune_mode: str,
+    ) -> list[str]:
+        args = [
+            "--dataset", str(dataset),
+            "--output-dir", str(out_dir),
+            "--gfm-logdir", str(self.logdir),
+            "--epochs", str(epochs),
+            "--elemental-reference-manifest", str(references),
+            "--device", self.device,
+            "--charge", str(self.charge),
+            "--spin", str(self.spin),
+        ]  # fmt: skip
+        if self.fine_tuner == "finetune_hydragnn":
+            if self.mlp_checkpoint is None:
+                raise ValueError("finetune_hydragnn requires mlp_checkpoint (BranchWeightMLP)")
+            args += ["--branch-mlp", str(self.mlp_checkpoint)]
+        if self.checkpoint is not None:
+            args += ["--gfm-checkpoint", self.checkpoint]
+        if self.hydragnn_root is not None:
+            args += ["--hydragnn-root", str(self.hydragnn_root)]
+        if self.fine_tuner == "finetune_hydragnn_newhead" and self.ft_repo is not None:
+            args += ["--ft-repo", str(self.ft_repo)]
+        return args
+
+    def build_calculator(self, *, enable_mc_dropout: bool = False) -> Any:
+        from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+
+        return build_hydragnn_calculator(self)
+
+    def with_checkpoint(self, path: str | Path) -> HydraGNNConfig:
+        return self.model_copy(update={"logdir": Path(path), "checkpoint": None})
+
+    def ensemble_member(self, model: str) -> HydraGNNConfig:
+        return self.model_copy(update={"logdir": Path(model)})
+
+    def model_identifier(self) -> str:
+        identifier = f"hydragnn:{self.logdir}:checkpoint={self.checkpoint or 'auto/latest'}"
+        head_index = resolve_hydragnn_inference_head(self.inference_head)
+        if head_index is not None:
+            identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
+        settings = {
+            "branch_mlp_checkpoint": (
+                str(self.mlp_checkpoint) if self.mlp_checkpoint is not None else None
+            ),
+            "charge": self.charge,
+            "max_neighbours": self.max_neighbours,
+            "newhead_ft_config": (
+                str(self.newhead_ft_config) if self.newhead_ft_config is not None else None
+            ),
+            "precision": self.precision,
+            "radius": self.radius,
+            "spin": self.spin,
+        }
+        return f"{identifier}:settings={_compact_json(settings)}"
+
+    @property
+    def model_reference(self) -> str:
+        return str(self.logdir)
+
+    def model_artifact(self) -> Path | None:
+        if not self.checkpoint:
+            return None
+        checkpoint = Path(self.checkpoint)
+        return checkpoint if checkpoint.is_absolute() else self.logdir / checkpoint
+
+    def relaxation_calculator(self, *, charge: float = 0.0, spin: float = 0.0) -> RelaxCalculator:
+        from matsim_agents.backends.mlip.relaxation import hydragnn_relaxation_calculator
+
+        return hydragnn_relaxation_calculator(
+            self.model_copy(update={"charge": charge, "spin": spin})
+        )
+
+
+class UMAConfig(MLIPBackendConfig):
+    """A UMA (FAIRChem) universal MLIP, pretrained by name or a fine-tuned checkpoint."""
+
+    backend: Literal["uma"] = "uma"
     model_name: str = Field(
         "uma-s-1p1",
         description="fairchem pretrained model name (e.g. 'uma-s-1p1') or local checkpoint path.",
     )
-    task_name: Literal["omat", "omol", "oc20", "odac", "omc"] = Field(
+    task_name: UMATask = Field(
         "omat",
         description="UMA task head (omat = inorganic bulk materials; omol = molecules/MOFs).",
     )
-    device: Literal["cuda", "cpu", "xpu"] = "cuda"
     precision: Literal["fp32", "fp64", "bf16"] | None = None
     charge: float = 0.0
     spin: float = 0.0
-    ensemble_models: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Additional UMA model names/checkpoints forming a deep ensemble. If "
-            "non-empty, ensemble disagreement is available as an acquisition."
-        ),
-    )
     dropout: MCDropoutInjectionConfig = Field(
         default_factory=MCDropoutInjectionConfig,
         description="Test-time dropout injection settings for MC-Dropout acquisition.",
     )
 
+    fine_tuner: Literal["finetune_uma"] = Field(
+        "finetune_uma", description="Fine-tuning recipe (fairchem UMA fine-tune)."
+    )
 
-MACEFamily = Literal[
-    "mace_mp",
-    "mace_off",
-    "mace_omol",
-    "mace_polar",
-    "mace_anicc",
-    "checkpoint",
-]
+    required_modules: ClassVar[tuple[str, ...]] = ("fairchem",)
+
+    @classmethod
+    def resolve_paths(cls, raw: dict[str, Any], base: Path) -> dict[str, Any]:
+        # model_name is a registry name unless it names an existing file.
+        name = raw.get("model_name")
+        if isinstance(name, str):
+            path = Path(name).expanduser()
+            if not path.is_absolute() and (base / path).exists():
+                raw["model_name"] = str((base / path).resolve())
+        return raw
+
+    def fine_tune_args(
+        self,
+        *,
+        dataset: Path,
+        out_dir: Path,
+        epochs: int,
+        references: Path,
+        finetune_mode: str,
+    ) -> list[str]:
+        args = [
+            "--dataset", str(dataset),
+            "--output-dir", str(out_dir),
+            "--base-model", str(self.model_name),
+            "--task-name", str(self.task_name),
+            "--epochs", str(epochs),
+            "--elemental-reference-manifest", str(references),
+            "--device", self.device,
+        ]  # fmt: skip
+        return args + (["--lora"] if finetune_mode == "lora" else [])
+
+    def build_calculator(self, *, enable_mc_dropout: bool = False) -> Any:
+        from matsim_agents.backends.mlip.calculator import build_uma_calculator
+
+        return build_uma_calculator(self, enable_mc_dropout=enable_mc_dropout)
+
+    def with_checkpoint(self, path: str | Path) -> UMAConfig:
+        return self.model_copy(update={"model_name": str(path)})
+
+    def ensemble_member(self, model: str) -> UMAConfig:
+        return self.model_copy(update={"model_name": model})
+
+    def model_identifier(self) -> str:
+        settings = {"charge": self.charge, "precision": self.precision, "spin": self.spin}
+        return f"uma:{self.model_name}:{self.task_name}:settings={_compact_json(settings)}"
+
+    @property
+    def model_reference(self) -> str:
+        return self.model_name
+
+    def model_artifact(self) -> Path | None:
+        path = Path(self.model_name).expanduser()
+        return path if path.is_file() else None
 
 
-class MACEConfig(BaseModel):
-    """Inputs to load a MACE MLIP as an ASE calculator.
+class MACEConfig(MLIPBackendConfig):
+    """A MACE foundation model (any mace-torch 0.3.16 loader) or local ``.model`` file.
 
-    Supports every foundation-model loader shipped by mace-torch 0.3.16, plus
-    local fine-tuned ``.model`` checkpoints. Materials variants such as MPA,
-    OMAT, MATPES, and MH are selected as ``mace_mp`` model aliases.
+    Materials variants such as MPA, OMAT, MATPES, and MH are ``mace_mp`` aliases.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
-
+    backend: Literal["mace"] = "mace"
     family: MACEFamily = Field(
         "mace_mp",
         description=(
@@ -206,7 +488,6 @@ class MACEConfig(BaseModel):
             "when family='checkpoint'."
         ),
     )
-    device: Literal["cuda", "cpu", "xpu"] = "cuda"
     precision: Literal["fp32", "fp64"] | None = Field(
         None,
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
@@ -219,19 +500,18 @@ class MACEConfig(BaseModel):
             "for mh-0/mh-1); required for those models, ignored by single-head ones."
         ),
     )
-    ensemble_models: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Additional MACE variants/checkpoints forming a deep ensemble. If "
-            "non-empty, ensemble disagreement is available as an acquisition."
-        ),
-    )
     dropout: MCDropoutInjectionConfig = Field(
         default_factory=MCDropoutInjectionConfig,
         description=(
             "Test-time dropout injection for MC-Dropout acquisition (MACE has no native dropout)."
         ),
     )
+
+    fine_tuner: Literal["finetune_mace"] = Field(
+        "finetune_mace", description="Fine-tuning recipe (mace_run_train fine-tune)."
+    )
+
+    required_modules: ClassVar[tuple[str, ...]] = ("mace",)
 
     @model_validator(mode="after")
     def _validate_family_options(self) -> MACEConfig:
@@ -253,43 +533,114 @@ class MACEConfig(BaseModel):
             raise ValueError("MACE ANI-CC loader does not support precision='fp32'")
         return self
 
+    @classmethod
+    def resolve_paths(cls, raw: dict[str, Any], base: Path) -> dict[str, Any]:
+        if raw.get("family") == "checkpoint" and raw.get("model"):
+            raw["model"] = _resolve_path(base, raw["model"])
+        return raw
 
-class MLIPConfig(BaseModel):
-    """Selects which ML potential predicts energies and forces.
+    def fine_tune_args(
+        self,
+        *,
+        dataset: Path,
+        out_dir: Path,
+        epochs: int,
+        references: Path,
+        finetune_mode: str,
+    ) -> list[str]:
+        args = [
+            "--dataset", str(dataset),
+            "--output-dir", str(out_dir),
+            "--family", str(self.family),
+            "--base-model", str(self.model),
+            "--precision", self.precision or "fp64",
+            "--epochs", str(epochs),
+            "--elemental-reference-manifest", str(references),
+            "--device", self.device,
+        ]  # fmt: skip
+        return args + (["--lora"] if finetune_mode == "lora" else [])
 
-    ``backend`` chooses the active surrogate. Both ``hydragnn`` and ``uma``
-    sub-blocks may be present simultaneously; only the block matching
-    ``backend`` must be populated (the other is ignored). This makes the
-    surrogate switchable with a single environment variable when ``backend``
-    is wired to one, e.g. ``backend: ${MLIP_BACKEND:-hydragnn}``::
+    def build_calculator(self, *, enable_mc_dropout: bool = False) -> Any:
+        from matsim_agents.backends.mlip.calculator import build_mace_calculator
 
-        MLIP_BACKEND=uma matsim-agents al run <cfg>   # frozen UMA foundation model
-        matsim-agents al run <cfg>                   # HydraGNN (default)
+        return build_mace_calculator(self, enable_mc_dropout=enable_mc_dropout)
 
-    """
+    def with_checkpoint(self, path: str | Path) -> MACEConfig:
+        return self.model_copy(
+            update={"family": "checkpoint", "model": str(path), "dispersion": False}
+        )
 
-    backend: Literal["hydragnn", "uma", "mace"] = "hydragnn"
-    hydragnn: HydraGNNConfig | None = None
-    uma: UMAConfig | None = None
-    mace: MACEConfig | None = None
+    def ensemble_member(self, model: str) -> MACEConfig:
+        values = self.model_dump()
+        values["model"] = model
+        values["ensemble_models"] = []
+        if Path(model).is_file():
+            values["family"] = "checkpoint"
+            values["dispersion"] = False
+        return MACEConfig.model_validate(values)
 
-    @model_validator(mode="after")
-    def _check_backend_block(self) -> MLIPConfig:
-        if self.backend == "hydragnn" and self.hydragnn is None:
-            raise ValueError("mlip.backend='hydragnn' requires an mlip.hydragnn block.")
-        if self.backend == "uma" and self.uma is None:
-            raise ValueError("mlip.backend='uma' requires an mlip.uma block.")
-        if self.backend == "mace" and self.mace is None:
-            raise ValueError("mlip.backend='mace' requires an mlip.mace block.")
-        return self
+    def model_identifier(self) -> str:
+        settings: dict[str, Any] = {"dispersion": self.dispersion, "precision": self.precision}
+        if self.head is not None:
+            settings["head"] = self.head
+        return f"mace:{self.family}:{self.model}:settings={_compact_json(settings)}"
 
     @property
-    def ensemble_paths(self) -> list:
-        """Unified ensemble-member list used by the AL loop, regardless of backend."""
-        if self.backend == "hydragnn" and self.hydragnn is not None:
-            return list(self.hydragnn.ensemble_paths)
-        if self.backend == "uma" and self.uma is not None:
-            return list(self.uma.ensemble_models)
-        if self.backend == "mace" and self.mace is not None:
-            return list(self.mace.ensemble_models)
-        return []
+    def model_reference(self) -> str:
+        return self.model if self.head is None else f"{self.model}:{self.head}"
+
+    def model_artifact(self) -> Path | None:
+        return Path(self.model) if self.family == "checkpoint" else None
+
+
+# --------------------------------------------------------------------------- #
+# Selection                                                                   #
+# --------------------------------------------------------------------------- #
+
+MLIP_BACKEND_CONFIGS: dict[str, type[MLIPBackendConfig]] = {
+    "hydragnn": HydraGNNConfig,
+    "uma": UMAConfig,
+    "mace": MACEConfig,
+}
+MLIPBackend = Literal["hydragnn", "uma", "mace"]
+MLIP_BACKENDS: tuple[str, ...] = get_args(MLIPBackend)
+
+MLIPConfig = Annotated[HydraGNNConfig | UMAConfig | MACEConfig, Field(discriminator="backend")]
+"""Any supported MLIP, selected by its ``backend`` field."""
+
+_MLIP_ADAPTER: TypeAdapter[MLIPBackendConfig] = TypeAdapter(MLIPConfig)
+
+
+def parse_mlip_config(value: Any) -> MLIPBackendConfig:
+    """Validate a mapping (or an existing config) as the selected backend's config."""
+    if isinstance(value, MLIPBackendConfig):
+        return value
+    return _MLIP_ADAPTER.validate_python(value)
+
+
+def resolve_mlip_paths(block: dict[str, Any], base: Path) -> dict[str, Any]:
+    """Resolve the selected backend's file paths in a raw ``mlip`` mapping against ``base``."""
+    backend = MLIP_BACKEND_CONFIGS.get(str(block.get("backend")))
+    return backend.resolve_paths(block, base) if backend is not None else block
+
+
+def load_mlip_config(path: str | Path) -> MLIPBackendConfig:
+    """Read the ``mlip`` block of a YAML file.
+
+    ``${VAR}`` references inside the block are substituted from the environment
+    and the file's ``vars:`` mapping; relative paths resolve against the file.
+    """
+    import yaml
+
+    from matsim_agents.execution.variables import expand_variables, variable_defaults
+
+    path = Path(path).expanduser().resolve()
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a mapping with an mlip block")
+    block = data.get("mlip")
+    if not isinstance(block, dict) or "backend" not in block:
+        raise ValueError(f"{path}: mlip block must define backend: {' | '.join(MLIP_BACKENDS)}")
+    defaults = variable_defaults(data.get("vars"), source=path)
+    block = yaml.safe_load(expand_variables(yaml.safe_dump(block), defaults, source=path))
+    return parse_mlip_config(resolve_mlip_paths(block, path.parent))

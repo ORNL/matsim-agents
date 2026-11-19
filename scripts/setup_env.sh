@@ -300,8 +300,7 @@ Activate (workstation):
 Quick start:
     matsim-agents --help
     matsim-agents run "Relax structures/foo.vasp" \\
-        --logdir /path/to/hydragnn_logdir \\
-        --mlp-checkpoint /path/to/mlp_branch_weights.pt \\
+        --mlip-config examples/mlip/uma-s-1p1-omat.yaml \\
         --llm-provider ollama
 ------------------------------------------------------------
 EOF

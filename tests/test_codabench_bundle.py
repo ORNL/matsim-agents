@@ -120,7 +120,7 @@ def test_codabench_hydragnn_adapter_forwards_device(monkeypatch, device, expecte
 
     assert calls[0] == (
         "config",
-        {"logdir": "model-logdir", "mlp_device": expected_device},
+        {"logdir": "model-logdir", "device": expected_device},
     )
     assert calls[1][0] == "build"
     assert calculator._inner is inner

@@ -14,6 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.backends.mlip.config import MLIPConfig, parse_mlip_config
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
@@ -67,18 +68,9 @@ class CompositionExplorationResult(BaseModel):
 
 def explore_composition(
     composition: str | Composition,
-    logdir: str | None = None,
-    hydragnn_branch_mlp_checkpoint: str | None = None,
-    hydragnn_inference_head: str | int | None = None,
     *,
+    mlip: MLIPConfig,
     output_dir: str,
-    mlip_backend: str = "hydragnn",
-    uma_model_name: str = "uma-s-1p1",
-    uma_task: str = "omat",
-    mace_family: str = "mace_mp",
-    mace_model: str = "medium",
-    mace_dispersion: bool = False,
-    checkpoint: str | None = None,
     optimizer: str = "FIRE",
     maxiter: int = 200,
     maxstep: float = 1e-2,
@@ -86,9 +78,6 @@ def explore_composition(
     relax_cell: bool = False,
     degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float | None = 0.2,
-    mlp_device: str = "cuda",
-    precision: str | None = None,
-    mlp_precision: str | None = None,
     n_random: int = 50,
     random_seed: int = 0,
     generation_action: SeedGenerationAction | None = None,
@@ -105,8 +94,8 @@ def explore_composition(
     ----------
     composition:
         Either a formula string ("Li2MnO3") or a parsed :class:`Composition`.
-    logdir, hydragnn_branch_mlp_checkpoint, checkpoint, ...:
-        Forwarded to :class:`RelaxStructureInput`.
+    mlip:
+        MLIP backend and its model settings, forwarded to :class:`RelaxStructureInput`.
     output_dir:
         Where seed structures, optimized structures, trajectories, and
         per-step logs are written.
@@ -137,6 +126,7 @@ def explore_composition(
     """
     if relax_fn is not None and mlip_pool is not None:
         raise ValueError("pass either relax_fn or mlip_pool, not both")
+    mlip = parse_mlip_config(mlip)
     if max_relaxations is not None and max_relaxations < 0:
         raise ValueError("max_relaxations must be non-negative")
     if generation_action is not None and (n_random != 50 or random_seed != 0):
@@ -184,25 +174,13 @@ def explore_composition(
     def relax_input(cand: PhaseCandidate) -> RelaxStructureInput:
         return RelaxStructureInput(
             structure_path=cand.structure_path,
-            mlip_backend=mlip_backend,
-            logdir=logdir,
-            hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
-            hydragnn_inference_head=hydragnn_inference_head,
-            checkpoint=checkpoint,
-            uma_model_name=uma_model_name,
-            uma_task=uma_task,
-            mace_family=mace_family,
-            mace_model=mace_model,
-            mace_dispersion=mace_dispersion,
+            mlip=mlip,
             optimizer=optimizer,
             maxiter=maxiter,
             maxstep=maxstep,
             fmax=fmax,
             relax_cell=relax_cell,
             relative_increase_threshold=relative_increase_threshold,
-            precision=precision,
-            mlp_precision=mlp_precision,
-            mlp_device=mlp_device,
             output_dir=relax_dir,
         )
 

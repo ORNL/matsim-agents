@@ -43,7 +43,7 @@ class AtomisticCalculator(Calculator):
         from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
         from matsim_agents.backends.mlip.config import HydraGNNConfig
 
-        cfg = HydraGNNConfig(logdir=checkpoint_path, mlp_device=device)
+        cfg = HydraGNNConfig(logdir=checkpoint_path, device=device)
         inner = build_hydragnn_calculator(cfg)
 
         instance = cls()

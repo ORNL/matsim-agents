@@ -42,10 +42,7 @@ def relaxation_contract(structure: Path, output: Path) -> dict[str, Any]:
         mode="mlip",
         structure_path=str(structure),
         output_root=str(output / "runs"),
-        mlip={
-            "mlip_backend": "uma",
-            "uma_model_name": "portability-deterministic",
-        },
+        mlip={"backend": "uma", "model_name": "portability-deterministic"},
     )
     result = run_relaxation(cfg, mlip_runner=fake_runner)
     return {
@@ -62,11 +59,11 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
+    from matsim_agents.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
     from matsim_agents.datasets.governance import (
         validate_labelled_frames,
         write_dataset_manifest,
     )
-    from matsim_agents.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
 
     candidates = []
     for index in range(4):
@@ -118,8 +115,8 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
 
     from matsim_agents.active_learning.candidates import Candidate
     from matsim_agents.active_learning.config import ALConfig
-    from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.execution.allocation import Allocation
 
     atoms = read(structure)
@@ -145,11 +142,9 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
         {
             "mlip": {
                 "backend": "hydragnn",
-                "hydragnn": {
-                    "logdir": str(output / "model"),
-                    "mlp_checkpoint": str(output / "branch.pt"),
-                    "mlp_device": "cpu",
-                },
+                "logdir": str(output / "model"),
+                "mlp_checkpoint": str(output / "branch.pt"),
+                "device": "cpu",
             },
             "md": {"seed_source": {"kind": "paths", "paths": [str(structure)]}},
             "acquisition": {"strategy": "random", "n_select": 2},

@@ -92,7 +92,7 @@ else
     log "Preserving HydraGNN checkout $(git -C "${HYDRAGNN_DIR}" rev-parse --short HEAD)"
 fi
 
-[[ "$(realpath -m "${HYDRAGNN_INSTALLER_DIR}")" != "$(realpath "${HYDRAGNN_DIR}")" ]] \
+[[ ! "${HYDRAGNN_INSTALLER_DIR}" -ef "${HYDRAGNN_DIR}" ]] \
     || die "Dependency source directory must not be the selected HydraGNN checkout"
 if [[ ! -d "${HYDRAGNN_INSTALLER_DIR}/.git" ]]; then
     log "Fetching upstream dependencies ${HYDRAGNN_INSTALLER_REF} into ${HYDRAGNN_INSTALLER_DIR}"

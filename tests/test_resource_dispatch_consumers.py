@@ -69,7 +69,7 @@ def test_trainer_rejects_moved_placement_fields():
 
 def _al(tmp_path: Path, *, resources=None, trainer=None) -> dict:
     data = {
-        "mlip": {"backend": "uma", "uma": {"model_name": "uma-s-1p1"}},
+        "mlip": {"backend": "uma", "model_name": "uma-s-1p1"},
         "md": {"seed_source": {"kind": "paths", "paths": ["/tmp/seed.vasp"]}},
         "acquisition": {"strategy": "random", "n_select": 1},
         "dft": {"backend": "qe", "qe": _qe(tmp_path)},
@@ -93,14 +93,11 @@ def test_al_config_requires_dft_pool(tmp_path):
 
 
 def test_enabled_trainer_requires_training_pool(tmp_path):
-    script = tmp_path / "finetune_uma.py"
-    script.touch()
     resources = {"preset": "perlmutter-gpu", "pools": {"dft": {"nodes": "all"}}}
     references = tmp_path / "elemental-references.json"
     references.touch()
     trainer = {
         "enabled": True,
-        "train_script": str(script),
         "validation_reference_set": str(references),
     }
     with pytest.raises(ValidationError, match="requires resources.pools.training"):

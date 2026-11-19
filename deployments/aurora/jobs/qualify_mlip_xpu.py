@@ -101,7 +101,7 @@ def qualify(args, progress: Progress) -> dict:
                 logdir=args.hydragnn_logdir,
                 checkpoint=args.hydragnn_checkpoint,
                 mlp_checkpoint=args.hydragnn_mlp,
-                mlp_device="xpu",
+                device="xpu",
                 precision="fp32",
             )
         )

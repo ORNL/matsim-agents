@@ -1,12 +1,16 @@
-"""Lazy builders for the MLP surrogate ASE calculators.
+"""Lazy builders for the MLIP ASE calculators.
 
-Two backends are supported behind a single factory, :func:`make_mlip_calculator`:
+Each backend configuration (:mod:`matsim_agents.backends.mlip.config`) builds its
+calculator through its ``build_calculator`` method, which delegates to the
+builder for that backend here:
 
 * **HydraGNN** — loaded from a logdir (``config.json`` + checkpoint), wrapping
   the pattern in ``HydraGNN/examples/.../structure_optimization_ASE.py``.
 * **UMA** — Meta FAIR's universal MLIP via ``fairchem`` (``FAIRChemCalculator``).
-  Optionally has test-time dropout injected so MC-Dropout acquisition works on
-  this otherwise-deterministic foundation model.
+* **MACE** — any mace-torch foundation loader or a local ``.model`` file.
+
+UMA and MACE optionally have test-time dropout injected so MC-Dropout
+acquisition works on these otherwise-deterministic models.
 
 Heavy / optional dependencies (torch, hydragnn, fairchem) are imported lazily
 so the rest of matsim-agents (and pytest collection) keeps working without them.
@@ -23,8 +27,8 @@ from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     MACEConfig,
-    MLIPConfig,
     UMAConfig,
+    parse_mlip_config,
     resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.devices import default_torch_device
@@ -36,29 +40,14 @@ from matsim_agents.backends.mlip.uma_artifacts import (
 log = logging.getLogger(__name__)
 
 
-def make_mlip_calculator(
-    cfg: MLIPConfig,
-    *,
-    enable_mc_dropout: bool = False,
-    logdir_override: str | Path | None = None,
-):
-    """Build the primary ASE calculator for whichever backend ``cfg`` selects.
+def make_mlip_calculator(cfg: Any, *, enable_mc_dropout: bool = False) -> Any:
+    """Build the primary ASE calculator of any MLIP configuration.
 
-    ``enable_mc_dropout`` only affects backends without native dropout (UMA):
-    when True, dropout is injected so :func:`uncertainty.score_mc_dropout` can
-    produce non-zero variance. HydraGNN ignores it (it has native dropout).
-    ``logdir_override`` is used by the ensemble path (HydraGNN only).
+    ``enable_mc_dropout`` affects only backends without native dropout (UMA,
+    MACE): dropout is injected so :func:`uncertainty.score_mc_dropout` can
+    produce non-zero variance.
     """
-    if cfg.backend == "hydragnn":
-        assert cfg.hydragnn is not None  # guaranteed by MLIPConfig validator
-        return build_hydragnn_calculator(cfg.hydragnn, logdir_override=logdir_override)
-    if cfg.backend == "uma":
-        assert cfg.uma is not None
-        return build_uma_calculator(cfg.uma, enable_mc_dropout=enable_mc_dropout)
-    if cfg.backend == "mace":
-        assert cfg.mace is not None
-        return build_mace_calculator(cfg.mace, enable_mc_dropout=enable_mc_dropout)
-    raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
+    return parse_mlip_config(cfg).build_calculator(enable_mc_dropout=enable_mc_dropout)
 
 
 def _build_single_head_calculator(
@@ -191,9 +180,9 @@ def _apply_energy_convention(
     if "branch_mlp_checkpoint" in convention:
         from matsim_agents.datasets.governance import sha256_file
 
-        cfg.hydragnn_branch_mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
+        cfg.mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
         cfg.newhead_ft_config = None
-        if sha256_file(cfg.hydragnn_branch_mlp_checkpoint) != convention["branch_mlp_sha256"]:
+        if sha256_file(cfg.mlp_checkpoint) != convention["branch_mlp_sha256"]:
             raise ValueError("HydraGNN routing MLP differs from training artifact")
         selected = resolve_hydragnn_inference_head(cfg.inference_head)
         if selected is not None and selected not in convention["routed_branches"]:
@@ -378,11 +367,7 @@ def _fused_stack_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, conventi
     from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
     from matsim_agents.backends.mlip.relaxation import _build_calculator, _load_fused_stack
 
-    mlp_checkpoint = (
-        str(cfg.hydragnn_branch_mlp_checkpoint)
-        if cfg.hydragnn_branch_mlp_checkpoint is not None
-        else None
-    )
+    mlp_checkpoint = str(cfg.mlp_checkpoint) if cfg.mlp_checkpoint is not None else None
 
     (
         model,
@@ -403,7 +388,7 @@ def _fused_stack_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, conventi
         mlp_checkpoint,
         cfg.precision,
         cfg.precision,
-        cfg.mlp_device,
+        cfg.device,
     )
 
     if convention is not None:
@@ -443,13 +428,9 @@ def _fused_stack_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, conventi
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
-def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path | None = None):
-    """Build a ready-to-use ASE calculator from a HydraGNN logdir.
-
-    ``logdir_override`` is used by the ensemble path to load each member from
-    its own logdir while reusing the rest of ``cfg``.
-    """
-    logdir = Path(logdir_override) if logdir_override is not None else cfg.logdir
+def build_hydragnn_calculator(cfg: HydraGNNConfig):
+    """Build a ready-to-use ASE calculator from a HydraGNN logdir."""
+    logdir = cfg.logdir
     if not (logdir / "config.json").is_file():
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
     cfg, convention = _apply_energy_convention(cfg, logdir)
@@ -463,39 +444,12 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     return _fused_stack_hydragnn_calculator(cfg, logdir, convention)
 
 
-def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[Any]:
-    """Return a list of calculators: the primary model plus all ensemble members.
-
-    * HydraGNN: primary logdir + each ``ensemble_paths`` logdir.
-    * UMA: primary ``model_name`` + each ``ensemble_models`` entry.
-    * MACE: primary model + variants in its family or local checkpoint members.
-    """
-    if cfg.backend == "hydragnn":
-        assert cfg.hydragnn is not None
-        calcs = [build_hydragnn_calculator(cfg.hydragnn)]
-        for p in cfg.hydragnn.ensemble_paths:
-            calcs.append(build_hydragnn_calculator(cfg.hydragnn, logdir_override=p))
-        return calcs
-    if cfg.backend == "uma":
-        assert cfg.uma is not None
-        calcs = [build_uma_calculator(cfg.uma, enable_mc_dropout=enable_mc_dropout)]
-        for name in cfg.uma.ensemble_models:
-            member = cfg.uma.model_copy(update={"model_name": name})
-            calcs.append(build_uma_calculator(member, enable_mc_dropout=enable_mc_dropout))
-        return calcs
-    if cfg.backend == "mace":
-        assert cfg.mace is not None
-        calcs = [build_mace_calculator(cfg.mace, enable_mc_dropout=enable_mc_dropout)]
-        for model in cfg.mace.ensemble_models:
-            values = cfg.mace.model_dump()
-            values["model"] = model
-            if Path(model).is_file():
-                values["family"] = "checkpoint"
-                values["dispersion"] = False
-            member = MACEConfig.model_validate(values)
-            calcs.append(build_mace_calculator(member, enable_mc_dropout=enable_mc_dropout))
-        return calcs
-    raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
+def build_ensemble(cfg: Any, *, enable_mc_dropout: bool = False) -> list[Any]:
+    """Calculators for the primary model followed by every ensemble member."""
+    return [
+        member.build_calculator(enable_mc_dropout=enable_mc_dropout)
+        for member in parse_mlip_config(cfg).ensemble_configs()
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -601,7 +555,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
         log.warning(
             "UMA calculator loaded but the underlying torch module could not be "
             "located; MC-Dropout acquisition will not work for this backend. "
-            "Use acquisition.strategy: ensemble (mlip.uma.ensemble_models) or random."
+            "Use acquisition.strategy: ensemble (mlip.ensemble_models) or random."
         )
     else:
         try:
@@ -704,7 +658,7 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
         log.warning(
             "MACE calculator loaded but the underlying torch module could not be "
             "located; MC-Dropout acquisition will not work for this backend. "
-            "Use acquisition.strategy: ensemble (mlip.mace.ensemble_models) or random."
+            "Use acquisition.strategy: ensemble (mlip.ensemble_models) or random."
         )
     else:
         try:

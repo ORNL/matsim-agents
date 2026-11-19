@@ -21,10 +21,7 @@ from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
-from matsim_agents.backends.mlip.config import (
-    HYDRAGNN_DATASET_HEADS,
-    resolve_hydragnn_inference_head,
-)
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import (
     MLIPWorkerPool,
     driver_on_mlip_device,
@@ -74,10 +71,12 @@ class CampaignFormulaExecutionConfig(BaseModel):
     """Reusable numerical configuration for every formula in a campaign."""
 
     active_learning_config: Path
+    # Replaces the AL config's mlip block, so any backend drives the campaign.
+    mlip: MLIPConfig | None = None
     phase_policy: PhaseExplorationPolicy
     exploration_kwargs: dict[str, Any] = Field(default_factory=dict)
     compute_nodes: int = Field(1, ge=1)
-    execution_mode: Literal["dft", "uma_only"] = "dft"
+    execution_mode: Literal["dft", "mlip_only"] = "dft"
     retraining: CampaignRetrainingConfig | None = None
     dft_refinement: CampaignDFTRefinementConfig | None = None
     model_override: str | None = None
@@ -120,11 +119,13 @@ class CampaignFormulaExecutionConfig(BaseModel):
                 "surrogate reference manifest does not exist: "
                 f"{self.surrogate_reference_structures}"
             )
-        if self.execution_mode == "uma_only":
+        if self.execution_mode == "mlip_only":
             if self.phase_policy.active_learning or self.phase_policy.retrain_mlip:
-                raise ValueError("uma_only execution disables active learning and retraining")
+                raise ValueError("mlip_only execution disables active learning and retraining")
             if self.retraining is not None or self.dft_refinement is not None:
-                raise ValueError("uma_only execution cannot configure retraining or DFT refinement")
+                raise ValueError(
+                    "mlip_only execution cannot configure retraining or DFT refinement"
+                )
         return self
 
 
@@ -186,78 +187,16 @@ class _StageTracker:
 
 
 def _model_identifier(cfg: ALConfig) -> str:
-    if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-        uma = cfg.mlip.uma
-        settings = {
-            "charge": uma.charge,
-            "precision": uma.precision,
-            "spin": uma.spin,
-        }
-        return (
-            f"uma:{uma.model_name}:{uma.task_name}:settings="
-            f"{json.dumps(settings, sort_keys=True, separators=(',', ':'))}"
-        )
-    if cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        mace = cfg.mlip.mace
-        settings = {
-            "dispersion": mace.dispersion,
-            "precision": mace.precision,
-        }
-        if mace.head is not None:
-            settings["head"] = mace.head
-        return (
-            f"mace:{mace.family}:{mace.model}:settings="
-            f"{json.dumps(settings, sort_keys=True, separators=(',', ':'))}"
-        )
-    if cfg.mlip.hydragnn is not None:
-        hydragnn = cfg.mlip.hydragnn
-        identifier = f"hydragnn:{hydragnn.logdir}"
-        identifier += f":checkpoint={hydragnn.checkpoint or 'auto/latest'}"
-        head_index = resolve_hydragnn_inference_head(hydragnn.inference_head)
-        if head_index is not None:
-            identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
-        settings = {
-            "branch_mlp_checkpoint": (
-                str(hydragnn.hydragnn_branch_mlp_checkpoint)
-                if hydragnn.hydragnn_branch_mlp_checkpoint is not None
-                else None
-            ),
-            "charge": hydragnn.charge,
-            "max_neighbours": hydragnn.max_neighbours,
-            "newhead_ft_config": (
-                str(hydragnn.newhead_ft_config) if hydragnn.newhead_ft_config is not None else None
-            ),
-            "precision": hydragnn.precision,
-            "radius": hydragnn.radius,
-            "spin": hydragnn.spin,
-        }
-        serialized_settings = json.dumps(settings, sort_keys=True, separators=(",", ":"))
-        return f"{identifier}:settings={serialized_settings}"
-    return cfg.mlip.backend
+    return cfg.mlip.model_identifier()
 
 
 def _apply_model_override(cfg: ALConfig, model_path: str) -> None:
     """Point an AL configuration at a promoted backend artifact."""
-    if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-        cfg.mlip.uma.model_name = model_path
-    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        cfg.mlip.mace.family = "checkpoint"
-        cfg.mlip.mace.model = model_path
-        cfg.mlip.mace.dispersion = False
-    elif cfg.mlip.hydragnn is not None:
-        cfg.mlip.hydragnn.logdir = Path(model_path)
-        cfg.mlip.hydragnn.checkpoint = None
+    cfg.mlip = cfg.mlip.with_checkpoint(model_path)
 
 
 def _promoted_model_path(result: PhaseExplorationWorkflowResult) -> str | None:
-    evidence = result.active_learning_result or {}
-    overrides = evidence.get("exploration_kwargs", {})
-    promoted = (
-        overrides.get("uma_model_name")
-        or overrides.get("mace_model")
-        or overrides.get("checkpoint")
-        or overrides.get("logdir")
-    )
+    promoted = (result.active_learning_result or {}).get("promoted_model_path")
     return str(promoted) if promoted else None
 
 
@@ -461,7 +400,8 @@ def _perturbation_robustness(
 class CampaignRetrainingConfig(BaseModel):
     """Explicit training and promotion controls for campaign MLIPs."""
 
-    train_script: Path
+    model_config = ConfigDict(extra="forbid")
+
     train_launcher: Path | None = None
     epochs: int = Field(5, ge=1)
     promote_model: bool = False
@@ -481,8 +421,6 @@ class CampaignRetrainingConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_training_paths_and_approval(self) -> CampaignRetrainingConfig:
-        if not self.train_script.is_file():
-            raise ValueError(f"training script does not exist: {self.train_script}")
         if self.train_launcher is not None and not self.train_launcher.is_file():
             raise ValueError(f"training launcher does not exist: {self.train_launcher}")
         if self.promote_model and not self.promotion_approved:
@@ -575,7 +513,7 @@ def _score_relaxed_candidate_uncertainty(
     primary = make_mlip_calculator(al_cfg.mlip, enable_mc_dropout=enable_dropout)
     ensemble = (
         build_ensemble(al_cfg.mlip, enable_mc_dropout=enable_dropout)
-        if al_cfg.mlip.ensemble_paths
+        if al_cfg.mlip.ensemble_models
         else []
     )
     _selected, scores = select_candidates(
@@ -649,35 +587,7 @@ def _durable_iteration_states(root: Path) -> list[dict[str, Any]]:
 
 
 def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, Any]:
-    values = dict(overrides)
-    values.setdefault("mlip_backend", cfg.mlip.backend)
-    if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-        values.setdefault("uma_model_name", cfg.mlip.uma.model_name)
-        values.setdefault("uma_task", cfg.mlip.uma.task_name)
-        values.setdefault("mlp_device", cfg.mlip.uma.device)
-        values.setdefault("precision", cfg.mlip.uma.precision)
-    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        values.setdefault("mace_family", cfg.mlip.mace.family)
-        values.setdefault("mace_model", cfg.mlip.mace.model)
-        values.setdefault("mace_dispersion", cfg.mlip.mace.dispersion)
-        values.setdefault("mace_head", cfg.mlip.mace.head)
-        values.setdefault("mlp_device", cfg.mlip.mace.device)
-        values.setdefault("precision", cfg.mlip.mace.precision)
-    elif cfg.mlip.hydragnn is not None:
-        values.setdefault("logdir", str(cfg.mlip.hydragnn.logdir))
-        values.setdefault("checkpoint", cfg.mlip.hydragnn.checkpoint)
-        values.setdefault("hydragnn_inference_head", cfg.mlip.hydragnn.inference_head)
-        values.setdefault(
-            "hydragnn_branch_mlp_checkpoint",
-            (
-                str(cfg.mlip.hydragnn.hydragnn_branch_mlp_checkpoint)
-                if cfg.mlip.hydragnn.hydragnn_branch_mlp_checkpoint is not None
-                else None
-            ),
-        )
-        values.setdefault("mlp_device", cfg.mlip.hydragnn.mlp_device)
-        values.setdefault("precision", cfg.mlip.hydragnn.precision)
-    return values
+    return {"mlip": cfg.mlip, **overrides}
 
 
 def _vasp_template_settings(al_cfg: ALConfig) -> dict[str, Any]:
@@ -1068,11 +978,7 @@ def _prepare_al_template(
 ) -> ALConfig:
     """Load the AL template and apply this formula's model, training, and budget policy."""
 
-    al_cfg = ALConfig.from_yaml(config.active_learning_config)
-    if config.execution_mode == "uma_only" and al_cfg.mlip.backend != "uma":
-        raise ValueError(
-            f"uma_only execution requires mlip.backend='uma', got {al_cfg.mlip.backend!r}"
-        )
+    al_cfg = ALConfig.from_yaml(config.active_learning_config, mlip=config.mlip)
     if config.model_override:
         _apply_model_override(al_cfg, config.model_override)
     if config.execution_mode == "dft":
@@ -1081,7 +987,6 @@ def _prepare_al_template(
         if config.retraining is None:
             raise ValueError("phase policy requests retraining but no retraining config is set")
         al_cfg.trainer.enabled = True
-        al_cfg.trainer.train_script = config.retraining.train_script
         al_cfg.trainer.train_launcher = config.retraining.train_launcher
         al_cfg.trainer.epochs_per_iter = config.retraining.epochs
         al_cfg.trainer.promote_model = config.retraining.promote_model
@@ -1206,23 +1111,14 @@ def _summarize_active_learning(
     if promoted:
         latest_model = promoted[-1].get("new_logdir")
         if latest_model:
-            if al_cfg.mlip.backend == "uma":
-                result["exploration_kwargs"] = {"uma_model_name": latest_model}
-            elif al_cfg.mlip.backend == "mace":
-                result["exploration_kwargs"] = {
-                    "mace_family": "checkpoint",
-                    "mace_model": latest_model,
-                    "mace_dispersion": False,
-                }
-            else:
-                result["exploration_kwargs"] = {
-                    "logdir": latest_model,
-                    "checkpoint": None,
-                }
+            result["promoted_model_path"] = str(latest_model)
+            result["exploration_kwargs"] = {
+                "mlip": al_cfg.mlip.with_checkpoint(latest_model).model_dump(mode="json")
+            }
     return result
 
 
-def _uma_only_evidence(
+def _mlip_only_evidence(
     exploration: Any,
     al_cfg: ALConfig,
     candidate_uncertainty: dict[str, float],
@@ -1232,7 +1128,7 @@ def _uma_only_evidence(
     node_hours: float,
     stage_manifest_path: Path,
 ) -> dict[str, Any]:
-    """Evidence record for UMA-only execution: MLIP labels without DFT."""
+    """Evidence record for MLIP-only execution with any backend: labels without DFT."""
     candidate_by_path = {
         candidate.structure_path: candidate for candidate in exploration.phase_candidates
     }
@@ -1258,14 +1154,11 @@ def _uma_only_evidence(
                 ),
             }
         )
-    model_identifier = None
-    if al_cfg.mlip.uma is not None:
-        model_identifier = al_cfg.mlip.uma.model_name
     return {
-        "execution_mode": "uma_only",
+        "execution_mode": "mlip_only",
         "evidence_level": "mlip_prediction",
-        "backend": "uma",
-        "model_identifier": model_identifier,
+        "backend": al_cfg.mlip.backend,
+        "model_identifier": al_cfg.mlip.model_reference,
         "n_dft_calculations": 0,
         "n_active_learning_iterations": 0,
         "node_hours": node_hours,
@@ -1505,8 +1398,8 @@ def run_formula_with_active_learning(
                 else mlip_relaxation_runner
             ),
         )
-    if config.execution_mode == "uma_only":
-        result.active_learning_result = _uma_only_evidence(
+    if config.execution_mode == "mlip_only":
+        result.active_learning_result = _mlip_only_evidence(
             exploration,
             al_cfg,
             candidate_uncertainty,

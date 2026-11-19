@@ -18,7 +18,7 @@ from matsim_agents.active_learning.candidates import (
     seed_rngs,
 )
 from matsim_agents.active_learning.config import MDConfig, SeedSourceConfig
-from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import WorkerOutcome
 
 
@@ -99,7 +99,7 @@ def test_concurrent_md_matches_sequential_md(tmp_path, monkeypatch):
         tmp_path / "pool",
         seed_paths=seeds,
         mlip_pool=pool,
-        mlip_cfg=MLIPConfig.model_validate({"backend": "uma", "uma": {}}),
+        mlip_cfg=UMAConfig(),
     )
     assert pool.calls == 1
     assert _signature(pooled) == _signature(sequential)
@@ -130,7 +130,7 @@ def test_failed_seed_names_the_seed(tmp_path):
             tmp_path,
             seed_paths=seeds,
             mlip_pool=FailingPool(),
-            mlip_cfg=MLIPConfig.model_validate({"backend": "uma", "uma": {}}),
+            mlip_cfg=UMAConfig(),
         )
 
 

@@ -87,7 +87,7 @@ matsim-agents workflow resume WORKFLOW_RUN_DIRECTORY \
 matsim-agents explore resume SCIENTIFIC_RUN_DIRECTORY
 ```
 
-Only version-2 exploration checkpoints are supported: no old-format reader,
+Only version-3 exploration checkpoints are supported: no old-format reader,
 migration, or compatibility mode. Native resume verifies scientific config,
 runtime/dependency identities, and committed artifact hashes. Completed attempts,
 including failed/nonconverged ones, are not silently rerun. An uncommitted attempt

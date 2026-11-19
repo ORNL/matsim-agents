@@ -20,10 +20,10 @@ cfg = {
     "output_root": str(Path(os.environ["RUN_DIR"]) / "outputs"),
     "geometry": {"relax_atoms": True, "relax_cell": False},
     "mlip": {
-        "mlip_backend": "hydragnn",
+        "backend": "hydragnn",
         "logdir": os.environ["LOGDIR"],
-        "hydragnn_branch_mlp_checkpoint": os.environ["HYDRAGNN_BRANCH_MLP_CHECKPOINT"],
-        "mlp_device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
+        "mlp_checkpoint": os.environ["HYDRAGNN_BRANCH_MLP_CHECKPOINT"],
+        "device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
     },
     "max_steps": int(os.environ.get("MATSIM_RELAX_MAX_STEPS", "200")),
     "force_tolerance_eV_per_A": float(os.environ.get("MATSIM_RELAX_FMAX", "0.02")),

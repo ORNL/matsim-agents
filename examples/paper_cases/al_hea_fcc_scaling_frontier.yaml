@@ -38,24 +38,15 @@ vars:
 
 mlip:
   # Frontier's venv is HydraGNN/ROCm; UMA (fairchem) is not installed there.
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    # The BEST6 multi-branch model REQUIRES its BranchWeightMLP; iter0_logdir has
-    # no mlp_weights/ dir, so point at the trained MLP shipped with the example.
-    mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
-    precision:  fp32
-    mlp_device: cuda           # torch HIP maps the "cuda" device string on MI250X
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  backend: hydragnn
+  logdir:         ${INITIAL_LOGDIR}
+  checkpoint:     best_model.pt
+  # The BEST6 multi-branch model REQUIRES its BranchWeightMLP; iter0_logdir has
+  # no mlp_weights/ dir, so point at the trained MLP shipped with the example.
+  mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  precision:  fp32
+  device: cuda           # torch HIP maps the "cuda" device string on MI250X
+  ensemble_models: []
 
 md:
   seed_source:

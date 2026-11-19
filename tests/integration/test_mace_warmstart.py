@@ -37,6 +37,8 @@ from typing import Any
 
 import pytest
 
+from matsim_agents.backends.mlip.config import MACEConfig
+
 DATA_DIR = Path(__file__).resolve().parent / "data"
 FIXTURES_YAML = DATA_DIR / "fixtures.yaml"
 
@@ -133,11 +135,19 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
     is_vc_relax = qe_overrides.get("calculation", "vc-relax") == "vc-relax"
     default_fmax = 0.01 if is_vc_relax else 0.05
 
-    mace_kwargs: dict[str, Any] = {
-        "mace_family": _env("MATSIM_MACE_FAMILY") or mace_cfg.get("family", "mace_mp"),
-        "mace_model": _env("MATSIM_MACE_MODEL") or mace_cfg.get("model", "medium"),
-        "mace_precision": _env("MATSIM_MACE_PRECISION") or mace_cfg.get("precision", "fp64"),
-        "mlp_device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+    mlip = MACEConfig(
+        **{
+            key: value
+            for key, value in {
+                "family": _env("MATSIM_MACE_FAMILY") or mace_cfg.get("family"),
+                "model": _env("MATSIM_MACE_MODEL") or mace_cfg.get("model"),
+                "precision": _env("MATSIM_MACE_PRECISION") or mace_cfg.get("precision", "fp64"),
+                "device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+            }.items()
+            if value is not None
+        }
+    )
+    mlip_settings: dict[str, Any] = {
         "optimizer": mace_cfg.get("optimizer", "FIRE"),
         "fmax": float(mace_cfg.get("fmax", default_fmax)),
         "maxiter": int(mace_cfg.get("maxiter", 200)),
@@ -157,8 +167,8 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
         pseudo_dir=_env("MATSIM_QE_PSEUDO_DIR"),
         qe_launcher=qe_launcher,
         qe_settings_overrides=qe_overrides,
-        mlip_backend="mace",
-        mlip_kwargs=mace_kwargs,
+        mlip=mlip,
+        mlip_settings=mlip_settings,
         timeout_sec=timeout,
     )
 
@@ -174,7 +184,7 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
         if summary.warm is None or "bfgs_steps" not in summary.warm:
             pytest.fail(
                 f"Warm-start phase produced no result for {fixture['name']!r}; "
-                f"mace block: {summary.hydragnn}"
+                f"mlip block: {summary.mlip}"
             )
         warm = summary.warm
         assert warm.get("converged"), (
@@ -199,7 +209,7 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
     if summary.warm is None or "bfgs_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"mace block: {summary.hydragnn}"
+            f"mlip block: {summary.mlip}"
         )
     warm = summary.warm
     assert warm.get("converged"), (

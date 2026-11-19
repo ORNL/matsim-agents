@@ -149,7 +149,7 @@ Field reference:
 
 `nodes_per_job`, `ranks_per_node`, `threads_per_rank` move out of the
 `dft.vasp` / `dft.qe` blocks; those blocks keep only scientific and executable
-settings. `mlp_device` / `device` move out of the MLIP blocks.
+settings. The `mlip` block's `device` selects the device type; the pool assigns the device index.
 
 ### 4.1 Examples
 

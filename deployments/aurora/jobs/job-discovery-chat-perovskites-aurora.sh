@@ -145,6 +145,14 @@ while true; do
     (( ELAPSED += INTERVAL ))
 done
 
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
+# examples/mlip/*.yaml) or the HydraGNN foundation model above.
+if [[ -z "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
+    "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
+fi
+
 # ── multi-turn perovskite dialogue ───────────────────────────────────────────
 # Each of the first five turns explicitly mentions ONE perovskite formula in
 # the USER text (regex-guaranteed) and asks the LLM for one sentence of
@@ -153,8 +161,7 @@ done
 # Turn 6 asks the LLM to rank the five from the cumulative feedback.
 echo "[$(date)] Submitting 5-perovskite dialogue to matsim-agents ..."
 matsim-agents chat \
-    --logdir          "${LOGDIR}" \
-    --hydragnn-branch-mlp-checkpoint "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
+    --mlip-config     "${MLIP_CONFIG}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
     --llm-model       "${CHAT_MODEL_NAME}" \

@@ -16,7 +16,7 @@ from ase.io import read, write
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig
 from matsim_agents.datasets.governance import structure_identity
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
@@ -78,7 +78,7 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
         raise ValueError(f"Unknown DFT backend: {backend}")
     return ALConfig.model_validate(
         {
-            "mlip": {"backend": "uma", "uma": {"device": "cuda"}},
+            "mlip": {"backend": "uma", "device": "cuda"},
             "md": {
                 "seed_source": {"kind": "paths", "paths": [str(root / "Si.extxyz")]},
                 "n_steps": 20,
@@ -105,7 +105,6 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             },
             "trainer": {
                 "enabled": True,
-                "train_script": str(source / "src/matsim_agents/training/finetune_uma.py"),
                 "epochs_per_iter": 1,
                 "validation_fraction": 0.2,
                 "compare_after_training": True,
@@ -168,12 +167,11 @@ def bootstrap(repo: Path, root: Path, backend: str = "qe") -> dict:
     (root / "al-config.json").write_text(cfg.model_dump_json(indent=2))
     explored = explore_composition(
         "Si",
+        mlip=cfg.mlip,
         output_dir=str(root / "budget-check"),
-        mlip_backend="uma",
         n_random=0,
         max_relaxations=1,
         maxiter=5,
-        mlp_device="cuda",
     )
     require(explored.candidate_counts["attempted"] == 1, "Real relaxation cap not exercised")
     require(bool(explored.relaxations), "The real UMA relaxation failed to return")
@@ -237,15 +235,12 @@ def mace(repo: Path, root: Path) -> dict:
     primary = cache / "macempa0mediummodel"
     member = cache / "20231203mace128L1_epoch199model"
     require(primary.is_file() and member.is_file(), "MACE ensemble assets unavailable")
-    cfg.mlip = MLIPConfig(
-        backend="mace",
-        mace=MACEConfig(
-            family="checkpoint",
-            model=str(primary),
-            device="cuda",
-            precision="fp64",
-            ensemble_models=[str(member)],
-        ),
+    cfg.mlip = MACEConfig(
+        family="checkpoint",
+        model=str(primary),
+        device="cuda",
+        precision="fp64",
+        ensemble_models=[str(member)],
     )
     frame = read(root / "Si.extxyz")
     energies = []
@@ -262,15 +257,12 @@ def mace(repo: Path, root: Path) -> dict:
         require(np.isfinite(energy) and np.isfinite(forces).all(), "Nonfinite MACE prediction")
         energies.append(energy)
     require(len(energies) == 2, "MACE ensemble member missing")
-    cfg.trainer.train_script = (
-        Path(__file__).resolve().parents[3] / "src/matsim_agents/training/finetune_mace.py"
-    )
     cfg.trainer.validation_fraction = 0
     cfg.trainer.validation_set = root / "al/validation.extxyz"
-    cfg.mlip.mace.ensemble_models = []
+    cfg.mlip.ensemble_models = []
     checkpoint = retrain_mace(
         cfg.trainer,
-        cfg.mlip.mace,
+        cfg.mlip,
         root / "al/dataset.extxyz",
         1,
         root / "mace-training",
@@ -282,9 +274,7 @@ def mace(repo: Path, root: Path) -> dict:
     )
     # Rejection is valid evidence; failed/nonfinite inference is not.
     require_metrics(asdict(decision))
-    candidate_cfg = cfg.mlip.model_copy(deep=True)
-    candidate_cfg.mace.model = str(checkpoint)
-    frame.calc = make_mlip_calculator(candidate_cfg)
+    frame.calc = make_mlip_calculator(cfg.mlip.with_checkpoint(checkpoint))
     require(
         np.isfinite(frame.get_potential_energy()) and np.isfinite(frame.get_forces()).all(),
         "MACE checkpoint reload failed",
@@ -301,14 +291,11 @@ def hydragnn(repo: Path, root: Path) -> dict:
     require((logdir / "config.json").is_file(), "HydraGNN logdir missing")
     predictions = {}
     for precision in ("fp64", "bf16"):
-        cfg = MLIPConfig(
-            backend="hydragnn",
-            hydragnn=HydraGNNConfig(
-                logdir=logdir,
-                checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
-                inference_head="OMat24",
-                precision=precision,
-            ),
+        cfg = HydraGNNConfig(
+            logdir=logdir,
+            checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
+            inference_head="OMat24",
+            precision=precision,
         )
         calc = make_mlip_calculator(cfg)
         atoms = bulk("Si", "diamond", a=5.43)
@@ -337,7 +324,6 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
     placement = cfg.resources.place()
     dataset = root / "al/dataset.extxyz"
     require(dataset.is_file(), "Run the bootstrap and resume stages first")
-    source = Path(__file__).resolve().parents[3]
     hydragnn_root = repo / "HydraGNN"
     example = hydragnn_root / "examples/multidataset_hpo_sc26"
     gfm = example / "multidataset_hpo-BEST6-fp64"
@@ -349,15 +335,14 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
     seed = root / "Si.extxyz"
     results: dict = {}
 
-    def relax(label: str, **kwargs) -> dict:
+    def relax(label: str, hydragnn: HydraGNNConfig) -> dict:
         outcome = relax_with_mlip(
             RelaxStructureInput(
                 structure_path=str(seed),
                 output_dir=str(root / f"relax-{label}"),
-                mlip_backend="hydragnn",
+                mlip=hydragnn,
                 maxiter=20,
                 random_displacement=True,
-                **kwargs,
             )
         )
         require(
@@ -369,19 +354,20 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
 
     results["relax_pretrained_routed"] = relax(
         "pretrained-routed",
-        logdir=str(gfm),
-        checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
-        hydragnn_branch_mlp_checkpoint=str(branch_mlp),
+        HydraGNNConfig(
+            logdir=gfm,
+            checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
+            mlp_checkpoint=branch_mlp,
+        ),
     )
     for script, extra in (
         ("finetune_hydragnn_newhead", {"ft_repo": ft_repo}),
-        ("finetune_hydragnn", {"hydragnn_branch_mlp_checkpoint": branch_mlp}),
+        ("finetune_hydragnn", {"mlp_checkpoint": branch_mlp}),
     ):
         out = root / f"hydragnn-{script}"
         require(not out.exists(), f"{out} already exists")
         trainer = cfg.trainer.model_copy(
             update={
-                "train_script": source / f"src/matsim_agents/training/{script}.py",
                 "train_launcher": None,
                 "epochs_per_iter": 1,
             },
@@ -391,6 +377,7 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
             logdir=gfm,
             checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
             hydragnn_root=hydragnn_root,
+            fine_tuner=script,
             **extra,
         )
         logdir = retrain_hydragnn(
@@ -404,12 +391,7 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
             dft_launch=placement.pool("dft").launches[0],
             reference_root=root / f"hydragnn-{script}-references",
         )
-        calculator = make_mlip_calculator(
-            MLIPConfig(
-                backend="hydragnn",
-                hydragnn=hydragnn.model_copy(update={"logdir": logdir, "checkpoint": None}),
-            )
-        )
+        calculator = make_mlip_calculator(hydragnn.with_checkpoint(logdir))
         atoms = read(seed)
         atoms.calc = calculator
         energy = float(atoms.get_potential_energy())

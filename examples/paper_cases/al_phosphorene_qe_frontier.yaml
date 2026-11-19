@@ -30,24 +30,15 @@ vars:
 
 mlip:
   # Frontier's venv is HydraGNN/ROCm (fairchem/UMA needs numpy>=2 and is not
-  # installed there), so the platform-native MLIP is HydraGNN. Override with
-  # MLIP_BACKEND=uma only on a node where fairchem-core is available.
-  backend: ${MLIP_BACKEND:-hydragnn}
-  hydragnn:
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    mlp_checkpoint: null
-    precision:  fp32
-    mlp_device: cuda
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  # installed there), so the platform-native MLIP is HydraGNN. Use
+  # --mlip-config with another backend only where its package is installed.
+  backend: hydragnn
+  logdir:         ${INITIAL_LOGDIR}
+  checkpoint:     best_model.pt
+  mlp_checkpoint: null
+  precision:  fp32
+  device: cuda
+  ensemble_models: []
 
 md:
   seed_source:

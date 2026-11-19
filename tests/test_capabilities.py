@@ -14,7 +14,7 @@ from matsim_agents.active_learning.config import LLMSeedConfig
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.dft.vasp_relax import _CALC_MODE_MAP
 from matsim_agents.backends.llm.provider import DEFAULT_MODELS
-from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.backends.mlip.config import MLIP_BACKEND_CONFIGS, MLIP_BACKENDS
 from matsim_agents.cli import app
 from matsim_agents.execution import capabilities as caps
 from matsim_agents.execution.contracts import DFT_EVIDENCE
@@ -32,7 +32,9 @@ def _literal(model, field: str) -> set[str]:
 
 def test_registry_matches_configured_backends():
     assert _names("dft") == _literal(DFTConfig, "backend")
-    assert _names("mlip") == _literal(MLIPConfig, "backend")
+    assert _names("mlip") == set(MLIP_BACKENDS) == set(MLIP_BACKEND_CONFIGS)
+    for name, config in MLIP_BACKEND_CONFIGS.items():
+        assert _literal(config, "backend") == {name}
     assert _names("llm") == set(DEFAULT_MODELS) == _literal(LLMSeedConfig, "provider")
 
 

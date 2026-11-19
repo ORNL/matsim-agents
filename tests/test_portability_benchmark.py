@@ -87,7 +87,7 @@ def test_production_contracts_cover_resume_allocation_and_independent_phase(tmp_
 def test_compute_qualification_requires_and_executes_real_workflow_modes(tmp_path):
     mlip = tmp_path / "mlip.yaml"
     qe = tmp_path / "qe.yaml"
-    mlip.write_text("mode: mlip\nstructure_path: replaced\n")
+    mlip.write_text("mode: mlip\nstructure_path: replaced\nmlip:\n  backend: uma\n")
     qe.write_text(
         "mode: dft\nstructure_path: replaced\ndft:\n  backend: qe\n  pseudo_dir: /shared/pseudo\n"
     )

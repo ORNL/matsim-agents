@@ -1,4 +1,9 @@
-"""Run one MLIP relaxation pass over a checked-in paper-case seed set."""
+"""Run one MLIP relaxation pass over a checked-in paper-case seed set.
+
+Select the model with ``--mlip-config FILE`` (a YAML with an ``mlip:`` block, e.g.
+``examples/mlip/uma-s-1p1-omat.yaml``); without it the executor reads the file
+named by ``MATSIM_MLIP_CONFIG``.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,8 @@ from pathlib import Path
 
 from ase.io import read
 
+from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.orchestration.objective_graph import build_graph
 from matsim_agents.orchestration.state import MatSimState
 
@@ -71,20 +78,14 @@ def _energy_per_atom_ranking(results: list[object]) -> list[dict[str, object]]:
     return ranking
 
 
-def run_case(case: str, run_dir: Path, args: argparse.Namespace) -> None:
+def run_case(case: str, run_dir: Path, mlip: MLIPConfig | None) -> None:
     case_dir = run_dir / case
     seed_paths = stage_seeds(case, case_dir / "seeds")
     objective = make_objective(case, seed_paths)
     config = {
         "configurable": {
             "thread_id": str(uuid.uuid4()),
-            "mlip_backend": args.mlip_backend,
-            "logdir": str(args.logdir) if args.logdir else None,
-            "hydragnn_branch_mlp_checkpoint": args.hydragnn_branch_mlp_checkpoint,
-            "checkpoint": args.checkpoint,
-            "uma_model_name": args.uma_model_name,
-            "uma_task": args.uma_task,
-            "mlp_device": args.mlp_device,
+            "mlip": mlip.model_dump(mode="json") if mlip is not None else None,
             "output_dir": str(case_dir / "relaxations"),
         }
     }
@@ -127,21 +128,9 @@ def main() -> None:
     parser.add_argument(
         "--seeds-only", action="store_true", help="Stage seed files without running the graph."
     )
-    parser.add_argument(
-        "--mlip-backend",
-        choices=("hydragnn", "uma"),
-        default=os.getenv("MATSIM_MLIP_BACKEND", "hydragnn"),
-    )
-    parser.add_argument("--logdir", type=Path, default=os.getenv("MATSIM_HYDRAGNN_LOGDIR"))
-    parser.add_argument(
-        "--hydragnn-branch-mlp-checkpoint",
-        default=os.getenv("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
-    )
-    parser.add_argument("--checkpoint", default=os.getenv("MATSIM_HYDRAGNN_CHECKPOINT"))
-    parser.add_argument("--uma-model-name", default=os.getenv("MATSIM_UMA_MODEL_NAME", "uma-s-1p1"))
-    parser.add_argument("--uma-task", default=os.getenv("MATSIM_UMA_TASK", "omat"))
-    parser.add_argument("--mlp-device", default="cuda")
+    add_mlip_arguments(parser)
     args = parser.parse_args()
+    mlip = mlip_config_from_args(parser, args)
 
     cases = CASES if args.all else (args.case,)
     run_dir = _run_directory()
@@ -152,7 +141,7 @@ def main() -> None:
                 paths = stage_seeds(case, run_dir / case / "seeds")
                 print(f"[{case}] staged {len(paths)} seed structure(s)")
             else:
-                run_case(case, run_dir, args)
+                run_case(case, run_dir, mlip)
         except FileNotFoundError as exc:
             print(f"[{case}] skipped: {exc}")
 

@@ -11,9 +11,9 @@ fi
   echo "Refusing POTCAR assembly without explicit PAW release approval." >&2
   exit 2
 }
-PAW_ROOT="$(realpath -e "$1")"
-CASE_DIR="$(realpath -e "$2")"
-REPO_REAL="$(realpath -e "${REPO}")"
+PAW_ROOT="$(CDPATH= cd -P -- "$1" && pwd -P)"
+CASE_DIR="$(CDPATH= cd -P -- "$2" && pwd -P)"
+REPO_REAL="$(CDPATH= cd -P -- "${REPO}" && pwd -P)"
 case "${CASE_DIR}/" in
   "${REPO_REAL}/"*)
     echo "Refusing to place licensed POTCAR content inside the Git worktree." >&2

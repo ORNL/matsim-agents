@@ -77,11 +77,14 @@ echo "MoNbTaW:     ${RHEA_STRUCT}"
 echo "Run dir:     ${RUN_DIR}"
 echo "=========================================="
 
+# HydraGNN on Aurora uses device cuda; the wrapper routes it to XPU when available.
+MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
+printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n  device: cuda\n' \
+  "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
+
 python "${REPO}/scripts/diagnostics/step2_perturbation_diagnostic.py" \
-    --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
+    --mlip-config     "${MLIP_CONFIG}" \
     --output-dir      "${OUTPUT_DIR}" \
-    --device          cuda \
     --seed            42 \
     --displacement-scale 0.10 \
     --cases \

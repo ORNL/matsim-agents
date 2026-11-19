@@ -3,77 +3,36 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
-
-def opt_mlip_backend():
-    return typer.Option(
-        "hydragnn",
-        "--mlip-backend",
-        help="Relaxation backend: hydragnn | uma.",
-        case_sensitive=False,
-    )
+if TYPE_CHECKING:
+    from matsim_agents.backends.mlip.config import MLIPConfig
 
 
-def opt_logdir():
+def opt_mlip_config():
     return typer.Option(
         None,
+        "--mlip-config",
         help=(
-            "HydraGNN logdir with config.json and checkpoint "
-            "(required for --mlip-backend hydragnn)."
+            "YAML file whose `mlip:` block selects the model (backend: hydragnn | uma | "
+            "mace plus that backend's settings), e.g. examples/mlip/*.yaml or an "
+            "active-learning config."
         ),
     )
 
 
-def opt_hydragnn_branch_mlp_checkpoint():
-    return typer.Option(
-        None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
-    )
+def load_mlip_option(path: Path | None) -> MLIPConfig | None:
+    """Load --mlip-config, reporting an invalid file as a usage error."""
+    if path is None:
+        return None
+    from matsim_agents.backends.mlip.config import load_mlip_config
 
-
-def opt_hydragnn_inference_head():
-    return typer.Option(
-        None,
-        "--hydragnn-inference-head",
-        help=(
-            "Use only one HydraGNN decoding head by dataset name "
-            "(for example OMat24) or index 0..15; bypasses BranchWeightMLP."
-        ),
-    )
-
-
-def opt_uma_model_name():
-    return typer.Option(
-        "uma-s-1p1",
-        "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlip-backend uma).",
-    )
-
-
-def opt_uma_task():
-    return typer.Option(
-        "omat",
-        "--uma-task",
-        help="UMA task head: omat | omol (used when --mlip-backend uma).",
-    )
-
-
-def opt_checkpoint(help_text: str):
-    return typer.Option(None, help=help_text)
-
-
-def opt_mlp_device():
-    return typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu).")
-
-
-def opt_precision(help_text: str):
-    return typer.Option(None, help=help_text)
-
-
-def opt_mlp_precision(help_text: str):
-    return typer.Option(None, help=help_text)
+    try:
+        return load_mlip_config(path)
+    except (OSError, ValueError) as error:
+        raise typer.BadParameter(str(error), param_hint="--mlip-config") from error
 
 
 def opt_trigger_al_handoff(default: bool, help_text: str):

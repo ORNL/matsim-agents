@@ -45,7 +45,7 @@ Every string in a config can reference `${VAR}`. A variable that is not set is a
 - `E4_HYDRAGNN_LOGDIR`
 - `E4_MLP_DEVICE` (job scripts default it to the facility accelerator)
 
-HydraGNN inference uses only the OMat24 head (`hydragnn_inference_head`); the branch-weight MLP is not used.
+HydraGNN inference uses only the OMat24 head (`mlip.inference_head`); the branch-weight MLP is not used.
 
 On Aurora, `deployments/aurora/jobs/submit-e4-science-campaign.sh vasp|qe` prints the whole science campaign (E4.1 weak and strong, E4.3) with queues and paths filled in. Add `--validate` for the 2-node debug check and `--submit` to submit. Aurora's QE 7.6 offloads only EPW to the GPU, so the QE campaign runs the CPU `pw.x`.
 

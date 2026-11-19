@@ -137,10 +137,17 @@ export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 # ── discovery query ──────────────────────────────────────────────────────────
 QUERY=${MATSIM_DISCOVERY_QUERY:-"Propose 3 to 5 candidate inorganic materials with concise physical justification, then relax each structure with the MLFF and report final energies and relative stability."}
 
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
+# examples/mlip/*.yaml) or the HydraGNN foundation model above.
+if [[ -z "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="$RUN_DIR/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
+    "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" >"$MLIP_CONFIG"
+fi
+
 echo "[$(date)] Submitting discovery query to matsim-agents ..."
 echo "$QUERY" | matsim-agents chat \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --mlip-config     "$MLIP_CONFIG" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    vllm \
     --llm-model       "$MODEL_NAME" \

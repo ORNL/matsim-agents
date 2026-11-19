@@ -16,6 +16,12 @@ from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _python_shim(path: Path) -> None:
+    """Run this interpreter (with its own site-packages) under another venv path."""
+    path.write_text(f'#!/bin/bash\nexec "{sys.executable}" "$@"\n')
+    path.chmod(0o755)
+
+
 def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
     """A config named relative to the submission directory survives the job's cd."""
     repo = tmp_path / "repo"
@@ -82,7 +88,7 @@ def test_campaign_reference_preflight_precedes_launch(
     (setup / "campaign-naming.sh").write_text('printf passed > "$TEST_PREFLIGHT_MARKER"\nexit 37\n')
     venv = tmp_path / "venv"
     (venv / "bin").mkdir(parents=True)
-    (venv / "bin/python3").symlink_to(sys.executable)
+    _python_shim(venv / "bin/python3")
     config = tmp_path / "al.yaml"
     config.write_text(
         {
@@ -267,20 +273,27 @@ def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -
     assert cfg.dft.vasp.extra_incar["KPAR"] == "4"
 
 
-def _fake_aurora_venv(tmp_path: Path, capture: Path) -> Path:
-    venv = tmp_path / "venv"
+def _fake_venv(tmp_path: Path, capture: Path, name: str = "venv") -> Path:
+    """A venv whose matsim-agents records its arguments, venv name, and job environment."""
+    venv = tmp_path / name
     bin_dir = venv / "bin"
     bin_dir.mkdir(parents=True)
-    (bin_dir / "python").symlink_to(sys.executable)
+    _python_shim(bin_dir / "python")
+    _python_shim(bin_dir / "python3")
     cli = bin_dir / "matsim-agents"
     cli.write_text(
         "#!/bin/bash\n"
-        f'printf "%s|%s|%s|%s|%s\\n" "$*" "$MLIP_BACKEND" "$DFT_BACKEND" '
-        f'"${{SCALE_TAG:-}}" "${{AL_SEED:-}}" >> "{capture}"\n'
+        f'printf "%s|%s|%s|%s|%s|%s\\n" "$*" "{name}" "$DFT_BACKEND" '
+        f'"${{SCALE_TAG:-}}" "${{AL_SEED:-}}" "${{TRAINER_ENABLED:-}}" >> "{capture}"\n'
     )
     cli.chmod(0o755)
     (bin_dir / "activate").write_text(f'export PATH="{bin_dir}:$PATH"\n')
-    (venv / "bash-env").write_text("module() { return 0; }\n")
+    return venv
+
+
+def _fake_aurora_venv(tmp_path: Path, capture: Path, name: str = "venv") -> Path:
+    venv = _fake_venv(tmp_path, capture, name)
+    (venv / "bash-env").write_text("module() { return 0; }\nml() { return 0; }\n")
     return venv
 
 
@@ -312,7 +325,36 @@ def test_aurora_paper_case_job_runs_aurora_config(tmp_path, case, config, dft):
     calls = capture.read_text().splitlines()
     assert calls[0].startswith(f"al validate-config {ROOT}/examples/paper_cases/{config}|")
     assert calls[1].startswith(f"al run {ROOT}/examples/paper_cases/{config} --log-level INFO|")
-    assert calls[1].split("|")[1:3] == ["hydragnn", dft]
+    assert calls[1].split("|")[1:3] == ["venv", dft]
+
+
+def test_aurora_paper_case_job_forwards_the_mlip_config(tmp_path):
+    capture = tmp_path / "calls.txt"
+    venv = _fake_aurora_venv(tmp_path, capture)
+    mace_venv = _fake_venv(tmp_path, capture, "venv-mace")
+    result = subprocess.run(
+        ["bash", str(ROOT / "deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh")],
+        env={
+            **os.environ,
+            "PROJECT_ROOT": str(ROOT),
+            "RUNS_ROOT": str(tmp_path / "runs"),
+            "MATSIM_AURORA_VENV": str(venv),
+            "MATSIM_MACE_VENV": str(mace_venv),
+            "BASH_ENV": str(venv / "bash-env"),
+            "CASE": "hea_bcc",
+            "MLIP_CONFIG": "examples/mlip/mace-mp-medium.yaml",
+            "PBS_JOBID": "123.aurora",
+        },
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    config = ROOT / "examples/paper_cases/al_hea_bcc_aurora.yaml"
+    mlip = ROOT / "examples/mlip/mace-mp-medium.yaml"
+    calls = capture.read_text().splitlines()
+    assert calls[0].startswith(f"al validate-config {config} --mlip-config {mlip}|venv-mace|")
+    assert calls[1].startswith(f"al run {config} --mlip-config {mlip} --log-level INFO|venv-mace|")
 
 
 def test_aurora_paper_case_job_rejects_unknown_case(tmp_path):
@@ -351,4 +393,119 @@ def test_aurora_scaling_job_tags_run_by_unique_pbs_nodes(tmp_path):
         run[0]
         == f"al run {ROOT}/examples/paper_cases/al_hea_fcc_scaling_aurora.yaml --log-level INFO"
     )
-    assert run[3:] == ["hea-fcc-scaling-aurora-N2-r3", "15"]
+    assert run[1] == "venv"
+    assert run[3:5] == ["hea-fcc-scaling-aurora-N2-r3", "15"]
+
+
+def _perlmutter_paper_case(tmp_path: Path, **env: str) -> tuple[subprocess.CompletedProcess, list]:
+    capture = tmp_path / "calls.txt"
+    venvs = {
+        name: _fake_venv(tmp_path, capture, name) for name in ("venv", "venv-uma", "venv-mace")
+    }
+    bash_env = tmp_path / "bash-env"
+    bash_env.write_text("module() { return 0; }\nml() { return 0; }\n")
+    uma_bundle = tmp_path / "artifacts/uma/uma-s-1p1"
+    uma_bundle.mkdir(parents=True)
+    (uma_bundle / "checkpoint.pt").write_text("x")
+    (uma_bundle / "atom_refs.yaml").write_text("x")
+    result = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh"),
+        ],
+        env={
+            **os.environ,
+            "PROJECT_ROOT": str(ROOT),
+            "RUNS_ROOT": str(tmp_path / "runs"),
+            "BASH_ENV": str(bash_env),
+            "MATSIM_PERLMUTTER_VENV": str(venvs["venv"]),
+            "MATSIM_HYDRAGNN_VENV": str(venvs["venv"]),
+            "MATSIM_FAIRCHEM_VENV": str(venvs["venv-uma"]),
+            "MATSIM_MACE_VENV": str(venvs["venv-mace"]),
+            "MATSIM_MODEL_ARTIFACTS_ROOT": str(tmp_path / "artifacts"),
+            "SLURM_JOB_ID": "77",
+            **env,
+        },
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    calls = capture.read_text().splitlines() if capture.exists() else []
+    return result, [call.split("|") for call in calls]
+
+
+def test_perlmutter_zn_formate_selects_the_uma_config_for_the_default_uma_model(tmp_path):
+    result, calls = _perlmutter_paper_case(tmp_path, CASE="zn_formate")
+    assert result.returncode == 0, result.stderr
+    mlip = ROOT / "examples/mlip/uma-s-1p1-omol.yaml"
+    config = ROOT / "examples/paper_cases/al_zn_formate_uma.yaml"
+    assert calls[1][0] == f"al run {config} --mlip-config {mlip} --log-level INFO"
+    assert calls[1][1] == "venv-uma"
+
+
+def test_perlmutter_paper_case_runs_its_own_model_with_an_empty_mlip_config(tmp_path):
+    result, calls = _perlmutter_paper_case(tmp_path, CASE="zn_formate", MLIP_CONFIG="")
+    assert result.returncode == 0, result.stderr
+    config = ROOT / "examples/paper_cases/al_zn_formate.yaml"
+    assert calls[1][0] == f"al run {config} --log-level INFO"
+    assert calls[1][1] == "venv"
+
+
+@pytest.mark.parametrize(
+    ("mlip_config", "retrain", "trainer"),
+    [
+        ("examples/mlip/mace-mp-medium.yaml", None, "false"),
+        ("examples/mlip/mace-mp-medium.yaml", "1", "true"),
+        ("examples/mlip/uma-s-1p1-omat.yaml", None, "false"),
+        ("", None, "true"),
+        ("", "0", "false"),
+    ],
+)
+def test_perlmutter_paper_case_retrains_hydragnn_and_freezes_foundation_models(
+    tmp_path, mlip_config, retrain, trainer
+):
+    env = {"CASE": "hea_bcc", "MLIP_CONFIG": mlip_config}
+    if retrain is not None:
+        env["RETRAIN"] = retrain
+    result, calls = _perlmutter_paper_case(tmp_path, **env)
+    assert result.returncode == 0, result.stderr
+    config = ROOT / "examples/paper_cases/al_hea_bcc.yaml"
+    mlip_args = f" --mlip-config {ROOT / mlip_config}" if mlip_config else ""
+    venv = {"": "venv", "mace": "venv-mace", "uma": "venv-uma"}
+    assert calls[1][0] == f"al run {config}{mlip_args} --log-level INFO"
+    assert calls[1][1] == venv[mlip_config.split("/")[-1].split("-")[0]]
+    assert calls[1][5] == trainer
+
+
+def test_bounded_campaign_submission_names_and_forwards_the_mlip_config(tmp_path):
+    capture = tmp_path / "sbatch.txt"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sbatch = bin_dir / "sbatch"
+    sbatch.write_text(
+        f'#!/bin/bash\nprintf "%s|%s\\n" "$MATSIM_CAMPAIGN_RUN_TAG" "$MLIP_CONFIG" > "{capture}"\n'
+    )
+    sbatch.chmod(0o755)
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    _python_shim(venv / "bin/python3")
+    references = tmp_path / "elemental.json"
+    references.write_text("{}")
+    result = subprocess.run(
+        ["bash", str(ROOT / "deployments/perlmutter/jobs/submit-nb-ta-o-combined-bounded.sh")],
+        env={
+            **{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "MATSIM_PERLMUTTER_VENV": str(venv),
+            "MATSIM_MODEL_ARTIFACTS_ROOT": str(tmp_path / "artifacts"),
+            "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET": str(references),
+            "MLIP_CONFIG": "examples/mlip/mace-omat-0-medium.yaml",
+        },
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    run_tag, mlip_config = capture.read_text().strip().split("|")
+    assert run_tag.startswith("nb-ta-o--7llm-mace-al-qe-hull--")
+    assert mlip_config == str(ROOT / "examples/mlip/mace-omat-0-medium.yaml")

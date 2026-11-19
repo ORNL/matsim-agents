@@ -108,9 +108,12 @@ def relax_workflow(
 
     import yaml
 
+    from matsim_agents.backends.mlip.config import resolve_mlip_paths
     from matsim_agents.workflows.relaxation import ScientificRelaxationConfig, run_relaxation
 
     raw = yaml.safe_load(config.read_text(encoding="utf-8"))
+    if isinstance(raw.get("mlip"), dict):
+        resolve_mlip_paths(raw["mlip"], config.resolve().parent)
     cfg = ScientificRelaxationConfig.model_validate(raw)
     result = run_relaxation(cfg)
     if as_json:

@@ -17,6 +17,7 @@ from matsim_agents.backends.mlip.config import (
 )
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
 from matsim_agents.cli import app
+from matsim_agents.cli.options import load_mlip_option
 from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
 EXPECTED_HEADS = (
@@ -60,15 +61,13 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
     config = HydraGNNConfig(logdir=logdir, inference_head="OMat24")
     request = RelaxStructureInput(
         structure_path="structure.extxyz",
-        mlip_backend="hydragnn",
-        logdir=str(logdir),
-        hydragnn_inference_head="OMat24",
+        mlip={"backend": "hydragnn", "logdir": str(logdir), "inference_head": "OMat24"},
     )
-    chat = DiscoveryChatConfig(logdir=str(logdir), hydragnn_inference_head="OMat24")
+    chat = DiscoveryChatConfig(mlip=config)
 
     assert resolve_hydragnn_inference_head(config.inference_head) == 7
-    assert request.hydragnn_branch_mlp_checkpoint is None
-    assert chat.hydragnn_branch_mlp_checkpoint is None
+    assert request.mlip.mlp_checkpoint is None
+    assert chat.mlip.mlp_checkpoint is None
 
 
 @pytest.mark.parametrize("declared", [False, True])
@@ -82,8 +81,8 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     logdir.mkdir()
     if declared:
         (logdir / "energy-convention.json").write_text("{}")
-    for env in ("HYDRAGNN_BRANCH_MLP_CHECKPOINT", "MATSIM_HYDRAGNN_INFERENCE_HEAD"):
-        monkeypatch.delenv(env, raising=False)
+    monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
+    mlip = {"backend": "hydragnn", "logdir": str(logdir)}
     captured = []
 
     def run(args):
@@ -98,24 +97,20 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     monkeypatch.setattr(executor, "relax_with_mlip", run)
     state = MatSimState(pending_tasks=[TaskSpec(structure_path="structure.extxyz")])
     if declared:
-        chat = DiscoveryChatConfig(logdir=str(logdir))
-        request = RelaxStructureInput(structure_path="structure.extxyz", logdir=str(logdir))
-        result = executor.executor_node(
-            state, {"configurable": {"mlip_backend": "hydragnn", "logdir": str(logdir)}}
-        )
-        assert chat.hydragnn_branch_mlp_checkpoint is None
-        assert request.hydragnn_branch_mlp_checkpoint is None
-        assert captured[0].hydragnn_branch_mlp_checkpoint is None
+        chat = DiscoveryChatConfig(mlip=mlip)
+        request = RelaxStructureInput(structure_path="structure.extxyz", mlip=mlip)
+        result = executor.executor_node(state, {"configurable": {"mlip": mlip}})
+        assert chat.mlip.mlp_checkpoint is None
+        assert request.mlip.mlp_checkpoint is None
+        assert captured[0].mlip.mlp_checkpoint is None
         assert len(result["results"]) == 1
     else:
         with pytest.raises(ValueError, match="BranchWeightMLP"):
-            DiscoveryChatConfig(logdir=str(logdir))
-        with pytest.raises(ValueError, match="hydragnn_branch_mlp_checkpoint"):
-            RelaxStructureInput(structure_path="structure.extxyz", logdir=str(logdir))
+            DiscoveryChatConfig(mlip=mlip)
+        with pytest.raises(ValueError, match="mlp_checkpoint"):
+            RelaxStructureInput(structure_path="structure.extxyz", mlip=mlip)
         with pytest.raises(ValueError, match="BranchWeightMLP"):
-            executor.executor_node(
-                state, {"configurable": {"mlip_backend": "hydragnn", "logdir": str(logdir)}}
-            )
+            executor.executor_node(state, {"configurable": {"mlip": mlip}})
         assert not captured
 
 
@@ -146,7 +141,11 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
     monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: RoutedCalculator())
     result = relaxation.relax_with_mlip(
-        RelaxStructureInput(structure_path=str(structure), logdir=str(logdir), maxiter=1)
+        RelaxStructureInput(
+            structure_path=str(structure),
+            mlip={"backend": "hydragnn", "logdir": str(logdir)},
+            maxiter=1,
+        )
     )
     assert result.top_branch == 0
     if active_branches == 1:
@@ -179,8 +178,11 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
     request = RelaxStructureInput(
         structure_path=str(tmp_path / "structure.extxyz"),
         output_dir=str(tmp_path / "output"),
-        logdir=str(logdir),
-        hydragnn_branch_mlp_checkpoint=str(tmp_path / "mlp.pt"),
+        mlip={
+            "backend": "hydragnn",
+            "logdir": str(logdir),
+            "mlp_checkpoint": str(tmp_path / "mlp.pt"),
+        },
     )
 
     if metadata_name is None:
@@ -318,7 +320,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
     assert calls == [torch.bfloat16 if precision == "bf16" else dtype] * 2
 
 
-def test_hydragnn_head_selector_is_exposed_by_public_commands():
+def test_hydragnn_head_selector_is_exposed_by_public_commands(tmp_path):
     root_command = get_command(app)
 
     for command_name in ("run", "chat", "supervisor-run"):
@@ -326,7 +328,19 @@ def test_hydragnn_head_selector_is_exposed_by_public_commands():
         option_names = {
             option for parameter in command.params for option in getattr(parameter, "opts", ())
         }
-        assert "--hydragnn-inference-head" in option_names
+        assert "--mlip-config" in option_names
+
+    logdir = tmp_path / "model"
+    logdir.mkdir()
+    config_file = tmp_path / "mlip.yaml"
+    config_file.write_text(
+        "mlip:\n  backend: hydragnn\n  logdir: model\n  inference_head: OMat24\n",
+        encoding="utf-8",
+    )
+    selected = load_mlip_option(config_file)
+    assert isinstance(selected, HydraGNNConfig)
+    assert selected.logdir == logdir.resolve()
+    assert resolve_hydragnn_inference_head(selected.inference_head) == 7
 
 
 @pytest.mark.parametrize("mlp_precision", ["fp32", "bf16"])
@@ -377,7 +391,7 @@ def test_fused_xpu_builder_moves_and_exposes_mlp(tmp_path, monkeypatch, mlp_prec
     if contexts:
         assert contexts == [(("xpu",), {"dtype": torch.bfloat16})]
     result = build_hydragnn_calculator(
-        HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", mlp_device="xpu")
+        HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", device="xpu")
     )
     assert result.model is model and result.mlp is mlp
     assert moves == [{"device": device}, {"device": device}]

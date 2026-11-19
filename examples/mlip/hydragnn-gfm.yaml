@@ -1,0 +1,10 @@
+# HydraGNN multi-head foundation model, fine-tuned by active learning.
+# INITIAL_LOGDIR: training logdir with config.json and the checkpoint.
+mlip:
+  backend: hydragnn
+  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  logdir: ${INITIAL_LOGDIR}
+  hydragnn_root: ${HYDRAGNN_DIR}
+  checkpoint: best_model.pt
+  precision: fp32
+  device: cuda

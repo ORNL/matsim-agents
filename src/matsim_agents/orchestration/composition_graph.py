@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from matsim_agents.active_learning import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.discovery import (
     Composition,
     CompositionExplorationResult,
@@ -29,17 +30,8 @@ class SupervisorConfig(BaseModel):
     """Inputs and policy knobs for the supervisor graph."""
 
     composition: str
-    mlip_backend: str = "hydragnn"
-    logdir: str | None = None
-    hydragnn_branch_mlp_checkpoint: str | None = None
-    hydragnn_inference_head: str | int | None = None
+    mlip: MLIPConfig
     output_dir: str = "./outputs"
-    checkpoint: str | None = None
-    mlp_device: str = "cuda"
-    uma_model_name: str = "uma-s-1p1"
-    uma_task: str = "omat"
-    precision: str | None = None
-    mlp_precision: str | None = None
     optimizer: str = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
@@ -129,17 +121,8 @@ def _explore_node(state: SupervisorState) -> dict:
     out_dir = str(Path(cfg.output_dir) / "discovery")
     exploration = explore_composition(
         comp,
-        mlip_backend=cfg.mlip_backend,
-        logdir=cfg.logdir,
-        hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
-        hydragnn_inference_head=cfg.hydragnn_inference_head,
-        uma_model_name=cfg.uma_model_name,
-        uma_task=cfg.uma_task,
-        checkpoint=cfg.checkpoint,
+        mlip=cfg.mlip,
         output_dir=out_dir,
-        mlp_device=cfg.mlp_device,
-        precision=cfg.precision,
-        mlp_precision=cfg.mlp_precision,
         optimizer=cfg.optimizer,
         maxiter=cfg.maxiter,
         maxstep=cfg.maxstep,

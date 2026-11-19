@@ -16,8 +16,7 @@ from benchmarks.portability.active_learning_scientific_debate import (
 _AL_CONFIG_YAML = """
 mlip:
   backend: uma
-  uma:
-    model_name: uma-s-1p1
+  model_name: uma-s-1p1
 md:
   seed_source:
     kind: paths

@@ -10,7 +10,7 @@
 # cheapest, most robust QE test case in the paper set.
 #
 # Run (UMA MLIP + QE DFT):
-#   MLIP_BACKEND=uma DFT_BACKEND=qe \
+#   DFT_BACKEND=qe \
 #     matsim-agents al run examples/paper_cases/al_phosphorene_qe.yaml
 # =============================================================================
 
@@ -27,22 +27,14 @@ vars:
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
 
 mlip:
-  backend: ${MLIP_BACKEND:-uma}
-  hydragnn:
-    logdir:         ${INITIAL_LOGDIR}
-    checkpoint:     best_model.pt
-    mlp_checkpoint: null
-    precision:  fp32
-    mlp_device: cuda
-    ensemble_paths: []
-  uma:
-    model_name: uma-s-1p1
-    task_name:  omat
-    device:     cuda
-    dropout:
-      enabled: true
-      p: 0.1
-      target_layers: linear
+  backend: uma
+  model_name: uma-s-1p1
+  task_name:  omat
+  device:     cuda
+  dropout:
+    enabled: true
+    p: 0.1
+    target_layers: linear
 
 md:
   seed_source:

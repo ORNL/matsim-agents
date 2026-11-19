@@ -87,12 +87,7 @@ def main() -> int:
         checks.append({"check": name, "passed": bool(passed), "detail": detail})
         print(f"[{'PASS' if passed else 'FAIL'}] {name} {detail}", flush=True)
 
-    mlip = {
-        "mlip_backend": "uma",
-        "uma_model_name": "uma-s-1p1",
-        "uma_task": "omat",
-        "mlp_device": "cuda",
-    }
+    mlip = {"backend": "uma", "model_name": "uma-s-1p1", "device": "cuda"}
 
     # 1. MLIP recipes on the shipped examples.
     if not args.skip_mlip:

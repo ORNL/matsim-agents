@@ -91,7 +91,7 @@ def build_calculator(
         logdir=hydragnn_logdir,
         checkpoint=HYDRAGNN_CHECKPOINT,
         inference_head=HYDRAGNN_HEAD,
-        mlp_device=device,
+        device=device,
     )
     model_calculator = build_hydragnn_calculator(cfg)
     model_config = {

@@ -37,7 +37,7 @@ from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import ModelReply, invoke_model
 from matsim_agents.backends.llm.servers import LLMServices, api_key_from_env
 from matsim_agents.backends.llm.transcript import Contribution, Transcript, prompt_messages
-from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
+from matsim_agents.backends.mlip.config import MLIPConfig, parse_mlip_config
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
@@ -100,22 +100,13 @@ Guidelines:
 @dataclass
 class DiscoveryChatConfig:
     llm_only: bool = False
-    mlip_backend: str = "hydragnn"
-    logdir: str | None = None
-    hydragnn_branch_mlp_checkpoint: str | None = None
-    hydragnn_inference_head: str | int | None = None
+    mlip: MLIPConfig | None = None
     output_dir: str = "./outputs"
-    checkpoint: str | None = None
-    mlp_device: str = "cuda"
-    uma_model_name: str = "uma-s-1p1"
-    uma_task: str = "omat"
     # Resource plan file: its llm pool serves the models named by llm_server and
     # critic_llm_servers, and its mlip pool relaxes candidates concurrently.
     resources: str | None = None
     llm_server: str | None = None
     critic_llm_servers: list[str] = field(default_factory=list)
-    precision: str | None = None
-    mlp_precision: str | None = None
     optimizer: str = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
@@ -148,37 +139,14 @@ class DiscoveryChatConfig:
     al_handoff_audit_path: str | None = None
 
     def __post_init__(self) -> None:
-        """Enforce a single, consistent surrogate-backend choice.
-
-        The user selects exactly one ``mlip_backend`` and must supply the
-        inputs that backend needs; the inputs for the other backend are
-        ignored. This mirrors the validation in
-        :class:`matsim_agents.backends.mlip.relaxation.RelaxStructureInput` so the
-        error surfaces at configuration time rather than at the first
-        relaxation.
-        """
+        """Validate the MLIP selection at configuration time, not at the first relaxation."""
         if self.llm_only:
             self.trigger_active_learning_on_high_uq = False
             return
-        if self.mlip_backend not in {"hydragnn", "uma"}:
-            raise ValueError(
-                f"mlip_backend must be 'hydragnn' or 'uma', got {self.mlip_backend!r}."
-            )
-        if self.mlip_backend == "hydragnn":
-            if not self.logdir:
-                raise ValueError(
-                    "mlip_backend='hydragnn' requires 'logdir' "
-                    "(HydraGNN logdir containing config.json + checkpoint)."
-                )
-            if (
-                not self.hydragnn_branch_mlp_checkpoint
-                and self.hydragnn_inference_head is None
-                and not has_declared_hydragnn_checkpoint(self.logdir)
-            ):
-                raise ValueError(
-                    "mlip_backend='hydragnn' requires 'hydragnn_branch_mlp_checkpoint' "
-                    "(BranchWeightMLP .pt checkpoint)."
-                )
+        if self.mlip is None:
+            raise ValueError("Atomistic chat requires an mlip configuration (or llm_only=True).")
+        self.mlip = parse_mlip_config(self.mlip)
+        RelaxStructureInput(structure_path="validation-only.extxyz", mlip=self.mlip)
 
 
 @dataclass
@@ -295,7 +263,10 @@ class DiscoveryChatSession:
         directory = self.transcript.directory
         state = {
             "session_id": directory.name,
-            "config": asdict(self.config),
+            "config": {
+                **asdict(self.config),
+                "mlip": (self.config.mlip.model_dump(mode="json") if self.config.mlip else None),
+            },
             "messages": messages_to_dict(self.messages),
             "seen_compositions": sorted(self.seen_compositions),
             "explorations": [item.model_dump(mode="json") for item in self.explorations],
@@ -418,17 +389,8 @@ def _kickoff_exploration(
 
     result = explore_composition(
         composition,
-        mlip_backend=cfg.mlip_backend,
-        logdir=cfg.logdir,
-        hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
-        hydragnn_inference_head=cfg.hydragnn_inference_head,
-        uma_model_name=cfg.uma_model_name,
-        uma_task=cfg.uma_task,
-        checkpoint=cfg.checkpoint,
+        mlip=cfg.mlip,
         output_dir=out_dir,
-        mlp_device=cfg.mlp_device,
-        precision=cfg.precision,
-        mlp_precision=cfg.mlp_precision,
         optimizer=cfg.optimizer,
         maxiter=cfg.maxiter,
         maxstep=cfg.maxstep,
@@ -571,16 +533,8 @@ def _run_single_structure_relaxation(
     result = relax(
         RelaxStructureInput(
             structure_path=structure_path,
-            mlip_backend=cfg.mlip_backend,
-            logdir=cfg.logdir,
-            hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
-            checkpoint=cfg.checkpoint,
-            uma_model_name=cfg.uma_model_name,
-            uma_task=cfg.uma_task,
+            mlip=cfg.mlip,
             output_dir=str(out_dir),
-            mlp_device=cfg.mlp_device,
-            precision=cfg.precision,
-            mlp_precision=cfg.mlp_precision,
             optimizer=cfg.optimizer,
             maxiter=cfg.maxiter,
         )

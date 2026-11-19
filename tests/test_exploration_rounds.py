@@ -8,7 +8,7 @@ from ase.calculators.emt import EMT
 from ase.io import write
 from typer.testing import CliRunner
 
-from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
+from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.execution.locking import exclusive_lock
@@ -28,7 +28,12 @@ def setup(tmp_path, monkeypatch):
     checkpoint.write_text("test-only, not deserialized")
     cfg = ExplorationConfig(
         formula="Cu",
-        checkpoint=checkpoint,
+        mlip={
+            "backend": "mace",
+            "family": "checkpoint",
+            "model": str(checkpoint),
+            "device": "cpu",
+        },
         output_dir=tmp_path / "runs",
         iterations=3,
         max_relaxations=2,
@@ -59,7 +64,7 @@ def setup(tmp_path, monkeypatch):
 
     def calculator(args):
         calls["loads"] += 1
-        return _RelaxCalculator(EMT(), 0, 0, None)
+        return RelaxCalculator(EMT(), 0, 0, None)
 
     original = workflow.relax_with_mlip
 
@@ -148,7 +153,7 @@ def test_resume_rejects_changed_inputs_or_runtime(setup, change):
     directory = Path(summary.run_directory)
     state = json.loads((directory / "rounds-state.json").read_text())
     if change == "checkpoint":
-        cfg.checkpoint.write_text("changed")
+        Path(cfg.mlip.model).write_text("changed")
     elif change == "candidate":
         Path(state["rounds"][0]["candidates"][0]["structure_path"]).write_text("changed")
     elif change == "result":
@@ -454,7 +459,7 @@ def test_diverse_supports_one_checkpointed_round(diverse_setup):
     assert len(calls["relax"]) == 2
 
 
-@pytest.mark.parametrize("version", [None, 1, 3])
+@pytest.mark.parametrize("version", [None, 1, 2, 4])
 def test_other_checkpoint_versions_are_rejected_without_migration(setup, version):
     cfg, calls, _ = setup
     result = run_exploration(cfg)
@@ -468,7 +473,7 @@ def test_other_checkpoint_versions_are_rejected_without_migration(setup, version
     path.write_text(json.dumps(state))
     before = {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
     for action in (summarize_exploration, resume_exploration):
-        with pytest.raises(ValueError, match="requires version 2"):
+        with pytest.raises(ValueError, match="requires version 3"):
             action(directory)
     assert len(calls["relax"]) == 6
     assert before == {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}

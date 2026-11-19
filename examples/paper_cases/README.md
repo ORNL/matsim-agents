@@ -98,39 +98,43 @@ examples/paper_cases/
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
-export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 
 # 1) stage seeds without running a model:
 python examples/paper_cases/singlepass.py --all --seeds-only
 
-# 2) one-pass MLIP feasibility run:
-python examples/paper_cases/singlepass.py --case lifepo4
+# 2) one-pass MLIP feasibility run with the case's HydraGNN model
+#    (--mlip-config takes any YAML with an mlip: block):
+python examples/paper_cases/singlepass.py --case lifepo4 \
+  --mlip-config examples/paper_cases/al_lifepo4.yaml
 
 # 3) use UMA instead of HydraGNN:
-python examples/paper_cases/singlepass.py --case lifepo4 --mlip-backend uma
+python examples/paper_cases/singlepass.py --case lifepo4 \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 4) active learning on one system:
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 
 # 4b) same AL config, UMA surrogate backend:
-MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+matsim-agents al run examples/paper_cases/al_lifepo4.yaml \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 5) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
-  --logdir $MLIP_LOGDIR \
-  --hydragnn-branch-mlp-checkpoint best_model.pt \
+  --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 ```
 
 > **Note:** on Perlmutter, submit the full AL loop with
 > `deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`
-> (select the system with `CASE=<name>`), or wrap `matsim-agents al run
+> (select the system with `CASE=<name>` and the model with `MLIP_CONFIG=<mlip
+> YAML>`, UMA by default), or wrap `matsim-agents al run
 > <config>` in your own `sbatch` script / interactive `salloc` GPU node.
 > Frontier and Aurora use the `al_<case>_frontier.yaml` / `al_<case>_aurora.yaml`
 > variants through `job-active-learning-paper-cases-frontier.sh` and
-> `job-active-learning-paper-cases-aurora.sh` (`qsub -v CASE=<name> ...`).
+> `job-active-learning-paper-cases-aurora.sh` (`qsub -v CASE=<name> ...`),
+> which accept the same optional `MLIP_CONFIG`.
 >
 > **Multi-node DFT:** the AL driver runs VASP single-points concurrently, up to
 > `SLURM_JOB_NUM_NODES / nodes_per_job` at once. The job script defaults to
@@ -141,7 +145,7 @@ matsim-agents supervisor-run LiFePO4 \
 > 2-way concurrency) — with `-N 1` every DFT step fails with
 > `srun: error: Only allocated 1 nodes asked for 2`.
 >
-> **UMA prerequisite:** with `MLIP_BACKEND=uma`, the UMA weights must be
+> **UMA prerequisite:** with a UMA model (`backend: uma`), the UMA weights must be
 > **prefetched** first — compute nodes have no internet and read the HF cache
 > offline. Run `sbatch deployments/perlmutter/download/download-uma-perlmutter.sh`
 > once. See `docs/model-download.md` ("UMA MLIP weights on Perlmutter").
@@ -158,27 +162,26 @@ matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
 # 2) Supervisor path with optional AL handoff planning
 matsim-agents supervisor-run LiFePO4 \
-  --logdir "$MLIP_LOGDIR" \
-  --hydragnn-branch-mlp-checkpoint best_model.pt \
+  --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 
 # 3) Core run path with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
-  --logdir "$MLIP_LOGDIR" \
-  --hydragnn-branch-mlp-checkpoint best_model.pt \
+  --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --trigger-al-handoff \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 ```
 
-For AL YAMLs in this folder, the surrogate backend can be switched with one
-env var when configs use `backend: ${MLIP_BACKEND:-hydragnn}`:
+For AL YAMLs in this folder, `--mlip-config` replaces the config's `mlip` block,
+so the same case runs with any backend:
 
 ```bash
-matsim-agents al run examples/paper_cases/al_lifepo4.yaml        # HydraGNN (default)
-MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+matsim-agents al run examples/paper_cases/al_lifepo4.yaml        # its own model (HydraGNN)
+matsim-agents al run examples/paper_cases/al_lifepo4.yaml \
+  --mlip-config examples/mlip/mace-mp-medium.yaml
 ```
 
 ---
@@ -251,7 +254,6 @@ organic-inorganic MOFs better than the inorganic-trained HydraGNN model.
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
-export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 export VASP_BIN=$PROJ_ROOT/external/vasp6/src/vasp.6.6.1/bin/vasp_std
 export POTCAR_DIR=/global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
 
@@ -267,6 +269,6 @@ are staged under `$POTCAR_DIR` as bare-symbol subdirectories.
 |---------|---------------------|
 | `n_random > 0` (pyXtal seeds) | Nothing extra (pyxtal is a core dependency, installed by default) |
 | `acquisition.strategy: mc_dropout` | Nothing extra (works with a single checkpoint) |
-| `acquisition.strategy: ensemble` / `ensemble_then_dropout` | ≥2 entries in `mlip.hydragnn.ensemble_paths` |
+| `acquisition.strategy: ensemble` / `ensemble_then_dropout` | ≥2 entries in `mlip.ensemble_models` |
 | VASP DFT backend | Perlmutter VASP GPU build at `external/vasp6/` + licensed POTCARs at `$POTCAR_DIR` |
 | 2D slabs (phosphorene, Cu-BHT) | Handled via `KSPACING` (auto single k-point along vacuum); no special flag |

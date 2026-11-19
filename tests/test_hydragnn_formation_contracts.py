@@ -13,11 +13,12 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
+from pydantic import ValidationError
 
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import retrain_hydragnn
 from matsim_agents.active_learning.training_references import resolve_training_references
-from matsim_agents.backends.mlip.config import HydraGNNConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 from matsim_agents.datasets.energy_references import predict_elemental_references
 from matsim_agents.datasets.formation_training import (
@@ -30,6 +31,11 @@ from matsim_agents.execution.placement import ProcessLaunch
 LAUNCH = ProcessLaunch(
     hosts=(socket.gethostname(),), devices=(0,), ranks_per_node=1, threads_per_rank=1
 )
+
+
+def _newhead(logdir):
+    """A single-new-head HydraGNN config (needs no BranchWeightMLP to fine-tune)."""
+    return HydraGNNConfig(logdir=logdir, fine_tuner="finetune_hydragnn_newhead")
 
 
 @pytest.fixture
@@ -418,7 +424,6 @@ def test_training_reference_is_frozen_independently_of_comparison(tmp_path, trai
     dataset, manifest = training_inputs
     config = TrainerConfig(
         enabled=True,
-        train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={"manifest": manifest},
@@ -449,7 +454,6 @@ def test_manifest_freeze_includes_label_scope_and_filters_superset(
     )
     config = TrainerConfig(
         enabled=True,
-        train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={"manifest": manifest},
@@ -481,7 +485,6 @@ def test_training_reference_manifest_additive_extension_across_iterations(
 
     config = TrainerConfig(
         enabled=True,
-        train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
         training_references={"manifest": manifest},
@@ -541,11 +544,11 @@ def test_training_reference_manifest_additive_extension_across_iterations(
 def test_training_without_comparison_still_requires_references(tmp_path, training_inputs):
     dataset, _ = training_inputs
     with pytest.raises(ValueError, match="requires trainer.training_references"):
-        TrainerConfig(enabled=True, train_script=tmp_path / "train.py")
+        TrainerConfig(enabled=True)
     # A configuration edited after loading skips validation; resolution still refuses.
     with pytest.raises(ValueError, match="even when"):
         resolve_training_references(
-            TrainerConfig.model_construct(enabled=True, train_script=tmp_path / "train.py"),
+            TrainerConfig.model_construct(enabled=True),
             dataset,
             dft_config=None,
             reference_root=tmp_path / "frozen",
@@ -565,19 +568,16 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
 
 
 @pytest.mark.parametrize("launcher", [False, True])
-@pytest.mark.parametrize("script_name", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
+@pytest.mark.parametrize("fine_tuner", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
 def test_retrain_hook_forwards_references_and_verifies_output(
-    tmp_path, training_inputs, monkeypatch, script_name, launcher
+    tmp_path, training_inputs, monkeypatch, fine_tuner, launcher
 ):
     import matsim_agents.backends.mlip.calculator as factory
 
     dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
-    script = tmp_path / f"{script_name}.py"
-    script.touch()
     config = TrainerConfig(
         enabled=True,
-        train_script=script,
         train_launcher=tmp_path / "launcher.sh" if launcher else None,
         validation_reference_set=manifest,
     )
@@ -585,10 +585,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
 
     def run(args, **kw):
         argv.extend(args)
-        if launcher:
-            reference_manifest = Path(args[9])
-        else:
-            reference_manifest = Path(args[args.index("--elemental-reference-manifest") + 1])
+        reference_manifest = Path(args[args.index("--elemental-reference-manifest") + 1])
         _bind_output_to_reference_manifest(output, reference_manifest)
         return SimpleNamespace(returncode=0)
 
@@ -617,6 +614,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             hydragnn_root=tmp_path / "HydraGNN source",
             charge=-2.5,
             spin=3.0,
+            fine_tuner=fine_tuner,
         ),
         dataset,
         0,
@@ -627,37 +625,29 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     # The output is verified from its recorded hashes; the promotion comparison
     # is what loads the model.
     assert built_calculators == []
+    module = ["-m", f"matsim_agents.training.{fine_tuner}"]
     if launcher:
-        assert argv[0:3] == ["bash", str(config.train_launcher), str(script)]
-        assert argv[3:10] == [
-            str(dataset),
-            str(output),
-            str(tmp_path),
-            str(config.epochs_per_iter),
-            "1",
-            "1",
-            str(output.parent / "elemental-training-reference/elemental-references.json"),
-        ]
-        assert argv[10:12] == ["incumbent.pk", str(tmp_path / "mlp.pt")]
-        assert argv[12:] == (
-            [
-                str(tmp_path / "fine tuning repo"),
-                "-2.5",
-                "3.0",
-                str(tmp_path / "HydraGNN source"),
-            ]
-        )
+        assert argv[:7] == ["bash", str(config.train_launcher), "hydragnn", "1", "1", *module]
     else:
-        assert "--elemental-reference-manifest" in argv
-        assert "--output-dir" in argv
-        assert "--gfm-logdir" in argv
-        assert argv[argv.index("--charge") + 1] == "-2.5"
-        assert argv[argv.index("--spin") + 1] == "3.0"
-        assert argv[argv.index("--hydragnn-root") + 1] == str(tmp_path / "HydraGNN source")
-        if script_name == "finetune_hydragnn_newhead":
-            assert argv[argv.index("--ft-repo") + 1] == str(tmp_path / "fine tuning repo")
-        else:
-            assert "--ft-repo" not in argv
+        assert argv[:3] == [sys.executable, *module]
+    flags = dict(zip(argv[1:], argv[2:], strict=False))
+    assert flags["--dataset"] == str(dataset)
+    assert flags["--output-dir"] == str(output)
+    assert flags["--gfm-logdir"] == str(tmp_path)
+    assert flags["--gfm-checkpoint"] == "incumbent.pk"
+    assert flags["--epochs"] == str(config.epochs_per_iter)
+    assert flags["--elemental-reference-manifest"] == str(
+        output.parent / "elemental-training-reference/elemental-references.json"
+    )
+    assert flags["--charge"] == "-2.5"
+    assert flags["--spin"] == "3.0"
+    assert flags["--hydragnn-root"] == str(tmp_path / "HydraGNN source")
+    if fine_tuner == "finetune_hydragnn_newhead":
+        assert flags["--ft-repo"] == str(tmp_path / "fine tuning repo")
+        assert "--branch-mlp" not in argv
+    else:
+        assert flags["--branch-mlp"] == str(tmp_path / "mlp.pt")
+        assert "--ft-repo" not in argv
     (output / "ft_model.pk").write_text("broken")
     with pytest.raises(ValueError, match="checkpoint"):
         retrain_hydragnn(
@@ -666,6 +656,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
                 logdir=tmp_path,
                 checkpoint="incumbent.pk",
                 mlp_checkpoint=tmp_path / "mlp.pt",
+                fine_tuner=fine_tuner,
             ),
             dataset,
             0,
@@ -698,11 +689,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
             metadata.pop("source_dataset_sha256")
             path.write_text(json.dumps(metadata))
     restore_hydragnn_total_energy(FormationCalculator(), output)
-    config = TrainerConfig(
-        enabled=True,
-        train_script=tmp_path / "finetune_hydragnn_newhead.py",
-        validation_reference_set=manifest,
-    )
+    config = TrainerConfig(enabled=True, validation_reference_set=manifest)
 
     def run(*args, **kw):
         argv = args[0]
@@ -720,7 +707,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
 
     monkeypatch.setattr(factory, "build_hydragnn_calculator", unexpected_model_load)
     with pytest.raises(ValueError, match="does not match the requested training dataset"):
-        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output, launch=LAUNCH)
+        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH)
 
 
 def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
@@ -731,11 +718,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     dataset, _ = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
     different_manifest = elemental_manifest({"Nb": -9, "O": -5})
-    config = TrainerConfig(
-        enabled=True,
-        train_script=tmp_path / "finetune_hydragnn_newhead.py",
-        validation_reference_set=different_manifest,
-    )
+    config = TrainerConfig(enabled=True, validation_reference_set=different_manifest)
     monkeypatch.setattr(
         "matsim_agents.active_learning.trainer.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0),
@@ -747,7 +730,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     )
 
     with pytest.raises(ValueError, match="requested elemental reference manifest"):
-        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output, launch=LAUNCH)
+        retrain_hydragnn(config, _newhead(tmp_path), dataset, 1, output, launch=LAUNCH)
 
 
 def test_retrain_rejects_multirank_builtin_before_resolving_references(
@@ -756,11 +739,8 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
     import matsim_agents.active_learning.training_references as references
 
     dataset, manifest = training_inputs
-    script = tmp_path / "finetune_hydragnn_newhead.py"
-    script.touch()
     config = TrainerConfig(
         enabled=True,
-        train_script=script,
         train_launcher=tmp_path / "launcher.sh",
         validation_reference_set=manifest,
     )
@@ -774,7 +754,7 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
     with pytest.raises(ValueError, match="run as one process"):
         retrain_hydragnn(
             config,
-            HydraGNNConfig(logdir=tmp_path),
+            _newhead(tmp_path),
             dataset,
             0,
             tmp_path / "output",
@@ -848,19 +828,20 @@ def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_i
         restore_hydragnn_total_energy(FormationCalculator(), model)
 
 
-def test_retrain_rejects_non_builtin_train_script(tmp_path, training_inputs):
-    dataset, manifest = training_inputs
-    script = tmp_path / "train.py"
-    script.touch()
-    with pytest.raises(ValueError, match="built-in HydraGNN fine-tuners"):
-        retrain_hydragnn(
-            TrainerConfig(enabled=True, train_script=script, validation_reference_set=manifest),
-            HydraGNNConfig(logdir=tmp_path),
-            dataset_path=dataset,
-            iteration=0,
-            out_logdir=tmp_path / "out",
-            launch=LAUNCH,
-        )
+@pytest.mark.parametrize(
+    ("config", "fine_tuner"),
+    [
+        (HydraGNNConfig, "train.py"),
+        (HydraGNNConfig, "finetune_uma"),
+        (UMAConfig, "finetune_hydragnn"),
+        (MACEConfig, "finetune_uma"),
+    ],
+)
+def test_unknown_fine_tuner_is_rejected(tmp_path, config, fine_tuner):
+    """Only a backend's built-in fine-tuning modules can be selected."""
+    extra = {"logdir": tmp_path} if config is HydraGNNConfig else {}
+    with pytest.raises(ValidationError, match="fine_tuner"):
+        config(fine_tuner=fine_tuner, **extra)
 
 
 def test_validation_partition_gets_the_same_formation_labels(tmp_path, training_inputs):

@@ -10,7 +10,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
+from matsim_agents.backends.mlip.relaxation import RelaxationSettings, RelaxStructureInput
 from matsim_agents.discovery.seeds import SeedGenerationAction
 from matsim_agents.execution.ledger import file_sha256
 
@@ -43,25 +44,24 @@ class ExplorationRelaxationConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_cell_options(self) -> ExplorationRelaxationConfig:
-        RelaxStructureInput(
-            structure_path="validation-only.extxyz",
-            mlip_backend="mace",
-            **self.model_dump(),
-        )
+        RelaxationSettings(**self.model_dump())
         return self
 
 
 class ExplorationConfig(BaseModel):
-    """Bounded MLIP exploration; never launches LLM, DFT, or AL work."""
+    """Bounded MLIP exploration with any supported backend.
+
+    The ``mlip`` block selects the model (``backend: hydragnn | uma | mace``
+    plus that backend's settings, including device and precision), exactly as
+    in active-learning configs. Never launches LLM, DFT, or AL work.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     formula: str
-    checkpoint: Path
+    mlip: MLIPConfig
     checkpoint_sha256: str | None = Field(None, pattern=r"^[a-f0-9]{64}$")
     output_dir: Path = Path("./runs")
-    device: Literal["cpu", "cuda"] = "cpu"
-    precision: Literal["fp32", "fp64"] = "fp64"
     max_relaxations: int = Field(2, gt=0)
     iterations: int = Field(1, ge=1, le=1000)
     selection: Literal["sequential", "diverse"] = "sequential"
@@ -73,6 +73,10 @@ class ExplorationConfig(BaseModel):
         self.formula = self.generation_action().formula
         return self
 
+    @property
+    def backend(self) -> str:
+        return self.mlip.backend
+
     def generation_action(self) -> SeedGenerationAction:
         return SeedGenerationAction(
             action_id="exploration",
@@ -80,16 +84,15 @@ class ExplorationConfig(BaseModel):
             **self.generation.model_dump(),
         )
 
+    def model_identifier(self) -> str:
+        return self.mlip.model_identifier()
+
     def relaxation_request(self, structure_path: str, output_dir: str) -> RelaxStructureInput:
         """Construct and validate the same scientific request for every attempt."""
         return RelaxStructureInput(
             structure_path=structure_path,
             output_dir=output_dir,
-            mlip_backend="mace",
-            mace_family="checkpoint",
-            mace_model=str(self.checkpoint),
-            mlp_device=self.device,
-            precision=self.precision,
+            mlip=self.mlip,
             **self.relaxation.model_dump(),
         )
 
@@ -99,6 +102,8 @@ class ExplorationCheck(BaseModel):
     python: str
     errors: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    backend: str
+    model_identifier: str
     checkpoint_sha256: str | None = None
 
 
@@ -108,31 +113,44 @@ def load_exploration_config(path: str | Path) -> ExplorationConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("Exploration configuration must be a YAML or JSON mapping")
+    if isinstance(raw.get("mlip"), dict):
+        resolve_mlip_paths(raw["mlip"], path.parent)
     cfg = ExplorationConfig.model_validate(raw)
-    for field in ("checkpoint", "output_dir"):
-        value = getattr(cfg, field).expanduser()
-        if not value.is_absolute():
-            value = path.parent / value
-        setattr(cfg, field, value.resolve())
+    output_dir = cfg.output_dir.expanduser()
+    if not output_dir.is_absolute():
+        output_dir = path.parent / output_dir
+    cfg.output_dir = output_dir.resolve()
     return cfg
 
 
 def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
-    """Check configuration, imports, and checkpoint without importing/loading MACE."""
+    """Check configuration, imports, and model inputs without importing/loading the MLIP."""
     errors = []
-    for module in ("ase", "numpy", "torch", "mace", "pymatgen"):
+    backend = cfg.backend
+    for module in ("ase", "numpy", "torch", "pymatgen", *cfg.mlip.required_modules):
         if importlib.util.find_spec(module) is None:
             errors.append(
-                f"Missing {module} in {sys.executable}. Use the prepared .venv-mace "
-                "interpreter or install the documented MACE dependencies."
+                f"Missing {module} in {sys.executable}. Use the interpreter prepared for "
+                f"the {backend} backend or install its documented dependencies."
             )
     if cfg.generation.pyxtal_count and importlib.util.find_spec("pyxtal") is None:
         errors.append("PyXtal generation requested but pyxtal is not installed.")
+    missing = [path for path in cfg.mlip.required_paths() if not path.exists()]
+    errors.extend(f"Required {backend} model file does not exist: {path}" for path in missing)
+    if not missing:
+        try:
+            cfg.mlip.check_loadable()
+        except ValueError as error:
+            errors.append(f"Invalid {backend} model selection: {error}")
     digest = None
-    if not cfg.checkpoint.is_file():
-        errors.append(f"Checkpoint does not exist: {cfg.checkpoint}")
-    else:
-        digest = file_sha256(cfg.checkpoint)
+    artifact = cfg.mlip.model_artifact()
+    if artifact is None:
+        if cfg.checkpoint_sha256 is not None:
+            errors.append(
+                "checkpoint_sha256 requires a local model file; this model is selected by name."
+            )
+    elif artifact.is_file():
+        digest = file_sha256(artifact)
         if cfg.checkpoint_sha256 is not None and digest != cfg.checkpoint_sha256:
             errors.append("Checkpoint SHA-256 does not match checkpoint_sha256.")
     notes = [
@@ -141,9 +159,15 @@ def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
         "Use a compute allocation for extended workloads; this command does not schedule one.",
         "Only load a trusted checkpoint. PyTorch checkpoints may contain executable code.",
     ]
-    if cfg.device == "cuda":
-        notes.append("CUDA visibility and compatibility will be checked when MACE loads.")
-    if cfg.checkpoint_sha256 is None:
+    device = cfg.mlip.device
+    if device in {"cuda", "xpu"}:
+        notes.append(f"{device.upper()} visibility and compatibility will be checked at load.")
+    if artifact is None:
+        notes.append(
+            "The model is identified by its configuration; select a local model file to "
+            "pin its SHA-256."
+        )
+    elif cfg.checkpoint_sha256 is None:
         notes.append(
             "No expected checkpoint hash supplied; pin the reported hash for reproduction."
         )
@@ -152,5 +176,7 @@ def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
         python=sys.executable,
         errors=errors,
         notes=notes,
+        backend=backend,
+        model_identifier=cfg.model_identifier(),
         checkpoint_sha256=digest,
     )

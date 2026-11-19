@@ -92,7 +92,7 @@ def test_known_answer_preflight_rejects_invalid_suite_requests(arguments, tmp_pa
     [
         ("objective", ["Find Cu"]),
         ("plan", ["Find Cu"]),
-        ("supervisor", ["Cu"]),
+        ("supervisor", ["Cu", "--mlip-config", "mlip.yaml"]),
         ("chat", ["--llm-only"]),
         ("known-answers", []),
     ],

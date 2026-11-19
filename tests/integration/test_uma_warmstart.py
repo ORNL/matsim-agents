@@ -36,6 +36,8 @@ from typing import Any
 
 import pytest
 
+from matsim_agents.backends.mlip.config import UMAConfig
+
 DATA_DIR = Path(__file__).resolve().parent / "data"
 FIXTURES_YAML = DATA_DIR / "fixtures.yaml"
 
@@ -132,10 +134,18 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
     is_vc_relax = qe_overrides.get("calculation", "vc-relax") == "vc-relax"
     default_fmax = 0.01 if is_vc_relax else 0.05
 
-    uma_kwargs: dict[str, Any] = {
-        "uma_model_name": _env("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1",
-        "uma_task": _env("MATSIM_UMA_TASK") or uma_cfg.get("task", "omat"),
-        "mlp_device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+    mlip = UMAConfig(
+        **{
+            key: value
+            for key, value in {
+                "model_name": _env("MATSIM_UMA_MODEL_NAME"),
+                "task_name": _env("MATSIM_UMA_TASK") or uma_cfg.get("task"),
+                "device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+            }.items()
+            if value is not None
+        }
+    )
+    mlip_settings: dict[str, Any] = {
         "optimizer": uma_cfg.get("optimizer", "FIRE"),
         "fmax": float(uma_cfg.get("fmax", default_fmax)),
         "maxiter": int(uma_cfg.get("maxiter", 200)),
@@ -155,8 +165,8 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         pseudo_dir=_env("MATSIM_QE_PSEUDO_DIR"),
         qe_launcher=qe_launcher,
         qe_settings_overrides=qe_overrides,
-        mlip_backend="uma",
-        mlip_kwargs=uma_kwargs,
+        mlip=mlip,
+        mlip_settings=mlip_settings,
         timeout_sec=timeout,
     )
 
@@ -172,7 +182,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         if summary.warm is None or "bfgs_steps" not in summary.warm:
             pytest.fail(
                 f"Warm-start phase produced no result for {fixture['name']!r}; "
-                f"uma block: {summary.hydragnn}"
+                f"mlip block: {summary.mlip}"
             )
         warm = summary.warm
         assert warm.get("converged"), (
@@ -197,7 +207,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
     if summary.warm is None or "bfgs_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"uma block: {summary.hydragnn}"
+            f"mlip block: {summary.mlip}"
         )
     warm = summary.warm
     assert warm.get("converged"), (

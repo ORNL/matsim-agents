@@ -13,7 +13,7 @@ from ase.io import write
 
 from matsim_agents.active_learning import finetune_eval
 from matsim_agents.active_learning.evaluate import EvalMetrics
-from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import UMAConfig
 
 
 def _frames(n_trajectories=6, steps=4, symbols=("Nb", "O", "O"), shift=0.0):
@@ -53,7 +53,7 @@ def inputs(tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch):
         calls.append(("fine-tune", Path(train).name, validation and Path(validation).name))
         ft_dir.mkdir(parents=True, exist_ok=True)
         (ft_dir / "inference_ckpt.pt").write_text("weights")
-        cfg = MLIPConfig(backend="uma", uma=UMAConfig())
+        cfg = UMAConfig()
         return finetune_eval._Models(cfg, "uma-s-1p1", cfg, str(ft_dir / "inference_ckpt.pt"))
 
     def fake_evaluate(cfg, frames, *, model_path, test_set_label, **kwargs):

@@ -17,6 +17,7 @@ from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import path_identity, scientific_dft_payload
 from matsim_agents.active_learning.loop import IterationState, run_active_learning
+from matsim_agents.backends.mlip.config import MACEConfig
 from matsim_agents.execution.locking import exclusive_lock
 
 log = logging.getLogger(__name__)
@@ -28,20 +29,20 @@ def validate_config(cfg: ALConfig, material: str) -> None:
 
     if material not in e3.MATERIALS:
         raise ValueError(f"Unknown E3 material: {material}")
-    if cfg.mlip.backend != "mace" or cfg.mlip.mace is None:
+    if not isinstance(cfg.mlip, MACEConfig):
         raise ValueError("E3-QE requires MACE")
-    if cfg.mlip.mace.family != "checkpoint" or cfg.mlip.mace.precision != "fp64":
+    if cfg.mlip.family != "checkpoint" or cfg.mlip.precision != "fp64":
         raise ValueError("E3-QE requires a local, fp64 MACE checkpoint")
     if (
-        cfg.mlip.mace.device != "cuda"
-        or cfg.mlip.mace.dispersion
-        or cfg.mlip.mace.head is not None
-        or cfg.mlip.mace.ensemble_models
+        cfg.mlip.device != "cuda"
+        or cfg.mlip.dispersion
+        or cfg.mlip.head is not None
+        or cfg.mlip.ensemble_models
     ):
         raise ValueError(
             "Use the unchanged single CUDA MACE head without added dispersion/ensemble"
         )
-    if e3._sha256_file(Path(cfg.mlip.mace.model)) != e3.E3_MLIP_CHECKPOINT_SHA256:
+    if e3._sha256_file(Path(cfg.mlip.model)) != e3.E3_MLIP_CHECKPOINT_SHA256:
         raise ValueError("The initial model must be the frozen MACE-OMAT-0 medium checkpoint")
     if cfg.dft.backend != "qe" or cfg.dft.qe is None:
         raise ValueError("E3-QE requires Quantum ESPRESSO")
@@ -253,7 +254,7 @@ class E3Sampler:
         return self._candidates(it_dir, Path(receipt["tasks_path"]), receipt["active_model"])
 
     def _run_geometry(self, cfg: ALConfig, iteration: int, it_dir: Path) -> None:
-        assert cfg.mlip.mace is not None
+        assert isinstance(cfg.mlip, MACEConfig)
         root = Path(cfg.loop.out_dir)
         generation_root = root / "e3"
         manifest = e3.build_campaign_manifest()
@@ -288,7 +289,7 @@ class E3Sampler:
             )
             log.warning("E3 generation exhausted: %s", error)
             return
-        checkpoint = Path(cfg.mlip.mace.model).resolve()
+        checkpoint = Path(cfg.mlip.model).resolve()
         model = {"path": str(checkpoint), "sha256": e3._sha256_file(checkpoint)}
         tasks = e3._read_tasks(tasks_path)
         if len(tasks) != 5000:

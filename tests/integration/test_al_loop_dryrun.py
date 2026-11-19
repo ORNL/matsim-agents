@@ -29,6 +29,7 @@ from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
+from matsim_agents.active_learning import trainer as trainer_mod
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
     AcquisitionConfig,
@@ -41,7 +42,7 @@ from matsim_agents.active_learning.config import (
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
 from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.datasets.governance import (
     DatasetValidationSummary,
     structure_identity,
@@ -94,9 +95,9 @@ def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, ma
     def unexpected_comparison(*_args, **_kwargs):
         pytest.fail("disabled training must not train or compare a candidate")
 
-    monkeypatch.setattr(loop_mod, "retrain_hydragnn", unexpected_comparison)
+    monkeypatch.setattr(trainer_mod, "retrain_hydragnn", unexpected_comparison)
     monkeypatch.setattr(loop_mod, "evaluate_promotion_candidate", unexpected_comparison)
-    incumbent = cfg.mlip.hydragnn.logdir
+    incumbent = cfg.mlip.logdir
     loop_mod.run_active_learning(cfg)
     state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
     assert state["status"] == "complete"
@@ -105,7 +106,7 @@ def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, ma
     assert state["candidate_model_path"] is None
     assert state["model_comparison"] is None
     assert not state["model_promoted"]
-    assert cfg.mlip.hydragnn.logdir == incumbent
+    assert cfg.mlip.logdir == incumbent
 
 
 @pytest.mark.parametrize("fails", [False, True])
@@ -187,15 +188,13 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
     si_potcar_dir = potcar_dir / "Si"
     si_potcar_dir.mkdir()
     (si_potcar_dir / "POTCAR").write_text("Si test potential")
-    train = tmp_path / "train.py"
-    train.write_text("# stub\n")
     logdir = tmp_path / "logdir"
     logdir.mkdir()
     out_dir = tmp_path / "out"
     out_dir.mkdir()
 
     return ALConfig(
-        mlip=MLIPConfig(backend="hydragnn", hydragnn=HydraGNNConfig(logdir=logdir)),
+        mlip=HydraGNNConfig(logdir=logdir),
         md=MDConfig(
             seed_source=SeedSourceConfig(kind="paths", paths=[seed]),
             n_steps=1,
@@ -214,7 +213,7 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
                 potcar_dir=potcar_dir,
             ),
         ),
-        trainer=TrainerConfig(enabled=False, train_script=train),
+        trainer=TrainerConfig(enabled=False),
         loop=LoopConfig(n_iterations=1, out_dir=out_dir, resume=False),
         resources=ResourcePlan.model_validate(CPU_RESOURCES),
     )
@@ -275,7 +274,7 @@ def _patch_runtime(
     )
     monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _FakeDFTBackend())
     monkeypatch.setattr(
-        loop_mod,
+        trainer_mod,
         "retrain_hydragnn",
         lambda tcfg, hcfg, dataset_path, iteration, out_logdir, **kw: trained_model or hcfg.logdir,
     )
@@ -392,9 +391,9 @@ def test_external_sampler_and_measured_error_gate(
 
     def train(*args, **kwargs):
         trained.append(True)
-        return cfg.mlip.hydragnn.logdir
+        return cfg.mlip.logdir
 
-    monkeypatch.setattr(loop_mod, "retrain_hydragnn", train)
+    monkeypatch.setattr(trainer_mod, "retrain_hydragnn", train)
 
     def sampler(config, iteration, directory):
         assert config is cfg and iteration == 0
@@ -573,7 +572,6 @@ def test_promotion_preflights_validation_method_before_campaign_work(
         enabled=True,
         promote_model=True,
         promotion_approved=True,
-        train_script=cfg.trainer.train_script,
         validation_set=validation_set,
         validation_reference_set=reference,
     )
@@ -612,13 +610,12 @@ def test_promotion_decision_controls_model_activation(
         enabled=True,
         promote_model=True,
         promotion_approved=True,
-        train_script=cfg.trainer.train_script,
         validation_set=validation_set,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
     dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
-    incumbent = cfg.mlip.hydragnn.logdir
-    cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
+    incumbent = cfg.mlip.logdir
+    cfg.mlip.checkpoint = "incumbent.pk"
     trained_model = tmp_path / "candidate-model"
     trained_model.mkdir()
     decision = PromotionDecision(
@@ -644,8 +641,8 @@ def test_promotion_decision_controls_model_activation(
     assert state["model_promoted"] is approved
     assert state["promotion_validation"]["approved"] is approved
     expected_model = trained_model if approved else incumbent
-    assert cfg.mlip.hydragnn.logdir == expected_model
-    assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
+    assert cfg.mlip.logdir == expected_model
+    assert cfg.mlip.checkpoint == (None if approved else "incumbent.pk")
 
 
 @pytest.mark.parametrize("start_from", ["incumbent", "foundation"])
@@ -667,14 +664,13 @@ def test_retraining_starts_from_the_configured_start_point(
         enabled=True,
         promote_model=True,
         promotion_approved=True,
-        train_script=cfg.trainer.train_script,
         validation_set=validation_set,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
         start_from=start_from,
     )
     dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
     cfg.loop.n_iterations = 2
-    foundation = cfg.mlip.hydragnn.logdir
+    foundation = cfg.mlip.logdir
     trained_model = tmp_path / "candidate-model"
     trained_model.mkdir()
 
@@ -693,7 +689,7 @@ def test_retraining_starts_from_the_configured_start_point(
         bases.append(hcfg.logdir)
         return trained_model
 
-    monkeypatch.setattr(loop_mod, "retrain_hydragnn", retrain)
+    monkeypatch.setattr(trainer_mod, "retrain_hydragnn", retrain)
     loop_mod.run_active_learning(cfg)
     # The first candidate is promoted; the second retrain starts from it or again
     # from the configured model.
@@ -711,7 +707,6 @@ def test_holdout_split_compares_candidate_without_promotion(
     cfg.acquisition.n_select = 3
     cfg.trainer = TrainerConfig(
         enabled=True,
-        train_script=cfg.trainer.train_script,
         validation_fraction=0.2,
         validation_split_seed=7,
         compare_after_training=True,
@@ -748,7 +743,7 @@ def test_holdout_split_compares_candidate_without_promotion(
         reference_path.write_text(json.dumps(manifest))
         training_calls = []
         monkeypatch.setattr(
-            loop_mod,
+            trainer_mod,
             "retrain_hydragnn",
             lambda *_args, **_kwargs: training_calls.append(True),
         )
@@ -771,14 +766,14 @@ def test_holdout_split_compares_candidate_without_promotion(
 
 def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
-    cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
+    cfg.mlip.checkpoint = "incumbent.pk"
     candidate = tmp_path / "candidate-model"
     candidate.mkdir()
 
     _apply_model_override(cfg, str(candidate))
 
-    assert cfg.mlip.hydragnn.logdir == candidate
-    assert cfg.mlip.hydragnn.checkpoint is None
+    assert cfg.mlip.logdir == candidate
+    assert cfg.mlip.checkpoint is None
 
 
 @pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
@@ -790,13 +785,12 @@ def test_small_batches_accumulate_fixed_partitions_before_training(
 
     cfg = _make_cfg(tmp_path)
     if backend == "uma":
-        cfg.mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+        cfg.mlip = UMAConfig()
     elif backend == "mace":
-        cfg.mlip = MLIPConfig(backend="mace", mace=MACEConfig())
+        cfg.mlip = MACEConfig()
     cfg.acquisition.n_select = batch_size
     cfg.trainer = TrainerConfig(
         enabled=True,
-        train_script=cfg.trainer.train_script,
         validation_fraction=0.2,
         compare_after_training=True,
         promote_model=True,
@@ -819,7 +813,7 @@ def test_small_batches_accumulate_fixed_partitions_before_training(
         training_calls.append((iteration, identities))
         return trained
 
-    monkeypatch.setattr(loop_mod, f"retrain_{backend}", train)
+    monkeypatch.setattr(trainer_mod, f"retrain_{backend}", train)
     previous_train = set()
     previous_validation = set()
     for iteration in range(4):
@@ -976,7 +970,6 @@ def test_resuming_a_framewise_split_requires_repartitioning(
     cfg = _make_cfg(tmp_path)
     cfg.trainer = TrainerConfig(
         enabled=False,
-        train_script=cfg.trainer.train_script,
         validation_fraction=0.5,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
@@ -1024,7 +1017,6 @@ def test_external_validation_frames_never_enter_training(
     ase_write(validation_set, held_out)
     cfg.trainer = TrainerConfig(
         enabled=False,
-        train_script=cfg.trainer.train_script,
         validation_set=validation_set,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
@@ -1063,7 +1055,6 @@ def test_fraction_holdout_real_evaluation_and_resume(
     reference_path = _campaign_elemental_manifest(cfg, elemental_manifest)
     cfg.trainer = TrainerConfig(
         enabled=True,
-        train_script=cfg.trainer.train_script,
         validation_fraction=0.2,
         compare_after_training=True,
         promote_model=promote,
@@ -1154,7 +1145,7 @@ def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: 
     assert _scan_resume(tmp_path) == (2, promoted)
 
 
-@pytest.mark.parametrize("backend", ["uma", "mace"])
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
 def test_resume_applies_last_promoted_model_for_all_backends(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
 ) -> None:
@@ -1163,13 +1154,16 @@ def test_resume_applies_last_promoted_model_for_all_backends(
     import matsim_agents.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
-    promoted = tmp_path / ("promoted.model" if backend == "mace" else "promoted-uma")
+    promoted = tmp_path / ("promoted.model" if backend == "mace" else f"promoted-{backend}")
     if backend == "mace":
         promoted.touch()
-        cfg.mlip = MLIPConfig(backend="mace", mace=MACEConfig())
+        cfg.mlip = MACEConfig()
     else:
         promoted.mkdir()
-        cfg.mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+        if backend == "uma":
+            cfg.mlip = UMAConfig()
+        else:
+            cfg.mlip.checkpoint = "incumbent.pk"
     cfg.loop.resume = True
     iteration_dir = cfg.loop.out_dir / "iteration_0000"
     iteration_dir.mkdir()
@@ -1186,13 +1180,15 @@ def test_resume_applies_last_promoted_model_for_all_backends(
 
     loop_mod.run_active_learning(cfg)
 
+    assert cfg.mlip.backend == backend
     if backend == "mace":
-        assert cfg.mlip.mace is not None
-        assert cfg.mlip.mace.family == "checkpoint"
-        assert cfg.mlip.mace.model == str(promoted)
+        assert cfg.mlip.family == "checkpoint"
+        assert cfg.mlip.model == str(promoted)
+    elif backend == "uma":
+        assert cfg.mlip.model_name == str(promoted)
     else:
-        assert cfg.mlip.uma is not None
-        assert cfg.mlip.uma.model_name == str(promoted)
+        assert cfg.mlip.logdir == promoted
+        assert cfg.mlip.checkpoint is None
 
 
 def test_benchmark_sets_give_a_learning_curve_after_each_decision(
@@ -1209,9 +1205,7 @@ def test_benchmark_sets_give_a_learning_curve_after_each_decision(
     cfg = _make_cfg(tmp_path)
     cfg.loop.n_iterations = 2
     reference = _campaign_elemental_manifest(cfg, elemental_manifest)
-    cfg.trainer = TrainerConfig(
-        enabled=False, train_script=cfg.trainer.train_script, validation_reference_set=reference
-    )
+    cfg.trainer = TrainerConfig(enabled=False, validation_reference_set=reference)
     benchmark = tmp_path / "benchmark.extxyz"
     frame = Atoms("Si2", positions=[[0, 0, 0], [2.0, 0, 0]], cell=[6, 6, 6], pbc=True)
     frame.info["energy"] = -2.0

@@ -104,10 +104,17 @@ else
   AL_ARGS+=( --al-dry-run )
 fi
 
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
+# examples/mlip/*.yaml) or the HydraGNN foundation model above.
+if [[ -z "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="$RUN_DIR/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
+    "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" >"$MLIP_CONFIG"
+fi
+
 echo "[$(date)] Submitting discovery query to matsim-agents (managed vLLM, AL mode=$AL_MODE) ..."
 echo "$QUERY" | matsim-agents chat \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --mlip-config     "$MLIP_CONFIG" \
     --output-dir      "$OUTPUT_DIR" \
     --resources       "$RESOURCES" \
     --llm-peer-review \

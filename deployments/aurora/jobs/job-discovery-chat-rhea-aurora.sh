@@ -148,6 +148,14 @@ while true; do
     (( ELAPSED += INTERVAL ))
 done
 
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
+# examples/mlip/*.yaml) or the HydraGNN foundation model above.
+if [[ -z "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
+    "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
+fi
+
 # ── multi-turn RHEA dialogue ────────────────────────────────────────────────
 # Each turn states ONE equiatomic RHEA formula explicitly in the user
 # text (regex-guaranteed: no fractional decimals, no element-name spelling,
@@ -160,8 +168,7 @@ done
 # eager-mode XPU throughput) so all four fit comfortably in the 1 h cap.
 echo "[$(date)] Submitting 4-RHEA dialogue to matsim-agents ..."
 matsim-agents chat \
-    --logdir          "${LOGDIR}" \
-    --hydragnn-branch-mlp-checkpoint "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
+    --mlip-config     "${MLIP_CONFIG}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
     --llm-model       "${CHAT_MODEL_NAME}" \

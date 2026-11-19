@@ -2,11 +2,10 @@
 # Per-material inputs and safety gates: e3-qe-mace-three-iteration-reproduction.txt.
 mlip:
   backend: mace
-  mace:
-    family: checkpoint
-    model: ${MACE_CHECKPOINT:?set the trusted MACE-OMAT-0 medium checkpoint}
-    device: cuda
-    precision: fp64
+  family: checkpoint
+  model: ${MACE_CHECKPOINT:?set the trusted MACE-OMAT-0 medium checkpoint}
+  device: cuda
+  precision: fp64
 
 # Required by the generic AL schema, but NOT executed by the E3 sampler.
 md:
@@ -44,7 +43,6 @@ dft:
 trainer:
   enabled: true
   force_error_trigger_eV_per_A: ${E3_FORCE_ERROR_TOLERANCE:-0.2}
-  train_script: ${PROJ_ROOT}/src/matsim_agents/training/finetune_mace.py
   finetune_mode: lora
   start_from: incumbent
   epochs_per_iter: 2

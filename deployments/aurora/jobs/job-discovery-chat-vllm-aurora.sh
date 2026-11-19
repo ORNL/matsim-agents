@@ -196,14 +196,21 @@ done
 
 export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 
+# The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g.
+# examples/mlip/*.yaml) or the HydraGNN foundation model above.
+if [[ -z "${MLIP_CONFIG:-}" ]]; then
+  MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
+    "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
+fi
+
 # ── multi-turn discovery dialogue ────────────────────────────────────────────
 # Three user turns + 'exit'. This keeps the script generic while still
 # exercising discovery, result-grounded comparison, and direct formula input.
 # Empty lines are silently skipped by the REPL; 'exit' closes it cleanly.
 echo "[$(date)] Submitting multi-turn discovery dialogue to matsim-agents (vLLM) ..."
 matsim-agents chat \
-    --logdir          "${LOGDIR}" \
-    --hydragnn-branch-mlp-checkpoint "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
+    --mlip-config     "${MLIP_CONFIG}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
     --llm-model       "${MODEL_NAME}" \

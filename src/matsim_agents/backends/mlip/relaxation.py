@@ -20,42 +20,13 @@ import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
 
 
-class RelaxStructureInput(BaseModel):
-    """Inputs for :func:`relax_structure`."""
+class RelaxationSettings(BaseModel):
+    """Optimizer and cell controls of an MLIP relaxation, independent of the backend."""
 
-    structure_path: str = Field(
-        ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
-    )
-    mlip_backend: Literal["hydragnn", "uma", "mace"] = Field(
-        "hydragnn",
-        description="Surrogate backend used by the relaxation tool.",
-    )
-    logdir: str | None = Field(
-        None,
-        description=(
-            "HydraGNN logdir containing config.json + checkpoint "
-            "(required for mlip_backend='hydragnn')."
-        ),
-    )
-    hydragnn_branch_mlp_checkpoint: str | None = Field(
-        None,
-        description=(
-            "HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'."
-        ),
-    )
-    hydragnn_inference_head: str | int | None = Field(
-        None,
-        description=(
-            "Optional HydraGNN decoding head dataset name or index. When set, "
-            "BranchWeightMLP is bypassed."
-        ),
-    )
-    checkpoint: str | None = Field(
-        None, description="Optional HydraGNN checkpoint filename or absolute path."
-    )
     optimizer: Literal["FIRE", "BFGS", "BFGSLineSearch"] = "FIRE"
     maxiter: int = 200
     max_optimization_seconds: float | None = Field(
@@ -75,30 +46,6 @@ class RelaxStructureInput(BaseModel):
         allow_inf_nan=False,
         description="Abort on fractional optimizer-force growth between steps; None disables.",
     )
-    charge: float = 0.0
-    spin: float = 0.0
-    precision: str | None = None
-    mlp_precision: str | None = None
-    mlp_device: Literal["cuda", "cpu", "xpu"] = "cuda"
-    uma_model_name: str = Field(
-        "uma-s-1p1",
-        description="UMA pretrained model name/checkpoint when mlip_backend='uma'.",
-    )
-    uma_task: Literal["omat", "omol"] = Field(
-        "omat",
-        description="UMA task head when mlip_backend='uma'.",
-    )
-    mace_family: Literal[
-        "mace_mp", "mace_off", "mace_omol", "mace_polar", "mace_anicc", "checkpoint"
-    ] = "mace_mp"
-    mace_model: str = Field(
-        "medium",
-        description="MACE model alias, URL, or local checkpoint path.",
-    )
-    mace_dispersion: bool = False
-    mace_head: str | None = Field(
-        None, description="Output head of a multi-head MACE model when mlip_backend='mace'."
-    )
     relax_cell: bool = Field(
         False,
         description=(
@@ -112,17 +59,9 @@ class RelaxStructureInput(BaseModel):
     max_cell_step_strain: float | None = Field(None, gt=0, allow_inf_nan=False)
     max_cell_total_strain: float | None = Field(None, gt=0, lt=1, allow_inf_nan=False)
     require_native_stress: bool = False
-    random_displacement: bool = False
-    random_displacement_scale: float = 0.1
-    seed: int = 42
-    output_dir: str | None = Field(
-        None,
-        description="Where to write the optimized structure, trajectory, and CSV log. "
-        "Defaults to the structure's parent directory.",
-    )
 
     @model_validator(mode="after")
-    def _validate_backend_inputs(self):
+    def _validate_cell_options(self):
         if not self.relax_cell and (
             self.cell_mask is not None
             or self.stress_tolerance_eV_per_A3 is not None
@@ -133,20 +72,33 @@ class RelaxStructureInput(BaseModel):
             raise ValueError("Cell-relaxation options require relax_cell=True.")
         if self.cell_mask is not None and not any(self.cell_mask):
             raise ValueError("cell_mask must enable at least one strain component.")
-        if self.mlip_backend == "hydragnn":
-            if not self.logdir:
-                raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            from matsim_agents.backends.mlip.hydragnn_energy import (
-                has_declared_hydragnn_checkpoint,
-            )
+        return self
 
-            has_declared_checkpoint = has_declared_hydragnn_checkpoint(self.logdir)
-            if (
-                not self.hydragnn_branch_mlp_checkpoint
-                and self.hydragnn_inference_head is None
-                and not has_declared_checkpoint
-            ):
-                raise ValueError("mlip_backend='hydragnn' requires hydragnn_branch_mlp_checkpoint.")
+
+class RelaxStructureInput(RelaxationSettings):
+    """Inputs for :func:`relax_structure`."""
+
+    structure_path: str = Field(
+        ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
+    )
+    mlip: MLIPConfig = Field(
+        ...,
+        description="MLIP backend and its model settings (backend plus its own config block).",
+    )
+    charge: float = 0.0
+    spin: float = 0.0
+    random_displacement: bool = False
+    random_displacement_scale: float = 0.1
+    seed: int = 42
+    output_dir: str | None = Field(
+        None,
+        description="Where to write the optimized structure, trajectory, and CSV log. "
+        "Defaults to the structure's parent directory.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_model_inputs(self):
+        self.mlip.check_loadable()
         return self
 
 
@@ -505,34 +457,28 @@ def _relaxation_paths(args: RelaxStructureInput) -> _RelaxPaths:
     )
 
 
-class _RelaxCalculator(NamedTuple):
+class RelaxCalculator(NamedTuple):
     calculator: Any
     num_branches: int
     active_branches: int
     uq_note: str | None
 
 
-def _declared_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
+def hydragnn_relaxation_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
+    """HydraGNN calculator with its branch-weight UQ description."""
+    declared_checkpoint = Path(cfg.logdir) / "energy-convention.json"
+    if cfg.inference_head is not None or declared_checkpoint.exists():
+        return _declared_hydragnn_calculator(cfg)
+    return _fused_hydragnn_calculator(cfg)
+
+
+def _declared_hydragnn_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
     """HydraGNN with a declared energy convention or an explicitly selected head."""
     from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
-    from matsim_agents.backends.mlip.config import HydraGNNConfig
 
-    calculator = build_hydragnn_calculator(
-        HydraGNNConfig(
-            logdir=args.logdir,
-            checkpoint=args.checkpoint,
-            hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
-            inference_head=args.hydragnn_inference_head,
-            precision=args.precision,
-            mlp_device=args.mlp_device,
-            charge=args.charge,
-            spin=args.spin,
-        )
-    )
+    calculator = build_hydragnn_calculator(cfg)
     num_branches = (
-        1
-        if args.hydragnn_inference_head is not None
-        else int(getattr(calculator.model, "num_branches", 1))
+        1 if cfg.inference_head is not None else int(getattr(calculator.model, "num_branches", 1))
     )
     active_branches = int(getattr(calculator, "active_branch_count", num_branches))
     uq_note = (
@@ -540,16 +486,16 @@ def _declared_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator
         if active_branches < 2
         else None
     )
-    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
+    return RelaxCalculator(calculator, num_branches, active_branches, uq_note)
 
 
-def _fused_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
+def _fused_hydragnn_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
     """Pretrained multi-branch HydraGNN weighted by its BranchWeightMLP."""
     from ase.calculators.calculator import Calculator
 
     from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
-    restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
+    restore_hydragnn_total_energy(Calculator(), Path(cfg.logdir), cfg.checkpoint)
 
     (
         model,
@@ -565,24 +511,19 @@ def _fused_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
         _gnn_prec,
         _mlp_prec,
     ) = _load_fused_stack(
-        args.logdir,
-        args.checkpoint,
-        args.hydragnn_branch_mlp_checkpoint,
-        args.precision,
-        args.mlp_precision,
-        args.mlp_device,
+        str(cfg.logdir),
+        cfg.checkpoint,
+        str(cfg.mlp_checkpoint),
+        cfg.precision,
+        cfg.mlp_precision,
+        cfg.device,
     )
-    active_branches = num_branches
-
     arch = config["NeuralNetwork"]["Architecture"]
-    radius = float(arch.get("radius", 5.0))
-    max_neighbours = int(arch.get("max_neighbours", 20))
-
     calculator = _build_calculator(
         model,
         mlp,
-        radius,
-        max_neighbours,
+        float(arch.get("radius", 5.0)),
+        int(arch.get("max_neighbours", 20)),
         param_dtype,
         autocast_ctx,
         device,
@@ -590,31 +531,10 @@ def _fused_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
         mlp_device,
         mlp_autocast_ctx,
         unified_mlp_gnn_stack,
-        args.charge,
-        args.spin,
+        cfg.charge,
+        cfg.spin,
     )
-    uq_note = None
-    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
-
-
-_CALCULATOR_FIELDS = (
-    "mlip_backend",
-    "logdir",
-    "hydragnn_branch_mlp_checkpoint",
-    "hydragnn_inference_head",
-    "checkpoint",
-    "precision",
-    "mlp_precision",
-    "mlp_device",
-    "charge",
-    "spin",
-    "uma_model_name",
-    "uma_task",
-    "mace_family",
-    "mace_model",
-    "mace_dispersion",
-    "mace_head",
-)
+    return RelaxCalculator(calculator, num_branches, num_branches, None)
 
 
 class CalculatorCache:
@@ -629,14 +549,14 @@ class CalculatorCache:
         if capacity < 1:
             raise ValueError("calculator cache capacity must be positive")
         self.capacity = capacity
-        self._entries: dict[tuple, _RelaxCalculator] = {}
+        self._entries: dict[tuple, RelaxCalculator] = {}
         self.loads = 0
 
     @staticmethod
     def key(args: RelaxStructureInput) -> tuple:
-        return tuple(getattr(args, field) for field in _CALCULATOR_FIELDS)
+        return (args.mlip.model_dump_json(), args.charge, args.spin)
 
-    def get(self, args: RelaxStructureInput) -> _RelaxCalculator:
+    def get(self, args: RelaxStructureInput) -> RelaxCalculator:
         key = self.key(args)
         entry = self._entries.pop(key, None)
         if entry is None:
@@ -655,47 +575,9 @@ class CalculatorCache:
         return entry
 
 
-def _relaxation_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
-    """Build the selected MLIP calculator and describe its branch-weight UQ support."""
-    if args.mlip_backend == "hydragnn":
-        declared_checkpoint = Path(args.logdir) / "energy-convention.json"
-        if args.hydragnn_inference_head is not None or declared_checkpoint.exists():
-            return _declared_hydragnn_calculator(args)
-        return _fused_hydragnn_calculator(args)
-    if args.mlip_backend == "uma":
-        from matsim_agents.backends.mlip.calculator import build_uma_calculator
-        from matsim_agents.backends.mlip.config import UMAConfig
-
-        calculator = build_uma_calculator(
-            UMAConfig(
-                model_name=args.uma_model_name,
-                task=args.uma_task,
-                device=args.mlp_device,
-            ),
-            enable_mc_dropout=False,
-        )
-        num_branches = 0
-        active_branches = 0
-        uq_note = "branch-weight UQ unavailable for UMA backend"
-        return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
-    from matsim_agents.backends.mlip.calculator import build_mace_calculator
-    from matsim_agents.backends.mlip.config import MACEConfig
-
-    calculator = build_mace_calculator(
-        MACEConfig(
-            family=args.mace_family,
-            model=args.mace_model,
-            device=args.mlp_device,
-            precision=args.precision,
-            dispersion=args.mace_dispersion,
-            head=args.mace_head,
-        ),
-        enable_mc_dropout=False,
-    )
-    num_branches = 0
-    active_branches = 0
-    uq_note = "branch-weight UQ unavailable for MACE backend"
-    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
+def _relaxation_calculator(args: RelaxStructureInput) -> RelaxCalculator:
+    """Build the selected MLIP's relaxation calculator."""
+    return args.mlip.relaxation_calculator(charge=args.charge, spin=args.spin)
 
 
 class _OptimizationOutcome(NamedTuple):

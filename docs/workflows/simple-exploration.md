@@ -293,13 +293,13 @@ thermodynamic stability claims, or DFT calls.
 
 ## Run format and compatibility
 
-This implementation requires **version 2** of the exploration checkpoint.
+This implementation requires **version 3** of the exploration checkpoint.
 Older single-batch evidence (`results.json` without a checkpoint) and version-1
-round journals are **not supported** by summary or resume. There is no migration,
+or version-2 round journals are **not supported** by summary or resume. There is no migration,
 legacy reader, or automatic conversion. Start a fresh run with your YAML; do not
 relabel an old checkpoint's version.
 
 The independent advanced phase-exploration workflow is not part of this
 config-driven interface. Its results are not accepted as exploration checkpoints.
-Changed code or scientific dependency versions also block resume of version-2
+Changed code or scientific dependency versions also block resume of version-3
 runs. The stored configuration and source/dependency identities are authoritative.

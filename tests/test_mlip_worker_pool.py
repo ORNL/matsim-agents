@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.backends.mlip import relaxation
+from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, WorkerOutcome, WorkerSlot
 from matsim_agents.backends.mlip.relaxation import CalculatorCache, RelaxStructureInput
 from matsim_agents.backends.mlip.results import RelaxationResult
@@ -18,8 +19,11 @@ from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
 
 
-def _uma_args(**overrides) -> RelaxStructureInput:
-    values = {"structure_path": "Si.vasp", "mlip_backend": "uma", "mlp_device": "cpu"}
+def _uma_args(model_name: str = "uma-s-1p1", **overrides) -> RelaxStructureInput:
+    values = {
+        "structure_path": "Si.vasp",
+        "mlip": UMAConfig(model_name=model_name, device="cpu"),
+    }
     return RelaxStructureInput(**{**values, **overrides})
 
 
@@ -35,8 +39,8 @@ def test_calculator_cache_reuses_and_evicts(monkeypatch):
     built = []
 
     def build(args):
-        built.append(args.uma_model_name)
-        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+        built.append(args.mlip.model_name)
+        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
 
     monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
     cache = CalculatorCache(capacity=2)
@@ -44,8 +48,8 @@ def test_calculator_cache_reuses_and_evicts(monkeypatch):
     again = cache.get(_uma_args(structure_path="Other.vasp", maxiter=5))
     assert again.calculator is first.calculator
     assert first.calculator.resets == 1
-    cache.get(_uma_args(uma_model_name="b"))
-    cache.get(_uma_args(uma_model_name="c"))
+    cache.get(_uma_args(model_name="b"))
+    cache.get(_uma_args(model_name="c"))
     cache.get(_uma_args())
     assert built == ["uma-s-1p1", "b", "c", "uma-s-1p1"]
     assert cache.loads == 4
@@ -73,7 +77,7 @@ def test_local_pool_relaxations_share_one_model(monkeypatch):
 
     def build(args):
         loads.append(args)
-        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
 
     def fake_relax(args, *, calculators=None):
         calculators.get(args)
@@ -204,7 +208,7 @@ def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path
     pool = _StubPool(fail_index=1)
     result = wrapper.explore_composition(
         "Si",
-        mlip_backend="uma",
+        mlip=UMAConfig(device="cpu"),
         output_dir=str(tmp_path),
         max_relaxations=3,
         mlip_pool=pool,
@@ -239,6 +243,7 @@ def test_exploration_rejects_both_relax_fn_and_pool(tmp_path):
     with pytest.raises(ValueError, match="either relax_fn or mlip_pool"):
         explore_composition(
             "Si",
+            mlip=UMAConfig(device="cpu"),
             output_dir=str(tmp_path),
             relax_fn=lambda args: None,
             mlip_pool=MLIPWorkerPool(),
@@ -326,7 +331,7 @@ def test_close_drops_local_models_and_restarts_lazily(monkeypatch):
 
     def build(args):
         built.append(args)
-        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
 
     def fake_relax(args, *, calculators=None):
         calculators.get(args)
@@ -385,14 +390,14 @@ def test_cache_eviction_frees_memory_before_loading(monkeypatch):
     monkeypatch.setattr(pool_module, "release_device_memory", lambda: events.append("free"))
 
     def build(args):
-        events.append(f"load {args.uma_model_name}")
-        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+        events.append(f"load {args.mlip.model_name}")
+        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
 
     monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
     cache = CalculatorCache(capacity=1)
-    cache.get(_uma_args(uma_model_name="a"))
-    cache.get(_uma_args(uma_model_name="a"))
-    cache.get(_uma_args(uma_model_name="b"))
+    cache.get(_uma_args(model_name="a"))
+    cache.get(_uma_args(model_name="a"))
+    cache.get(_uma_args(model_name="b"))
     assert events == ["load a", "free", "load b"]
 
 
@@ -423,7 +428,7 @@ def test_cell_relaxation_runs_with_the_current_ase_filter(tmp_path, monkeypatch)
     monkeypatch.setattr(
         relaxation,
         "_relaxation_calculator",
-        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+        lambda args: relaxation.RelaxCalculator(EMT(), 0, 0, None),
     )
     result = relaxation.relax_with_mlip(
         _uma_args(

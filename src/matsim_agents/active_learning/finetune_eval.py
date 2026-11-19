@@ -42,7 +42,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, get_args
 
 import numpy as np
 from ase import Atoms
@@ -63,9 +63,11 @@ from matsim_agents.active_learning.evaluate import (
 from matsim_agents.backends.mlip.config import (
     HydraGNNConfig,
     MACEConfig,
+    MACEFamily,
     MCDropoutInjectionConfig,
     MLIPConfig,
     UMAConfig,
+    UMATask,
 )
 from matsim_agents.datasets.splits import (
     SplitConfig,
@@ -156,14 +158,11 @@ class EvaluationConfig(BaseModel):
 
 
 def _hydragnn_cfg(logdir: Path, checkpoint: str, branch_mlp: Path, device: str) -> MLIPConfig:
-    return MLIPConfig(
-        backend="hydragnn",
-        hydragnn=HydraGNNConfig(
-            logdir=logdir,
-            checkpoint=checkpoint,
-            hydragnn_branch_mlp_checkpoint=branch_mlp,
-            mlp_device="cuda" if device.startswith("cuda") else "cpu",
-        ),
+    return HydraGNNConfig(
+        logdir=logdir,
+        checkpoint=checkpoint,
+        mlp_checkpoint=branch_mlp,
+        device="cuda" if device.startswith("cuda") else "cpu",
     )
 
 
@@ -171,40 +170,33 @@ def _hydragnn_newhead_cfg(
     logdir: Path, checkpoint: str, device: str, ft_repo: Path | None = None
 ) -> MLIPConfig:
     """Eval config for a single-head (drop-all-heads) fine-tune model."""
-    return MLIPConfig(
-        backend="hydragnn",
-        hydragnn=HydraGNNConfig(
-            logdir=logdir,
-            checkpoint=checkpoint,
-            newhead_ft_config=logdir / "newhead.json",
-            ft_repo=ft_repo,
-            mlp_device="cuda" if device.startswith("cuda") else "cpu",
-        ),
+    return HydraGNNConfig(
+        logdir=logdir,
+        checkpoint=checkpoint,
+        newhead_ft_config=logdir / "newhead.json",
+        ft_repo=ft_repo,
+        device="cuda" if device.startswith("cuda") else "cpu",
     )
 
 
-def _uma_cfg(model_name: str, task_name: str, device: str) -> MLIPConfig:
-    return MLIPConfig(
-        backend="uma",
-        uma=UMAConfig(
-            model_name=model_name,
-            task_name=task_name,  # type: ignore[arg-type]
-            device="cuda" if device.startswith("cuda") else "cpu",
-            dropout=MCDropoutInjectionConfig(enabled=False),  # deterministic eval
-        ),
+def _uma_cfg(model_name: str | None, task_name: str | None, device: str) -> MLIPConfig:
+    values = {"model_name": model_name, "task_name": task_name}
+    return UMAConfig(
+        **{key: value for key, value in values.items() if value is not None},
+        device="cuda" if device.startswith("cuda") else "cpu",
+        dropout=MCDropoutInjectionConfig(enabled=False),  # deterministic eval
     )
 
 
-def _mace_cfg(family: str, model: str, device: str, *, precision: str = "fp64") -> MLIPConfig:
-    return MLIPConfig(
-        backend="mace",
-        mace=MACEConfig(
-            family=family,  # type: ignore[arg-type]
-            model=model,
-            device="cuda" if device.startswith("cuda") else "cpu",
-            precision=precision,  # type: ignore[arg-type]
-            dropout=MCDropoutInjectionConfig(enabled=False),  # deterministic eval
-        ),
+def _mace_cfg(
+    family: str | None, model: str | None, device: str, *, precision: str = "fp64"
+) -> MLIPConfig:
+    values = {"family": family, "model": model}
+    return MACEConfig(
+        **{key: value for key, value in values.items() if value is not None},
+        device="cuda" if device.startswith("cuda") else "cpu",
+        precision=precision,  # type: ignore[arg-type]
+        dropout=MCDropoutInjectionConfig(enabled=False),  # deterministic eval
     )
 
 
@@ -361,11 +353,13 @@ def _uma_endpoints(
     dev: str,
     *,
     eval_only: bool,
-    base_model: str,
-    task_name: str,
+    base_model: str | None,
+    task_name: str | None,
     finetune_kwargs: dict[str, Any],
 ) -> _Models:
     """Fine-tune the UMA foundation model (or reuse the fine-tune)."""
+    baseline = _uma_cfg(base_model, task_name, dev)
+    base_model, task_name = baseline.model_name, baseline.task_name
     if eval_only:
         ckpt = _require_checkpoint(ft_dir / "inference_ckpt.pt", "UMA")
     else:
@@ -381,7 +375,7 @@ def _uma_endpoints(
             **finetune_kwargs,
         )
     return _Models(
-        _uma_cfg(base_model, task_name, dev),
+        baseline,
         base_model,
         _uma_cfg(str(ckpt), task_name, dev),
         str(ckpt),
@@ -395,8 +389,8 @@ def _mace_endpoints(
     dev: str,
     *,
     eval_only: bool,
-    family: str,
-    model: str,
+    family: str | None,
+    model: str | None,
     model_id: str | None,
     precision: str,
     finetune_kwargs: dict[str, Any],
@@ -413,6 +407,8 @@ def _mace_endpoints(
             )
         family = MACE_MODELS[model_id]["family"]
         model = MACE_MODELS[model_id]["model"]
+    baseline = _mace_cfg(family, model, dev, precision=precision)
+    family, model = baseline.family, baseline.model
     if eval_only:
         ckpt = _require_checkpoint(ft_dir / "mace_finetuned.model", "MACE")
     else:
@@ -431,7 +427,7 @@ def _mace_endpoints(
         )
     # Fine-tuned checkpoint reloads via family="checkpoint".
     return _Models(
-        _mace_cfg(family, model, dev, precision=precision),
+        baseline,
         f"{family}:{model}",
         _mace_cfg("checkpoint", str(ckpt), dev, precision=precision),
         str(ckpt),
@@ -549,8 +545,8 @@ def run_finetune_endpoints(
     elemental_reference_manifest: str | Path,
     evaluation: EvaluationConfig,
     # UMA
-    uma_base_model: str = "uma-s-1p1",
-    uma_task_name: str = "omat",
+    uma_base_model: str | None = None,
+    uma_task_name: str | None = None,
     # UMA fine-tune recipe (custom conservative-head loop; see finetune_uma).
     # Matches allaffa/HydraGNN_GFM_FineTuning4Materials @ uma-sota-comparison:
     # Adam lr=1e-4, force-weighted MSE loss, no weight decay.
@@ -565,8 +561,8 @@ def run_finetune_endpoints(
     # MACE (all installed foundation families; model is an alias, URL, or path).
     # {small, medium, large}/tag/URL/path, or a MACE_MODELS id). Fine-tuning is
     # delegated to mace_run_train (reference recipe), with optional native LoRA.
-    mace_family: str = "mace_mp",
-    mace_model: str = "medium",
+    mace_family: str | None = None,
+    mace_model: str | None = None,
     mace_model_id: str | None = None,
     mace_precision: str = "fp64",
     mace_epochs: int | None = None,
@@ -1012,10 +1008,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--elemental-reference-manifest", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, help="Campaign output directory.")
     # UMA
-    parser.add_argument("--uma-base-model", default="uma-s-1p1")
-    parser.add_argument(
-        "--uma-task-name", default="omat", choices=["omat", "omol", "oc20", "odac", "omc"]
-    )
+    parser.add_argument("--uma-base-model", default=None, help="Default: UMAConfig's model.")
+    parser.add_argument("--uma-task-name", default=None, choices=get_args(UMATask))
     parser.add_argument("--uma-epochs", type=int, default=20, help="UMA fine-tune epochs.")
     parser.add_argument(
         "--uma-lr",
@@ -1051,20 +1045,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--mace-family",
-        default="mace_mp",
-        choices=[
-            "mace_mp",
-            "mace_off",
-            "mace_omol",
-            "mace_polar",
-            "mace_anicc",
-            "checkpoint",
-        ],
-        help="MACE foundation-loader family or checkpoint (local .model).",
+        default=None,
+        choices=get_args(MACEFamily),
+        help="MACE foundation-loader family or checkpoint (default: MACEConfig's).",
     )
     parser.add_argument(
         "--mace-model",
-        default="medium",
+        default=None,
         help=(
             "MACE size/variant (small|medium|large, or tag/URL), "
             "or a .model path for family=checkpoint."

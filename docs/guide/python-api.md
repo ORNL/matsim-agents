@@ -2,6 +2,21 @@
 
 ## Programmatic API
 
+Every entry point takes the MLIP as `mlip=`: a `HydraGNNConfig`, `UMAConfig`, or
+`MACEConfig` (from `matsim_agents.backends.mlip.config`), or an equivalent
+mapping with a `backend` key. `load_mlip_config(path)` reads the `mlip:` block of
+a YAML file such as `examples/mlip/uma-s-1p1-omat.yaml`, and
+`parse_mlip_config(mapping)` validates a mapping. The examples below use
+
+```python
+from matsim_agents.backends.mlip.config import HydraGNNConfig
+
+mlip = HydraGNNConfig(
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+)
+```
+
 ### Single relaxation
 
 ```python
@@ -9,8 +24,7 @@ from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_wi
 
 result = relax_with_mlip(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
-    logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+    mlip=mlip,
     optimizer="FIRE",
     maxiter=200,
 ))
@@ -25,8 +39,7 @@ from matsim_agents.discovery import explore_composition
 # Default: every applicable AFLOW prototype + 50 pyXtal random seeds.
 result = explore_composition(
     "Cs2AgBiBr6",
-    logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+    mlip=mlip,
     output_dir="./outputs",
 )
 print(result.stability.summary)
@@ -34,8 +47,7 @@ print(result.stability.summary)
 # Prototype-only run (pyXtal pass disabled).
 result = explore_composition(
     "MoS2",
-    logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+    mlip=mlip,
     output_dir="./outputs",
     n_random=0,
 )
@@ -44,8 +56,7 @@ result = explore_composition(
 # AFLOW match — rely entirely on pyXtal.
 result = explore_composition(
     "FeCoNiCrMn",
-    logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+    mlip=mlip,
     output_dir="./outputs",
     n_random=200,
     random_seed=42,
@@ -68,8 +79,7 @@ final = graph.invoke(
     ),
     config={"configurable": {
         "thread_id": str(uuid.uuid4()),
-        "logdir": "./multidataset_hpo-BEST6-fp64",
-      "hydragnn_branch_mlp_checkpoint": "./mlp_branch_weights.pt",
+        "mlip": mlip.model_dump(mode="json"),
     }},
 )
 print(final["analysis"])
@@ -82,8 +92,7 @@ from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_
 
 final = run_supervisor(SupervisorConfig(
   composition="Li2MnO3",
-  logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+  mlip=mlip,
   output_dir="./outputs",
   trigger_active_learning_on_high_uq=True,
   active_learning_config="examples/active_learning/al_config.example.yaml",
@@ -98,8 +107,7 @@ print(final.get("summary"))
 from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 
 session = DiscoveryChatSession(config=DiscoveryChatConfig(
-    logdir="./multidataset_hpo-BEST6-fp64",
-  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
+    mlip=mlip,
     output_dir="./outputs",
     llm_model="qwen2.5:14b",
     auto_confirm=True,

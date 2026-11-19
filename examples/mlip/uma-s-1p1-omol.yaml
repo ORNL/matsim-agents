@@ -1,0 +1,10 @@
+# FAIR-Chem UMA small, molecular/organic (OMol) task head, e.g. hybrid MOFs.
+mlip:
+  backend: uma
+  model_name: uma-s-1p1
+  task_name: omol
+  device: cuda
+  dropout:
+    enabled: true
+    p: 0.1
+    target_layers: linear

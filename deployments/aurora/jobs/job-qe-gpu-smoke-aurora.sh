@@ -43,7 +43,7 @@ grep -Fqx 'QE_GPU_ARCHS:STRING=intel_gpu_pvc' "${BUILD_DIR}/CMakeCache.txt" \
 
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
-module load xpu-smi/1.3.5
+load_aurora_gpu_monitor_modules
 
 export OMP_TARGET_OFFLOAD=MANDATORY
 export LIBOMPTARGET_INFO=16

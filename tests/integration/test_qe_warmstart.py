@@ -36,6 +36,8 @@ from typing import Any
 
 import pytest
 
+from matsim_agents.backends.mlip.config import HydraGNNConfig
+
 DATA_DIR = Path(__file__).resolve().parent / "data"
 FIXTURES_YAML = DATA_DIR / "fixtures.yaml"
 
@@ -140,10 +142,18 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     # stress is reliable (e.g. well-converged insulators with small cells).
     relax_cell = bool(hydragnn_cfg.get("relax_cell", False))
 
-    mlip_kwargs: dict[str, Any] = {
-        "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
-        "hydragnn_branch_mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
-        "mlp_device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+    mlip = HydraGNNConfig(
+        **{
+            key: value
+            for key, value in {
+                "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
+                "mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
+                "device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
+            }.items()
+            if value is not None
+        }
+    )
+    mlip_settings: dict[str, Any] = {
         "optimizer": hydragnn_cfg.get("optimizer", "FIRE"),
         "fmax": float(hydragnn_cfg.get("fmax", default_fmax)),
         "maxiter": int(hydragnn_cfg.get("maxiter", 200)),
@@ -164,7 +174,8 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         pseudo_dir=_env("MATSIM_QE_PSEUDO_DIR"),
         qe_launcher=qe_launcher,
         qe_settings_overrides=qe_overrides,
-        mlip_kwargs=mlip_kwargs,
+        mlip=mlip,
+        mlip_settings=mlip_settings,
         timeout_sec=timeout,
     )
 
@@ -181,7 +192,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         if summary.warm is None or "bfgs_steps" not in summary.warm:
             pytest.fail(
                 f"Warm-start phase produced no result for {fixture['name']!r}; "
-                f"hydragnn block: {summary.hydragnn}"
+                f"mlip block: {summary.mlip}"
             )
         warm = summary.warm
         assert warm.get("converged"), (
@@ -208,7 +219,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     if summary.warm is None or "bfgs_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"hydragnn block: {summary.hydragnn}"
+            f"mlip block: {summary.mlip}"
         )
     warm = summary.warm
     if not warm.get("converged"):

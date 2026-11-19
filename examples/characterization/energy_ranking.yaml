@@ -10,10 +10,10 @@ structures:
   - structures/MgO-zincblende.vasp
 methods:
   mlip:
-    mlip_backend: uma
-    uma_model_name: uma-s-1p1
-    uma_task: omat
-    mlp_device: cuda
+    backend: uma  # hydragnn | uma | mace, with that backend's block below
+    model_name: uma-s-1p1
+    task_name: omat
+    device: cuda
 tolerances:
   force_tolerance_eV_per_A: 0.02
   # Energy differences below this are reported as near-degenerate (inconclusive).

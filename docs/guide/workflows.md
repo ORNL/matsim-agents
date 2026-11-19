@@ -141,13 +141,13 @@ Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |
 |---|---|---|---|
-| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
-| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--hydragnn-branch-mlp-checkpoint`, LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
+| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--mlip-config`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
+| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--mlip-config`, LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
-| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
-| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLIP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
+| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--mlip-config`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
+| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `--mlip-config` replacing its `mlip` block | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
 
 Notes:
@@ -158,39 +158,41 @@ Notes:
 ### Minimum viable commands
 
 Use these as starter templates; replace paths with your environment.
+`hydragnn.yaml` stands for an `mlip:` block with your HydraGNN model:
+
+```yaml
+mlip:
+  backend: hydragnn
+  logdir: /path/to/hydragnn_logdir
+  mlp_checkpoint: /path/to/mlp_branch_weights.pt
+```
 
 ```bash
 # 1) Core graph: planner -> executor -> uq_gate -> analyst
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt
+  --mlip-config hydragnn.yaml
 
 # 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlip-backend uma \
-  --uma-model-name uma-s-1p1 \
-  --uma-task omat
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 1b) Core graph with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config hydragnn.yaml \
   --trigger-al-handoff \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
 # 2) Interactive discovery chat
 matsim-agents chat \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt
+  --mlip-config hydragnn.yaml
 
 # 2b) Interactive chat with proposer/critic multi-LLM hypothesis debate
 matsim-agents chat \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config hydragnn.yaml \
   --llm-peer-review \
   --critic-llm-provider ollama \
   --critic-llm-model qwen2.5:14b \
@@ -198,8 +200,7 @@ matsim-agents chat \
 
 # 2c) True multi-critic panel mode (multiple critics + cross-critique)
 matsim-agents chat \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config hydragnn.yaml \
   --llm-peer-review \
   --critic-panel-models "qwen2.5:14b,llama3.1:8b,mistral:7b" \
   --critic-panel-providers "ollama,ollama,ollama" \
@@ -208,22 +209,17 @@ matsim-agents chat \
 
 # 2a) Interactive discovery chat with UMA relaxations
 matsim-agents chat \
-  --mlip-backend uma \
-  --uma-model-name uma-s-1p1 \
-  --uma-task omat
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 3) Supervisor orchestration with AL handoff planning
 matsim-agents supervisor-run Li2MnO3 \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config hydragnn.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
 # 3a) Supervisor orchestration with UMA relaxations
 matsim-agents supervisor-run Li2MnO3 \
-  --mlip-backend uma \
-  --uma-model-name uma-s-1p1 \
-  --uma-task omat \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
@@ -232,7 +228,8 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 4b) Same AL config, UMA surrogate instead of HydraGNN
-MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 ```
 
 ---

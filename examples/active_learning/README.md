@@ -1,17 +1,21 @@
-# Active-learning workflow: MLIP surrogate (HydraGNN or UMA) ↔ DFT (VASP or Quantum ESPRESSO)
+# Active-learning workflow: MLIP surrogate (HydraGNN, UMA, or MACE) ↔ DFT (VASP or Quantum ESPRESSO)
 
-End-to-end loop that uses an MLIP surrogate force field (HydraGNN or UMA) and either
+End-to-end loop that uses an MLIP surrogate force field (HydraGNN, UMA, or MACE) and either
 **VASP 6.6** or **Quantum ESPRESSO `pw.x`** as the ground-truth labeller for
 high-uncertainty structures discovered by surrogate-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
 
 Surrogate selection is controlled by the `mlip` block in the AL config:
 
-- Default: `mlip.backend: hydragnn` (or `backend: ${MLIP_BACKEND:-hydragnn}`)
-- Switch to UMA without editing YAML:
+- Default: the config's own flat block (`mlip.backend: hydragnn` plus HydraGNN
+  settings such as `logdir`).
+- Run the same config with another model, without editing it: `--mlip-config`
+  replaces the `mlip` block with the one in another YAML (for example
+  `examples/mlip/*.yaml`):
 
 ```bash
-MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 ```
 
 ## Methodology
@@ -27,7 +31,7 @@ held-out data and compute approval; it does not alter frozen E3 results.
 Each iteration of the loop performs four steps:
 
 1. **Cheap MD with the surrogate.** Short molecular-dynamics trajectories are
-   run from the seed structures using the MLIP surrogate (HydraGNN or UMA) as
+   run from the seed structures using the MLIP surrogate (HydraGNN, UMA, or MACE) as
    the ASE calculator — *not* DFT. The driver is ASE's `Langevin` (NVT) by
    default (`NVTBerendsen` / `VelocityVerlet` are alternatives), started from
    Maxwell–Boltzmann velocities at `md.temperature_K`. The heat-up deliberately
@@ -110,7 +114,7 @@ compatibility. These inputs are existing DFT calculations, not requests to run
 DFT automatically. See the
 [manifest schema and promotion contract](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
 
-For built-in HydraGNN fine-tuning, set `mlip.hydragnn.hydragnn_root` to the HydraGNN
+For built-in HydraGNN fine-tuning, set `mlip.hydragnn_root` to the HydraGNN
 source checkout (the Frontier examples use `${HYDRAGNN_DIR}`). The training
 launcher forwards this path to the fine-tuner so it does not rely on a
 machine-specific default checkout location.
@@ -209,7 +213,7 @@ in the parsed `ALConfig`.
    ```
 
 2. Edit `al_config.example.yaml`:
-   - Point `mlip.hydragnn.logdir` at a trained HydraGNN logdir.
+   - Point `mlip.logdir` at a trained HydraGNN logdir.
    - Choose a seed source under `md.seed_source` — see *Seed sources* below.
    - Choose `dft.backend: vasp` (and fill `dft.vasp.*`) **or** `dft.backend: qe`
      (and fill `dft.qe.*`).
@@ -236,8 +240,7 @@ graph and let it trigger this AL path when UQ policy thresholds are met:
 
 ```bash
 matsim-agents supervisor-run Li2MnO3 \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-run
 ```
@@ -252,20 +255,19 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 2b) Same AL config, UMA surrogate backend
-MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 3) Run via supervisor orchestration (dry-run handoff)
 matsim-agents supervisor-run Li2MnO3 \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
 # 4) Run path with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --logdir /path/to/hydragnn_logdir \
-  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --mlip-config examples/active_learning/al_config.example.yaml \
   --trigger-al-handoff \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
@@ -291,8 +293,8 @@ matsim-agents run \
 │    │     │       srun -N1 -n8 vasp_std           │                   │
 │    │     │     parse OUTCAR/vasprun → labels  ←──┘                   │
 │    │     ├── append to dataset.extxyz                                │
-│    │     └── bash _hydragnn-train-step-frontier.sh                   │
-│    │           srun -N8 -n64 python train.py --dataset ... --resume  │
+│    │     └── bash _mlip-train-step-frontier.sh hydragnn 1 1 \        │
+│    │           srun -N1 -n1 python -m <mlip.fine_tuner> ...          │
 │    └──                                                                │
 └──────────────────────────────────────────────────────────────────────┘
 ```

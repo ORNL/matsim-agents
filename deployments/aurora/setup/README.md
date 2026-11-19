@@ -136,8 +136,8 @@ Submit with your allocation (`qsub -A <project> ...`); none embed an account.
 
 | Script | Purpose |
 | --- | --- |
-| `launchers/_hydragnn-train-step-aurora.sh` | AL retraining step: one built-in HydraGNN fine-tuner on one XPU tile (`--device xpu`) |
-| `jobs/job-active-learning-paper-cases-aurora.sh` | Full AL loop for one paper case (`CASE=hea_bcc\|lifepo4\|phosphorene\|phosphorene_qe`) using `examples/paper_cases/al_<case>_aurora.yaml` |
+| `launchers/_mlip-train-step-aurora.sh` | AL retraining step (`trainer.train_launcher`): activates the HydraGNN, UMA, or MACE environment and runs the model's fine-tuner on the training pool's hosts and XPU tiles |
+| `jobs/job-active-learning-paper-cases-aurora.sh` | Full AL loop for one paper case (`CASE=hea_bcc\|lifepo4\|phosphorene\|phosphorene_qe`) using `examples/paper_cases/al_<case>_aurora.yaml`; optional `MLIP_CONFIG` (an `mlip:` YAML) replaces its model |
 | `jobs/submit-active-learning-paper-cases.sh` | Submit the paper-case job for every case |
 | `jobs/job-al-dft-scaling-aurora.sh` | One DFT strong-scaling point; node count from `PBS_NODEFILE` |
 | `jobs/submit-al-dft-scaling-sweep.sh` | Submit the scaling sweep over `NODES` x `REPS` |

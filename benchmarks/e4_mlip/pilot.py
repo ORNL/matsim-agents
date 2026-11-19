@@ -178,10 +178,12 @@ def pilot_worker(payload: dict) -> dict:
     import torch
 
     checkpoint = torch.load(
-        payload["relax_args"]["checkpoint"], map_location="cpu", weights_only=False
+        payload["relax_args"]["mlip"]["checkpoint"],
+        map_location="cpu",
+        weights_only=False,
     )
     branch = torch.load(
-        payload["relax_args"]["hydragnn_branch_mlp_checkpoint"],
+        payload["relax_args"]["mlip"]["mlp_checkpoint"],
         map_location="cpu",
         weights_only=False,
     )
@@ -296,13 +298,15 @@ def execute(rows: list[Structure], metadata: dict, output: Path) -> int:
         raise ValueError("Imported HydraGNN must originate from frozen source")
     stages, errors = {}, []
     relax_args = {
-        "mlip_backend": "hydragnn",
-        "logdir": str(Path(metadata["config"]["path"]).parent),
-        "checkpoint": metadata["checkpoint"]["path"],
-        "hydragnn_branch_mlp_checkpoint": metadata["branch_checkpoint"]["path"],
-        "mlp_device": "xpu",
-        "precision": "fp64",
-        "mlp_precision": "fp64",
+        "mlip": {
+            "backend": "hydragnn",
+            "logdir": str(Path(metadata["config"]["path"]).parent),
+            "checkpoint": metadata["checkpoint"]["path"],
+            "mlp_checkpoint": metadata["branch_checkpoint"]["path"],
+            "device": "xpu",
+            "precision": "fp64",
+            "mlp_precision": "fp64",
+        },
         "optimizer": "FIRE",
         "fmax": 0.02,
         "maxiter": 200,
