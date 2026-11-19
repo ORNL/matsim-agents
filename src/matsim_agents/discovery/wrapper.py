@@ -66,6 +66,47 @@ class CompositionExplorationResult(BaseModel):
         }
 
 
+def generate_composition_candidates(
+    composition: str | Composition,
+    output_dir: str,
+    *,
+    n_random: int = 50,
+    random_seed: int | None,
+    generation_action: SeedGenerationAction | None = None,
+) -> tuple[Composition, list[PhaseCandidate], str | None]:
+    """Generate the candidate structures of one composition, without relaxing them.
+
+    Either the default prototype + pyXtal search (``n_random``, ``random_seed``) or
+    a ``generation_action`` that carries its own controls and seed. Returns the
+    parsed composition, the candidates under ``<output_dir>/<formula>/seeds``, and
+    the action id that names their subdirectory (``None`` without an action).
+    """
+    if generation_action is not None and (n_random != 50 or random_seed is not None):
+        raise ValueError(
+            "generation_action cannot be combined with n_random or random_seed; "
+            "set those controls on the action"
+        )
+    if isinstance(composition, str):
+        parsed = parse_composition(composition)
+        if parsed is None:
+            raise ValueError(f"Could not parse chemical composition: {composition!r}")
+        composition = parsed
+    if generation_action is None:
+        seeds_dir = os.path.join(output_dir, composition.formula, "seeds")
+        candidates = generate_seeds(
+            composition, seeds_dir, n_random=n_random, random_seed=random_seed
+        )
+        return composition, candidates, None
+    if generation_action.formula != composition.formula:
+        raise ValueError(
+            f"generation_action formula {generation_action.formula!r} does not match "
+            f"requested composition {composition.formula!r}"
+        )
+    seeds_dir = os.path.join(output_dir, composition.formula, "seeds", generation_action.action_id)
+    candidates = generate_seed_action(generation_action, seeds_dir)
+    return composition, candidates, generation_action.action_id
+
+
 def explore_composition(
     composition: str | Composition,
     *,
@@ -131,44 +172,15 @@ def explore_composition(
     mlip = parse_mlip_config(mlip)
     if max_relaxations is not None and max_relaxations < 0:
         raise ValueError("max_relaxations must be non-negative")
-    if generation_action is not None and (n_random != 50 or random_seed is not None):
-        raise ValueError(
-            "generation_action cannot be combined with n_random or random_seed; "
-            "set those controls on the action"
-        )
-
-    if isinstance(composition, str):
-        parsed = parse_composition(composition)
-        if parsed is None:
-            raise ValueError(f"Could not parse chemical composition: {composition!r}")
-        composition = parsed
-
-    if generation_action is not None:
-        if generation_action.formula != composition.formula:
-            raise ValueError(
-                f"generation_action formula {generation_action.formula!r} does not match "
-                f"requested composition {composition.formula!r}"
-            )
-        seeds_dir = os.path.join(
-            output_dir, composition.formula, "seeds", generation_action.action_id
-        )
-        relax_dir = os.path.join(
-            output_dir, composition.formula, "relaxed", generation_action.action_id
-        )
-    else:
-        seeds_dir = os.path.join(output_dir, composition.formula, "seeds")
-        relax_dir = os.path.join(output_dir, composition.formula, "relaxed")
+    composition, candidates, action_id = generate_composition_candidates(
+        composition,
+        output_dir,
+        n_random=n_random,
+        random_seed=random_seed,
+        generation_action=generation_action,
+    )
+    relax_dir = os.path.join(output_dir, composition.formula, "relaxed", *filter(None, [action_id]))
     os.makedirs(relax_dir, exist_ok=True)
-
-    if generation_action is None:
-        candidates = generate_seeds(
-            composition,
-            seeds_dir,
-            n_random=n_random,
-            random_seed=random_seed,
-        )
-    else:
-        candidates = generate_seed_action(generation_action, seeds_dir)
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []
     callback_failures: list[str] = []

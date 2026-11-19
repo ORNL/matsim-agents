@@ -695,3 +695,9 @@ def test_interrupted_journal_write_does_not_publish_uncommitted_attempt(setup, m
     assert state["rounds"][0]["attempts"] == []
     assert all("/attempt-" not in path for path in state["artifacts"])
     assert resume_exploration(directory).counts["attempted"] == 6
+
+
+def test_checkpoint_compatibility_covers_the_seeding_module():
+    from matsim_agents.workflows.exploration_checkpoint import _compatibility
+
+    assert "matsim_agents.seeding" in _compatibility()

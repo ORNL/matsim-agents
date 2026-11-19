@@ -19,8 +19,9 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import ExitStack, contextmanager
+from typing import Any
 
 import numpy as np
 
@@ -55,26 +56,38 @@ def python_rng(seed: int, *stream: StreamKey) -> random.Random:
 
 
 @contextmanager
-def seeded_torch(seed: int, *stream: StreamKey) -> Iterator[None]:
-    """Seed PyTorch's global generators for the block, then restore them.
+def seeded_torch(seed: int, *stream: StreamKey, devices: Iterable[Any]) -> Iterator[None]:
+    """Seed PyTorch's CPU generator and those of *devices* for the block, then restore them.
 
-    ``torch.manual_seed`` reseeds the CPU, CUDA, and XPU generators, so the state
-    of each available accelerator type is saved and restored, also on error.
+    *devices* are the accelerators the seeded code runs on (``torch.device`` or
+    strings such as ``"cuda:1"``); CPU devices in it are ignored. Other
+    accelerators are left untouched, so devices reserved for other work get no
+    context and keep their random streams. State is restored also on error.
     For code whose randomness comes from torch's global state (e.g. dropout).
     """
     import torch
 
+    by_type: dict[str, set[int]] = {}
+    for device in devices:
+        device = torch.device(device)
+        if device.type == "cpu":
+            continue
+        backend = getattr(torch, device.type)
+        index = device.index if device.index is not None else backend.current_device()
+        by_type.setdefault(device.type, set()).add(index)
+    value = stream_seed(seed, *stream)
     with ExitStack() as saved:
-        for device_type in ("cuda", "xpu"):
-            backend = getattr(torch, device_type, None)
-            if backend is not None and backend.is_available():
-                saved.enter_context(
-                    torch.random.fork_rng(
-                        devices=list(range(backend.device_count())), device_type=device_type
-                    )
-                )
         saved.enter_context(torch.random.fork_rng(devices=[]))
-        torch.manual_seed(stream_seed(seed, *stream))
+        for device_type, indices in by_type.items():
+            saved.enter_context(
+                torch.random.fork_rng(devices=sorted(indices), device_type=device_type)
+            )
+        torch.random.default_generator.manual_seed(value)
+        for device_type, indices in by_type.items():
+            backend = getattr(torch, device_type)
+            for index in sorted(indices):
+                with backend.device(index):
+                    backend.manual_seed(value)
         yield
 
 

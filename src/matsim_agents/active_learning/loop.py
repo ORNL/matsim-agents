@@ -202,6 +202,32 @@ def _trajectory_ids(frames: list[Any]) -> set[str]:
     return {str(f.info["trajectory_id"]) for f in frames if "trajectory_id" in f.info}
 
 
+_ROOT_SEED_FILE = "random-seed.json"
+
+
+def _bind_root_seed(cfg: ALConfig, root: Path) -> None:
+    """Record the run's root seed; a resume must use the same one.
+
+    Checked before seed structures are resolved or written, so a mismatched resume
+    neither mixes random streams nor replaces the inputs of completed iterations.
+    """
+    path = root / _ROOT_SEED_FILE
+    if cfg.loop.resume and path.exists():
+        recorded = int(json.loads(path.read_text())["random_seed"])
+        if recorded != cfg.random_seed:
+            raise ValueError(
+                f"{root} was started with random_seed {recorded}; resuming it with "
+                f"{cfg.random_seed} would mix two seed streams in one run"
+            )
+        return
+    if cfg.loop.resume and any(root.glob("iteration_*/state.json")):
+        raise ValueError(
+            f"{root} has completed iterations but no recorded random_seed; it predates "
+            "seed recording and cannot be resumed reproducibly; start a new out_dir"
+        )
+    path.write_text(json.dumps({"random_seed": cfg.random_seed}) + "\n")
+
+
 def _scan_resume(root: Path) -> tuple[int, Path | None]:
     """Return (start_iteration, current_logdir_or_None) based on existing state.
 
@@ -798,6 +824,7 @@ def run_active_learning(
     comparison_enabled = _validate_comparison_inputs(cfg)
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
+    _bind_root_seed(cfg, root)
     placement = cfg.resources.place(root)
     # Driver-side MLIP work (model loading, single-seed MD, scoring, model
     # comparison) runs on the mlip pool's device, not on device 0.

@@ -49,6 +49,7 @@ from matsim_agents.datasets.energy_references import (
     validate_dataset_reference_method,
 )
 from matsim_agents.datasets.governance import structure_identity
+from matsim_agents.seeding import numpy_rng, stream_seed
 
 log = logging.getLogger(__name__)
 
@@ -468,17 +469,21 @@ def evaluate_promotion_candidate(
     return assess_promotion(candidate_metrics, incumbent_metrics, cfg.trainer)
 
 
-def _subsample(parity: dict[str, np.ndarray], max_points: int) -> dict[str, np.ndarray]:
+def _subsample(
+    parity: dict[str, np.ndarray], max_points: int, *, seed: int
+) -> dict[str, np.ndarray]:
     """Cap the force parity arrays for compact plotting (energies are per-frame).
 
-    The arrays hold flattened per-atom ``(x, y, z)`` components. Keeping evenly
-    spaced whole atoms preserves every Cartesian component in equal numbers and
-    needs no random stream.
+    The arrays hold flattened per-atom ``(x, y, z)`` components. A seeded random
+    sample of whole atoms keeps every Cartesian component in equal numbers and,
+    unlike evenly spaced indices, cannot alias a periodic atom ordering (for
+    example alternating species).
     """
     f_ref = parity["f_ref_eV_per_A"]
     if max_points > 0 and f_ref.size > max_points:
         n_atoms = f_ref.size // 3
-        atoms = np.unique(np.linspace(0, n_atoms - 1, max(1, max_points // 3)).round()).astype(int)
+        keep = min(n_atoms, max(1, max_points // 3))
+        atoms = np.sort(numpy_rng(seed).choice(n_atoms, size=keep, replace=False))
         idx = (3 * atoms[:, None] + np.arange(3)).reshape(-1)
         parity = dict(parity)
         parity["f_ref_eV_per_A"] = f_ref[idx]
@@ -545,7 +550,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.parity_npz:
         parity_path = Path(args.parity_npz)
         parity_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(parity_path, **_subsample(parity, args.max_parity_points))
+        np.savez_compressed(
+            parity_path,
+            **_subsample(
+                parity,
+                args.max_parity_points,
+                seed=stream_seed(cfg.random_seed, "parity-plot"),
+            ),
+        )
         log.info("Wrote parity arrays -> %s", parity_path)
 
     return 0

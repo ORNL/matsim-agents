@@ -237,12 +237,13 @@ def test_campaign_resume_does_not_repeat_completed_formula(tmp_path):
     assert second.campaign.formula_runs["NbO2"].attempts == 1
 
 
-def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
+def test_campaign_rejects_legacy_interrupted_attempt_before_touching_the_checkpoint(tmp_path):
     campaign = _campaign()
     campaign.formula_runs["NbO2"] = FormulaRunRecord(
         formula="NbO2",
         status=WorkflowStatus.RUNNING,
         attempts=1,
+        output_dir=str(tmp_path / "formulas" / "NbO2"),
     )
     calls: list[str] = []
 
@@ -252,16 +253,19 @@ def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
         calls.append(formula)
         return _result(formula, output_dir)
 
-    result = run_campaign(
-        campaign,
-        output_dir=tmp_path,
-        formula_runner=runner,
-        policy=CampaignRunPolicy(max_iterations=1),
-        resume=False,
-    )
+    with pytest.raises(ValueError, match="without attempt seeds"):
+        run_campaign(
+            campaign,
+            output_dir=tmp_path,
+            formula_runner=runner,
+            policy=CampaignRunPolicy(max_iterations=1),
+            resume=False,
+        )
 
-    assert calls == ["NbO2"]
-    assert result.campaign.formula_runs["NbO2"].attempts == 2
+    assert calls == []
+    assert not (tmp_path / "campaign_state.json").exists()
+    record = campaign.formula_runs["NbO2"]
+    assert record.attempts == 1 and record.output_dir == str(tmp_path / "formulas" / "NbO2")
 
 
 def test_campaign_retries_draw_new_seeds_and_recovery_keeps_the_attempt_seed(tmp_path):
@@ -742,7 +746,7 @@ def test_failed_formula_recovers_durable_resource_and_stage_evidence(tmp_path):
     assert result.campaign.budget.max_dft_calculations == 3
 
 
-def test_retry_does_not_double_count_recovered_usage(tmp_path):
+def test_retry_attempt_is_charged_its_own_usage(tmp_path):
     campaign = _campaign()
     campaign.budget.max_dft_calculations = 5
     campaign.formulas["NbO"].active = False
@@ -818,9 +822,10 @@ def test_retry_does_not_double_count_recovered_usage(tmp_path):
     record = second.campaign.formula_runs["NbO2"]
     assert calls == 2
     assert record.status == WorkflowStatus.COMPLETE
-    assert record.n_dft_calculations == 2
-    assert record.n_active_learning_iterations == 1
-    assert record.node_hours == pytest.approx(0.5)
+    # The retry runs in a new attempt directory, so its two labels are new work.
+    assert record.n_dft_calculations == 4
+    assert record.n_active_learning_iterations == 2
+    assert record.node_hours == pytest.approx(1.0)
 
 
 def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path):

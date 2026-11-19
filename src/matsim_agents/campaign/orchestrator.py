@@ -588,6 +588,16 @@ def _select_batch(
     return batch, selection
 
 
+# Progress already charged from the current attempt's directory; a new attempt has none.
+_ATTEMPT_USAGE_BASELINES = (
+    "accounted_active_learning_dft_calculations",
+    "accounted_active_learning_node_hours",
+    "accounted_active_learning_iterations",
+    "accounted_refinement_stage_attempts",
+    "accounted_refinement_stage_node_hours",
+)
+
+
 def _start_formula_record(
     campaign: CampaignState,
     formula: str,
@@ -604,15 +614,21 @@ def _start_formula_record(
     directory, and replays.
     """
     record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
-    if record.status != WorkflowStatus.RUNNING or record.random_seed is None:
+    if record.status == WorkflowStatus.RUNNING and record.random_seed is None:
+        raise ValueError(
+            f"{formula} has an interrupted attempt from a checkpoint without attempt seeds; "
+            "it cannot be recovered without abandoning its artifacts; start a new campaign"
+        )
+    if record.status != WorkflowStatus.RUNNING:
         record.attempts += 1
         record.random_seed = stream_seed(random_seed, "formula", formula, record.attempts)
+        # Usage baselines are per attempt directory; cumulative totals stay on the record.
+        for key in _ATTEMPT_USAGE_BASELINES:
+            record.evidence[key] = 0
     record.status = WorkflowStatus.RUNNING
     record.iteration = campaign.iteration
     record.output_dir = str(formula_root / f"attempt-{record.attempts:04d}")
     record.failure_reason = None
-    record.evidence["accounted_refinement_stage_attempts"] = 0
-    record.evidence["accounted_refinement_stage_node_hours"] = 0.0
     if selection is not None:
         record.acquisition_branch = selection.scores[formula].assigned_branch
     campaign.formula_runs[formula] = record
@@ -962,6 +978,16 @@ def run_campaign(
                 f"saved campaign_id {saved.campaign_id!r} does not match {campaign.campaign_id!r}"
             )
         campaign = saved
+    legacy = sorted(
+        formula
+        for formula, record in campaign.formula_runs.items()
+        if record.status == WorkflowStatus.RUNNING and record.random_seed is None
+    )
+    if legacy:
+        raise ValueError(
+            f"interrupted attempts of {legacy} come from a checkpoint without attempt seeds; "
+            "they cannot be recovered without abandoning their artifacts; start a new campaign"
+        )
     if campaign.random_seed is None:
         campaign.random_seed = policy.random_seed
     elif campaign.random_seed != policy.random_seed:

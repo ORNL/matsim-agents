@@ -34,6 +34,7 @@ are valid and never alias positive ones.
 | Campaign | the AL template's `random_seed` | `("formula-acquisition", iteration)`; each formula attempt gets `("formula", formula, attempt)`, and within it `generation`, the AL streams, `candidate-uncertainty`, `perturbation`, and `dft-refinement` |
 | Fine-tuning (`finetune_*`) | `--seed` (required) | split from the root stream; global Python, NumPy, and PyTorch state from `training`; `mace_run_train --seed` from `mace_run_train` |
 | Fine-tune evaluation | split `seed`, training seeds | group-bootstrap intervals from `bootstrap` |
+| Held-out evaluation (`evaluate`) | the AL config's `random_seed` | parity-plot atoms from `parity-plot` (whole atoms, so x/y/z stay balanced) |
 | Dataset splits | `split.seed` | root stream |
 | Relaxation with `random_displacement` | `displacement_seed` (required) | root stream |
 
@@ -43,7 +44,18 @@ structures and never resumes the previous attempt's active-learning artifacts.
 Resuming an interrupted attempt keeps its number, seed
 (`FormulaRunRecord.random_seed`), and directory, and replays it. The campaign
 state records the root seed of its first run (`CampaignState.random_seed`);
-resuming with a different seed is rejected.
+resuming with a different seed is rejected. Each new attempt is charged its own
+DFT calculations and node hours. An interrupted attempt from a checkpoint
+without attempt seeds cannot be recovered reproducibly and is rejected before
+the checkpoint is modified.
+
+A standalone active-learning run records its root seed in
+`<out_dir>/random-seed.json`. `loop.resume` with a different seed, or of a run
+directory with completed iterations but no recorded seed, is rejected before
+any seed structure is resolved or written.
+
+Exploration checkpoints include `seeding.py` in their code identity, so a
+change to stream derivation blocks resuming an interrupted run.
 
 A configured `generation_action` receives the attempt's `generation` seed on a
 copy of the action. Public entry points take the seed explicitly:
@@ -72,9 +84,11 @@ protocols (E3/E4 manifests, blinded assessments) whose recorded seeds must keep
 regenerating the published artifacts.
 
 Use `numpy_rng`/`python_rng` for generators, `seeded_torch` for code that draws
-from PyTorch's global generator (it restores the CPU, CUDA, and XPU states
-afterwards, also on error), and
-`seed_process` at the start of a training process.
+from PyTorch's global generator, and
+`seed_process` at the start of a training process. `seeded_torch(seed, ...,
+devices=...)` seeds and afterwards restores, also on error, the CPU generator
+and only the given accelerators (MC dropout passes the devices of the model's
+parameters), so GPUs reserved for DFT, training, or an LLM are not touched.
 
 ## Limits
 

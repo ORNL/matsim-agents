@@ -78,18 +78,19 @@ def test_seeded_torch_reproduces_and_restores_the_global_generator():
     torch.manual_seed(123)
     expected_next = torch.rand(2)
     torch.manual_seed(123)
-    with seeded_torch(9, "mc-dropout"):
+    with seeded_torch(9, "mc-dropout", devices=["cpu"]):
         first = torch.rand(4)
-    with seeded_torch(9, "mc-dropout"):
+    with seeded_torch(9, "mc-dropout", devices=["cpu"]):
         assert torch.equal(torch.rand(4), first)
     assert torch.equal(torch.rand(2), expected_next)
 
 
-def test_seeded_torch_restores_state_on_error_and_saves_xpu_state(monkeypatch):
+def test_seeded_torch_touches_only_the_given_accelerators_and_restores_on_error(monkeypatch):
     torch = pytest.importorskip("torch")
-    from contextlib import contextmanager
+    from contextlib import contextmanager, nullcontext
 
     forked: list[tuple[list[int], str | None]] = []
+    seeded: list[tuple[str, int]] = []
     real_fork = torch.random.fork_rng
 
     @contextmanager
@@ -101,19 +102,31 @@ def test_seeded_torch_restores_state_on_error_and_saves_xpu_state(monkeypatch):
         with real_fork(devices=devices, device_type=device_type, **kwargs):
             yield
 
+    current = {"index": None}
+
+    @contextmanager
+    def select(index):
+        current["index"] = index
+        yield
+
     monkeypatch.setattr(torch.random, "fork_rng", recording_fork)
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
-    monkeypatch.setattr(torch.xpu, "device_count", lambda: 2)
+    monkeypatch.setattr(torch.xpu, "device", select)
+    monkeypatch.setattr(
+        torch.xpu, "manual_seed", lambda _v: seeded.append(("xpu", current["index"]))
+    )
+    monkeypatch.setattr(torch, "manual_seed", lambda _v: pytest.fail("seeds every device"))
+    monkeypatch.setattr(torch.cuda, "device", lambda _i: nullcontext())
 
     torch.random.manual_seed(123)
     expected_next = torch.rand(2)
     torch.random.manual_seed(123)
-    with pytest.raises(RuntimeError), seeded_torch(9, "mc-dropout"):
+    with pytest.raises(RuntimeError), seeded_torch(9, "mc-dropout", devices=["cpu", "xpu:1"]):
         torch.rand(4)
         raise RuntimeError("scoring failed")
     assert torch.equal(torch.rand(2), expected_next)
-    assert ([0, 1], "xpu") in forked
+    assert ([1], "xpu") in forked
+    assert seeded == [("xpu", 1)]
+    assert not any(device_type == "cuda" for _, device_type in forked)
 
 
 def test_seed_process_seeds_every_global_generator():

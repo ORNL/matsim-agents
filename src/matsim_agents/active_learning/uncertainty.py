@@ -86,7 +86,8 @@ def score_mc_dropout(
                 m.p = float(p)
 
     out = np.zeros(len(candidates), dtype=np.float64)
-    with seeded_torch(seed, "mc-dropout"):
+    devices = {parameter.device for parameter in calculator.model.parameters()}
+    with seeded_torch(seed, "mc-dropout", devices=devices):
         for i, cand in enumerate(candidates):
             per_pass = []
             for _ in range(passes):

@@ -1165,6 +1165,7 @@ def test_resume_applies_last_promoted_model_for_all_backends(
         else:
             cfg.mlip.checkpoint = "incumbent.pk"
     cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": cfg.random_seed}))
     iteration_dir = cfg.loop.out_dir / "iteration_0000"
     iteration_dir.mkdir()
     (iteration_dir / "state.json").write_text(
@@ -1265,3 +1266,33 @@ def test_benchmark_sets_need_elemental_references(tmp_path: Path) -> None:
     data["loop"]["benchmark_sets"] = [BenchmarkSet(name="frozen", dataset=benchmark)]
     with pytest.raises(ValueError, match="need elemental DFT references"):
         ALConfig.model_validate(data)
+
+
+def test_resume_rejects_a_different_root_seed_before_writing_seed_structures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": 1}))
+    cfg.random_seed = 2
+    resolved = []
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *a, **k: resolved.append(1))
+
+    with pytest.raises(ValueError, match="started with random_seed 1"):
+        loop_mod.run_active_learning(cfg)
+    assert resolved == []
+
+
+def test_resume_rejects_legacy_iterations_without_a_recorded_seed(tmp_path: Path) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    iteration_dir = cfg.loop.out_dir / "iteration_0000"
+    iteration_dir.mkdir()
+    (iteration_dir / "state.json").write_text(json.dumps({"status": "complete", "iteration": 0}))
+
+    with pytest.raises(ValueError, match="no recorded random_seed"):
+        loop_mod.run_active_learning(cfg)
