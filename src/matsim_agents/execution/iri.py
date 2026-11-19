@@ -120,12 +120,22 @@ def walltime_seconds(walltime: str) -> int:
     return total
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects so the bearer token never leaves the configured origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _urllib_transport(
     method: str, url: str, headers: Mapping[str, str], body: bytes | None, timeout: float
 ) -> tuple[int, bytes]:
     request = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with _OPENER.open(request, timeout=timeout) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()
@@ -178,6 +188,7 @@ class IRIPlatform:
         payload: Mapping[str, Any] | None = None,
         authenticated: bool = True,
         extra_headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
     ) -> Any:
         headers = {"Accept": "application/json"}
         if authenticated:
@@ -189,10 +200,12 @@ class IRIPlatform:
         headers.update(extra_headers or {})
         url = f"{self.facility.base_url}{path}"
         try:
-            status, raw = self._transport(method, url, headers, body, self._timeout)
+            status, raw = self._transport(
+                method, url, headers, body, self._timeout if timeout is None else timeout
+            )
         except OSError as error:
             raise IRIError(f"{method} {path} failed: {error}") from error
-        if status >= 400:
+        if status >= 300:
             detail = raw.decode(errors="replace")[:500]
             raise IRIError(f"{method} {path} returned HTTP {status}: {detail}", status=status)
         return json.loads(raw) if raw else None
@@ -222,9 +235,13 @@ class IRIPlatform:
             "process_count": resources.nodes * resources.tasks_per_node,
         }
         if resources.gpus_per_node > 0:
-            resource_spec["gpu_cores_per_process"] = max(
-                1, resources.gpus_per_node // resources.tasks_per_node
-            )
+            per_process, leftover = divmod(resources.gpus_per_node, resources.tasks_per_node)
+            if per_process == 0 or leftover:
+                raise ValueError(
+                    f"IRI needs a whole number of GPUs per process: {resources.gpus_per_node} "
+                    f"GPUs/node over {resources.tasks_per_node} tasks/node"
+                )
+            resource_spec["gpu_cores_per_process"] = per_process
         attributes: dict[str, Any] = {
             "custom_attributes": dict(self.facility.custom_attributes),
         }
@@ -261,7 +278,7 @@ class IRIPlatform:
         """Launch *command* on the facility compute resource and return the job id."""
 
         spec = self.job_spec(command, resources=resources, workdir=workdir, env=env)
-        # OLCF S3M returns 501 for Idempotency-Key unless it has an idempotency store.
+        # Opt-in: deployments without an idempotency store reject the header (400/501).
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
         response = self._request(
             "POST", self._resource_path("compute/job"), payload=spec, extra_headers=headers
@@ -299,13 +316,27 @@ class IRIPlatform:
 
         if poll_interval <= 0 or max_interval < poll_interval or backoff < 1:
             raise ValueError("need 0 < poll_interval <= max_interval and backoff >= 1")
+        self._token_value()
         deadline = None if timeout is None else time.monotonic() + timeout
+        path = self._resource_path("compute/status", job_id)
         interval = poll_interval
         state = "unknown"
         errors = 0
+
+        def expired() -> IRIWaitTimeout:
+            return IRIWaitTimeout(
+                f"job {job_id} still {state!r} after {timeout}s", last_state=state
+            )
+
         while True:
+            request_timeout = self._timeout
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise expired()
+                request_timeout = min(request_timeout, remaining)
             try:
-                record = self.job(job_id) or {}
+                record = self._request("GET", path, timeout=request_timeout) or {}
             except IRIError as error:
                 transient = error.status is None or error.status >= 500
                 errors += 1
@@ -319,9 +350,7 @@ class IRIPlatform:
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise IRIWaitTimeout(
-                        f"job {job_id} still {state!r} after {timeout}s", last_state=state
-                    )
+                    raise expired()
                 time.sleep(min(interval, remaining))
             else:
                 time.sleep(interval)

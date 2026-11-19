@@ -28,6 +28,7 @@ class FakeTransport:
                 "url": url,
                 "headers": dict(headers),
                 "body": json.loads(body) if body else None,
+                "timeout": timeout,
             }
         )
         status, payload = self.responses.pop(0)
@@ -106,6 +107,28 @@ def test_request_overrides_facility_queue_and_account():
     assert spec["attributes"]["queue_name"] == "extended"
     assert spec["attributes"]["account"] == "other"
     assert "gpu_cores_per_process" not in spec["resources"]
+
+
+@pytest.mark.parametrize(("tasks", "gpus"), [(8, 4), (3, 8)])
+def test_job_spec_rejects_fractional_gpus_per_process(tasks, gpus):
+    with pytest.raises(ValueError, match="whole number of GPUs"):
+        frontier(FakeTransport([])).job_spec(
+            ["true"],
+            resources=ResourceRequest(tasks_per_node=tasks, gpus_per_node=gpus),
+            workdir="/tmp",
+        )
+
+
+def test_redirect_is_an_error():
+    transport = FakeTransport([(302, None)])
+    with pytest.raises(IRIError) as excinfo:
+        frontier(transport).job("7")
+    assert excinfo.value.status == 302
+
+
+def test_urllib_transport_does_not_follow_redirects():
+    handler = iri._NoRedirect()
+    assert handler.redirect_request(None, None, 302, "Found", {}, "http://evil") is None
 
 
 def test_submit_omits_idempotency_key_by_default():
@@ -233,6 +256,21 @@ def test_wait_timeout_reports_last_state(clock):
 
     assert excinfo.value.last_state == "queued"
     assert clock.sleeps == [10, 10, 5]
+    assert len(transport.calls) == 3
+
+
+def test_wait_caps_request_timeout_to_remaining_budget(clock):
+    transport = FakeTransport([state("queued"), state("completed")])
+    frontier(transport).wait("7", timeout=12, poll_interval=10)
+    assert [call["timeout"] for call in transport.calls] == [12, 2]
+
+
+def test_wait_without_token_fails_immediately(clock, monkeypatch):
+    monkeypatch.delenv("IRI_TOKEN_OLCF", raising=False)
+    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]))
+    with pytest.raises(IRIError, match="IRI_TOKEN_OLCF"):
+        platform.wait("7")
+    assert clock.sleeps == []
 
 
 def test_wait_retries_transient_errors(clock):
