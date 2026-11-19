@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,13 @@ from typer.testing import CliRunner
 
 from matsim_agents.cli import app, system
 from matsim_agents.cli._app import package_version
+
+
+def _help_text() -> str:
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0, result.output
+    # Typer colors help on CI (GITHUB_ACTIONS), splitting option names with ANSI codes.
+    return re.sub(r"\x1b\[[0-9;]*m", "", result.output)
 
 
 def test_cli_help_does_not_load_langgraph_or_print_warnings():
@@ -34,10 +42,9 @@ def test_cli_help_does_not_load_langgraph_or_print_warnings():
 
 def test_root_help_and_version_are_available_without_a_command():
     runner = CliRunner()
-    help_result = runner.invoke(app, ["--help"])
-    assert help_result.exit_code == 0, help_result.output
-    assert "workflow list" in help_result.output
-    assert "--debug" in help_result.output
+    help_text = _help_text()
+    assert "workflow list" in help_text
+    assert "--debug" in help_text
 
     version_result = runner.invoke(app, ["--version"])
     assert version_result.exit_code == 0, version_result.output
@@ -309,7 +316,6 @@ def test_tools_list_and_unknown_tool():
 
 
 def test_shell_completion_is_offered():
-    result = CliRunner().invoke(app, ["--help"])
-    assert result.exit_code == 0
-    assert "--install-completion" in result.output
-    assert "--show-completion" in result.output
+    help_text = _help_text()
+    assert "--install-completion" in help_text
+    assert "--show-completion" in help_text
