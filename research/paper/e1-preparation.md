@@ -19,7 +19,7 @@ in the run plan. Its questions and outcomes must not feed back into E1a panel,
 prompt, or held-out-set revisions.
 
 The governing design and gates are in
-[`docs/numerical-results-run-plan.md`](../../docs/numerical-results-run-plan.md).
+[`docs/project/numerical-results-run-plan.md`](../../docs/project/numerical-results-run-plan.md).
 
 ## Candidate Inventory
 

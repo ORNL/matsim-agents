@@ -35,7 +35,7 @@ Every participant declares:
 ```
 
 Credentials and provider-specific environment variables follow the normal
-[LLM provider configuration](../README.md#llm-provider-configuration). An
+[LLM provider configuration](guide/llm-backends.md). An
 endpoint must be reachable from the process running the debate. Participant
 names label dialogue contributions; they do not imply rank or authority.
 
