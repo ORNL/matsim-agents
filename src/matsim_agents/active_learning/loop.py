@@ -205,25 +205,40 @@ def _trajectory_ids(frames: list[Any]) -> set[str]:
 _ROOT_SEED_FILE = "random-seed.json"
 
 
-def _bind_root_seed(cfg: ALConfig, root: Path) -> None:
-    """Record the run's root seed; a resume must use the same one.
+def _prior_run_artifacts(root: Path) -> list[str]:
+    """Evidence a previous run left in *root*: iterations, datasets, and seed structures."""
+    names = ["dataset.extxyz", "dataset.db", "validation.extxyz", "seeds"]
+    found = [name for name in names if (root / name).exists()]
+    return found + sorted(path.name for path in root.glob("iteration_*"))
 
-    Checked before seed structures are resolved or written, so a mismatched resume
-    neither mixes random streams nor replaces the inputs of completed iterations.
+
+def _bind_root_seed(cfg: ALConfig, root: Path) -> None:
+    """Record the run's root seed; existing evidence must already carry the same one.
+
+    Checked before seed structures are resolved or written. A resume must match the
+    recorded seed. Artifacts without a recorded seed (from before seed recording) and,
+    for a fresh run, any prior artifacts are rejected, so retained datasets are never
+    reused under a seed that did not produce them.
     """
     path = root / _ROOT_SEED_FILE
-    if cfg.loop.resume and path.exists():
+    artifacts = _prior_run_artifacts(root)
+    if path.exists():
         recorded = int(json.loads(path.read_text())["random_seed"])
+        if not cfg.loop.resume:
+            raise ValueError(
+                f"{root} already holds a run (random_seed {recorded}); set loop.resume to "
+                "continue it or choose a new out_dir"
+            )
         if recorded != cfg.random_seed:
             raise ValueError(
                 f"{root} was started with random_seed {recorded}; resuming it with "
                 f"{cfg.random_seed} would mix two seed streams in one run"
             )
         return
-    if cfg.loop.resume and any(root.glob("iteration_*/state.json")):
+    if artifacts:
         raise ValueError(
-            f"{root} has completed iterations but no recorded random_seed; it predates "
-            "seed recording and cannot be resumed reproducibly; start a new out_dir"
+            f"{root} holds artifacts {artifacts} without a recorded random_seed; they "
+            "cannot be attributed to a seed; choose a new out_dir"
         )
     path.write_text(json.dumps({"random_seed": cfg.random_seed}) + "\n")
 

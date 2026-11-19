@@ -152,8 +152,11 @@ python -m matsim_agents.active_learning.finetune_eval \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
   --evaluation-config evaluation.yaml \
   --dataset dataset.extxyz --elemental-reference-manifest refs.json \
-  --output-dir runs/uma-lora
+  --output-dir runs/uma-lora --seed 0
 ```
+
+`--seed` (required) is the fine-tuning seed; the split, bootstrap, and parity
+streams derive from the configuration's seeds ([reproducibility](reproducibility.md)).
 
 Training refuses devices the backend's fine-tuner does not support (UMA and MACE
 train on `cuda` or `cpu`; HydraGNN also on `xpu`). `eval/report.json` records the

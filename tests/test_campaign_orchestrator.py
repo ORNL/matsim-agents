@@ -994,3 +994,96 @@ def test_campaign_policies_reject_removed_seed_fields(tmp_path):
             phase_policy=PhaseExplorationPolicy(),
             perturbation_seed=17,
         )
+
+
+def _write_al_iteration(formula_dir: Path, *, promoted: str | None, status: str) -> dict:
+    iteration_dir = formula_dir / "active_learning" / "iteration_0000"
+    iteration_dir.mkdir(parents=True, exist_ok=True)
+    state = {
+        "iteration": 0,
+        "status": status,
+        "n_dft_converged": 1,
+        "n_dft_failed": 0,
+        "timings_sec": {"total": 0.0},
+        "model_promoted": promoted is not None,
+        "new_logdir": promoted,
+    }
+    (iteration_dir / "state.json").write_text(json.dumps(state))
+    return state
+
+
+def test_retry_without_promotion_keeps_the_promoted_checkpoint(tmp_path):
+    from matsim_agents.campaign.formula_execution import latest_promoted_model
+
+    campaign = _campaign()
+    campaign.formulas["NbO"].active = False
+    campaign.formulas["Nb2O3"].active = False
+    checkpoint = str(tmp_path / "promoted.ckpt")
+    calls = 0
+
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
+        nonlocal calls
+        calls += 1
+        state = _write_al_iteration(
+            Path(output_dir), promoted=checkpoint if calls == 1 else None, status="complete"
+        )
+        result = _result(formula, output_dir)  # inconclusive, so it is retried
+        result.model_promoted = calls == 1
+        result.active_learning_result = {"n_dft_calculations": 1, "iteration_states": [state]}
+        return result
+
+    first = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(max_iterations=1),
+        resume=False,
+    )
+    assert latest_promoted_model(first.campaign) == checkpoint
+    second = run_campaign(
+        first.campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(retry_inconclusive=True, max_iterations=1),
+        resume=False,
+    )
+
+    record = second.campaign.formula_runs["NbO2"]
+    assert calls == 2 and record.attempts == 2
+    assert record.model_promoted is False
+    assert record.promoted_checkpoint == checkpoint
+    assert latest_promoted_model(second.campaign) == checkpoint
+
+
+def test_failed_retries_accumulate_active_learning_iterations(tmp_path):
+    campaign = _campaign()
+    campaign.formulas["NbO"].active = False
+    campaign.formulas["Nb2O3"].active = False
+
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
+        _write_al_iteration(Path(output_dir), promoted=None, status="complete")
+        raise RuntimeError("failed after one AL iteration")
+
+    first = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(max_iterations=1),
+        resume=False,
+    )
+    second = run_campaign(
+        first.campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(retry_failed=True, max_iterations=1),
+        resume=False,
+    )
+
+    record = second.campaign.formula_runs["NbO2"]
+    assert record.attempts == 2
+    assert record.n_active_learning_iterations == 2
+    assert record.n_dft_calculations == 2

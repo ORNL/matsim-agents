@@ -1707,24 +1707,17 @@ def make_formula_runner(
 
 
 def latest_promoted_model(campaign: CampaignState) -> str | None:
-    """Return the newest promoted checkpoint recorded in durable campaign evidence."""
+    """Return the newest promoted checkpoint recorded in durable campaign evidence.
 
-    ordered_records = sorted(
-        enumerate(campaign.formula_runs.values()),
-        key=lambda item: (
-            item[1].promotion_sequence is not None,
-            item[1].promotion_sequence if item[1].promotion_sequence is not None else -1,
-            item[1].iteration,
-            item[1].attempts,
-            item[0],
-        ),
-        reverse=True,
-    )
-    for _, record in ordered_records:
-        if not record.model_promoted:
-            continue
-        for state in reversed(record.evidence.get("iteration_states", [])):
-            checkpoint = state.get("new_logdir")
-            if state.get("model_promoted") and checkpoint:
-                return str(checkpoint)
-    return None
+    Uses each formula's durable ``promoted_checkpoint``, ordered by the campaign-wide
+    ``promotion_sequence``, so retries that promote nothing do not hide it.
+    """
+
+    promoted = [
+        record
+        for record in campaign.formula_runs.values()
+        if record.promoted_checkpoint is not None and record.promotion_sequence is not None
+    ]
+    if not promoted:
+        return None
+    return max(promoted, key=lambda record: record.promotion_sequence).promoted_checkpoint

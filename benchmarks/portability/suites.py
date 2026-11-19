@@ -289,7 +289,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
         )
     ]
 
-    with patch("matsim_agents.discovery.seeds.generate_seeds", return_value=candidates):
+    with patch("matsim_agents.discovery.wrapper.generate_seeds", return_value=candidates):
         result = run_phase_exploration(
             "Si",
             policy=PhaseExplorationPolicy(relax_structures=False),

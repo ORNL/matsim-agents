@@ -738,18 +738,7 @@ def _account_completed_formula(
         previous_node_hours + additional_al_node_hours + current_refinement_node_hours
     )
     record.model_promoted = result.model_promoted
-    if result.model_promoted:
-        record.promotion_sequence = (
-            max(
-                (
-                    item.promotion_sequence
-                    for item in campaign.formula_runs.values()
-                    if item.promotion_sequence is not None
-                ),
-                default=-1,
-            )
-            + 1
-        )
+    _record_promotion(campaign, record, al_result.get("iteration_states", []))
     record.evidence = {
         key: value for key, value in al_result.items() if key != "exploration_kwargs"
     }
@@ -879,7 +868,38 @@ def _ingest_formula_outcome(
     )
 
 
-def _account_failed_formula(record: FormulaRunRecord, formula_dir: Path) -> None:
+def _record_promotion(
+    campaign: CampaignState, record: FormulaRunRecord, iteration_states: list[dict[str, Any]]
+) -> None:
+    """Keep the newest checkpoint this attempt promoted as durable formula history.
+
+    The current attempt's evidence is replaced on every attempt; the promoted
+    checkpoint is not, so a later attempt that promotes nothing cannot erase it.
+    """
+    promoted = [
+        str(state["new_logdir"])
+        for state in iteration_states
+        if state.get("model_promoted") and state.get("new_logdir")
+    ]
+    if not promoted or promoted[-1] == record.promoted_checkpoint:
+        return
+    record.promoted_checkpoint = promoted[-1]
+    record.promotion_sequence = (
+        max(
+            (
+                item.promotion_sequence
+                for item in campaign.formula_runs.values()
+                if item.promotion_sequence is not None
+            ),
+            default=-1,
+        )
+        + 1
+    )
+
+
+def _account_failed_formula(
+    campaign: CampaignState, record: FormulaRunRecord, formula_dir: Path
+) -> None:
     """Charge durable partial progress from a failed formula attempt."""
     partial = _recover_partial_formula_evidence(formula_dir)
     previous_al_dft = int(record.evidence.get("accounted_active_learning_dft_calculations", 0))
@@ -907,12 +927,11 @@ def _account_failed_formula(record: FormulaRunRecord, formula_dir: Path) -> None
         0.0,
         partial["refinement_node_hours"] - previous_refinement_stage_node_hours,
     )
+    additional_al_iterations = max(0, len(partial["iteration_states"]) - previous_al_iterations)
     record.n_dft_calculations += additional_al_dft + additional_refinement_dft
     record.node_hours += additional_al_node_hours + additional_refinement_node_hours
-    record.n_active_learning_iterations = max(
-        record.n_active_learning_iterations,
-        len(partial["iteration_states"]),
-    )
+    record.n_active_learning_iterations += additional_al_iterations
+    _record_promotion(campaign, record, partial["iteration_states"])
     record.evidence.update(
         {
             "partial_campaign_stages": partial["stages"],
@@ -1123,7 +1142,7 @@ def run_campaign(
                 record.status = WorkflowStatus.COMPLETE
                 completed.append(formula)
             except Exception as exc:  # noqa: BLE001
-                _account_failed_formula(record, formula_dir)
+                _account_failed_formula(campaign, record, formula_dir)
                 record.status = WorkflowStatus.FAILED
                 record.failure_reason = repr(exc)
                 failed.append(formula)

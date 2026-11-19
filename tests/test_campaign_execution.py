@@ -2036,16 +2036,16 @@ def test_latest_promoted_model_recovers_checkpoint_from_state(tmp_path):
                 formula="NbO2",
                 status=WorkflowStatus.COMPLETE,
                 iteration=2,
-                model_promoted=True,
-                evidence={
-                    "iteration_states": [
-                        {
-                            "model_promoted": True,
-                            "new_logdir": str(tmp_path / "inference_ckpt.pt"),
-                        }
-                    ]
-                },
-            )
+                model_promoted=False,
+                promoted_checkpoint=str(tmp_path / "inference_ckpt.pt"),
+                promotion_sequence=0,
+            ),
+            "NbO": FormulaRunRecord(
+                formula="NbO",
+                status=WorkflowStatus.COMPLETE,
+                iteration=3,
+                promoted_checkpoint=str(tmp_path / "older.pt"),
+            ),
         },
     )
 

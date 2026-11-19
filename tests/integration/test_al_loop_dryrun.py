@@ -478,6 +478,8 @@ def test_nonempty_unsigned_dataset_cannot_be_appended(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": cfg.random_seed}))
     dataset_path = cfg.loop.out_dir / "dataset.extxyz"
     atoms = _make_candidate(0).atoms
     atoms.info["energy"] = -1.0
@@ -1294,5 +1296,32 @@ def test_resume_rejects_legacy_iterations_without_a_recorded_seed(tmp_path: Path
     iteration_dir.mkdir()
     (iteration_dir / "state.json").write_text(json.dumps({"status": "complete", "iteration": 0}))
 
-    with pytest.raises(ValueError, match="no recorded random_seed"):
+    with pytest.raises(ValueError, match="without a recorded random_seed"):
         loop_mod.run_active_learning(cfg)
+    assert not (cfg.loop.out_dir / "random-seed.json").exists()
+
+
+def test_resume_rejects_unseeded_partial_iterations_before_recording_a_seed(
+    tmp_path: Path,
+) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    (cfg.loop.out_dir / "iteration_0000").mkdir()  # partial: no state.json
+
+    with pytest.raises(ValueError, match="without a recorded random_seed"):
+        loop_mod.run_active_learning(cfg)
+    assert not (cfg.loop.out_dir / "random-seed.json").exists()
+
+
+def test_fresh_run_rejects_an_existing_run_directory(tmp_path: Path) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = False
+    (cfg.loop.out_dir / "random-seed.json").write_text(json.dumps({"random_seed": 5}))
+
+    with pytest.raises(ValueError, match="already holds a run"):
+        loop_mod.run_active_learning(cfg)
+    assert json.loads((cfg.loop.out_dir / "random-seed.json").read_text()) == {"random_seed": 5}

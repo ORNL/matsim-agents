@@ -45,14 +45,18 @@ Resuming an interrupted attempt keeps its number, seed
 (`FormulaRunRecord.random_seed`), and directory, and replays it. The campaign
 state records the root seed of its first run (`CampaignState.random_seed`);
 resuming with a different seed is rejected. Each new attempt is charged its own
-DFT calculations and node hours. An interrupted attempt from a checkpoint
+DFT calculations, node hours, and active-learning iterations, also when it fails.
+A promoted checkpoint is kept on the formula record (`promoted_checkpoint`), so
+a later attempt that promotes nothing does not erase it. An interrupted attempt from a checkpoint
 without attempt seeds cannot be recovered reproducibly and is rejected before
 the checkpoint is modified.
 
 A standalone active-learning run records its root seed in
-`<out_dir>/random-seed.json`. `loop.resume` with a different seed, or of a run
-directory with completed iterations but no recorded seed, is rejected before
-any seed structure is resolved or written.
+`<out_dir>/random-seed.json`. Before any seed structure is resolved or written,
+the loop rejects `loop.resume` with a different seed, a fresh run
+(`loop.resume: false`) in a directory that already holds a run, and any prior
+artifacts (iterations, datasets, seed structures) without a recorded seed, so
+retained labels are never reused under a seed that did not produce them.
 
 Exploration checkpoints include `seeding.py` in their code identity, so a
 change to stream derivation blocks resuming an interrupted run.

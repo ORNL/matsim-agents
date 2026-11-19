@@ -6,7 +6,8 @@
 #   python -m matsim_agents.active_learning.finetune_eval \
 #     --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
 #     --dataset dataset.extxyz --elemental-reference-manifest refs.json \
-#     --output-dir runs/uma-random --evaluation-config random-frame-interpolation.yaml
+#     --output-dir runs/uma-random --evaluation-config random-frame-interpolation.yaml \
+#     --seed 0
 evaluation:
   objective: within-distribution interpolation among frames like the training frames
   split:

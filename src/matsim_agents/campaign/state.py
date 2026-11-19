@@ -63,8 +63,17 @@ class FormulaRunRecord(BaseModel):
     n_dft_calculations: int = 0
     n_active_learning_iterations: int = 0
     node_hours: float = 0.0
-    model_promoted: bool = False
-    promotion_sequence: int | None = None
+    model_promoted: bool = Field(False, description="Whether the current attempt promoted a model.")
+    promoted_checkpoint: str | None = Field(
+        None,
+        description=(
+            "Newest checkpoint any attempt of this formula promoted; kept across retries "
+            "that do not promote."
+        ),
+    )
+    promotion_sequence: int | None = Field(
+        None, description="Campaign-wide order of promoted_checkpoint among all formulas."
+    )
     acquisition_branch: str | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
 
