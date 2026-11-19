@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 
 import pytest
@@ -182,6 +183,27 @@ def test_resource_status_is_unauthenticated():
     assert transport.calls[0]["url"].endswith("/status/resources/frontier")
 
 
+def test_resource_status_null_is_unknown():
+    transport = FakeTransport([(200, {"id": "frontier", "current_status": None})])
+    assert IRIPlatform("olcf-frontier", transport=transport).resource_status() == "unknown"
+
+
+def test_job_state_null_is_unknown():
+    transport = FakeTransport([(200, {"id": "7", "status": {"state": None}})])
+    assert frontier(transport).job_state("7") == "unknown"
+
+
+def truncated_transport(method, url, headers, body, timeout):
+    raise http.client.IncompleteRead(b"{", 10)
+
+
+def test_truncated_response_raises_status_less_iri_error():
+    platform = IRIPlatform("olcf-frontier", token="tok", transport=truncated_transport)
+    with pytest.raises(IRIError) as excinfo:
+        platform.job("7")
+    assert excinfo.value.status is None
+
+
 def test_missing_token_names_environment_variable(monkeypatch):
     monkeypatch.delenv("IRI_TOKEN_OLCF", raising=False)
     platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]))
@@ -276,6 +298,21 @@ def test_wait_without_token_fails_immediately(clock, monkeypatch):
 def test_wait_retries_transient_errors(clock):
     transport = FakeTransport([(503, {"detail": "busy"}), state("completed")])
     assert frontier(transport).wait("7", poll_interval=1)["status"]["state"] == "completed"
+
+
+def test_wait_retries_truncated_response(clock):
+    responses = FakeTransport([state("completed")])
+    calls = []
+
+    def flaky(method, url, headers, body, timeout):
+        calls.append(url)
+        if len(calls) == 1:
+            raise http.client.IncompleteRead(b"{", 10)
+        return responses(method, url, headers, body, timeout)
+
+    platform = IRIPlatform("olcf-frontier", token="tok", transport=flaky)
+    assert platform.wait("7", poll_interval=1)["status"]["state"] == "completed"
+    assert len(calls) == 2
 
 
 def test_wait_gives_up_after_repeated_transient_errors(clock):

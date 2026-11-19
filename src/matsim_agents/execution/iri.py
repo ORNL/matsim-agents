@@ -7,6 +7,7 @@ scheduler, so one client reaches NERSC, ALCF, and OLCF (Frontier via S3M).
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
@@ -203,8 +204,8 @@ class IRIPlatform:
             status, raw = self._transport(
                 method, url, headers, body, self._timeout if timeout is None else timeout
             )
-        except OSError as error:
-            raise IRIError(f"{method} {path} failed: {error}") from error
+        except (OSError, http.client.HTTPException) as error:
+            raise IRIError(f"{method} {path} failed: {error!r}") from error
         if status >= 300:
             detail = raw.decode(errors="replace")[:500]
             raise IRIError(f"{method} {path} returned HTTP {status}: {detail}", status=status)
@@ -295,7 +296,7 @@ class IRIPlatform:
 
     def job_state(self, job_id: str) -> str:
         status = self.job(job_id).get("status") or {}
-        return str(status.get("state", "unknown")).lower()
+        return str(status.get("state") or "unknown").lower()
 
     def wait(
         self,
@@ -344,7 +345,7 @@ class IRIPlatform:
                     raise
             else:
                 errors = 0
-                state = str((record.get("status") or {}).get("state", "unknown")).lower()
+                state = str((record.get("status") or {}).get("state") or "unknown").lower()
                 if state in TERMINAL_STATES:
                     return record
             if deadline is not None:
@@ -364,7 +365,7 @@ class IRIPlatform:
 
         path = self._resource_path("status/resources")
         record = self._request("GET", path, authenticated=False)
-        return str((record or {}).get("current_status", "unknown"))
+        return str((record or {}).get("current_status") or "unknown")
 
     def available_resources(self) -> ResourceRequest:
         """Return the configured queue and account; IRI exposes no allocation sizes yet."""
