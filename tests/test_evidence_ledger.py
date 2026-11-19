@@ -348,8 +348,11 @@ def test_cli_verifies_and_shows_the_ledger(tmp_path):
     runner = CliRunner()
     result = runner.invoke(app, ["ledger", "verify", str(path)])
     assert result.exit_code == 0 and "hash chain intact" in result.output
-    shown = runner.invoke(app, ["ledger", "show", str(path)])
+    shown = runner.invoke(app, ["ledger", "show", str(path), "--json"])
     assert json.loads(shown.output)["hypotheses"]["hyp-sic"]["status"] == "supported"
+    readable = runner.invoke(app, ["ledger", "show", str(path)])
+    assert readable.exit_code == 0
+    assert "hyp-sic: supported" in readable.output
     path.write_text(path.read_text().replace('"value":0.0', '"value":1.0'))
     result = runner.invoke(app, ["ledger", "verify", str(path)])
     assert result.exit_code == 1 and "tampered" in result.output
