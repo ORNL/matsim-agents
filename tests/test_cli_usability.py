@@ -319,3 +319,41 @@ def test_shell_completion_is_offered():
     help_text = _help_text()
     assert "--install-completion" in help_text
     assert "--show-completion" in help_text
+
+
+def test_config_init_never_overwrites_a_file_created_concurrently(monkeypatch, tmp_path):
+    target = tmp_path / "relax.yaml"
+    target.write_text("another process's config\n")
+    # Pretend the file appeared after any existence check.
+    monkeypatch.setattr(Path, "exists", lambda self: False)
+    result = CliRunner().invoke(app, ["config", "init", "relax", str(target)])
+    assert result.exit_code != 0
+    assert "refusing to overwrite" in result.output
+    assert target.read_text() == "another process's config\n"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        subprocess.CalledProcessError(7, ["python", "-m", "mace.cli.run_train"]),
+        RuntimeError("MACE produced no model"),
+    ],
+)
+def test_tool_execution_failures_exit_1(monkeypatch, failure):
+    import types
+
+    from matsim_agents.cli import tools
+
+    def main(argv=None):
+        raise failure
+
+    fake = types.ModuleType("failing_tool")
+    fake.main = main
+    monkeypatch.setitem(tools.TOOLS, "failing", ("failing_tool", "test tool"))
+    monkeypatch.setitem(sys.modules, "failing_tool", fake)
+    result = CliRunner().invoke(app, ["tools", "run", "failing"])
+    assert result.exit_code == 1, result.output
+    assert "tool 'failing' failed" in result.output
+    assert "Traceback" not in result.output
+    debug = CliRunner().invoke(app, ["--debug", "tools", "run", "failing"])
+    assert debug.exception is failure

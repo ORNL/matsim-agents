@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from importlib import import_module
 from pathlib import Path
 
@@ -80,10 +79,12 @@ def init(
     source = REPO / example
     if not source.is_file():
         fail(f"template {example} is only available in a source checkout of matsim-agents")
-    if output.exists():
-        fail(f"refusing to overwrite {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, output)
+    try:
+        with output.open("xb") as stream:
+            stream.write(source.read_bytes())
+    except FileExistsError:
+        fail(f"refusing to overwrite {output}")
     console.print(f"Created {output} from {example}", markup=False)
     console.print(
         f"Relative paths in it were written for {source.parent}; check them before running.",

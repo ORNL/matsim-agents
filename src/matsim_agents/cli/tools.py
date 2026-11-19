@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import subprocess
 import sys
 from importlib import import_module
 
 import typer
 
-from matsim_agents.cli._app import app, console, fail
+from matsim_agents.cli._app import CLIState, app, console, error_console, fail
 
 # name -> (module, one-line purpose); descriptions are static so ``list`` loads nothing heavy.
 TOOLS: dict[str, tuple[str, str]] = {
@@ -101,6 +102,17 @@ def run_tool(
         code = (
             module.main(arguments) if inspect.signature(module.main).parameters else module.main()
         )
+    except (subprocess.CalledProcessError, RuntimeError) as error:
+        # The tool ran and failed, so this is exit 1 rather than a usage error.
+        if ctx.find_root().ensure_object(CLIState).debug:
+            raise
+        error_console.print(
+            f"Error: tool {name!r} failed: {error}", style="red", markup=False, highlight=False
+        )
+        error_console.print(
+            "Hint: rerun with --debug before the command for a traceback.", markup=False
+        )
+        raise typer.Exit(1) from None
     finally:
         sys.argv = saved
     raise typer.Exit(code or 0)
