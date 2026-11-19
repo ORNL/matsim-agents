@@ -171,7 +171,7 @@ def test_trainer_command_reaches_the_fine_tuner_through_the_launcher(tmp_path):
     argv = _fine_tune_argv(
         trainer,
         mlip,
-        SimpleNamespace(node_count=1, ranks_per_node=1),
+        SimpleNamespace(node_count=1, ranks_per_node=1, total_ranks=1),
         dataset=tmp_path / "dataset.extxyz",
         out_dir=tmp_path / "out",
         references=tmp_path / "references.json",

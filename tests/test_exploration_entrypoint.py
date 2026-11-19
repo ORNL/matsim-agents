@@ -11,6 +11,7 @@ from ase.calculators.emt import EMT
 from ase.io import write
 from typer.testing import CliRunner
 
+from matsim_agents.backends.mlip.config import HydraGNNConfig
 from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -104,11 +105,14 @@ def _backend_mlip_block(backend: str, root: Path) -> dict:
     if backend == "hydragnn":
         logdir = root / "hydragnn-logdir"
         logdir.mkdir()
+        (logdir / "config.json").write_text("{}")
+        (logdir / "best_model.pk").write_bytes(b"test weights, never deserialized")
         mlp = root / "branch.pt"
         mlp.write_bytes(b"test branch weights, never deserialized")
         return {
             "backend": "hydragnn",
             "logdir": "hydragnn-logdir",
+            "checkpoint": "best_model.pk",
             "mlp_checkpoint": "branch.pt",
         }
     if backend == "uma":
@@ -157,9 +161,16 @@ def test_every_mlip_backend_runs_the_same_exploration(tmp_path, emt_workflow, mo
     assert provenance["backend"] == backend
     assert provenance["model_identifier"] == check.model_identifier
     if backend == "hydragnn":
-        assert requests[0].mlip.logdir == tmp_path / "hydragnn-logdir"
+        logdir = tmp_path / "hydragnn-logdir"
+        assert requests[0].mlip.logdir == logdir
         assert requests[0].mlip.mlp_checkpoint == tmp_path / "branch.pt"
+        assert set(check.model_files) == {
+            str(logdir / "config.json"),
+            str(logdir / "best_model.pk"),
+            str(tmp_path / "branch.pt"),
+        }
     elif backend == "uma":
+        assert check.model_files == {}
         assert requests[0].mlip.model_name == "uma-s-1p1"
     else:
         assert requests[0].mlip.model == "medium-omat-0"
@@ -546,3 +557,56 @@ def test_single_round_cli_resumes_interrupted_work(config_path, emt_workflow, mo
     before = {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
     assert resume_exploration(directory) == summary
     assert before == {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+
+
+def test_hydragnn_exploration_requires_a_pinned_checkpoint(tmp_path, available_dependencies):
+    block = _backend_mlip_block("hydragnn", tmp_path)
+    block.pop("checkpoint")
+    cfg = ExplorationConfig(
+        formula="Cu", mlip=HydraGNNConfig(**{**block, "logdir": tmp_path / block["logdir"]})
+    )
+    check = check_exploration(cfg)
+    assert not check.ready
+    assert any("set mlip.checkpoint" in error for error in check.errors)
+
+
+def test_resume_refuses_a_changed_model_file(tmp_path, emt_workflow):
+    path = tmp_path / "explore.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "formula": "Cu",
+                "mlip": _backend_mlip_block("hydragnn", tmp_path),
+                "output_dir": "runs",
+                "generation": {"pyxtal_count": 0, "max_aflow_candidates": 2},
+                "relaxation": {"maxiter": 2},
+            }
+        )
+    )
+    run = Path(run_exploration(load_exploration_config(path)).run_directory)
+    (tmp_path / "hydragnn-logdir" / "best_model.pk").write_bytes(b"replaced weights")
+    with pytest.raises(ValueError, match="model file changed or missing: .*best_model.pk"):
+        resume_exploration(run)
+
+
+def test_relative_model_paths_are_persisted_absolute(tmp_path, emt_workflow, monkeypatch):
+    work = tmp_path / "work"
+    work.mkdir()
+    block = _backend_mlip_block("hydragnn", work)
+    monkeypatch.chdir(work)
+    summary = run_exploration(
+        ExplorationConfig(
+            formula="Cu",
+            mlip=block,
+            output_dir="runs",
+            generation={"pyxtal_count": 0, "max_aflow_candidates": 2},
+            relaxation={"maxiter": 2},
+        )
+    )
+    run = Path(summary.run_directory)
+    stored = json.loads((run / "resolved_config.json").read_text())["mlip"]
+    assert stored["logdir"] == str(work / "hydragnn-logdir")
+    assert stored["mlp_checkpoint"] == str(work / "branch.pt")
+    monkeypatch.chdir(tmp_path)
+    assert summarize_exploration(run) == summary
+    assert resume_exploration(run) == summary

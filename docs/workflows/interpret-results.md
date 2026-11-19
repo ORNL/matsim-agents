@@ -88,8 +88,9 @@ matsim-agents explore resume SCIENTIFIC_RUN_DIRECTORY
 ```
 
 Only version-3 exploration checkpoints are supported: no old-format reader,
-migration, or compatibility mode. Native resume verifies scientific config,
-runtime/dependency identities, and committed artifact hashes. Completed attempts,
+migration, or compatibility mode. Native resume verifies scientific config, the
+model selection and the hashes of its local model files, runtime/dependency
+identities, and committed artifact hashes. Completed attempts,
 including failed/nonconverged ones, are not silently rerun. An uncommitted attempt
 may restart. Completed runs are no-ops.
 

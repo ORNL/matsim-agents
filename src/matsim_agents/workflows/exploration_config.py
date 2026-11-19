@@ -105,6 +105,8 @@ class ExplorationCheck(BaseModel):
     backend: str
     model_identifier: str
     checkpoint_sha256: str | None = None
+    # SHA-256 of every local file that determines the model's predictions.
+    model_files: dict[str, str] = Field(default_factory=dict)
 
 
 def load_exploration_config(path: str | Path) -> ExplorationConfig:
@@ -143,7 +145,18 @@ def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
         except ValueError as error:
             errors.append(f"Invalid {backend} model selection: {error}")
     digest = None
-    artifact = cfg.mlip.model_artifact()
+    model_files: dict[str, str] = {}
+    try:
+        artifact = cfg.mlip.model_artifact()
+        files = cfg.mlip.model_files()
+    except ValueError as error:
+        errors.append(f"Model files cannot be identified: {error}")
+        artifact, files = None, []
+    for path in files:
+        if path.is_file():
+            model_files[str(path)] = file_sha256(path)
+        elif not missing:
+            errors.append(f"Required {backend} model file does not exist: {path}")
     if artifact is None:
         if cfg.checkpoint_sha256 is not None:
             errors.append(
@@ -179,4 +192,5 @@ def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
         backend=backend,
         model_identifier=cfg.model_identifier(),
         checkpoint_sha256=digest,
+        model_files=model_files,
     )

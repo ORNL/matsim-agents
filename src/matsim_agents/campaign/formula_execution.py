@@ -986,6 +986,7 @@ def _prepare_al_template(
     if config.phase_policy.retrain_mlip:
         if config.retraining is None:
             raise ValueError("phase policy requests retraining but no retraining config is set")
+        al_cfg.mlip.check_fine_tunable()
         al_cfg.trainer.enabled = True
         al_cfg.trainer.train_launcher = config.retraining.train_launcher
         al_cfg.trainer.epochs_per_iter = config.retraining.epochs

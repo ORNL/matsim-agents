@@ -220,6 +220,11 @@ def main(argv: list[str] | None = None) -> int:
     campaign = CampaignState.load(args.campaign_state)
     mlip = mlip_config_from_args(parser, args)
     al_config = ALConfig.from_yaml(args.al_config, mlip=mlip)
+    if args.retrain:
+        try:
+            al_config.mlip.check_fine_tunable()
+        except ValueError as error:
+            parser.error(f"--retrain: {error}")
     # An explicit --promotion-validation-reference-set overrides the AL config's.
     if args.promotion_validation_reference_set is None:
         args.promotion_validation_reference_set = al_config.trainer.validation_reference_set

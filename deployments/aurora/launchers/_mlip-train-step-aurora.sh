@@ -17,6 +17,10 @@
 #   hydragnn  the AL driver's active frameworks + HydraGNN environment (.venv)
 #   uma       MATSIM_FAIRCHEM_VENV (default .venv-uma)
 #   mace      MATSIM_MACE_VENV (default .venv-mace)
+#
+# Only HydraGNN's fine-tuners train on XPU; matsim-agents rejects UMA and MACE
+# training with mlip.device: xpu before the job reaches this launcher. The
+# built-in fine-tuners are single-process, so the trainer always passes 1 x 1.
 # =============================================================================
 
 set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset

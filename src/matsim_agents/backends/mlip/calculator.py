@@ -493,26 +493,6 @@ def _find_torch_module(*roots: Any):
     return None
 
 
-def _resolve_finetuned_uma_checkpoint(model_name: str) -> Path | None:
-    """If ``model_name`` points at a fine-tuned UMA checkpoint on disk, return
-    the resolved ``.pt`` path; otherwise return ``None`` (a registered name).
-
-    The AL trainer's UMA fine-tune writes its final checkpoint under the fairchem
-    convention ``<output-dir>/<timestamp_id>/checkpoints/final/inference_ckpt.pt``,
-    so a directory is accepted and the canonical location is searched first.
-    """
-    p = Path(str(model_name))
-    if not p.exists():
-        return None
-    if p.is_file():
-        return p
-    canonical = p / "checkpoints" / "final" / "inference_ckpt.pt"
-    if canonical.is_file():
-        return canonical
-    matches = sorted(p.glob("**/inference_ckpt.pt"))
-    return matches[-1] if matches else None
-
-
 def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
     """Build an ASE calculator backed by a UMA (fairchem) universal MLIP.
 
@@ -535,7 +515,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
             "Hugging Face), then set mlip.backend: uma."
         ) from exc
 
-    ckpt = _resolve_finetuned_uma_checkpoint(cfg.model_name)
+    ckpt = cfg.local_checkpoint()
     if ckpt is not None:
         log.info("Loading fine-tuned UMA checkpoint from %s", ckpt)
         predictor = load_predict_unit(str(ckpt), device=cfg.device)

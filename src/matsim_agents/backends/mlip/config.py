@@ -139,6 +139,8 @@ class MLIPBackendConfig(BaseModel, ABC):
     required_modules: ClassVar[tuple[str, ...]] = ()
     # Fields holding file paths, resolved against the declaring YAML file.
     path_fields: ClassVar[tuple[str, ...]] = ()
+    # Devices the built-in fine-tuner (fine_tuner) can train on.
+    fine_tune_devices: ClassVar[frozenset[str]] = frozenset({"cuda", "cpu"})
 
     @abstractmethod
     def build_calculator(self, *, enable_mc_dropout: bool = False) -> Any:
@@ -165,6 +167,20 @@ class MLIPBackendConfig(BaseModel, ABC):
         """Local model file whose SHA-256 identifies the model, if the backend uses one."""
         return None
 
+    def model_files(self) -> list[Path]:
+        """Every local file whose contents determine this model's predictions.
+
+        Empty for a model selected by a released name. Raises ``ValueError`` when
+        the files would only be chosen at load time, so they cannot be pinned.
+        """
+        artifact = self.model_artifact()
+        return [artifact] if artifact is not None else []
+
+    def with_resolved_paths(self, base: Path) -> MLIPBackendConfig:
+        """This configuration with relative local paths resolved against ``base``."""
+        raw = self.model_dump(mode="json")
+        return parse_mlip_config(type(self).resolve_paths(raw, Path(base)))
+
     def check_loadable(self) -> None:
         """Raise ``ValueError`` if inputs needed to load the model are missing."""
 
@@ -172,6 +188,15 @@ class MLIPBackendConfig(BaseModel, ABC):
         """Local files and directories that must exist before the model can load."""
         artifact = self.model_artifact()
         return [artifact] if artifact is not None else []
+
+    def check_fine_tunable(self) -> None:
+        """Raise ``ValueError`` if the built-in fine-tuner cannot train this model."""
+        if self.device not in self.fine_tune_devices:
+            raise ValueError(
+                f"{self.fine_tuner} does not support device={self.device!r} "
+                f"(supported: {', '.join(sorted(self.fine_tune_devices))}); keep "
+                "trainer.enabled false or select a supported device"
+            )
 
     @property
     def fine_tuner_module(self) -> str:
@@ -272,6 +297,7 @@ class HydraGNNConfig(MLIPBackendConfig):
     )
 
     required_modules: ClassVar[tuple[str, ...]] = ("hydragnn", "torch_geometric")
+    fine_tune_devices: ClassVar[frozenset[str]] = frozenset({"cuda", "cpu", "xpu"})
     path_fields: ClassVar[tuple[str, ...]] = (
         "logdir",
         "hydragnn_root",
@@ -378,6 +404,29 @@ class HydraGNNConfig(MLIPBackendConfig):
         checkpoint = Path(self.checkpoint)
         return checkpoint if checkpoint.is_absolute() else self.logdir / checkpoint
 
+    def model_files(self) -> list[Path]:
+        convention_path = self.logdir / "energy-convention.json"
+        convention = json.loads(convention_path.read_text()) if convention_path.is_file() else {}
+        checkpoint = self.model_artifact()
+        if checkpoint is None and "checkpoint" in convention:
+            checkpoint = self.logdir / convention["checkpoint"]
+        if checkpoint is None:
+            raise ValueError(
+                "HydraGNN checkpoint is chosen from the logdir at load time; set "
+                "mlip.checkpoint so the model can be identified"
+            )
+        files = [self.logdir / "config.json", checkpoint]
+        # Training metadata the loader applies (energy convention, routing, new head).
+        for name in ("energy-convention.json", "routing.json", "newhead.json"):
+            if (self.logdir / name).is_file():
+                files.append(self.logdir / name)
+        if "branch_mlp_checkpoint" in convention:
+            files.append(self.logdir / convention["branch_mlp_checkpoint"])
+        for path in (self.mlp_checkpoint, self.newhead_ft_config):
+            if path is not None:
+                files.append(path)
+        return sorted(set(files))
+
     def relaxation_calculator(self, *, charge: float = 0.0, spin: float = 0.0) -> RelaxCalculator:
         from matsim_agents.backends.mlip.relaxation import hydragnn_relaxation_calculator
 
@@ -461,9 +510,28 @@ class UMAConfig(MLIPBackendConfig):
     def model_reference(self) -> str:
         return self.model_name
 
-    def model_artifact(self) -> Path | None:
+    def local_checkpoint(self) -> Path | None:
+        """The checkpoint loaded for a local ``model_name``; ``None`` for a registry name.
+
+        A directory is a fine-tune output: fairchem writes
+        ``<dir>/<run>/checkpoints/final/inference_ckpt.pt``, and the canonical
+        location is searched first.
+        """
         path = Path(self.model_name).expanduser()
-        return path if path.is_file() else None
+        if not path.exists():
+            return None
+        if path.is_file():
+            return path
+        canonical = path / "checkpoints" / "final" / "inference_ckpt.pt"
+        if canonical.is_file():
+            return canonical
+        matches = sorted(path.glob("**/inference_ckpt.pt"))
+        if not matches:
+            raise ValueError(f"UMA model directory has no inference_ckpt.pt: {path}")
+        return matches[-1]
+
+    def model_artifact(self) -> Path | None:
+        return self.local_checkpoint()
 
 
 class MACEConfig(MLIPBackendConfig):

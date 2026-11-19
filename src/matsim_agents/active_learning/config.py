@@ -432,6 +432,12 @@ class ALConfig(BaseModel):
         return references.manifest if references is not None else None
 
     @model_validator(mode="after")
+    def _check_fine_tunable(self) -> ALConfig:
+        if self.trainer.enabled:
+            self.mlip.check_fine_tunable()
+        return self
+
+    @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:
         s = self.acquisition.strategy
         needs_ensemble = s in {"ensemble", "ensemble_then_dropout"}

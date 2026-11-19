@@ -126,6 +126,18 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 # --------------------------------------------------------------------------- #
 
 
+def _check_fine_tune_launch(mlip_cfg: MLIPBackendConfig, launch: ProcessLaunch) -> None:
+    """Reject fine-tunes the built-in recipes cannot run, before any expensive setup."""
+    mlip_cfg.check_fine_tunable()
+    # The built-in fine-tuners are single-process; extra ranks would race on outputs.
+    if launch.total_ranks != 1:
+        raise ValueError(
+            f"Built-in fine-tuners run as one process ({mlip_cfg.fine_tuner}); set "
+            f"resources.pools.training to 1 node and 1 device (it resolved to "
+            f"{launch.node_count} node(s) x {launch.ranks_per_node} rank(s))"
+        )
+
+
 def _fine_tune_argv(
     trainer_cfg: TrainerConfig,
     mlip_cfg: MLIPBackendConfig,
@@ -141,6 +153,7 @@ def _fine_tune_argv(
     it prepares the backend's environment on the site and runs ``python`` with the
     remaining arguments.
     """
+    _check_fine_tune_launch(mlip_cfg, launch)
     python_args = [
         "-m",
         mlip_cfg.fine_tuner_module,
@@ -213,12 +226,7 @@ def retrain_hydragnn(
         log.info("trainer.enabled=False; skipping retrain at iteration %d", iteration)
         return Path(hydragnn_cfg.logdir)
 
-    if launch.total_ranks != 1:
-        raise ValueError(
-            "Built-in HydraGNN fine-tuners run as one process; set resources.pools.training "
-            f"to 1 node and 1 device (it resolved to {launch.node_count} node(s) x "
-            f"{launch.ranks_per_node} rank(s))"
-        )
+    _check_fine_tune_launch(hydragnn_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "HydraGNN fine-tuning")
 
     from matsim_agents.active_learning.training_references import resolve_training_references
@@ -360,6 +368,7 @@ def retrain_uma(
         log.info("trainer.enabled=False; skipping UMA fine-tune at iteration %d", iteration)
         return Path(str(uma_cfg.model_name))
 
+    _check_fine_tune_launch(uma_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "UMA fine-tuning")
     manifest = _references_for_training(
         trainer_cfg,
@@ -384,9 +393,10 @@ def retrain_uma(
     log_path = out_model_dir / "train.log"
     _run_trainer(argv, log_path, launch, trainer_cfg.train_launcher is None, "UMA fine-tune")
 
-    from matsim_agents.backends.mlip.calculator import _resolve_finetuned_uma_checkpoint
-
-    checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
+    try:
+        checkpoint = uma_cfg.with_checkpoint(out_model_dir).local_checkpoint()
+    except ValueError:
+        checkpoint = None
     if checkpoint is None:
         raise RuntimeError(
             "UMA fine-tune exited successfully but did not produce an inference_ckpt.pt "
@@ -423,6 +433,7 @@ def retrain_mace(
         # Point downstream at the existing base model (checkpoint path or variant).
         return Path(str(mace_cfg.model))
 
+    _check_fine_tune_launch(mace_cfg, launch)
     _require_direct_placement(trainer_cfg, launch, "MACE fine-tuning")
     manifest = _references_for_training(
         trainer_cfg,

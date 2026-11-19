@@ -308,3 +308,57 @@ def test_routed_hydragnn_fine_tune_requires_a_branch_mlp(tmp_path, references):
             out_dir=tmp_path / "out",
             references=tmp_path / "refs.json",
         )
+
+
+@pytest.mark.parametrize(
+    ("retrain", "mlip"),
+    [
+        (trainer_module.retrain_uma, UMAConfig()),
+        (trainer_module.retrain_mace, MACEConfig()),
+        (trainer_module.retrain_hydragnn, HydraGNNConfig(logdir="/l", mlp_checkpoint="/m.pt")),
+    ],
+    ids=["uma", "mace", "hydragnn"],
+)
+def test_multirank_fine_tunes_are_rejected_before_any_setup(
+    tmp_path, monkeypatch, references, retrain, mlip
+):
+    def unexpected(*args, **kwargs):
+        pytest.fail("references must not be resolved for a rejected fine-tune")
+
+    monkeypatch.setattr(trainer_module, "_references_for_training", unexpected)
+    import matsim_agents.active_learning.training_references as training_references
+
+    monkeypatch.setattr(training_references, "resolve_training_references", unexpected)
+    two_ranks = LAUNCH.model_copy(update={"ranks_per_node": 2})
+    config = _trainer(references, train_launcher=tmp_path / "launcher.sh")
+    with pytest.raises(ValueError, match="run as one process"):
+        retrain(config, mlip, tmp_path / "d.extxyz", 0, tmp_path / "out", launch=two_ranks)
+
+
+@pytest.mark.parametrize(
+    ("mlip", "supported"),
+    [
+        (HydraGNNConfig(logdir="/l", mlp_checkpoint="/m.pt", device="xpu"), True),
+        (UMAConfig(device="xpu"), False),
+        (MACEConfig(device="xpu"), False),
+    ],
+    ids=["hydragnn", "uma", "mace"],
+)
+def test_fine_tuning_rejects_devices_the_recipe_cannot_train_on(references, mlip, supported):
+    from pathlib import Path
+
+    def argv():
+        return _fine_tune_argv(
+            _trainer(references),
+            mlip,
+            LAUNCH,
+            dataset=Path("d.extxyz"),
+            out_dir=Path("o"),
+            references=references,
+        )
+
+    if supported:
+        assert argv()[argv().index("--device") + 1] == "xpu"
+    else:
+        with pytest.raises(ValueError, match="does not support device='xpu'"):
+            argv()

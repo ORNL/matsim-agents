@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -150,3 +151,61 @@ def test_selected_model_brings_its_own_fine_tuner(path, tmp_path, hydragnn_env):
     cfg = ALConfig.from_yaml(_al_yaml(tmp_path), mlip=load_mlip_config(path))
     assert cfg.mlip.fine_tuner_module == f"matsim_agents.training.{cfg.mlip.fine_tuner}"
     assert cfg.mlip.fine_tuner.startswith(f"finetune_{cfg.mlip.backend}")
+
+
+@pytest.mark.parametrize(
+    ("mlip", "supported"),
+    [
+        (HydraGNNConfig(logdir="/l", device="xpu", fine_tuner="finetune_hydragnn_newhead"), True),
+        (UMAConfig(device="xpu"), False),
+        (MACEConfig(device="xpu"), False),
+    ],
+    ids=["hydragnn", "uma", "mace"],
+)
+def test_training_config_rejects_an_unsupported_device_at_load(tmp_path, mlip, supported):
+    references = tmp_path / "references.json"
+    references.write_text("{}")
+    path = _al_yaml(tmp_path)
+    raw = yaml.safe_load(path.read_text())
+    raw["trainer"] = {"enabled": True, "validation_reference_set": str(references)}
+    path.write_text(yaml.safe_dump(raw))
+    if supported:
+        assert ALConfig.from_yaml(path, mlip=mlip).mlip.device == "xpu"
+    else:
+        with pytest.raises(ValidationError, match="does not support device='xpu'"):
+            ALConfig.from_yaml(path, mlip=mlip)
+
+
+def test_uma_fine_tune_directory_resolves_to_its_inference_checkpoint(tmp_path):
+    run = tmp_path / "finetune" / "run-1" / "checkpoints" / "final"
+    run.mkdir(parents=True)
+    (run / "inference_ckpt.pt").write_bytes(b"weights")
+    cfg = UMAConfig(model_name=str(tmp_path / "finetune"))
+    assert cfg.local_checkpoint() == run / "inference_ckpt.pt"
+    assert cfg.model_files() == [run / "inference_ckpt.pt"]
+    assert UMAConfig(model_name="uma-s-1p1").model_files() == []
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(ValueError, match="no inference_ckpt.pt"):
+        UMAConfig(model_name=str(empty)).model_files()
+
+
+def test_hydragnn_model_files_follow_the_declared_energy_convention(tmp_path):
+    logdir = tmp_path / "logdir"
+    logdir.mkdir()
+    for name in ("config.json", "epoch_7.pk", "routing.json", "mlp.pt"):
+        (logdir / name).write_text(name)
+    (logdir / "energy-convention.json").write_text(
+        json.dumps({"checkpoint": "epoch_7.pk", "branch_mlp_checkpoint": "mlp.pt"})
+    )
+    files = HydraGNNConfig(logdir=logdir).model_files()
+    assert files == sorted(
+        logdir / name
+        for name in (
+            "config.json",
+            "energy-convention.json",
+            "epoch_7.pk",
+            "mlp.pt",
+            "routing.json",
+        )
+    )

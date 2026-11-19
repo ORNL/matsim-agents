@@ -1,32 +1,40 @@
 # A small phase search, without writing Python
 
 This is the beginner-facing entry point for **bounded batches or rounds** of
-MACE structure generation and relaxation. It reuses the same generators,
+MLIP structure generation and relaxation. It reuses the same generators,
 calculator, ranking, and evidence storage as the library workflows.
 You need one YAML file, not a session-specific test driver.
 
-This first interface supports a **trusted local MACE checkpoint**. It does
-not yet reproduce the three-round Nb2O5 coordination test: there are no LLM
-calls, SOAP filtering, adaptive decisions, DFT, or active learning.
+The model is selected by the YAML's `mlip:` block, so any supported backend
+(HydraGNN, UMA, or MACE) runs the same search. There are no LLM calls, SOAP
+filtering, adaptive decisions, DFT, or active learning in this interface.
 Existing advanced commands remain available.
 
 ## 1. Prepare once
 
 Use the [installation instructions](../../README.md#installation) or your
-facility's prepared MACE environment. The examples below assume the repository
-root and `.venv-mace/bin/python`. This interpreter must import matsim-agents,
-MACE, ASE, PyTorch, pymatgen, and PyXtal if random generation is requested.
-The CLI and Python API use the same validated configuration.
+facility's prepared environment for the selected backend (`.venv` for HydraGNN,
+`.venv-uma` for UMA, `.venv-mace` for MACE). The examples below use MACE from the
+repository root with `.venv-mace/bin/python`. The interpreter must import
+matsim-agents, the backend's package, ASE, PyTorch, pymatgen, and PyXtal if random
+generation is requested. The CLI and Python API use the same validated
+configuration.
 
 Copy [the Nb2O5 example](../../examples/workflows/explore-nb2o5.yaml) somewhere
-convenient, then edit **`checkpoint`** to the local model file. The supplied hash
-pins MACE-OMAT-0 medium; change the hash as well if deliberately using another
-model. Only deserialize checkpoints you trust.
+convenient and edit its **`mlip:`** block (see [examples/mlip](../../examples/mlip)
+for one block per backend). The example selects MACE-OMAT-0 medium by name. To
+load a local model file instead, select it in the block (for MACE,
+`family: checkpoint` and `model: /path/to/file`) and pin its SHA-256 with
+`checkpoint_sha256`. Only deserialize checkpoints you trust.
 
 ```bash
 cp examples/workflows/explore-nb2o5.yaml ./explore.yaml
-# Edit explore.yaml: set checkpoint to your trusted local model path.
+# Edit the mlip: block of explore.yaml to select your model.
 ```
+
+A HydraGNN selection must name its `checkpoint` (or point at a fine-tuned logdir
+whose `energy-convention.json` declares it): the loader would otherwise pick the
+latest checkpoint at load time, and the run could not identify the model it used.
 
 Paths in the YAML are resolved relative to the YAML file, including the output
 directory. There are no machine-specific Python paths to rewrite. The example
@@ -39,9 +47,10 @@ extended work. Nothing in these commands submits a scheduler job.
 .venv-mace/bin/python -m matsim_agents.cli explore check explore.yaml
 ```
 
-This validates the configuration, checks dependency availability in the
-**current interpreter**, and verifies the checkpoint hash. It does not import
-or load MACE, generate structures, contact an LLM, or create a run directory.
+This validates the configuration, checks the selected backend's dependencies in
+the **current interpreter**, hashes every local file that determines the model's
+predictions, and verifies `checkpoint_sha256` when set. It does not import or
+load the model, generate structures, contact an LLM, or create a run directory.
 It is a static preflight, not a device/ABI or scientific qualification.
 If dependencies are missing, use the correct prepared interpreter first;
 do not mix packages from unrelated environments.
@@ -62,9 +71,9 @@ checkpointed engine and output layout:
 
 | Output | Purpose |
 | --- | --- |
-| `resolved_config.json` | Complete validated configuration with absolute paths |
-| `provenance.json` | Checkpoint identity and scientific runtime settings |
-| `rounds-state.json` | Version-2 checkpoint: generated candidates, decisions, attempts, errors, hashes |
+| `resolved_config.json` | Complete validated configuration, including the `mlip:` block, with absolute paths |
+| `provenance.json` | MLIP backend, model identity, checkpoint hash, and scientific runtime settings |
+| `rounds-state.json` | Version-3 checkpoint: generated candidates, decisions, attempts, errors, model-file and artifact hashes |
 | `cumulative-ranking.json` | Relative-energy ranking, or `null` when nothing qualifies |
 | `exploration-summary.json` | Counts, termination reasons, execution/scientific outcome |
 | `round-0001/seeds/` | Generated input structures |
@@ -198,7 +207,8 @@ successful calculations.
   loads its own calculator on its first outstanding attempt; it cannot recover
   GPU/CPU model memory from a terminated process.
 - Only one writer may run/resume a directory at a time (an OS file lock).
-- Missing/modified input or output artifacts, a changed checkpoint, changed
+- Missing/modified input or output artifacts, a changed model selection or any
+  changed model file (checkpoint, branch-weight MLP, training metadata), changed
   workflow/optimizer/generator source, or changed scientific dependency versions
   block resume. Do not edit the journal to bypass checks. Start a fresh run for
   changed scientific settings; the stored configuration is authoritative.
@@ -236,7 +246,7 @@ generation:
   random_seed: 123
 ```
 
-These settings supplement the formula, trusted checkpoint, and relaxation
+These settings supplement the formula, `mlip:` block, and relaxation
 settings in your YAML. Generate more candidates than the attempt budget to give
 selection a meaningful choice. Generation itself can be costly; this policy does
 not automatically increase candidate counts, replenish duplicates, or submit jobs.
