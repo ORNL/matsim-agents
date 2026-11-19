@@ -157,18 +157,20 @@ print(summary.model_dump_json(indent=2))
 
 Add explicit LLM-guided generation, distinguishing advisory feedback from
 validated decisions that actually steer generation. The rounds below use
-fixed generation settings with incremented seeds, not adaptive LLM steering.
+fixed generation settings with per-round seeds, not adaptive LLM steering.
 
 ## Multiple rounds and safe resume
 
-Set `iterations: 3` in the same YAML. Each round generates a fresh batch using
-`random_seed + round_index` (the first round uses the configured seed).
+Set `iterations: 3` in the same YAML. Each round generates a fresh batch: the
+first round uses the configured `random_seed`, later rounds their own streams of
+it ([reproducibility](../reproducibility.md)), so a run seeded `S + 1` does not
+replay this run's second round.
 `max_relaxations: 2` permits at most six attempts across three rounds.
 All rounds share one calculator cache within the running process.
 The default `iterations: 1` uses exactly the same engine, progress reporting,
 selection options, checkpoint format, and resume command.
-Deterministic AFLOW prototypes can repeat across rounds; incrementing the seed
-does not guarantee distinct structures. The default `selection: sequential`
+Deterministic AFLOW prototypes can repeat across rounds; a new seed does not
+guarantee distinct structures. The default `selection: sequential`
 retains generation order and permits repeated structures. Opt in to the
 structural screening policy below to avoid repeating equivalent structures.
 
@@ -179,7 +181,7 @@ structural screening policy below to avoid repeating equivalent structures.
 ```
 
 All new runs store `rounds-state.json` atomically after generation, each completed attempt, and each
-round. This contains the complete configuration, incremented-seed round
+round. This contains the complete configuration, per-round-seed
 candidates, results/errors, checkpoint identity, and artifact hashes.
 `cumulative-ranking.json` ranks converged results across completed work; a JSON
 `null` means no eligible result. No LLM, DFT, or active learning is introduced.

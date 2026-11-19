@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from matsim_agents.discovery.composition import Composition, parse_composition
+from matsim_agents.execution.seeding import numpy_rng, python_rng
 
 if TYPE_CHECKING:
     from pymatgen.core import Structure
@@ -372,7 +373,7 @@ def random_search(
     comp: Composition,
     n: int = 50,
     *,
-    seed: int = 0,
+    seed: int,
     formula_units: int = 1,
     space_groups: list[int] | None = None,
     max_attempts_factor: int = 4,
@@ -401,15 +402,11 @@ def random_search(
         )
         return []
 
-    import random as _random
-
-    import numpy as np
     from pymatgen.analysis.structure_matcher import StructureMatcher
     from pymatgen.core import Structure
     from pyxtal import pyxtal
 
-    # random.Random(-k) repeats Random(k); give negative seeds their own stream.
-    rng = _random.Random(seed if seed >= 0 else f"negative:{seed}")
+    rng = python_rng(seed)
     elements = list(comp.elements.keys())
     counts = [comp.elements[e] * formula_units for e in elements]
     allowed_groups = tuple(space_groups) if space_groups is not None else tuple(range(1, 231))
@@ -429,7 +426,7 @@ def random_search(
                 group=spg,
                 species=elements,
                 numIons=counts,
-                random_state=np.random.default_rng(rng.getrandbits(32)),
+                random_state=numpy_rng(rng.getrandbits(32)),
             )
             if not x.valid:
                 continue
@@ -465,7 +462,7 @@ def generate_seeds(
     *,
     n_random: int = 50,
     fmt: str = "vasp",
-    random_seed: int = 0,
+    random_seed: int | None = None,
     formula_units: int | None = None,
     include_aflow: bool = True,
     max_aflow_prototypes: int | None = None,
@@ -488,7 +485,8 @@ def generate_seeds(
     fmt:
         ASE-compatible structure format (``"vasp"``, ``"cif"``, ``"xyz"``).
     random_seed:
-        Seed for the pyXtal RNG (reproducibility).
+        Seed of the pyXtal search (space groups and atom placement); required
+        when ``n_random`` is positive.
     formula_units:
         Requested number of reduced formula units. AFLOW cells are replicated
         only when their existing formula-unit count divides this value; pyXtal
@@ -642,13 +640,17 @@ def generate_seeds(
 
     # --- 2. pyXtal random search -------------------------------------------
     requested_formula_units = formula_units or 1
-    random_hits = random_search(
-        composition,
-        n=n_random,
-        seed=random_seed,
-        formula_units=requested_formula_units,
-        space_groups=space_groups,
-    )
+    random_hits: list[tuple[Structure, int]] = []
+    if n_random > 0:
+        if random_seed is None:
+            raise ValueError("a pyXtal random search (n_random > 0) needs random_seed")
+        random_hits = random_search(
+            composition,
+            n=n_random,
+            seed=random_seed,
+            formula_units=requested_formula_units,
+            space_groups=space_groups,
+        )
     for r_idx, (struct, spg) in enumerate(random_hits):
         actual_formula_units = struct.num_sites // composition.total_atoms
         prior_structures = seen_by_size.setdefault(actual_formula_units, [])

@@ -12,14 +12,11 @@ from ase.calculators.emt import EMT
 from ase.io import write
 
 from matsim_agents.active_learning import candidates as candidates_module
-from matsim_agents.active_learning.candidates import (
-    _SeedTask,
-    sample_md_candidates,
-    seed_rngs,
-)
+from matsim_agents.active_learning.candidates import _SeedTask, sample_md_candidates
 from matsim_agents.active_learning.config import MDConfig, SeedSourceConfig
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import WorkerOutcome
+from matsim_agents.execution.seeding import numpy_rng
 
 
 def _seeds(tmp_path: Path) -> list[Path]:
@@ -32,13 +29,12 @@ def _seeds(tmp_path: Path) -> list[Path]:
     return paths
 
 
-def _md(seed_paths: list[Path], random_seed: int | None = 7) -> MDConfig:
+def _md(seed_paths: list[Path]) -> MDConfig:
     return MDConfig(
         seed_source=SeedSourceConfig(kind="paths", paths=seed_paths),
         n_steps=20,
         sample_every=5,
         temperature_K=600,
-        random_seed=random_seed,
     )
 
 
@@ -63,30 +59,31 @@ class _ReverseOrderPool:
         return [WorkerOutcome(value=values[index]) for index in range(len(items))]
 
 
-def test_seed_rngs_are_reproducible_and_independent():
-    first = [rng.standard_normal(4) for rng in seed_rngs(11, 3)]
-    again = [rng.standard_normal(4) for rng in seed_rngs(11, 3)]
-    assert all(np.array_equal(a, b) for a, b in zip(first, again, strict=True))
-    assert not np.array_equal(first[0], first[1])
-    assert seed_rngs(None, 2) == [None, None]
-
-
-def test_seed_stream_does_not_depend_on_later_seeds():
-    two = seed_rngs(5, 2)[0].standard_normal(3)
-    five = seed_rngs(5, 5)[0].standard_normal(3)
-    assert np.array_equal(two, five)
-
-
-def test_md_is_reproducible(tmp_path):
+def test_md_is_reproducible_and_seed_dependent(tmp_path):
     seeds = _seeds(tmp_path)
-    first = sample_md_candidates(_md(seeds), EMT(), tmp_path / "a", seed_paths=seeds)
-    second = sample_md_candidates(_md(seeds), EMT(), tmp_path / "b", seed_paths=seeds)
-    assert first and _signature(first) == _signature(second)
+
+    def sample(name, seed):
+        return sample_md_candidates(
+            _md(seeds), EMT(), tmp_path / name, seed_paths=seeds, random_seed=seed
+        )
+
+    first = sample("a", 7)
+    assert first and _signature(first) == _signature(sample("b", 7))
+    assert _signature(first) != _signature(sample("c", 8))
+
+
+def test_a_seed_structure_trajectory_does_not_depend_on_later_structures(tmp_path):
+    seeds = _seeds(tmp_path)
+    alone = sample_md_candidates(_md(seeds[:1]), EMT(), tmp_path / "a", seeds[:1], random_seed=7)
+    all_ = sample_md_candidates(_md(seeds), EMT(), tmp_path / "b", seeds, random_seed=7)
+    assert _signature(alone) == _signature(all_)[: len(alone)]
 
 
 def test_concurrent_md_matches_sequential_md(tmp_path, monkeypatch):
     seeds = _seeds(tmp_path)
-    sequential = sample_md_candidates(_md(seeds), EMT(), tmp_path / "seq", seed_paths=seeds)
+    sequential = sample_md_candidates(
+        _md(seeds), EMT(), tmp_path / "seq", seed_paths=seeds, random_seed=7
+    )
 
     import matsim_agents.backends.mlip.calculator as calculator_module
 
@@ -98,6 +95,7 @@ def test_concurrent_md_matches_sequential_md(tmp_path, monkeypatch):
         None,
         tmp_path / "pool",
         seed_paths=seeds,
+        random_seed=7,
         mlip_pool=pool,
         mlip_cfg=UMAConfig(),
     )
@@ -110,7 +108,12 @@ def test_concurrent_md_requires_mlip_config(tmp_path):
     seeds = _seeds(tmp_path)
     with pytest.raises(ValueError, match="needs mlip_cfg"):
         sample_md_candidates(
-            _md(seeds), None, tmp_path, seed_paths=seeds, mlip_pool=_ReverseOrderPool()
+            _md(seeds),
+            None,
+            tmp_path,
+            seed_paths=seeds,
+            random_seed=7,
+            mlip_pool=_ReverseOrderPool(),
         )
 
 
@@ -129,13 +132,14 @@ def test_failed_seed_names_the_seed(tmp_path):
             None,
             tmp_path,
             seed_paths=seeds,
+            random_seed=7,
             mlip_pool=FailingPool(),
             mlip_cfg=UMAConfig(),
         )
 
 
 def test_seed_task_pickles_with_its_random_stream(tmp_path):
-    rng = seed_rngs(3, 1)[0]
+    rng = numpy_rng(3, 0)
     task = _SeedTask("{}", "{}", False, "seed.extxyz", str(tmp_path), rng)
     restored = pickle.loads(pickle.dumps(task))
     assert np.array_equal(restored.rng.standard_normal(3), rng.standard_normal(3))

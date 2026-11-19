@@ -83,7 +83,6 @@ def main(argv: list[str] | None = None) -> int:
         choices=["insertion-order", "random", "exploitation", "exploration", "adaptive"],
         default="insertion-order",
     )
-    parser.add_argument("--acquisition-seed", type=int, default=0)
     parser.add_argument("--lambda-initial", type=float, default=0.5)
     parser.add_argument("--lambda-minimum", type=float, default=0.2)
     parser.add_argument("--lambda-maximum", type=float, default=0.8)
@@ -124,7 +123,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--perturbation-trials", type=int, default=0)
     parser.add_argument("--perturbation-scale-A", type=float, default=0.05)
-    parser.add_argument("--perturbation-seed", type=int, default=0)
     parser.add_argument("--surrogate-reference-structures", type=Path)
     parser.add_argument("--surrogate-unary-max-steps", type=int, default=200)
     parser.add_argument("--surrogate-unary-fmax", type=float, default=0.02)
@@ -363,7 +361,6 @@ def main(argv: list[str] | None = None) -> int:
             validation_pythons=args.validation_python,
             perturbation_trials=args.perturbation_trials,
             perturbation_scale_A=args.perturbation_scale_A,
-            perturbation_seed=args.perturbation_seed,
             surrogate_reference_structures=args.surrogate_reference_structures,
             surrogate_unary_max_steps=args.surrogate_unary_max_steps,
             surrogate_unary_fmax_eV_per_A=args.surrogate_unary_fmax,
@@ -417,6 +414,8 @@ def main(argv: list[str] | None = None) -> int:
             minimum_formula_coverage=args.minimum_formula_coverage,
             require_low_uncertainty_near_hull=args.require_low_uncertainty_near_hull,
             low_uncertainty_threshold=args.low_uncertainty_threshold,
+            # The AL template's seed is the campaign's root seed.
+            random_seed=al_config.random_seed,
             acquisition=CampaignAcquisitionPolicy(
                 enabled=args.acquisition_mode != "insertion-order",
                 mode=(
@@ -424,7 +423,6 @@ def main(argv: list[str] | None = None) -> int:
                     if args.acquisition_mode == "insertion-order"
                     else args.acquisition_mode
                 ),
-                random_seed=args.acquisition_seed,
                 lambda_initial=args.lambda_initial,
                 lambda_minimum=args.lambda_minimum,
                 lambda_maximum=args.lambda_maximum,

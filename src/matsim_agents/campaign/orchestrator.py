@@ -35,6 +35,7 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.execution.seeding import stream_seed
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
@@ -55,6 +56,13 @@ class CampaignRunPolicy(BaseModel):
     require_low_uncertainty_near_hull: bool = False
     low_uncertainty_threshold: float = Field(0.1, ge=0.0, le=1.0)
     acquisition: CampaignAcquisitionPolicy = Field(default_factory=CampaignAcquisitionPolicy)
+    random_seed: int = Field(
+        0,
+        description=(
+            "Root seed of the campaign: random formula acquisition and the seed of every "
+            "formula attempt derive from it (docs/reproducibility.md)."
+        ),
+    )
 
 
 class CampaignReviewDecision(BaseModel):
@@ -569,6 +577,7 @@ def _select_batch(
             iteration=campaign.iteration,
             policy=policy.acquisition,
             state=campaign.acquisition,
+            random_seed=policy.random_seed,
         )
         batch = selection.selected_formulas
     else:
@@ -577,10 +586,21 @@ def _select_batch(
 
 
 def _start_formula_record(
-    campaign: CampaignState, formula: str, formula_dir: Path, selection: Any
+    campaign: CampaignState,
+    formula: str,
+    formula_dir: Path,
+    selection: Any,
+    *,
+    random_seed: int,
 ) -> FormulaRunRecord:
-    """Reset the formula's run record for a new attempt in this iteration."""
+    """Reset the formula's run record for a new attempt in this iteration.
+
+    A new attempt draws a new seed from the campaign's *random_seed*, so a retry
+    explores new structures; an interrupted attempt keeps its seed and replays.
+    """
     record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
+    if record.status != WorkflowStatus.RUNNING or record.random_seed is None:
+        record.random_seed = stream_seed(random_seed, "formula", formula, record.attempts + 1)
     record.status = WorkflowStatus.RUNNING
     record.iteration = campaign.iteration
     record.attempts += 1
@@ -1001,7 +1021,9 @@ def run_campaign(
                 stop_reason = budget_reason
                 break
             formula_dir = root / "formulas" / formula
-            record = _start_formula_record(campaign, formula, formula_dir, selection)
+            record = _start_formula_record(
+                campaign, formula, formula_dir, selection, random_seed=policy.random_seed
+            )
             campaign.save(state_path)
             try:
                 dft_allowance, mlip_allowance = _formula_allowances(campaign)
@@ -1018,19 +1040,23 @@ def run_campaign(
                     attempt_record.n_mlip_relaxations += 1
                     campaign.save(state_path)
 
+                attempt_seed = record.random_seed
                 result = (
                     formula_runner(
                         formula,
                         str(formula_dir),
                         dft_allowance,
+                        random_seed=attempt_seed,
                         mlip_allowance=mlip_allowance,
                         on_mlip_relaxation_attempt=record_mlip_attempt,
                     )
                     if mlip_allowance is not None
                     else (
-                        formula_runner(formula, str(formula_dir), dft_allowance)
+                        formula_runner(
+                            formula, str(formula_dir), dft_allowance, random_seed=attempt_seed
+                        )
                         if dft_allowance is not None
-                        else formula_runner(formula, str(formula_dir))
+                        else formula_runner(formula, str(formula_dir), random_seed=attempt_seed)
                     )
                 )
                 exploration = result.after_retraining or result.initial

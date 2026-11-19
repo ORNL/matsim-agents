@@ -22,6 +22,9 @@
 #   matsim-agents al validate-config examples/paper_cases/al_cu_bht_2d.yaml
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 21
+
 vars:
   PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
   TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh
@@ -61,7 +64,6 @@ md:
     #   - Cu3C6S6        # closest compositional proxy in AFLOW prototypes
     # max_phases_per_composition: 2
     n_random: 3          # additional random unit cells (supercell variants / defects)
-    random_seed: 21
   timestep_fs: 0.5       # MOF frameworks are flexible; shorter step for stability
   n_steps: 200
   temperature_K: 300.0   # room-temperature sampling; preserve MOF topology
@@ -108,7 +110,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
 

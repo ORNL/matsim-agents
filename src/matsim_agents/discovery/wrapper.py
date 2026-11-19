@@ -79,7 +79,7 @@ def explore_composition(
     degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float | None = 0.2,
     n_random: int = 50,
-    random_seed: int = 0,
+    random_seed: int | None = None,
     generation_action: SeedGenerationAction | None = None,
     max_relaxations: int | None = None,
     on_relaxation_attempt: Callable[[], None] | None = None,
@@ -104,7 +104,7 @@ def explore_composition(
         seeds for novelty / characterization (in addition to every
         applicable AFLOW prototype decoration). ``0`` disables.
     random_seed:
-        Seed for the pyXtal RNG (reproducibility).
+        Seed of the pyXtal search; required when ``n_random`` is positive.
     generation_action:
         Optional strategy-selected generator action. When supplied, its AFLOW,
         pyXtal, space-group, and formula-unit controls replace ``n_random`` and
@@ -129,11 +129,12 @@ def explore_composition(
     mlip = parse_mlip_config(mlip)
     if max_relaxations is not None and max_relaxations < 0:
         raise ValueError("max_relaxations must be non-negative")
-    if generation_action is not None and (n_random != 50 or random_seed != 0):
+    if generation_action is not None and (n_random != 50 or random_seed is not None):
         raise ValueError(
             "generation_action cannot be combined with n_random or random_seed; "
             "set those controls on the action"
         )
+
     if isinstance(composition, str):
         parsed = parse_composition(composition)
         if parsed is None:

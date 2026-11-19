@@ -23,6 +23,7 @@ class TaskSpec(BaseModel):
     charge: float | None = None  # unset: the selected MLIP's configured charge
     spin: float | None = None  # unset: the selected MLIP's configured spin
     random_displacement: bool = False
+    displacement_seed: int | None = None  # required with random_displacement
     extra: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -1,5 +1,8 @@
 # Use only through benchmarks.e3.qe_active_learning, not `al run`.
 # Per-material inputs and safety gates: e3-qe-mace-three-iteration-reproduction.txt.
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 0
+
 mlip:
   backend: mace
   family: checkpoint

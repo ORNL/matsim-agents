@@ -239,7 +239,7 @@ def run_phase_exploration(
                 parsed,
                 str(calculations_dir / parsed.formula / "seeds"),
                 n_random=kwargs.get("n_random", 50),
-                random_seed=kwargs.get("random_seed", 0),
+                random_seed=kwargs.get("random_seed"),
             )
             initial = CompositionExplorationResult(
                 composition=parsed,

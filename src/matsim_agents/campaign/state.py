@@ -49,6 +49,10 @@ class FormulaRunRecord(BaseModel):
     status: WorkflowStatus = WorkflowStatus.PLANNED
     iteration: int = 0
     attempts: int = 0
+    random_seed: int | None = Field(
+        None,
+        description="Seed of the current attempt; an interrupted attempt keeps it on recovery.",
+    )
     output_dir: str | None = None
     failure_reason: str | None = None
     outcome_class: str | None = None

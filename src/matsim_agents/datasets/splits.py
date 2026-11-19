@@ -55,6 +55,7 @@ from matsim_agents.datasets.governance import (
     structure_identity,
     write_dataset_manifest,
 )
+from matsim_agents.execution.seeding import numpy_rng
 
 SPLIT_MANIFEST = "split-manifest.json"
 ROLES = ("train", "validation", "test")
@@ -387,7 +388,7 @@ def _assign_random_frames(entries: list[FrameEntry], cfg: SplitConfig) -> None:
     # Test frames come first in the permutation, so a given seed and test
     # fraction select the same test frames whatever the validation fraction.
     order = np.arange(len(entries))
-    np.random.default_rng(cfg.seed).shuffle(order)
+    numpy_rng(cfg.seed).shuffle(order)
     n = len(entries)
     n_test = max(1, round(n * cfg.test_fraction)) if cfg.test_fraction > 0 else 0
     n_val = max(1, round(n * cfg.validation_fraction)) if cfg.validation_fraction > 0 else 0
@@ -424,7 +425,7 @@ def _assign_groups(entries: list[FrameEntry], cfg: SplitConfig) -> None:
                 f"{len(groups)} independent group(s) cannot fill the {len(roles)} roles "
                 f"{roles}; collect data from more independent groups or drop a role"
             )
-        order = [groups[i] for i in np.random.default_rng(cfg.seed).permutation(len(groups))]
+        order = [groups[i] for i in numpy_rng(cfg.seed).permutation(len(groups))]
         target = {role: cfg.fraction(role) * len(entries) for role in roles}
         filled = dict.fromkeys(roles, 0)
         assignment = {}

@@ -56,6 +56,7 @@ from ase.io import read as ase_read
 from matsim_agents.backends.mlip.config import UMAConfig, UMATask
 from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.execution.seeding import numpy_rng, seed_process
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 
 log = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _reference_forces(atoms: Atoms) -> np.ndarray | None:
 
 def split_indices(n: int, *, val_fraction: float, seed: int) -> tuple[list[int], list[int]]:
     """Random ``(train, validation)`` frame indices; validation gets at least one frame."""
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     order = rng.permutation(n)
     n_val = min(max(1, int(round(val_fraction * n))), n - 1) if val_fraction > 0 else 0
     return sorted(order[n_val:].tolist()), sorted(order[:n_val].tolist())
@@ -364,7 +365,7 @@ def _train_uma(
     val_targets = targets(val_atoms, val_energies)
     loss_args = {"task_name": task_name, "force_weight": force_weight}
 
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed, "batch-order")
     n = len(train_atoms)
     train_history: list[float] = []
     val_history: list[float] = []
@@ -468,7 +469,7 @@ def finetune_uma(
     force_weight: float = 10.0,
     freeze_backbone: bool = False,
     weight_decay: float = 0.0,
-    seed: int = 0,
+    seed: int,
     device: str | None = None,
     run: bool = True,
     lora: bool = False,
@@ -504,6 +505,7 @@ def finetune_uma(
     )
     base_model, task_name = selection.model_name, selection.task_name
 
+    seed_process(seed, "training")
     output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     dest_ckpt = output_dir / "inference_ckpt.pt"
@@ -688,7 +690,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Validation partition for choosing the best epoch (replaces --val-fraction).",
     )
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, required=True, help="Seed of every random stream.")
     parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
         "--dry-run",

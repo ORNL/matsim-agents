@@ -1,3 +1,6 @@
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 42
+
 mlip:
   backend: mace
   family: mace_mp
@@ -19,7 +22,6 @@ md:
   sample_every: 10
   max_force_threshold_eV_per_A: 40.0
   max_displacement_A: 3.0
-  random_seed: 42
 
 acquisition:
   strategy: random

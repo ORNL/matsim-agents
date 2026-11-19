@@ -24,6 +24,8 @@ class MDConfig(BaseModel):
     (``seed_source``).
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     seed_source: SeedSourceConfig = Field(
         ...,
         description=(
@@ -41,17 +43,6 @@ class MDConfig(BaseModel):
     sample_every: int = 10  # snapshot every N steps for the candidate pool
     max_force_threshold_eV_per_A: float = 50.0  # discard exploding frames
     max_displacement_A: float = 5.0  # discard frames moving > X Å from start
-    random_seed: int | None = Field(
-        default=None,
-        description=(
-            "If set, seed the MD RNG (Maxwell-Boltzmann velocities and the "
-            "Langevin thermostat noise) so the sampled trajectories and the "
-            "resulting candidate pool are reproducible across runs. Each seed "
-            "structure gets its own stream derived from this value, so results "
-            "do not depend on whether seeds run sequentially or concurrently. "
-            "Leave unset for stochastic sampling (the default)."
-        ),
-    )
 
 
 class LLMSeedConfig(BaseModel):
@@ -69,6 +60,8 @@ class LLMSeedConfig(BaseModel):
 
 class SeedSourceConfig(BaseModel):
     """Where the MD seed structures come from."""
+
+    model_config = ConfigDict(extra="forbid")
 
     kind: Literal["paths", "compositions", "prompt"] = "paths"
 
@@ -115,7 +108,6 @@ class SeedSourceConfig(BaseModel):
             "Default 0: AL relies on prototype-derived seeds only."
         ),
     )
-    random_seed: int = Field(0, description="Seed for pyXtal random search (per composition).")
 
     @model_validator(mode="after")
     def _check_required_fields(self) -> SeedSourceConfig:
@@ -255,7 +247,6 @@ class TrainerConfig(BaseModel):
             "Only new frames are assigned; existing training/validation membership is fixed."
         ),
     )
-    validation_split_seed: int = 0
     compare_after_training: bool = Field(
         False,
         description="Compare incumbent and candidate models on held-out validation frames.",
@@ -389,6 +380,17 @@ class LoopConfig(BaseModel):
 class ALConfig(BaseModel):
     """Root config for the active-learning loop."""
 
+    model_config = ConfigDict(extra="forbid")
+
+    random_seed: int = Field(
+        ...,
+        description=(
+            "Root seed of the run. Every random draw (pyXtal seed structures, MD "
+            "velocities and thermostat noise, acquisition, MC-dropout masks, the "
+            "validation split) comes from a named stream of this seed; see "
+            "docs/reproducibility.md."
+        ),
+    )
     mlip: MLIPConfig
     md: MDConfig
     acquisition: AcquisitionConfig

@@ -175,6 +175,7 @@ def test_trainer_command_reaches_the_fine_tuner_through_the_launcher(tmp_path):
         dataset=tmp_path / "dataset.extxyz",
         out_dir=tmp_path / "out",
         references=tmp_path / "references.json",
+        seed=0,
     )
     assert argv[:5] == ["bash", str(_launcher("perlmutter")), "hydragnn", "1", "1"]
     proc = subprocess.run(argv, env=_site(tmp_path), capture_output=True, text=True, check=False)

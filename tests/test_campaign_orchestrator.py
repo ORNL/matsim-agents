@@ -37,6 +37,7 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
+from matsim_agents.execution.seeding import stream_seed
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -177,7 +178,9 @@ def _result(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
 def test_campaign_enforces_budget_and_prioritizes_llm_formula(tmp_path):
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -209,7 +212,9 @@ def test_campaign_enforces_budget_and_prioritizes_llm_formula(tmp_path):
 def test_campaign_resume_does_not_repeat_completed_formula(tmp_path):
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -241,7 +246,9 @@ def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
     )
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -257,6 +264,41 @@ def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
     assert result.campaign.formula_runs["NbO2"].attempts == 2
 
 
+def test_campaign_retries_draw_new_seeds_and_recovery_keeps_the_attempt_seed(tmp_path):
+    campaign = _campaign()
+    campaign.formula_runs["NbO"] = FormulaRunRecord(
+        formula="NbO", status=WorkflowStatus.RUNNING, attempts=1, random_seed=1234
+    )
+    calls: list[tuple[str, int]] = []
+
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
+        calls.append((formula, random_seed))
+        return _result(formula, output_dir)  # generation_failure: inconclusive
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(
+            formulas_per_iteration=3, max_iterations=2, retry_inconclusive=True, random_seed=9
+        ),
+        resume=False,
+    )
+
+    by_formula: dict[str, list[int]] = {}
+    for formula, seed in calls:
+        by_formula.setdefault(formula, []).append(seed)
+    # The interrupted NbO attempt replays its seed; each later attempt draws a new one.
+    assert by_formula["NbO"] == [1234, stream_seed(9, "formula", "NbO", 3)]
+    assert by_formula["NbO2"] == [stream_seed(9, "formula", "NbO2", attempt) for attempt in (1, 2)]
+    assert len({seed for _, seed in calls}) == len(calls)
+    persisted = CampaignState.load(result.state_path)
+    for formula, seeds in by_formula.items():
+        assert persisted.formula_runs[formula].random_seed == seeds[-1]
+
+
 def test_latest_promotion_uses_persisted_execution_order(tmp_path):
     campaign = _campaign()
     campaign.formula_runs = {
@@ -265,7 +307,9 @@ def test_latest_promotion_uses_persisted_execution_order(tmp_path):
     }
     checkpoints = {"NbO2": "promoted-first.pt", "NbO": "promoted-last.pt"}
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         result = _result(formula, output_dir)
         result.model_promoted = True
         result.active_learning_result["iteration_states"] = [
@@ -302,7 +346,9 @@ def test_campaign_retry_inconclusive_skips_usable_completed_formula(tmp_path):
     )
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -336,7 +382,9 @@ def test_campaign_persists_reference_registry_from_formula_evidence(tmp_path):
         ],
     )
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         result = _result(formula, output_dir)
         result.active_learning_result["dft_refinement"] = {
             "reference_energy_set": references.model_dump(mode="json")
@@ -357,7 +405,9 @@ def test_campaign_persists_reference_registry_from_formula_evidence(tmp_path):
 def test_campaign_applies_review_decision_before_next_iteration(tmp_path):
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -409,7 +459,7 @@ def test_a_review_that_changes_nothing_still_records_its_cost(tmp_path):
     result = run_campaign(
         _campaign(max_candidates=1),
         output_dir=tmp_path,
-        formula_runner=lambda formula, output_dir: _result(formula, output_dir),
+        formula_runner=lambda formula, output_dir, *, random_seed: _result(formula, output_dir),
         review_runner=review,
     )
 
@@ -439,7 +489,9 @@ def test_adaptive_acquisition_reserves_branches_updates_lambda_and_persists(tmp_
     }
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         result = _result(formula, output_dir)
         result.active_learning_result["useful_outcome"] = formula == "NbO2"
@@ -488,6 +540,7 @@ def test_adaptive_single_item_batches_eventually_reserve_exploration():
             iteration=iteration,
             policy=policy,
             state=campaign.acquisition,
+            random_seed=0,
         )
 
     branches = [
@@ -510,7 +563,9 @@ def test_registry_ingestion_uses_mlip_provenance(tmp_path, monkeypatch):
         capture_ingestion,
     )
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         result = _result(formula, output_dir)
         assert result.active_learning_result is not None
         result.active_learning_result.update(
@@ -542,7 +597,9 @@ def test_campaign_does_not_admit_formula_beyond_reserved_budget(tmp_path):
     )
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 
@@ -566,7 +623,9 @@ def test_campaign_passes_remaining_dft_allowance_to_formula_runner(tmp_path):
     campaign.budget.max_dft_calculations = 3
     allowances: list[int] = []
 
-    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, dft_allowance: int, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         allowances.append(dft_allowance)
         result = _result(formula, output_dir)
         result.active_learning_result = {"n_dft_calculations": dft_allowance}
@@ -584,7 +643,15 @@ def test_campaign_mlip_attempt_budget_is_durable_and_shared(tmp_path, crash):
     campaign.budget.max_mlip_relaxations = 1
     calls = []
 
-    def runner(formula, output_dir, dft_allowance, *, mlip_allowance, on_mlip_relaxation_attempt):
+    def runner(
+        formula,
+        output_dir,
+        dft_allowance,
+        *,
+        random_seed,
+        mlip_allowance,
+        on_mlip_relaxation_attempt,
+    ):
         calls.append(mlip_allowance)
         on_mlip_relaxation_attempt()
         persisted = CampaignState.load(tmp_path / "campaign_state.json")
@@ -615,7 +682,9 @@ def test_failed_formula_recovers_durable_resource_and_stage_evidence(tmp_path):
         "timings_sec": {"total": 1800.0},
     }
 
-    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, dft_allowance: int, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         formula_dir = Path(output_dir)
         al_root = formula_dir / "active_learning"
@@ -675,7 +744,9 @@ def test_retry_does_not_double_count_recovered_usage(tmp_path):
     campaign.formulas["Nb2O3"].active = False
     calls = 0
 
-    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, dft_allowance: int, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         nonlocal calls
         calls += 1
         formula_dir = Path(output_dir)
@@ -760,7 +831,9 @@ def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path
     )
     phase_energies = {"NbO": -16.0, "NbO2": -20.3}
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         structure_path = Path(output_dir) / f"{formula}.extxyz"
         structure_path.parent.mkdir(parents=True, exist_ok=True)
         symbols = {"NbO": ["Nb", "O"], "NbO2": ["Nb", "O", "O"]}[formula]
@@ -824,6 +897,7 @@ def test_pure_acquisition_mode_records_forced_branch():
         iteration=0,
         policy=CampaignAcquisitionPolicy(enabled=True, mode="exploitation"),
         state=campaign.acquisition,
+        random_seed=0,
     )
 
     assert selection.scores["NbO"].exploration_score > 0
@@ -833,7 +907,9 @@ def test_pure_acquisition_mode_records_forced_branch():
 def test_campaign_stops_at_formula_coverage_threshold(tmp_path):
     calls: list[str] = []
 
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+    def runner(
+        formula: str, output_dir: str, *, random_seed: int
+    ) -> PhaseExplorationWorkflowResult:
         calls.append(formula)
         return _result(formula, output_dir)
 

@@ -25,6 +25,9 @@
 #   matsim-agents al validate-config examples/paper_cases/al_zn_formate.yaml
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 23
+
 vars:
   PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
   TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_mlip-train-step-perlmutter.sh
@@ -59,7 +62,6 @@ md:
     paths:
       - ${SEED_XYZ}
     n_random: 3          # random framework-breathing / libration cells
-    random_seed: 23
   timestep_fs: 0.5       # flexible framework + light H: short step
   n_steps: 200
   temperature_K: 300.0   # room-temperature sampling; preserve MOF topology
@@ -104,7 +106,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
 

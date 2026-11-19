@@ -52,6 +52,7 @@ from matsim_agents.discovery.stability import (
 )
 from matsim_agents.execution.contracts import EvidenceLevel
 from matsim_agents.execution.placement import Placement
+from matsim_agents.execution.seeding import numpy_rng, stream_seed
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -85,7 +86,6 @@ class CampaignFormulaExecutionConfig(BaseModel):
     validation_pythons: list[Path] = Field(default_factory=list)
     perturbation_trials: int = Field(0, ge=0)
     perturbation_scale_A: float = Field(0.05, gt=0)
-    perturbation_seed: int = 0
     surrogate_reference_structures: Path | None = None
     surrogate_unary_max_steps: int = Field(200, ge=1)
     surrogate_unary_fmax_eV_per_A: float = Field(0.02, gt=0)
@@ -95,6 +95,11 @@ class CampaignFormulaExecutionConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_execution_mode(self) -> CampaignFormulaExecutionConfig:
+        if "random_seed" in self.exploration_kwargs:
+            raise ValueError(
+                "exploration_kwargs must not set random_seed: each formula attempt's seed "
+                "comes from the campaign seed"
+            )
         missing = [str(path) for path in self.validation_configs if not path.is_file()]
         if missing:
             raise ValueError(f"validation config files do not exist: {missing}")
@@ -363,7 +368,8 @@ def _perturbation_robustness(
         trial_dir.mkdir(parents=True, exist_ok=True)
         perturbed_path = trial_dir / "perturbed.extxyz"
         atoms = ase_read(reference.optimized_structure_path)
-        rng = np.random.default_rng(config.perturbation_seed + index)
+        trial_seed = stream_seed(al_cfg.random_seed, "perturbation", index)
+        rng = numpy_rng(trial_seed)
         atoms.positions += rng.normal(scale=config.perturbation_scale_A, size=atoms.positions.shape)
         ase_write(perturbed_path, atoms)
         try:
@@ -378,7 +384,7 @@ def _perturbation_robustness(
             )
             trials.append(
                 {
-                    "seed": config.perturbation_seed + index,
+                    "seed": trial_seed,
                     "converged": result.converged,
                     "energy_per_atom_eV": result.final_energy_eV / len(atoms),
                     "max_force_eV_per_A": result.final_max_force_eV_per_A,
@@ -386,9 +392,7 @@ def _perturbation_robustness(
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            trials.append(
-                {"seed": config.perturbation_seed + index, "converged": False, "error": repr(exc)}
-            )
+            trials.append({"seed": trial_seed, "converged": False, "error": repr(exc)})
     return {
         "reference_structure_path": reference.optimized_structure_path,
         "displacement_scale_A": config.perturbation_scale_A,
@@ -521,7 +525,7 @@ def _score_relaxed_candidate_uncertainty(
         al_cfg.acquisition,
         primary_calculator=primary,
         ensemble_calculators=ensemble or None,
-        seed=0,
+        seed=stream_seed(al_cfg.random_seed, "candidate-uncertainty"),
     )
     return {
         candidate.candidate_id: float(score)
@@ -974,11 +978,16 @@ def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig
 
 
 def _prepare_al_template(
-    formula: str, config: CampaignFormulaExecutionConfig, al_root: Path
+    formula: str, config: CampaignFormulaExecutionConfig, al_root: Path, *, random_seed: int
 ) -> ALConfig:
-    """Load the AL template and apply this formula's model, training, and budget policy."""
+    """Load the AL template and apply this formula's model, training, budget, and seed.
+
+    *random_seed* (the formula attempt's seed) replaces the template's seed, so every
+    random stream of the attempt, including the AL loop's, derives from it.
+    """
 
     al_cfg = ALConfig.from_yaml(config.active_learning_config, mlip=config.mlip)
+    al_cfg.random_seed = random_seed
     if config.model_override:
         _apply_model_override(al_cfg, config.model_override)
     if config.execution_mode == "dft":
@@ -1187,6 +1196,7 @@ def run_formula_with_active_learning(
     output_dir: str,
     *,
     config: CampaignFormulaExecutionConfig,
+    random_seed: int,
     al_runner: Callable[[ALConfig], None] = run_active_learning,
     phase_runner: Callable[..., PhaseExplorationWorkflowResult] = run_phase_exploration,
     relaxation_runner: Callable[
@@ -1195,11 +1205,15 @@ def run_formula_with_active_learning(
     mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
     calculator_factory: Callable[..., Any] = make_mlip_calculator,
 ) -> PhaseExplorationWorkflowResult:
-    """Explore and label one formula using a fresh copy of the AL template."""
+    """Explore and label one formula using a fresh copy of the AL template.
+
+    *random_seed* is the attempt's seed; generation, AL, uncertainty scoring,
+    perturbations, and DFT candidate selection use named streams of it.
+    """
 
     formula_root = Path(output_dir)
     al_root = formula_root / "active_learning"
-    al_cfg = _prepare_al_template(formula, config, al_root)
+    al_cfg = _prepare_al_template(formula, config, al_root, random_seed=random_seed)
     stage_manifest_path = formula_root / "campaign_stages.json"
     tracker = _StageTracker(stage_manifest_path, formula, config)
 
@@ -1300,6 +1314,7 @@ def run_formula_with_active_learning(
             output_dir=str(formula_root / "phase_exploration"),
             exploration_kwargs={
                 **_exploration_kwargs(al_cfg, config.exploration_kwargs),
+                "random_seed": stream_seed(random_seed, "generation"),
                 "mlip_pool": mlip_pool,
             },
             active_learning_runner=active_learning_after_exploration,
@@ -1484,6 +1499,7 @@ def _run_independent_dft_ranking(
             uncertainty_by_candidate=(result.active_learning_result or {}).get(
                 "candidate_uncertainty", {}
             ),
+            random_seed=stream_seed(effective_al_cfg.random_seed, "dft-refinement"),
         )
     else:
         candidates.sort(key=_relaxation_energy_per_atom)
@@ -1641,6 +1657,7 @@ def make_formula_runner(
         output_dir: str,
         dft_allowance: int | None = None,
         *,
+        random_seed: int,
         mlip_allowance: int | None = None,
         on_mlip_relaxation_attempt: Callable[[], None] | None = None,
     ) -> PhaseExplorationWorkflowResult:
@@ -1658,7 +1675,9 @@ def make_formula_runner(
                 "exploration_kwargs": exploration_kwargs,
             }
         )
-        result = run_formula_with_active_learning(formula, output_dir, config=effective_config)
+        result = run_formula_with_active_learning(
+            formula, output_dir, config=effective_config, random_seed=random_seed
+        )
         if result.model_promoted and result.active_learning_result:
             promoted = _promoted_model_path(result)
             if promoted:

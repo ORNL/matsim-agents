@@ -25,6 +25,9 @@
 #   CASE=phosphorene sbatch deployments/frontier/jobs/job-active-learning-paper-cases-frontier.sh
 # =============================================================================
 
+# Root of every random stream in the run (docs/reproducibility.md).
+random_seed: 17
+
 vars:
   PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
   RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
@@ -66,7 +69,6 @@ md:
     #   - P
     # max_phases_per_composition: 3
     n_random: 3          # random strained / rumpled monolayer cells
-    random_seed: 17
   timestep_fs: 0.5       # light element + soft pucker mode: short step
   n_steps: 200
   temperature_K: 300.0
@@ -112,7 +114,6 @@ trainer:
   promotion_approved: true     # explicit acceptance after reviewing validation metrics
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
-  validation_split_seed: 42
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_mlip-train-step-frontier.sh
   epochs_per_iter: 5
 

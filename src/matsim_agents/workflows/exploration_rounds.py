@@ -17,6 +17,7 @@ from matsim_agents.discovery.seeds import generate_seed_action
 from matsim_agents.discovery.selection import select_diverse_candidates
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.execution.seeding import stream_seed
 from matsim_agents.workflows.exploration_checkpoint import (
     Attempt,
     Round,
@@ -116,12 +117,21 @@ def run_rounds(
         return summarize_rounds(run)
 
 
+def round_seed(seed: int, index: int) -> int:
+    """Generator seed of round *index*: the configured seed, then the round's own stream.
+
+    Deriving later rounds as ``seed + index`` would make a run started at
+    ``seed + 1`` replay this run's second round.
+    """
+    return seed if index == 0 else stream_seed(seed, "round", index)
+
+
 def _generate_round(state: RoundState, index: int, folder: Path) -> Round:
     cfg = state.config
     action = cfg.generation_action().model_copy(
         update={
             "action_id": f"round-{index + 1:04d}",
-            "random_seed": cfg.generation.random_seed + index,
+            "random_seed": round_seed(cfg.generation.random_seed, index),
         }
     )
     candidates = [

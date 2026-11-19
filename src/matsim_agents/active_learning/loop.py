@@ -80,6 +80,7 @@ from matsim_agents.datasets.governance import (
     write_dataset_manifest,
 )
 from matsim_agents.execution.placement import Placement
+from matsim_agents.execution.seeding import numpy_rng, stream_seed
 
 log = logging.getLogger(__name__)
 
@@ -189,7 +190,7 @@ def _split_training_validation_frames(
     pinned = existing_training_trajectories | existing_validation_trajectories
     members = [indices for key, indices in groups.items() if key not in pinned]
     n_validation = max(len(validation_indices), target - existing_validation_count)
-    for group in np.random.default_rng(seed).permutation(len(members)):
+    for group in numpy_rng(seed).permutation(len(members)):
         if len(validation_indices) + len(members[group]) <= n_validation:
             validation_indices.update(members[group])
     training = [frame for index, frame in enumerate(frames) if index not in validation_indices]
@@ -297,7 +298,7 @@ def _select_for_labelling(
         cfg.acquisition,
         primary_calculator=primary_calc,
         ensemble_calculators=ensemble_calcs or None,
-        seed=42 + i,
+        seed=stream_seed(cfg.random_seed, "acquisition", i),
     )
     if cfg.loop.max_dft_calculations is not None:
         remaining_dft = cfg.loop.max_dft_calculations - completed_dft
@@ -497,7 +498,7 @@ def _append_labelled_frames(
     training_frames, validation_frames = _split_training_validation_frames(
         frames,
         validation_fraction=cfg.trainer.validation_fraction,
-        seed=cfg.trainer.validation_split_seed + i,
+        seed=stream_seed(cfg.random_seed, "validation-split", i),
         existing_training_count=len(existing_training_frames),
         existing_validation_count=len(existing_validation_frames),
         existing_training_trajectories=_trajectory_ids(existing_training_frames),
@@ -646,6 +647,7 @@ def _retrain_candidate(
     common = {
         "dataset_path": dataset_path,
         "iteration": i,
+        "seed": stream_seed(cfg.random_seed, "training", i),
         "launch": placement.pool("training").launches[0],
         "dft_config": cfg.dft,
         "dft_launch": placement.pool("dft").launches[0],
@@ -810,7 +812,11 @@ def run_active_learning(
         # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
         seeds_dir = root / "seeds"
         seed_paths = (
-            resolve_seed_structures(cfg.md.seed_source, seeds_dir)
+            resolve_seed_structures(
+                cfg.md.seed_source,
+                seeds_dir,
+                random_seed=stream_seed(cfg.random_seed, "seed-source"),
+            )
             if candidate_sampler is None
             else []
         )
@@ -950,6 +956,7 @@ def _run_iterations(
                         primary_calc,
                         md_dir,
                         seed_paths=seed_paths,
+                        random_seed=stream_seed(cfg.random_seed, "md", i),
                         mlip_pool=md_pool,
                         mlip_cfg=cfg.mlip,
                         enable_mc_dropout=enable_drop,
