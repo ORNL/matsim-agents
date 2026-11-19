@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from contextlib import ExitStack
@@ -393,15 +394,66 @@ def check(config: Path = typer.Argument(..., exists=True, dir_okay=False)) -> No
         console.print(note, markup=False)
 
 
+def _plan(cfg: WorkflowConfig, *, approved: bool) -> dict[str, Any]:
+    notes = _check(cfg)
+    command = _command(cfg, approved=approved)
+    return {
+        "workflow": cfg.workflow,
+        "output_root": str(cfg.output_root),
+        "execution_approved": approved,
+        "command": command,
+        "command_display": shlex.join(command),
+        "notes": notes,
+        "would_execute": True,
+    }
+
+
+def _print_plan(plan: dict[str, Any]) -> None:
+    console.print(f"Workflow: {plan['workflow']}", markup=False)
+    console.print(f"Output root: {plan['output_root']}", markup=False)
+    console.print(f"Execution approved: {str(plan['execution_approved']).lower()}")
+    console.print("Command:", markup=False)
+    console.print(f"  {plan['command_display']}", markup=False, soft_wrap=True)
+    for note in plan["notes"]:
+        console.print(f"Note: {note}", markup=False)
+    console.print("No run directory, model load, scheduler job, or scientific command created.")
+
+
+@workflow_app.command("plan")
+def plan(
+    config: Path = typer.Argument(..., exists=True, dir_okay=False),
+    approve_execution: bool = typer.Option(
+        False, help="Include explicitly approved E3 execution or scheduler submission."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print the plan as JSON."),
+) -> None:
+    """Validate a workflow and show the exact command without executing it."""
+    try:
+        result = _plan(load_workflow(config), approved=approve_execution)
+    except (ValueError, OSError, yaml.YAMLError) as error:
+        console.print(f"Cannot plan workflow: {error}", markup=False)
+        raise typer.Exit(1) from error
+    if as_json:
+        console.print_json(json.dumps(result))
+    else:
+        _print_plan(result)
+
+
 @workflow_app.command("run")
 def run(
     config: Path = typer.Argument(..., exists=True, dir_okay=False),
     approve_execution: bool = typer.Option(
         False, help="Explicitly approve E3-MLIP execution or E3/VASP scheduler submission."
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Validate and print the command without executing it."
+    ),
 ) -> None:
     try:
         cfg = load_workflow(config)
+        if dry_run:
+            _print_plan(_plan(cfg, approved=approve_execution))
+            return
         _check(cfg)
         command = _command(cfg, approved=approve_execution)
         directory = ScientificRunDirectory.create(

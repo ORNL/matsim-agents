@@ -1272,6 +1272,7 @@ reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
 ## CLI reference
 
 ```text
+matsim-agents doctor [--require BACKEND]   # Python/backend preflight without loading models
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
@@ -1286,7 +1287,8 @@ matsim-agents explore resume RUN_DIRECTORY # resume checkpointed exploration (on
 matsim-agents workflow list                # advanced workflows and native restart capabilities
 matsim-agents workflow init PRESET OUTPUT.yaml # annotated E3/exploration/debate presets; no execution
 matsim-agents workflow check CONFIG.yaml   # validate wrapper/native config without scientific execution
-matsim-agents workflow run CONFIG.yaml     # invoke native workflow; E3 execution requires approval
+matsim-agents workflow plan CONFIG.yaml    # validate and show the exact command without execution
+matsim-agents workflow run CONFIG.yaml [--dry-run] # preview or invoke; E3 execution requires approval
 matsim-agents workflow status RUN_DIRECTORY # last saved invocation status, not scheduler liveness
 matsim-agents workflow summary RUN_DIRECTORY # human report and links to native evidence
 matsim-agents workflow resume RUN_DIRECTORY [--native-run DIR] # native restart where supported
@@ -1306,6 +1308,10 @@ matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT pl
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
 matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan's LLM servers are up
 ```
+
+Use `matsim-agents --help` (or `-h`) for command details and examples, and
+`matsim-agents --version` to report the installed package version. Put the
+global `--debug` option before a command to show a traceback for diagnosis.
 
 Common options (all commands that touch HydraGNN):
 
