@@ -380,8 +380,14 @@ def _kickoff_exploration(
 
     def _on_done(cand, result):
         novel = " [yellow](novel)[/yellow]" if cand.needs_dft_verification else ""
+        label = (
+            "converged"
+            if result.converged
+            else f"not converged ({result.termination_reason or 'unknown'})"
+        )
+        status = f"[{'green' if result.converged else 'red'}]{label:<28}[/]"
         _print(
-            f"  [green]done[/green]    {_tag(cand):<26} "
+            f"  {status} {_tag(cand):<26} "
             f"E={result.final_energy_eV:.4f} eV  "
             f"|F|max={result.final_max_force_eV_per_A:.4f} eV/\u00c5  "
             f"steps={result.num_steps}{novel}"
@@ -467,8 +473,14 @@ def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
 
 
 def _validated_chat_revision(session: DiscoveryChatSession, text: str) -> str:
+    # Some models wrap the whole object in one Markdown fence despite the instructions.
+    fenced = re.fullmatch(
+        r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*",
+        text.strip(),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     try:
-        payload = json.loads(text)
+        payload = json.loads(fenced.group(1) if fenced else text)
     except json.JSONDecodeError as error:
         raise ValueError("LLM reply must be JSON with scientific_hypotheses") from error
     if not isinstance(payload, dict) or not isinstance(payload.get("response"), str):

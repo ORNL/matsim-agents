@@ -689,3 +689,45 @@ def test_convex_hull_claim_requires_reference_energies(tmp_path):
     )
     with pytest.raises(ValueError, match="reference-energy set"):
         score_stability("H", [relaxation], ranking_mode=RankingMode.CONVEX_HULL)
+
+
+def test_stability_keeps_candidate_provenance_across_path_spellings(tmp_path, monkeypatch):
+    from ase.build import bulk
+    from ase.io import write
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "seeds").mkdir()
+    candidates = [
+        PhaseCandidate(formula="Si", structure_path="seeds/proto.vasp", prototype_id="A_cF8"),
+        PhaseCandidate(
+            formula="Si",
+            structure_path="seeds/random.vasp",
+            source="random",
+            space_group=164,
+            needs_dft_verification=True,
+        ),
+    ]
+    relaxations = []
+    for index, candidate in enumerate(candidates):
+        optimized = tmp_path / f"optimized-{index}.vasp"
+        write(optimized, bulk("Si", "diamond", a=5.43))
+        relaxations.append(
+            RelaxationResult(
+                structure_path=str(tmp_path / candidate.structure_path),
+                optimized_structure_path=str(optimized),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-10.0 - index,
+                final_max_force_eV_per_A=0.01,
+                num_steps=5,
+                converged=True,
+            )
+        )
+
+    report = score_stability("Si", relaxations, candidates=candidates)
+
+    assert sorted(item.source for item in report.ranking) == ["prototype", "random"]
+    assert report.ground_state.needs_dft_verification
+    assert "(1 prototype + 1 random)" in report.summary
+    with pytest.raises(ValueError, match="matches no generated candidate"):
+        score_stability("Si", relaxations, candidates=candidates[:1])
