@@ -1,0 +1,6 @@
+# MACE ANI-CC (Codabench baseline; output predictions/mace_anicc/).
+mlip:
+  backend: mace
+  family: mace_anicc
+  model: default
+  device: ${MLIP_DEVICE:-cpu}

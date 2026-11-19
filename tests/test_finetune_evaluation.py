@@ -13,7 +13,9 @@ from ase.io import write
 
 from matsim_agents.active_learning import finetune_eval
 from matsim_agents.active_learning.evaluate import EvalMetrics
-from matsim_agents.backends.mlip.config import UMAConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+
+UMA_CPU = UMAConfig(device="cpu")
 
 
 def _frames(n_trajectories=6, steps=4, symbols=("Nb", "O", "O"), shift=0.0):
@@ -49,12 +51,11 @@ def inputs(tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch):
     monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
     calls = []
 
-    def fake_endpoints(train, validation, ft_dir, dev, **kwargs):
+    def fake_endpoints(self, mlip, train, validation, ft_dir, **kwargs):
         calls.append(("fine-tune", Path(train).name, validation and Path(validation).name))
         ft_dir.mkdir(parents=True, exist_ok=True)
         (ft_dir / "inference_ckpt.pt").write_text("weights")
-        cfg = UMAConfig()
-        return finetune_eval._Models(cfg, "uma-s-1p1", cfg, str(ft_dir / "inference_ckpt.pt"))
+        return finetune_eval._Models(mlip, "uma-s-1p1", mlip, str(ft_dir / "inference_ckpt.pt"))
 
     def fake_evaluate(cfg, frames, *, model_path, test_set_label, **kwargs):
         finetuned = model_path.endswith(".pt")
@@ -96,7 +97,7 @@ def inputs(tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch):
         parity["f_pred_eV_per_A"] = np.zeros(3)
         return metrics, parity
 
-    monkeypatch.setattr(finetune_eval, "_uma_endpoints", fake_endpoints)
+    monkeypatch.setattr(finetune_eval.UMAFineTune, "endpoints", fake_endpoints)
     monkeypatch.setattr(finetune_eval, "evaluate_frames", fake_evaluate)
     return dataset, domain, reference, calls
 
@@ -125,8 +126,7 @@ def test_selection_is_frozen_on_validation_before_any_test_frame(inputs, tmp_pat
     finetune_eval.run_finetune_endpoints(
         dataset,
         output,
-        backend="uma",
-        device="cpu",
+        mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(domain),
     )
@@ -161,8 +161,7 @@ def test_without_validation_the_finetuned_model_is_reported_unselected(inputs, t
     finetune_eval.run_finetune_endpoints(
         dataset,
         output,
-        backend="uma",
-        device="cpu",
+        mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=finetune_eval.EvaluationConfig.model_validate(
             {
@@ -180,9 +179,7 @@ def test_without_validation_the_finetuned_model_is_reported_unselected(inputs, t
 
 def test_cli_requires_an_evaluation_config(tmp_path, capsys):
     with pytest.raises(SystemExit):
-        finetune_eval.main(
-            ["--backend", "uma", "--dataset", "d.extxyz", "--output-dir", str(tmp_path)]
-        )
+        finetune_eval.main(["--dataset", "d.extxyz", "--output-dir", str(tmp_path)])
     assert "--evaluation-config" in capsys.readouterr().err
 
 
@@ -192,8 +189,7 @@ def test_repetitions_reuse_one_split_per_split_seed(inputs, tmp_path):
     finetune_eval.run_finetune_endpoints(
         dataset,
         output,
-        backend="uma",
-        device="cpu",
+        mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(
             domain, repetitions={"split_seeds": [1, 2], "training_seeds": [10, 11]}
@@ -216,8 +212,7 @@ def test_other_backends_reuse_the_same_split(inputs, tmp_path):
     finetune_eval.run_finetune_endpoints(
         dataset,
         first,
-        backend="uma",
-        device="cpu",
+        mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=_evaluation(domain),
     )
@@ -226,8 +221,7 @@ def test_other_backends_reuse_the_same_split(inputs, tmp_path):
     finetune_eval.run_finetune_endpoints(
         dataset,
         second,
-        backend="uma",
-        device="cpu",
+        mlip=UMA_CPU,
         elemental_reference_manifest=reference,
         evaluation=finetune_eval.EvaluationConfig(
             objective="transfer to new trajectories", split_manifest=manifest
@@ -264,3 +258,83 @@ def test_documented_examples_are_valid_evaluation_configs(name):
         root / "examples" / "evaluation" / f"{name}.yaml"
     )
     assert config.objective and config.split is not None
+
+
+def test_report_records_the_model_and_its_recipe(inputs, tmp_path):
+    dataset, domain, reference, _calls = inputs
+    output = tmp_path / "recipe"
+    finetune_eval.run_finetune_endpoints(
+        dataset,
+        output,
+        mlip=UMA_CPU,
+        elemental_reference_manifest=reference,
+        evaluation=_evaluation(domain, fine_tune={"backend": "uma", "lora": True, "epochs": 3}),
+    )
+    report = json.loads((output / "eval" / "report.json").read_text())
+    assert report["backend"] == "uma"
+    assert report["model"] == UMA_CPU.model_identifier()
+    assert report["fine_tune"]["lora"] is True and report["fine_tune"]["epochs"] == 3
+
+
+@pytest.mark.parametrize(
+    ("mlip", "recipe"),
+    [
+        (HydraGNNConfig(logdir="/l", checkpoint="c.pk"), finetune_eval.HydraGNNFineTune),
+        (UMAConfig(), finetune_eval.UMAFineTune),
+        (MACEConfig(), finetune_eval.MACEFineTune),
+    ],
+    ids=["hydragnn", "uma", "mace"],
+)
+def test_each_backend_gets_its_own_recipe(mlip, recipe):
+    evaluation = finetune_eval.EvaluationConfig(objective="x", split={"strategy": "random_frame"})
+    assert type(evaluation.recipe_for(mlip)) is recipe
+
+
+def test_recipe_must_match_the_selected_backend():
+    evaluation = finetune_eval.EvaluationConfig.model_validate(
+        {"objective": "x", "split": {"strategy": "random_frame"}, "fine_tune": {"backend": "uma"}}
+    )
+    with pytest.raises(ValueError, match="selected MLIP is 'mace'"):
+        evaluation.recipe_for(MACEConfig())
+    with pytest.raises(ValueError):
+        finetune_eval.EvaluationConfig.model_validate(
+            {
+                "objective": "x",
+                "split": {"strategy": "random_frame"},
+                "fine_tune": {"backend": "uma", "lora_rank": 4},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("fine_tuner", "field"),
+    [("finetune_hydragnn", "strategy"), ("finetune_hydragnn_newhead", "weight_threshold")],
+)
+def test_hydragnn_recipe_rejects_settings_of_the_other_fine_tuner(fine_tuner, field, tmp_path):
+    recipe = finetune_eval.HydraGNNFineTune.model_validate(
+        {field: "frozen" if field == "strategy" else 0.2}
+    )
+    mlip = HydraGNNConfig(logdir=tmp_path, checkpoint="c.pk", fine_tuner=fine_tuner)
+    with pytest.raises(ValueError, match=f"do not apply to {fine_tuner}"):
+        recipe.endpoints(
+            mlip,
+            tmp_path / "train.extxyz",
+            None,
+            tmp_path / "ft",
+            eval_only=False,
+            reference_manifest=tmp_path / "r.json",
+            seed=0,
+        )
+
+
+def test_training_on_an_unsupported_device_is_rejected_before_any_work(tmp_path):
+    with pytest.raises(ValueError, match="does not support device='xpu'"):
+        finetune_eval.run_finetune_endpoints(
+            tmp_path / "missing.extxyz",
+            tmp_path / "out",
+            mlip=UMAConfig(device="xpu"),
+            elemental_reference_manifest=tmp_path / "r.json",
+            evaluation=finetune_eval.EvaluationConfig(
+                objective="x", split={"strategy": "random_frame"}
+            ),
+        )

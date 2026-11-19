@@ -606,6 +606,126 @@ def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
     assert module.verify_model_residency(fused, "hydragnn") == ["xpu:0"]
 
 
+def _load_xpu_qualifier():
+    helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
+    spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+XPU_SELECTIONS = ROOT / "deployments/aurora/jobs/config"
+
+
+def test_aurora_xpu_qualification_requires_an_xpu_mlip_config(tmp_path, capsys):
+    module = _load_xpu_qualifier()
+    output = str(tmp_path / "out.json")
+    with pytest.raises(SystemExit):
+        module.parse_args(["--output", output])
+    assert "--mlip-config is required" in capsys.readouterr().err
+    cpu = tmp_path / "cpu.yaml"
+    cpu.write_text("mlip:\n  backend: uma\n  model_name: uma-s-1p1\n  device: cpu\n")
+    with pytest.raises(SystemExit):
+        module.parse_args(["--mlip-config", str(cpu), "--output", output])
+    assert "requires device: xpu" in capsys.readouterr().err
+    for removed in ("--backend", "--uma-model", "--mace-model", "--hydragnn-logdir"):
+        with pytest.raises(SystemExit):
+            module.parse_args([removed, "x", "--mlip-config", str(cpu), "--output", output])
+
+
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+def test_aurora_xpu_qualification_builds_each_backend_from_mlip_config(
+    tmp_path, monkeypatch, backend
+):
+    import json
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from ase.calculators.lj import LennardJones
+
+    import matsim_agents.backends.mlip.calculator  # noqa: F401  (cached before torch is faked)
+    from matsim_agents.backends.mlip.config import MLIP_BACKEND_CONFIGS
+
+    monkeypatch.setenv("HYDRAGNN_ROOT", str(tmp_path / "HydraGNN"))
+    module = _load_xpu_qualifier()
+    output = tmp_path / f"{backend}.json"
+    args, cfg = module.parse_args(
+        ["--mlip-config", str(XPU_SELECTIONS / f"mlip-xpu-{backend}.yaml"), "--output", str(output)]
+    )
+    assert (cfg.backend, cfg.device) == (backend, "xpu")
+    if backend == "hydragnn":
+        example = tmp_path / "HydraGNN/examples/multidataset_hpo_sc26"
+        assert cfg.logdir == example / "multidataset_hpo-BEST6-fp64"
+        assert cfg.mlp_checkpoint == example / "mlp_branch_weights.pt"
+
+    built, residency = [], []
+
+    def build_calculator(self, *, enable_mc_dropout=False):
+        built.append(self)
+        return LennardJones()
+
+    monkeypatch.setattr(MLIP_BACKEND_CONFIGS[backend], "build_calculator", build_calculator)
+    monkeypatch.setattr(
+        module,
+        "verify_model_residency",
+        lambda calculator, name: residency.append(name) or ["xpu:0"],
+    )
+
+    class Probe:
+        def __mul__(self, other):
+            return self
+
+        def sum(self):
+            return self
+
+        def cpu(self):
+            return 13.0
+
+        def __float__(self):
+            return 13.0
+
+    torch = ModuleType("torch")
+    torch.__version__, torch.__file__ = "fake", "fake/torch/__init__.py"
+    torch.tensor = lambda values, device: Probe()
+    torch.xpu = SimpleNamespace(
+        is_available=lambda: True,
+        set_device=lambda index: None,
+        synchronize=lambda: None,
+        get_device_name=lambda index: "Fake XPU",
+    )
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["qualify_mlip_xpu.py", "--mlip-config", str(args.mlip_config), "--output", str(output)],
+    )
+    monkeypatch.setattr(module.faulthandler, "register", lambda *args, **kwargs: None)
+
+    assert module.main() == 0
+    result = json.loads(output.read_text())
+    assert result["status"] == "PASSED"
+    assert result["backend"] == backend
+    assert result["model"] == cfg.model_identifier()
+    assert [config.device for config in built] == ["xpu"]
+    assert residency == [backend]
+
+
+def test_aurora_xpu_qualification_job_forwards_mlip_config():
+    job = (ROOT / "deployments/aurora/jobs/job-qualify-mlip-xpu-aurora.sh").read_text()
+    assert '--mlip-config "${config}"' in job
+    assert 'configs=("${MLIP_CONFIG}")' in job
+    for backend in ("hydragnn", "uma", "mace"):
+        assert (XPU_SELECTIONS / f"mlip-xpu-{backend}.yaml").is_file()
+    for removed in (
+        "--backend",
+        "--uma-model",
+        "--mace-model",
+        "--hydragnn-logdir",
+        "--hydragnn-mlp",
+    ):
+        assert removed not in job
+
+
 def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> None:
     helper = ROOT / "deployments/aurora/setup/prepare_hydragnn_source.py"
     spec = importlib.util.spec_from_file_location("prepare_hydragnn_source", helper)

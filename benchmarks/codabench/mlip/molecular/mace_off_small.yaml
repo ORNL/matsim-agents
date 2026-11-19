@@ -1,0 +1,7 @@
+# MACE-OFF23 small (Codabench baseline; output predictions/mace_off_small/).
+mlip:
+  backend: mace
+  family: mace_off
+  model: small
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

@@ -1,0 +1,7 @@
+# MACE-OMAT-0 medium (Codabench baseline; output predictions/mace_omat_medium/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: medium-omat-0
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

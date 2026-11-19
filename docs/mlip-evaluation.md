@@ -12,7 +12,7 @@ The pieces are:
 - `matsim_agents.datasets.splits`: split strategies, partitions, leakage checks,
   and the split manifest;
 - `matsim_agents.active_learning.finetune_eval`: fine-tuning and evaluation of
-  one backend with those partitions (`--evaluation-config`);
+  one MLIP with those partitions (`--mlip-config`, `--evaluation-config`);
 - `matsim_agents.active_learning.eval_report`: per-group reports, the backend x
   strategy table, and active-learning learning curves;
 - `matsim_agents.active_learning.uncertainty.calibrate_uncertainty`: how well
@@ -121,9 +121,53 @@ python -m matsim_agents.datasets.splits --dataset dataset.extxyz \
   --config examples/evaluation/trajectory-holdout.yaml --output-dir splits/trajectory
 ```
 
+## Choosing the model and the fine-tuning recipe
+
+The foundation model is an `mlip:` block (`--mlip-config FILE`, e.g. a file in
+[examples/mlip](../examples/mlip)), so any supported backend is evaluated the same
+way. The block fixes everything about the model: backend, checkpoint, device,
+UMA task, MACE family/size/precision, and for HydraGNN the fine-tuner
+(`fine_tuner: finetune_hydragnn` adapts the routed heads and needs
+`mlp_checkpoint`; `finetune_hydragnn_newhead` drops all heads and trains one). A
+HydraGNN block must name its `checkpoint`.
+
+The evaluation YAML's optional `fine_tune:` block holds that backend's
+hyperparameters; omit it for the defaults. Settings of another backend, or of the
+other HydraGNN fine-tuner, are rejected.
+
+```yaml
+evaluation:
+  objective: transfer to new trajectories
+  split: {strategy: trajectory_holdout, train_fraction: 0.6, validation_fraction: 0.2, test_fraction: 0.2}
+  fine_tune:
+    backend: uma            # must match the mlip block
+    lora: true              # uma: epochs, lr, force_weight, weight_decay, freeze_backbone, lora, lora_r, lora_alpha
+    epochs: 20              # mace: epochs, lr, weight_decay, freeze_backbone, lora, lora_rank, lora_alpha
+                            # hydragnn: epochs, lr, weight_threshold, unfreeze_backbone (routed) or
+                            #           strategy (unfrozen|frozen|scratch), head (new head)
+```
+
+```bash
+python -m matsim_agents.active_learning.finetune_eval \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
+  --evaluation-config evaluation.yaml \
+  --dataset dataset.extxyz --elemental-reference-manifest refs.json \
+  --output-dir runs/uma-lora
+```
+
+Training refuses devices the backend's fine-tuner does not support (UMA and MACE
+train on `cuda` or `cpu`; HydraGNN also on `xpu`). `eval/report.json` records the
+backend, the model identity, and the recipe. On Perlmutter,
+`deployments/perlmutter/launchers/submit-finetune-eval-matrix-perlmutter.sh`
+submits every (variant, dataset) run of
+`deployments/perlmutter/launchers/config/finetune-eval-matrix.yaml`, where each
+variant is an `mlip:` block plus a `fine_tune:` recipe;
+`submit-finetune-eval-pack4-perlmutter.sh` packs up to four variants of one
+dataset onto one node.
+
 ## Selection and the final test
 
-`finetune_eval` runs one backend per invocation:
+`finetune_eval` runs one model per invocation:
 
 1. It fine-tunes the foundation model on `train`, with `validation` for early
    stopping.

@@ -286,8 +286,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
             finetune_eval.run_finetune_endpoints(
                 dataset,
                 tmp_path / "campaign",
-                backend="uma",
-                device="cpu",
+                mlip={"backend": "uma", "device": "cpu"},
                 elemental_reference_manifest=reference,
                 evaluation=_random_frame(),
             )
@@ -334,10 +333,9 @@ def test_finetune_split_preserves_verified_method(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, "_uma_endpoints", check_split)
+    monkeypatch.setattr(finetune_eval.UMAFineTune, "endpoints", check_split)
     kwargs = dict(
-        backend="uma",
-        device="cpu",
+        mlip={"backend": "uma", "device": "cpu"},
         elemental_reference_manifest=reference,
         evaluation=_random_frame(),
     )
@@ -402,13 +400,13 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, f"_{backend}_endpoints", check_split)
+    recipe = {"uma": finetune_eval.UMAFineTune, "mace": finetune_eval.MACEFineTune}[backend]
+    monkeypatch.setattr(recipe, "endpoints", check_split)
     with pytest.raises(StopBeforeTraining):
         finetune_eval.run_finetune_endpoints(
             dataset,
             output,
-            backend=backend,
-            device="cpu",
+            mlip={"backend": backend, "device": "cpu"},
             elemental_reference_manifest=reference,
             evaluation=_random_frame(),
         )
@@ -469,8 +467,7 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
         finetune_eval.run_finetune_endpoints(
             dataset,
             tmp_path / "campaign",
-            backend="uma",
-            device="cpu",
+            mlip={"backend": "uma", "device": "cpu"},
             elemental_reference_manifest=elemental_manifest({"Nb": -10.0}),
             evaluation=_random_frame(),
         )

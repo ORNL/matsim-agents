@@ -1,0 +1,74 @@
+# Fine-tune + evaluation matrix for the AL-corrected paper datasets.
+#
+# Each variant is one foundation model (an `mlip:` block) and, optionally, that
+# backend's fine-tuning recipe (`fine_tune:`, merged into the evaluation YAML).
+# Variant names are the output directories under $RUNS_ROOT/finetune-eval/ that
+# scripts/utils/harvest_finetune_eval.py reads. A case's `mlip:` entry, keyed by
+# backend, overrides that backend's block for the case.
+#
+# Used by submit-finetune-eval-matrix-perlmutter.sh (finetune_eval_matrix.py).
+vars:
+  HYDRAGNN_ROOT: ${PROJECT_ROOT}/../HydraGNN
+  GFM_LOGDIR: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
+  GFM_CHECKPOINT: multidataset_hpo-BEST6-fp64_epoch_97.pk
+  BRANCH_MLP: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  FT_REPO: ${PROJECT_ROOT}/../HydraGNN_GFM_FineTuning4Materials
+
+cases:
+  zn-formate-mof-uma-al-001:
+    mlip:
+      uma: {task_name: omol}   # hybrid MOF: molecular/organic head
+  cantor-fcc-al-001: {}
+  phosphorene-2d-al-001: {}
+  lifepo4-al-001: {}
+  hea-bcc-al-001: {}
+
+variants:
+  # HydraGNN multi-head GFM: routed branch-MLP heads, or drop all heads and train one.
+  hydragnn:
+    mlip: &hydragnn
+      backend: hydragnn
+      logdir: ${GFM_LOGDIR}
+      checkpoint: ${GFM_CHECKPOINT}
+      mlp_checkpoint: ${BRANCH_MLP}
+      hydragnn_root: ${HYDRAGNN_ROOT}
+      device: cuda
+  hydragnn-unfrozen:
+    mlip: &hydragnn_newhead
+      <<: *hydragnn
+      fine_tuner: finetune_hydragnn_newhead
+      ft_repo: ${FT_REPO}
+    fine_tune: {backend: hydragnn, strategy: unfrozen}
+  hydragnn-frozen:
+    mlip: *hydragnn_newhead
+    fine_tune: {backend: hydragnn, strategy: frozen}
+  hydragnn-scratch:
+    mlip: *hydragnn_newhead
+    fine_tune: {backend: hydragnn, strategy: scratch}
+
+  # UMA small: whole model, frozen backbone, or backbone LoRA adapters.
+  uma:
+    mlip: &uma {backend: uma, model_name: uma-s-1p1, task_name: omat, device: cuda}
+  uma-frozen:
+    mlip: *uma
+    fine_tune: {backend: uma, freeze_backbone: true}
+  uma-lora:
+    mlip: *uma
+    fine_tune: {backend: uma, lora: true}
+
+  # MACE-MP-0 small / medium / large: naive fine-tune or native LoRA.
+  mace-small:
+    mlip: &mace_small {backend: mace, family: mace_mp, model: small, precision: fp64, device: cuda}
+  mace-small-lora:
+    mlip: *mace_small
+    fine_tune: {backend: mace, lora: true}
+  mace:
+    mlip: &mace_medium {backend: mace, family: mace_mp, model: medium, precision: fp64, device: cuda}
+  mace-lora:
+    mlip: *mace_medium
+    fine_tune: {backend: mace, lora: true}
+  mace-large:
+    mlip: &mace_large {backend: mace, family: mace_mp, model: large, precision: fp64, device: cuda}
+  mace-large-lora:
+    mlip: *mace_large
+    fine_tune: {backend: mace, lora: true}

@@ -47,6 +47,7 @@ upstream package pins `e3nn==0.4.4`, conflicting with HydraGNN's exact
 
 Codabench dependencies follow the same boundary: `requirements.txt` is
 backend-neutral, `requirements-mace.txt` belongs in `.venv-mace`, and
-`requirements-fairchem.txt` belongs in `.venv`. `run_baselines.py --model all`
-dispatches each backend through the appropriate interpreter. Override the
+`requirements-fairchem.txt` belongs in `.venv`. When its `--mlip-config`
+selections (and `--allscaip`) need both environments, `run_baselines.py`
+dispatches MACE models and the others through the appropriate interpreters. Override the
 defaults with `MATSIM_BASE_PYTHON` and `MATSIM_MACE_PYTHON`.

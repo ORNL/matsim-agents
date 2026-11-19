@@ -22,8 +22,9 @@ def _python_shim(path: Path) -> None:
     path.chmod(0o755)
 
 
-def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
-    """A config named relative to the submission directory survives the job's cd."""
+def test_finetune_eval_job_passes_absolute_inputs_and_the_selected_environment(tmp_path):
+    """Configs named relative to the submission directory survive the job's cd, and
+    the backend read from the mlip block picks the environment."""
     repo = tmp_path / "repo"
     launchers = repo / "deployments/perlmutter/launchers"
     setup = repo / "deployments/perlmutter/setup"
@@ -32,10 +33,14 @@ def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
     (repo / "pyproject.toml").write_text("")
     job = launchers / "job-finetune-eval-perlmutter.sh"
     shutil.copy(ROOT / "deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh", job)
+    shutil.copy(ROOT / "deployments/perlmutter/setup/campaign-naming.sh", setup)
     (setup / "perlmutter-module-stack.sh").write_text("load_perlmutter_modules_gpu() { :; }\n")
     (setup / "model-artifacts-perlmutter.sh").write_text(
         "configure_mace_model_artifacts() { :; }\n"
     )
+    main_venv = tmp_path / "main-venv"
+    (main_venv / "bin").mkdir(parents=True)
+    _python_shim(main_venv / "bin/python3")
     venv = tmp_path / "venv"
     (venv / "bin").mkdir(parents=True)
     args_file = tmp_path / "args"
@@ -50,13 +55,15 @@ def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
     submit_dir = tmp_path / "submit"
     submit_dir.mkdir()
     (submit_dir / "evaluation.yaml").write_text("objective: interpolation\n")
+    (submit_dir / "mace-small.yaml").write_text("mlip:\n  backend: mace\n  model: small\n")
     env = {
         **os.environ,
         "PROJECT_ROOT": str(repo),
         "RUNS_ROOT": str(tmp_path / "runs"),
-        "BACKEND": "mace",
         "CASE": "case",
+        "MATSIM_HYDRAGNN_VENV": str(main_venv),
         "MATSIM_MACE_VENV": str(venv),
+        "MLIP_CONFIG": "mace-small.yaml",
         "EVALUATION_CONFIG": "evaluation.yaml",
     }
     proc = subprocess.run(
@@ -65,6 +72,10 @@ def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
     assert proc.returncode == 0, proc.stderr
     args = args_file.read_text().splitlines()
     assert args[args.index("--evaluation-config") + 1] == str(submit_dir / "evaluation.yaml")
+    assert args[args.index("--mlip-config") + 1] == str(submit_dir / "mace-small.yaml")
+    out_dir = tmp_path / "runs" / "finetune-eval" / "mace-small" / "case"
+    assert args[args.index("--output-dir") + 1] == str(out_dir)
+    assert (out_dir / "mlip.yaml").read_text() == (submit_dir / "mace-small.yaml").read_text()
 
 
 @pytest.mark.parametrize(

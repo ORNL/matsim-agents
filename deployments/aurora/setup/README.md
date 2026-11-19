@@ -187,12 +187,16 @@ forces for perturbed two-atom silicon. CPU fallback is a failure. This smoke
 test does not establish scientific accuracy or production scaling.
 
 Prepare checkpoint caches on a login node before submission; compute nodes run
-offline. The defaults are the local HydraGNN BEST6 logdir/BranchWeightMLP,
-UMA `uma-s-1p1`, and MACE-MP `small`. `MATSIM_HYDRAGNN_LOGDIR`,
-`HYDRAGNN_BRANCH_MLP_CHECKPOINT`, `MATSIM_UMA_MODEL_NAME`, `MATSIM_MACE_MODEL`,
-and `QUALIFICATION_RUN_DIR` override inputs/output. The model configuration
-accepts explicit `xpu` devices; actual support is determined by this test, not
-by configuration acceptance alone.
+offline. Each model is an `mlip:` block passed to `qualify_mlip_xpu.py
+--mlip-config FILE`; the block must select `device: xpu`, and anything else is
+rejected. Without `MLIP_CONFIG`, the job qualifies the three selections in
+`deployments/aurora/jobs/config/`: `mlip-xpu-hydragnn.yaml` (the BEST6
+logdir and BranchWeightMLP under `${HYDRAGNN_ROOT}`), `mlip-xpu-uma.yaml`
+(UMA `uma-s-1p1`), and `mlip-xpu-mace.yaml` (MACE-MP `small`). Set
+`MLIP_CONFIG` to an absolute or repository-relative YAML file to qualify one
+other model instead, and `QUALIFICATION_RUN_DIR` to choose the output
+location. Configuration acceptance of `xpu` does not establish support; this
+test does.
 
 Each model writes a timed `.progress.json` before imports, XPU setup, checkpoint
 loading, energy/force prediction, synchronization, and residency checks. Logs

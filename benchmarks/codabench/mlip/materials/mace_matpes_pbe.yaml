@@ -1,0 +1,7 @@
+# MACE-MATPES PBE (Codabench baseline; output predictions/mace_matpes_pbe/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: mace-matpes-pbe-0
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

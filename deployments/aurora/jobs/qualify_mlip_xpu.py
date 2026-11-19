@@ -1,9 +1,14 @@
-"""Qualify checkpoint-backed MLIP energy/forces without allowing CPU fallback."""
+"""Qualify checkpoint-backed MLIP energy/forces without allowing CPU fallback.
+
+The model is the ``mlip:`` block of ``--mlip-config FILE``; it must select
+``device: xpu``.
+"""
 
 from __future__ import annotations
 
 import argparse
 import faulthandler
+import importlib
 import json
 import math
 import platform
@@ -11,6 +16,9 @@ import signal
 import time
 import traceback
 from pathlib import Path
+
+from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
+from matsim_agents.backends.mlip.config import MLIPBackendConfig
 
 
 def validate_predictions(energy: float, forces: list[list[float]], atom_count: int) -> None:
@@ -69,7 +77,7 @@ class Progress:
         print(json.dumps(record), flush=True)
 
 
-def qualify(args, progress: Progress) -> dict:
+def qualify(cfg: MLIPBackendConfig, progress: Progress) -> dict:
     progress.stage("import_torch")
     import torch
 
@@ -77,12 +85,7 @@ def qualify(args, progress: Progress) -> dict:
     from ase.build import bulk
 
     progress.stage("import_matsim_calculators")
-    from matsim_agents.backends.mlip.calculator import (
-        build_hydragnn_calculator,
-        build_mace_calculator,
-        build_uma_calculator,
-    )
-    from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+    importlib.import_module("matsim_agents.backends.mlip.calculator")
 
     progress.stage("xpu_availability")
     if not torch.xpu.is_available():
@@ -95,29 +98,7 @@ def qualify(args, progress: Progress) -> dict:
     if float((probe * probe).sum().cpu()) != 13.0:
         raise RuntimeError("XPU arithmetic probe failed")
     progress.stage("load_checkpoint_and_build_calculator")
-    if args.backend == "hydragnn":
-        calculator = build_hydragnn_calculator(
-            HydraGNNConfig(
-                logdir=args.hydragnn_logdir,
-                checkpoint=args.hydragnn_checkpoint,
-                mlp_checkpoint=args.hydragnn_mlp,
-                device="xpu",
-                precision="fp32",
-            )
-        )
-    elif args.backend == "uma":
-        calculator = build_uma_calculator(
-            UMAConfig(model_name=args.uma_model, device="xpu", task_name="omat")
-        )
-    else:
-        calculator = build_mace_calculator(
-            MACEConfig(
-                model=args.mace_model,
-                family="checkpoint" if Path(args.mace_model).is_file() else "mace_mp",
-                device="xpu",
-                precision="fp32",
-            )
-        )
+    calculator = cfg.build_calculator()
     progress.stage("construct_silicon_input")
     atoms = bulk("Si", "diamond", a=5.43)
     atoms.positions[1, 0] += 0.02
@@ -129,12 +110,13 @@ def qualify(args, progress: Progress) -> dict:
     progress.stage("synchronize_xpu")
     torch.xpu.synchronize()
     progress.stage("verify_model_residency")
-    devices = verify_model_residency(calculator, args.backend)
+    devices = verify_model_residency(calculator, cfg.backend)
     progress.stage("validate_predictions")
     validate_predictions(energy, forces, len(atoms))
     return {
         "status": "PASSED",
-        "backend": args.backend,
+        "backend": cfg.backend,
+        "model": cfg.model_identifier(),
         "host": platform.node(),
         "torch": torch.__version__,
         "torch_path": torch.__file__,
@@ -146,31 +128,40 @@ def qualify(args, progress: Progress) -> dict:
     }
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, MLIPBackendConfig]:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", choices=("hydragnn", "uma", "mace"), required=True)
+    add_mlip_arguments(parser)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--hydragnn-logdir", type=Path)
-    parser.add_argument("--hydragnn-checkpoint")
-    parser.add_argument("--hydragnn-mlp", type=Path)
-    parser.add_argument("--uma-model", default="uma-s-1p1")
-    parser.add_argument("--mace-model", default="small")
     parser.add_argument("--stack-interval", type=int, default=90)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.mlip_config is None:
+        parser.error("--mlip-config is required")
     if args.stack_interval <= 0:
         parser.error("--stack-interval must be positive")
-    progress = Progress(args.output, args.backend)
+    cfg = mlip_config_from_args(parser, args)
+    if cfg.device != "xpu":
+        parser.error(
+            f"--mlip-config: XPU qualification requires device: xpu in the mlip block "
+            f"(got {cfg.device!r} in {args.mlip_config})"
+        )
+    return args, cfg
+
+
+def main(argv: list[str] | None = None) -> int:
+    args, cfg = parse_args(argv)
+    progress = Progress(args.output, cfg.backend)
     progress.stage("starting")
     faulthandler.enable()
     faulthandler.dump_traceback_later(args.stack_interval, repeat=True)
     faulthandler.register(signal.SIGTERM, all_threads=True, chain=True)
     try:
-        result = qualify(args, progress)
+        result = qualify(cfg, progress)
     except Exception as error:
         traceback.print_exc()
         result = {
             "status": "FAILED",
-            "backend": args.backend,
+            "backend": cfg.backend,
+            "model": cfg.model_identifier(),
             "host": platform.node(),
             "error": f"{type(error).__name__}: {error}",
         }

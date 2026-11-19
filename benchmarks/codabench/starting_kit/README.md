@@ -204,42 +204,54 @@ exhaustive probing.
 
 ## Provided Baselines
 
-Four baselines are provided in `baselines/`:
+Two baseline adapters are provided in `baselines/`: `mlip/` builds any
+matsim-agents MLIP (MACE, HydraGNN, or UMA) from an `mlip:` YAML block, and
+`allscaip/` wraps AllScAIP. Curated selections live in `mlip/`:
 
-| Baseline | Architecture | Tasks | Notes |
+| Selection | Architecture | Tasks | Notes |
 |----------|-------------|-------|-------|
-| **MACE foundations** | Equivariant GNN (MACE) | 1–3, 5 | MP, MPA, OMAT, and MATPES crystal models; no extra auth needed |
-| **HydraGNN** | Multi-headed graph NN | 1–3, 5 | ORNL model |
-| **UMA** (`uma-s-1p2`) | Transformer-based universal model | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
-| **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN (OMol102M) | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
+| `mlip/materials/*.yaml` | Equivariant GNN (MACE) | 1–3, 5 | 14 MP, MPA, OMAT, and MATPES crystal models; no extra auth needed |
+| `mlip/molecular/*.yaml` | Equivariant GNN (MACE) | 1–3, 5 | 8 OFF, OMOL, Polar, and ANI-CC molecular models |
+| `mlip/hydragnn.yaml` | Multi-headed graph NN | 1–3, 5 | ORNL model; set `HYDRAGNN_LOGDIR` to the trained logdir |
+| `mlip/uma.yaml` (`uma-s-1p2`) | Transformer-based universal model | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
+| `--allscaip` (`allscaip-md-conserving-all-omol`) | Message-passing NN (OMol102M) | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
 
 Run with:
 
 ```bash
 REF=public_data/elemental_references.json
-python run_baselines.py --model mace --mace-variant mace_omat_medium --elemental-reference-manifest "$REF"
-python run_baselines.py --model mace --mace-variant materials --elemental-reference-manifest "$REF"  # 14 crystal models
-python run_baselines.py --model hydragnn --elemental-reference-manifest "$REF"  # also provide --hydragnn-logdir
-python run_baselines.py --model uma --elemental-reference-manifest "$REF"
-python run_baselines.py --model allscaip --elemental-reference-manifest "$REF"
-python run_baselines.py --model all --relax --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/materials/mace_omat_medium.yaml --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/materials/*.yaml --elemental-reference-manifest "$REF"  # 14 crystal models
+HYDRAGNN_LOGDIR=/path/to/logdir python run_baselines.py --mlip-config mlip/hydragnn.yaml --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/uma.yaml --elemental-reference-manifest "$REF"
+python run_baselines.py --allscaip --elemental-reference-manifest "$REF"
+python run_baselines.py --mlip-config mlip/materials/*.yaml mlip/hydragnn.yaml mlip/uma.yaml \
+    --allscaip --relax --elemental-reference-manifest "$REF"
 ```
 
-`--mace-variant` accepts every MACE model exposed by the workflow. Use
-`materials` for the Codabench bulk-crystal matrix (MP, MPA, OMAT, and
-MATPES), or `all` to include all 22 catalog variants. The latter also includes
-OFF, OMOL, Polar, and ANI-CC molecular models; those are selectable for explicit
-diagnostics but are not general-purpose bulk-crystal potentials. MACE-OFF and
-MACE-OMOL use the non-commercial Academic Software License; verify each model's
-upstream terms before publishing or redistributing results.
+`--mlip-config FILE` takes a YAML file with an `mlip:` block (`backend:
+hydragnn | uma | mace`, that backend's settings, and `device`). It is
+repeatable and accepts several files at once; each file writes
+`predictions/<file stem>/`, so stems must be unique. Each model runs on its
+block's `device`; the curated selections read it from `MLIP_DEVICE` (default
+`cpu`), e.g. `MLIP_DEVICE=cuda`. AllScAIP uses `--allscaip-device`,
+`--allscaip-model`, and `--allscaip-task`. Write your own selection file to
+run any other MLIP, such as a fine-tuned MACE checkpoint (`family:
+checkpoint`). The MLIP adapter requires the matsim-agents package in each
+model environment.
 
-MACE-MH (`mh-0` and `mh-1`) variants are excluded until explicit inference-head
-selection is supported through the adapters.
+The molecular selections (OFF, OMOL, Polar, and ANI-CC) are provided for
+explicit diagnostics but are not general-purpose bulk-crystal potentials.
+MACE-OFF and MACE-OMOL use the non-commercial Academic Software License;
+verify each model's upstream terms before publishing or redistributing
+results. Multi-head MACE-MH (`mh-0`, `mh-1`) models need an explicit `head:`
+in their selection file.
 
 Install backend dependencies separately: `requirements-mace.txt` in the MACE
 environment and `requirements-fairchem.txt` in the HydraGNN/FairChem
-environment. Aggregate runs use `.venv-mace/bin/python` and `.venv/bin/python`
-by default; set `MATSIM_MACE_PYTHON` and `MATSIM_BASE_PYTHON` when the
+environment. When the selected models need both environments, MACE models
+run under `.venv-mace/bin/python` and the others under `.venv/bin/python` by
+default; set `MATSIM_MACE_PYTHON` and `MATSIM_BASE_PYTHON` when the
 environments live elsewhere.
 
 `run_baselines.py` and `evaluate.py` first predict energies of the fixed

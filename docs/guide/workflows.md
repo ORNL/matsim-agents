@@ -88,8 +88,9 @@ MACE fine-tune with low-rank adapters by default (`trainer.finetune_mode: lora`;
 configured model each time instead of the last promoted one. See
 [Fine-tuning UMA and MACE](../../docs/scientific-workflows.md#fine-tuning-uma-and-mace).
 
-**Evaluating fine-tuned MLIPs.** `python -m matsim_agents.active_learning.finetune_eval`
-splits a labelled dataset by a declared strategy (random frames, time blocks,
+**Evaluating fine-tuned MLIPs.** `python -m matsim_agents.active_learning.finetune_eval
+--mlip-config FILE` fine-tunes the selected model (any backend) with the recipe in
+the evaluation YAML's `fine_tune:` block. It splits a labelled dataset by a declared strategy (random frames, time blocks,
 trajectories, structures, compositions, conditions, or AL iterations) into
 train, validation, and test partitions with a content-addressed manifest and
 leakage checks, selects between the foundation and fine-tuned model on

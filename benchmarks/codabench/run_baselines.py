@@ -1,38 +1,40 @@
 #!/usr/bin/env python3
 """
-run_baselines.py — Run MACE, HydraGNN, UMA, and AllScAIP over all test
-structures and write predictions/ directories. These serve as leaderboard seeds
-and pipeline-validation baselines.
+run_baselines.py — Run MLIP (MACE, HydraGNN, UMA) and AllScAIP baselines over
+all test structures and write predictions/ directories. These serve as
+leaderboard seeds and pipeline-validation baselines.
+
+Each MLIP is selected by ``--mlip-config FILE``: a YAML file with an ``mlip:``
+block (``backend: hydragnn | uma | mace``, that backend's settings, and its
+``device``). The option is repeatable and accepts several files at once; every
+file writes ``predictions/<file stem>/``. Curated selections live in ``mlip/``
+and read their device from ``MLIP_DEVICE`` (default ``cpu``).
 
 Usage
 -----
-# One MACE model or all bulk-material MACE models:
-    python run_baselines.py --model mace --mace-variant mace_omat_medium --device cpu
-    python run_baselines.py --model mace --mace-variant materials --device cuda
+# One MACE model, or all 14 bulk-material MACE models:
+    python run_baselines.py --mlip-config mlip/materials/mace_omat_medium.yaml
+    MLIP_DEVICE=cuda python run_baselines.py --mlip-config mlip/materials/*.yaml
 
-# HydraGNN only:
-    python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/logdir
+# HydraGNN (HYDRAGNN_LOGDIR is the trained logdir):
+    HYDRAGNN_LOGDIR=/path/to/logdir python run_baselines.py --mlip-config mlip/hydragnn.yaml
 
 # UMA (requires fairchem-core + HF authentication):
-    python run_baselines.py --model uma --uma-model uma-s-1p2 --device cuda
+    python run_baselines.py --mlip-config mlip/uma.yaml
 
 # AllScAIP (requires fairchem-core + HF authentication):
-    python run_baselines.py --model allscaip --allscaip-model facebook/AllScAIP --device cuda
+    python run_baselines.py --allscaip --allscaip-device cuda
 
-# MACE + HydraGNN only:
-    python run_baselines.py --model both --mace-variant mace_mp_medium \\
-                            --hydragnn-logdir /path/to/logdir
+# Every curated model (MACE is dispatched to .venv-mace; the others to .venv):
+    python run_baselines.py --mlip-config mlip/materials/*.yaml mlip/hydragnn.yaml \\
+                            mlip/uma.yaml --allscaip
 
-# All four models (MACE is dispatched to .venv-mace; the others to .venv):
-    python run_baselines.py --model all --mace-variant mace_mp_medium \\
-                            --hydragnn-logdir /path/to/logdir --device cuda
+Every invocation also requires ``--elemental-reference-manifest``.
 
 Outputs
 -------
-    predictions/mace_<variant>/ — energies.csv + forces/
-    predictions/hydragnn/       — energies.csv + forces/
-    predictions/uma/            — energies.csv + forces/
-    predictions/allscaip/       — energies.csv + forces/
+    predictions/<mlip-config stem>/ — energies.csv + forces/ (e.g. mace_omat_medium/)
+    predictions/allscaip/           — energies.csv + forces/
 """
 
 from __future__ import annotations
@@ -43,7 +45,6 @@ import importlib.util
 import json
 import os
 import subprocess
-import sys
 import time
 import traceback
 from pathlib import Path
@@ -61,33 +62,8 @@ STRUCT_META = HERE / "public_data" / "structures_metadata.csv"
 STRUCT_ROOT = HERE / "public_data" / "structures"
 PRED_ROOT = HERE / "predictions"
 
-MACE_MODELS: dict[str, tuple[str, str]] = {
-    "mace_mp_small": ("mace_mp", "small"),
-    "mace_mp_medium": ("mace_mp", "medium"),
-    "mace_mp_large": ("mace_mp", "large"),
-    "mace_mp_small_0b": ("mace_mp", "small-0b"),
-    "mace_mp_medium_0b": ("mace_mp", "medium-0b"),
-    "mace_mp_small_0b2": ("mace_mp", "small-0b2"),
-    "mace_mp_medium_0b2": ("mace_mp", "medium-0b2"),
-    "mace_mp_large_0b2": ("mace_mp", "large-0b2"),
-    "mace_mp_medium_0b3": ("mace_mp", "medium-0b3"),
-    "mace_mpa_medium": ("mace_mp", "medium-mpa-0"),
-    "mace_omat_small": ("mace_mp", "small-omat-0"),
-    "mace_omat_medium": ("mace_mp", "medium-omat-0"),
-    "mace_matpes_pbe": ("mace_mp", "mace-matpes-pbe-0"),
-    "mace_matpes_r2scan": ("mace_mp", "mace-matpes-r2scan-0"),
-    "mace_off_small": ("mace_off", "small"),
-    "mace_off_medium": ("mace_off", "medium"),
-    "mace_off_large": ("mace_off", "large"),
-    "mace_omol_extra_large": ("mace_omol", "extra_large"),
-    "mace_polar_small": ("mace_polar", "polar-1-s"),
-    "mace_polar_medium": ("mace_polar", "polar-1-m"),
-    "mace_polar_large": ("mace_polar", "polar-1-l"),
-    "mace_anicc": ("mace_anicc", "default"),
-}
-MACE_MATERIAL_MODELS = tuple(
-    name for name, (family, _model) in MACE_MODELS.items() if family == "mace_mp"
-)
+# Interpreter environments: MACE pins e3nn==0.4.4; FairChem/HydraGNN need e3nn>=0.5.
+MACE_ENVIRONMENT, BASE_ENVIRONMENT = "mace", "base"
 
 
 def load_baseline_class(name: str):
@@ -109,58 +85,22 @@ def load_baseline_class(name: str):
 # ---------------------------------------------------------------------------
 
 
-def parse_args() -> argparse.Namespace:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Run competition baselines.")
     p.add_argument(
-        "--model",
-        choices=["mace", "hydragnn", "uma", "allscaip", "both", "all"],
-        default="both",
-        help="Which baseline(s) to run. 'both' = mace+hydragnn; 'all' = all four.",
-    )
-    # MACE
-    p.add_argument(
-        "--mace-variant",
-        default="mace_mp_medium",
-        choices=[*MACE_MODELS, "materials", "all"],
+        "--mlip-config",
+        type=Path,
+        action="extend",
+        nargs="+",
+        default=[],
+        metavar="FILE",
         help=(
-            "Curated MACE model id, 'materials' for all bulk-material models, "
-            "or 'all' for every installed family."
+            "YAML file with an mlip block (backend: hydragnn | uma | mace, its settings, "
+            "and device). Repeatable; each file writes predictions/<file stem>/."
         ),
     )
-    p.add_argument(
-        "--mace-family",
-        choices=[
-            "mace_mp",
-            "mace_off",
-            "mace_omol",
-            "mace_polar",
-            "mace_anicc",
-            "checkpoint",
-        ],
-        help="Override the curated variant with a native MACE loader family.",
-    )
-    p.add_argument(
-        "--mace-model",
-        help="Model alias, URL, or local path used with --mace-family.",
-    )
-    # HydraGNN
-    p.add_argument(
-        "--hydragnn-logdir",
-        default=None,
-        help="Path to a trained HydraGNN logdir (contains config.json).",
-    )
-    # UMA
-    p.add_argument(
-        "--uma-model",
-        default="uma-s-1p2",
-        help="UMA model name: uma-s-1p2 | uma-m-1p1 | uma-s-1p1.",
-    )
-    p.add_argument(
-        "--uma-task",
-        default="omat",
-        help="fairchem task name for UMA (default: omat for inorganic bulk).",
-    )
-    # AllScAIP
+    # AllScAIP (a FairChem model outside the mlip backends)
+    p.add_argument("--allscaip", action="store_true", help="Also run the AllScAIP baseline.")
     p.add_argument(
         "--allscaip-model",
         default="allscaip-md-conserving-all-omol",
@@ -171,13 +111,36 @@ def parse_args() -> argparse.Namespace:
         default="omol",
         help="fairchem task name for AllScAIP (default: omol; trained on OMol25).",
     )
+    p.add_argument(
+        "--allscaip-device", default="cpu", help="AllScAIP compute device: cpu, cuda, xpu."
+    )
     # Common
-    p.add_argument("--device", default="cpu", help="Compute device: cpu, cuda, xpu.")
     p.add_argument("--elemental-reference-manifest", required=True, type=Path)
     p.add_argument("--relax", action="store_true", help="Also run ASE LBFGS relaxation.")
     p.add_argument("--fmax", type=float, default=0.05)
     p.add_argument("--steps", type=int, default=500)
-    return p.parse_args()
+    return p
+
+
+def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[tuple]]:
+    """Parse the CLI and load every ``--mlip-config`` as ``(label, path, config)``."""
+    from matsim_agents.backends.mlip.config import load_mlip_config
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.mlip_config and not args.allscaip:
+        parser.error("select at least one model with --mlip-config FILE and/or --allscaip")
+    selections = []
+    for path in args.mlip_config:
+        try:
+            cfg = load_mlip_config(path)
+        except (OSError, ValueError) as error:
+            parser.error(f"--mlip-config {path}: {error}")
+        selections.append((path.stem, path.expanduser().resolve(), cfg))
+    labels = [label for label, _path, _cfg in selections] + (["allscaip"] if args.allscaip else [])
+    if duplicates := sorted({label for label in labels if labels.count(label) > 1}):
+        parser.error(f"prediction labels must be unique (repeated: {', '.join(duplicates)})")
+    return args, selections
 
 
 # ---------------------------------------------------------------------------
@@ -289,53 +252,68 @@ def run_predictions(
         raise RuntimeError(f"{label} failed for {n_fail} of {len(structures)} structures")
 
 
-def _dispatch_aggregate(model: str) -> None:
-    """Run incompatible backend families in their owning interpreters."""
-    repo = HERE.parents[1]
-    base_python = Path(os.environ.get("MATSIM_BASE_PYTHON", repo / ".venv/bin/python"))
-    mace_python = Path(os.environ.get("MATSIM_MACE_PYTHON", repo / ".venv-mace/bin/python"))
-    selections = ["mace", "hydragnn"]
-    if model == "all":
-        selections.extend(("uma", "allscaip"))
+def environment_of(cfg) -> str:
+    """Interpreter environment that owns an mlip block's backend."""
+    return MACE_ENVIRONMENT if cfg.backend == "mace" else BASE_ENVIRONMENT
 
-    original = sys.argv[1:]
-    for selection in selections:
-        python = mace_python if selection == "mace" else base_python
+
+def _common_arguments(args: argparse.Namespace) -> list[str]:
+    common = [
+        "--elemental-reference-manifest",
+        str(args.elemental_reference_manifest.expanduser().resolve()),
+        "--fmax",
+        str(args.fmax),
+        "--steps",
+        str(args.steps),
+    ]
+    return common + (["--relax"] if args.relax else [])
+
+
+def dispatch_environments(args: argparse.Namespace, selections: list[tuple]) -> bool:
+    """Run selections in their owning interpreters when they need more than one.
+
+    Returns ``False`` (nothing dispatched) when one interpreter serves every selection.
+    """
+    groups: dict[str, list[str]] = {}
+    for _label, path, cfg in selections:
+        groups.setdefault(environment_of(cfg), []).append(str(path))
+    if args.allscaip:
+        groups.setdefault(BASE_ENVIRONMENT, [])
+    if len(groups) < 2:
+        return False
+
+    repo = HERE.parents[1]
+    pythons = {
+        MACE_ENVIRONMENT: Path(
+            os.environ.get("MATSIM_MACE_PYTHON", repo / ".venv-mace/bin/python")
+        ),
+        BASE_ENVIRONMENT: Path(os.environ.get("MATSIM_BASE_PYTHON", repo / ".venv/bin/python")),
+    }
+    for environment in (MACE_ENVIRONMENT, BASE_ENVIRONMENT):
+        python = pythons[environment]
         if not python.is_file():
             raise SystemExit(
-                f"{selection} interpreter not found: {python}. Run the facility installer "
+                f"{environment} interpreter not found: {python}. Run the facility installer "
                 f"with INSTALL_MACE=1 and/or INSTALL_UMA=1 first."
             )
-        child_args = original.copy()
-        for index, argument in enumerate(child_args):
-            if argument == "--model":
-                child_args[index + 1] = selection
-                break
-            if argument.startswith("--model="):
-                child_args[index] = f"--model={selection}"
-                break
-        else:
-            child_args.extend(("--model", selection))
-        print(f"\n=== dispatch {selection} via {python} ===", flush=True)
+    for environment in (MACE_ENVIRONMENT, BASE_ENVIRONMENT):
+        python = pythons[environment]
+        child_args = _common_arguments(args)
+        if groups[environment]:
+            child_args += ["--mlip-config", *groups[environment]]
+        if environment == BASE_ENVIRONMENT and args.allscaip:
+            child_args += [
+                "--allscaip",
+                "--allscaip-model",
+                args.allscaip_model,
+                "--allscaip-task",
+                args.allscaip_task,
+                "--allscaip-device",
+                args.allscaip_device,
+            ]
+        print(f"\n=== dispatch {environment} environment via {python} ===", flush=True)
         subprocess.run([str(python), str(Path(__file__).resolve()), *child_args], check=True)
-
-
-def selected_mace_models(args: argparse.Namespace) -> list[tuple[str, str, str]]:
-    """Return ``(output_label, family, model)`` selections for this invocation."""
-    if args.mace_family or args.mace_model:
-        if not args.mace_family or not args.mace_model:
-            raise SystemExit("--mace-family and --mace-model must be supplied together")
-        safe_model = "".join(
-            character if character.isalnum() else "_" for character in args.mace_model
-        ).strip("_")
-        return [(f"mace_{args.mace_family}_{safe_model}", args.mace_family, args.mace_model)]
-    if args.mace_variant == "materials":
-        names = MACE_MATERIAL_MODELS
-    elif args.mace_variant == "all":
-        names = tuple(MACE_MODELS)
-    else:
-        names = (args.mace_variant,)
-    return [(name, *MACE_MODELS[name]) for name in names]
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -343,102 +321,42 @@ def selected_mace_models(args: argparse.Namespace) -> list[tuple[str, str, str]]
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    args = parse_args()
-
-    if args.model in ("both", "all"):
-        _dispatch_aggregate(args.model)
+def main(argv: list[str] | None = None) -> None:
+    args, selections = parse_args(argv)
+    if dispatch_environments(args, selections):
         return
 
-    run_mace = args.model == "mace"
-    run_hydragnn = args.model == "hydragnn"
-    run_uma = args.model == "uma"
-    run_allscaip = args.model == "allscaip"
-
-    if run_mace:
-        for label, family, mace_model in selected_mace_models(args):
-            print(f"\n=== MACE ({family}:{mace_model}) ===")
-            try:
-                MACE = load_baseline_class("mace_mp0")
-                calc_mace = MACE.from_checkpoint(
-                    mace_model,
-                    device=args.device,
-                    family=family,
-                )
-                run_predictions(
-                    calc_mace,
-                    label,
-                    args.device,
-                    args.relax,
-                    args.fmax,
-                    args.steps,
-                    elemental_reference_manifest=args.elemental_reference_manifest,
-                )
-            except ImportError:
-                print("  mace-torch not installed. Run: pip install mace-torch")
-                raise
-            except Exception:
-                traceback.print_exc()
-                raise
-
-    if run_hydragnn:
-        if not args.hydragnn_logdir:
-            raise ValueError("HydraGNN requires --hydragnn-logdir")
-        else:
-            print(f"\n=== HydraGNN ({args.hydragnn_logdir}) ===")
-            try:
-                HydraGNN = load_baseline_class("hydragnn")
-                calc_hgnn = HydraGNN.from_checkpoint(args.hydragnn_logdir, device=args.device)
-                run_predictions(
-                    calc_hgnn,
-                    "hydragnn",
-                    args.device,
-                    args.relax,
-                    args.fmax,
-                    args.steps,
-                    elemental_reference_manifest=args.elemental_reference_manifest,
-                )
-            except Exception:
-                traceback.print_exc()
-                raise
-
-    if run_uma:
-        print(f"\n=== UMA ({args.uma_model}, task={args.uma_task}) ===")
-        print("  Requires: pip install fairchem-core  +  huggingface-cli login")
+    MLIP = load_baseline_class("mlip") if selections else None
+    for label, path, cfg in selections:
+        print(f"\n=== {cfg.backend} ({cfg.model_reference}, device={cfg.device}) from {path} ===")
         try:
-            UMA = load_baseline_class("uma")
-            calc_uma = UMA.from_checkpoint(
-                args.uma_model, device=args.device, task_name=args.uma_task
-            )
+            calc = MLIP.from_mlip_config(cfg)
             run_predictions(
-                calc_uma,
-                "uma",
-                args.device,
+                calc,
+                label,
+                cfg.device,
                 args.relax,
                 args.fmax,
                 args.steps,
                 elemental_reference_manifest=args.elemental_reference_manifest,
             )
-        except ImportError:
-            print("  fairchem-core not installed. Run: pip install fairchem-core")
-            raise
         except Exception:
             traceback.print_exc()
             raise
 
-    if run_allscaip:
+    if args.allscaip:
         print(f"\n=== AllScAIP ({args.allscaip_model}, task={args.allscaip_task}) ===")
         print("  Requires: pip install fairchem-core  +  huggingface-cli login")
         print("  Accept license at: https://huggingface.co/facebook/AllScAIP")
         try:
             AllScAIP = load_baseline_class("allscaip")
             calc_allscaip = AllScAIP.from_checkpoint(
-                args.allscaip_model, device=args.device, task_name=args.allscaip_task
+                args.allscaip_model, device=args.allscaip_device, task_name=args.allscaip_task
             )
             run_predictions(
                 calc_allscaip,
                 "allscaip",
-                args.device,
+                args.allscaip_device,
                 args.relax,
                 args.fmax,
                 args.steps,
@@ -450,9 +368,6 @@ def main() -> None:
         except Exception:
             traceback.print_exc()
             raise
-
-    print("\nAll baselines complete.")
-    print("Next: populate reference_data/ with DFT labels, then run score.py.")
 
 
 if __name__ == "__main__":

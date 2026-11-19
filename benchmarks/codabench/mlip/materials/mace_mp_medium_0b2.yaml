@@ -1,0 +1,7 @@
+# MACE-MP-0b2 medium (Codabench baseline; output predictions/mace_mp_medium_0b2/).
+mlip:
+  backend: mace
+  family: mace_mp
+  model: medium-0b2
+  precision: fp32
+  device: ${MLIP_DEVICE:-cpu}

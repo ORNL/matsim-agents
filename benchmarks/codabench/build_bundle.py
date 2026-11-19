@@ -45,6 +45,7 @@ def build_bundle(output: Path, public_data: Path, reference_data: Path) -> Path:
         # starting kit because Codabench does not include sibling directories.
         for rel in (
             "baselines",
+            "mlip",
             "run_baselines.py",
             "evaluate.py",
             "package_submission.py",

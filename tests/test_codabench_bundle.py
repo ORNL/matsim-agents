@@ -81,94 +81,105 @@ def test_split_uses_published_scope_and_keeps_singletons_private(tmp_path) -> No
     assert original == (public_file.read_bytes(), private_file.read_bytes())
 
 
+MLIP_SELECTIONS = CODEBENCH / "mlip"
+BACKEND_SELECTIONS = {
+    "hydragnn": MLIP_SELECTIONS / "hydragnn.yaml",
+    "uma": MLIP_SELECTIONS / "uma.yaml",
+    "mace": MLIP_SELECTIONS / "materials" / "mace_omat_medium.yaml",
+}
+
+
+def _manifest_args(tmp_path: Path) -> list[str]:
+    return ["--elemental-reference-manifest", str(tmp_path / "refs.json")]
+
+
 def test_baselines_load_as_distinct_modules() -> None:
     runner = _load("codabench_run_baselines", CODEBENCH / "run_baselines.py")
-    mace = runner.load_baseline_class("mace_mp0")
-    hydragnn = runner.load_baseline_class("hydragnn")
-    assert mace.__module__ == "matsim_codabench_baseline_mace_mp0"
-    assert hydragnn.__module__ == "matsim_codabench_baseline_hydragnn"
-    assert mace is not hydragnn
+    mlip = runner.load_baseline_class("mlip")
+    allscaip = runner.load_baseline_class("allscaip")
+    assert mlip.__module__ == "matsim_codabench_baseline_mlip"
+    assert allscaip.__module__ == "matsim_codabench_baseline_allscaip"
+    assert mlip is not allscaip
+    assert sorted(path.name for path in (CODEBENCH / "baselines").iterdir() if path.is_dir()) == [
+        "allscaip",
+        "mlip",
+    ]
 
 
-@pytest.mark.parametrize(
-    ("device", "expected_device"),
-    [("cpu", "cpu"), ("cuda", "cuda"), ("xpu", "xpu"), ("XPU", "xpu")],
-)
-def test_codabench_hydragnn_adapter_forwards_device(monkeypatch, device, expected_device) -> None:
-    from matsim_agents.backends.mlip import calculator as mlip_calculator
-    from matsim_agents.backends.mlip import config as mlip_config
+@pytest.mark.parametrize("backend", sorted(BACKEND_SELECTIONS))
+def test_codabench_mlip_adapter_builds_each_backend(tmp_path, monkeypatch, backend) -> None:
+    from matsim_agents.backends.mlip.config import MLIP_BACKEND_CONFIGS
 
-    calls = []
-    inner = SimpleNamespace()
+    monkeypatch.setenv("HYDRAGNN_LOGDIR", str(tmp_path / "logdir"))
+    built = []
 
-    class HydraGNNConfig:
-        def __init__(self, **kwargs):
-            calls.append(("config", kwargs))
+    class Inner:
+        def calculate(self, atoms, properties, system_changes):
+            self.results = {"energy": np.float64(-2.0), "forces": np.zeros((len(atoms), 3))}
 
-    def build_calculator(config):
-        calls.append(("build", config))
-        return inner
+    def build_calculator(self, *, enable_mc_dropout=False):
+        built.append(self)
+        return Inner()
 
-    monkeypatch.setattr(mlip_config, "HydraGNNConfig", HydraGNNConfig)
-    monkeypatch.setattr(mlip_calculator, "build_hydragnn_calculator", build_calculator)
-    adapter = _load(
-        "codabench_hydragnn_adapter",
-        CODEBENCH / "baselines" / "hydragnn" / "model.py",
-    ).AtomisticCalculator
+    monkeypatch.setattr(MLIP_BACKEND_CONFIGS[backend], "build_calculator", build_calculator)
+    adapter = _load(f"codabench_mlip_adapter_{backend}", CODEBENCH / "baselines/mlip/model.py")
+    selection = tmp_path / "checkpoint"
+    selection.mkdir()
+    (selection / "mlip.yaml").write_text(BACKEND_SELECTIONS[backend].read_text())
 
-    calculator = adapter.from_checkpoint("model-logdir", device=device)
-
-    assert calls[0] == (
-        "config",
-        {"logdir": "model-logdir", "device": expected_device},
+    calculator = adapter.AtomisticCalculator.from_checkpoint(str(selection), device="xpu")
+    from_file = adapter.AtomisticCalculator.from_checkpoint(
+        str(BACKEND_SELECTIONS[backend]), device="cuda"
     )
-    assert calls[1][0] == "build"
-    assert calculator._inner is inner
+
+    assert [(cfg.backend, cfg.device) for cfg in built] == [(backend, "xpu"), (backend, "cuda")]
+    if backend == "hydragnn":
+        assert built[0].logdir == tmp_path / "logdir"
+    assert from_file._inner is not calculator._inner
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.7]])
+    predictions = calculator.predict_many([atoms, atoms.copy()])
+    assert [prediction["energy"] for prediction in predictions] == [-2.0, -2.0]
+    assert all(prediction["forces"].dtype == np.float32 for prediction in predictions)
+    with pytest.raises(ValueError, match="device"):
+        adapter.AtomisticCalculator.from_checkpoint(str(selection), device="tpu")
 
 
-def test_codabench_hydragnn_adapter_rejects_unknown_device() -> None:
-    adapter = _load(
-        "codabench_hydragnn_invalid_device_adapter",
-        CODEBENCH / "baselines" / "hydragnn" / "model.py",
-    ).AtomisticCalculator
+def test_codabench_mace_catalog_matches_workflow(monkeypatch) -> None:
+    from matsim_agents.backends.mlip.config import load_mlip_config
 
-    with pytest.raises(ValueError, match="cpu, cuda, xpu"):
-        adapter.from_checkpoint("model-logdir", device="tpu")
+    monkeypatch.delenv("MLIP_DEVICE", raising=False)
+    materials = sorted((MLIP_SELECTIONS / "materials").glob("*.yaml"))
+    molecular = sorted((MLIP_SELECTIONS / "molecular").glob("*.yaml"))
+    catalog = {path.stem: load_mlip_config(path) for path in materials + molecular}
 
-
-def test_codabench_mace_catalog_matches_workflow() -> None:
-    runner = _load("codabench_mace_catalog", CODEBENCH / "run_baselines.py")
-    from matsim_agents.training.finetune_mace import MACE_MODELS
-
-    expected = {name: (entry["family"], entry["model"]) for name, entry in MACE_MODELS.items()}
-    assert expected == runner.MACE_MODELS
-
-    common = {
-        "mace_family": None,
-        "mace_model": None,
+    assert {name: (cfg.family, cfg.model) for name, cfg in catalog.items()} == {
+        name: (entry["family"], entry["model"]) for name, entry in MACE_MODELS.items()
     }
-    materials = runner.selected_mace_models(Namespace(**common, mace_variant="materials"))
-    all_models = runner.selected_mace_models(Namespace(**common, mace_variant="all"))
-
     assert len(materials) == 14
-    assert all(family == "mace_mp" for _name, family, _model in materials)
-    assert len(all_models) == 22
-    assert not {"mace_mh_0", "mace_mh_1"} & expected.keys()
+    assert all(catalog[path.stem].family == "mace_mp" for path in materials)
+    assert len(catalog) == 22
+    assert all(cfg.device == "cpu" for cfg in catalog.values())
+    assert {name for name, cfg in catalog.items() if cfg.precision != "fp32"} == {"mace_anicc"}
+    monkeypatch.setenv("MLIP_DEVICE", "cuda")
+    assert load_mlip_config(materials[0]).device == "cuda"
 
 
 @pytest.mark.parametrize("variant", sorted(MACE_MODELS))
-def test_codabench_mace_variants_select_load_and_predict(monkeypatch, variant) -> None:
+def test_codabench_mace_variants_select_load_and_predict(tmp_path, monkeypatch, variant) -> None:
     runner = _load("codabench_variant_runner", CODEBENCH / "run_baselines.py")
     family = MACE_MODELS[variant]["family"]
     model = MACE_MODELS[variant]["model"]
-    selections = runner.selected_mace_models(
-        Namespace(
-            mace_variant=variant,
-            mace_family=None,
-            mace_model=None,
-        )
+    group = "materials" if family == "mace_mp" else "molecular"
+    monkeypatch.delenv("MLIP_DEVICE", raising=False)
+    _args, selections = runner.parse_args(
+        [
+            "--mlip-config",
+            str(MLIP_SELECTIONS / group / f"{variant}.yaml"),
+            *_manifest_args(tmp_path),
+        ]
     )
-    assert selections == [(variant, family, model)]
+    [(label, _path, cfg)] = selections
+    assert (label, cfg.backend, cfg.family, cfg.model) == (variant, "mace", family, model)
 
     calls = []
     atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.7]])
@@ -196,8 +207,7 @@ def test_codabench_mace_variants_select_load_and_predict(monkeypatch, variant) -
     mace_module.calculators = calculators
     monkeypatch.setitem(sys.modules, "mace", mace_module)
     monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
-    adapter = runner.load_baseline_class("mace_mp0")
-    calculator = adapter.from_checkpoint(model, device="cpu", family=family)
+    calculator = runner.load_baseline_class("mlip").from_mlip_config(cfg)
     expected_kwargs = (
         {"model_path": None, "device": "cpu"}
         if family == "mace_anicc"
@@ -217,44 +227,84 @@ def test_codabench_mace_variants_select_load_and_predict(monkeypatch, variant) -
     assert calculator.results["stress"].shape == (6,)
 
 
-def test_codabench_mace_adapter_dispatches_native_families(monkeypatch) -> None:
-    calls: dict[str, dict] = {}
-    calculators = ModuleType("mace.calculators")
+def test_run_baselines_runs_each_mlip_config_on_its_device(tmp_path, monkeypatch) -> None:
+    from matsim_agents.backends.mlip.config import MLIP_BACKEND_CONFIGS
 
-    def loader(name):
-        def load(**kwargs):
-            calls[name] = kwargs
-            return SimpleNamespace()
+    runner = _load("codabench_run_mlip_configs", CODEBENCH / "run_baselines.py")
+    monkeypatch.setenv("HYDRAGNN_LOGDIR", str(tmp_path / "logdir"))
+    monkeypatch.setenv("MLIP_DEVICE", "xpu")
+    for backend, config_class in MLIP_BACKEND_CONFIGS.items():
+        monkeypatch.setattr(
+            config_class,
+            "build_calculator",
+            lambda self, *, enable_mc_dropout=False, backend=backend: SimpleNamespace(
+                backend=backend
+            ),
+        )
+    runs = []
+    monkeypatch.setattr(
+        runner,
+        "run_predictions",
+        lambda calc, label, device, relax, fmax, steps, **kwargs: runs.append(
+            (calc._inner.backend, label, device, relax, fmax, steps, kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        runner.subprocess, "run", lambda *args, **kwargs: pytest.fail("unexpected dispatch")
+    )
+    reference = tmp_path / "refs.json"
+    for backend, selection in BACKEND_SELECTIONS.items():
+        runner.main(
+            [
+                "--mlip-config",
+                str(selection),
+                "--elemental-reference-manifest",
+                str(reference),
+                "--relax",
+                "--fmax",
+                "0.1",
+            ]
+        )
+        assert runs.pop() == (
+            backend,
+            selection.stem,
+            "xpu",
+            True,
+            0.1,
+            500,
+            {"elemental_reference_manifest": reference},
+        )
+    materials = sorted(str(path) for path in (MLIP_SELECTIONS / "materials").glob("*.yaml"))
+    runner.main(["--mlip-config", *materials, "--elemental-reference-manifest", str(reference)])
+    assert [label for _backend, label, *_rest in runs] == [Path(path).stem for path in materials]
 
-        return load
 
-    calculators.MACECalculator = loader("checkpoint")
-    for name in ("mace_mp", "mace_off", "mace_omol", "mace_polar", "mace_anicc"):
-        setattr(calculators, name, loader(name))
-    mace_module = ModuleType("mace")
-    mace_module.calculators = calculators
-    monkeypatch.setitem(sys.modules, "mace", mace_module)
-    monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
-
-    adapter = _load(
-        "codabench_mace_adapter",
-        CODEBENCH / "baselines" / "mace_mp0" / "model.py",
-    ).AtomisticCalculator
-    selections = {
-        "mace_mp": "medium-omat-0",
-        "mace_off": "large",
-        "mace_omol": "extra_large",
-        "mace_polar": "polar-1-m",
-        "mace_anicc": "default",
-        "checkpoint": "fine-tuned.model",
-    }
-    for family, model in selections.items():
-        adapter.from_checkpoint(model, device="cpu", family=family)
-
-    assert set(calls) == set(selections)
-    assert calls["mace_mp"]["model"] == "medium-omat-0"
-    assert calls["mace_anicc"]["model_path"] is None
-    assert calls["checkpoint"]["model_paths"] == ["fine-tuned.model"]
+def test_run_baselines_rejects_removed_and_invalid_selections(tmp_path, capsys) -> None:
+    runner = _load("codabench_run_invalid", CODEBENCH / "run_baselines.py")
+    common = _manifest_args(tmp_path)
+    with pytest.raises(SystemExit):
+        runner.parse_args(common)
+    assert "--mlip-config FILE and/or --allscaip" in capsys.readouterr().err
+    uma = str(BACKEND_SELECTIONS["uma"])
+    for removed in (
+        ["--model", "mace"],
+        ["--mace-variant", "materials"],
+        ["--mace-family", "mace_mp"],
+        ["--mace-model", "small"],
+        ["--hydragnn-logdir", "x"],
+        ["--uma-model", "uma-s-1p2"],
+        ["--uma-task", "omat"],
+        ["--device", "cpu"],
+    ):
+        with pytest.raises(SystemExit):
+            runner.parse_args(["--mlip-config", uma, *removed, *common])
+    with pytest.raises(SystemExit):
+        runner.parse_args(["--mlip-config", uma, uma, *common])
+    assert "prediction labels must be unique" in capsys.readouterr().err
+    missing = tmp_path / "missing.yaml"
+    with pytest.raises(SystemExit):
+        runner.parse_args(["--mlip-config", str(missing), *common])
+    assert f"--mlip-config {missing}" in capsys.readouterr().err
 
 
 def test_aggregate_baselines_dispatch_incompatible_backends(tmp_path, monkeypatch) -> None:
@@ -265,22 +315,49 @@ def test_aggregate_baselines_dispatch_incompatible_backends(tmp_path, monkeypatc
     mace_python.touch()
     monkeypatch.setenv("MATSIM_BASE_PYTHON", str(base_python))
     monkeypatch.setenv("MATSIM_MACE_PYTHON", str(mace_python))
-    monkeypatch.setattr(runner.sys, "argv", ["run_baselines.py", "--model=all", "--device", "cpu"])
+    monkeypatch.setenv("HYDRAGNN_LOGDIR", str(tmp_path / "logdir"))
     calls = []
     monkeypatch.setattr(runner.subprocess, "run", lambda command, check: calls.append(command))
+    materials = sorted((MLIP_SELECTIONS / "materials").glob("*.yaml"))
+    args, selections = runner.parse_args(
+        [
+            "--mlip-config",
+            *map(str, materials),
+            str(BACKEND_SELECTIONS["hydragnn"]),
+            "--mlip-config",
+            str(BACKEND_SELECTIONS["uma"]),
+            "--allscaip",
+            "--allscaip-device",
+            "cuda",
+            "--relax",
+            *_manifest_args(tmp_path),
+        ]
+    )
 
-    runner._dispatch_aggregate("all")
+    assert runner.dispatch_environments(args, selections)
 
-    assert len(calls) == 4
-    assert calls[0][0] == str(mace_python)
-    assert "--model=mace" in calls[0]
-    assert all(call[0] == str(base_python) for call in calls[1:])
-    assert [next(arg for arg in call if arg.startswith("--model=")) for call in calls] == [
-        "--model=mace",
-        "--model=hydragnn",
-        "--model=uma",
-        "--model=allscaip",
-    ]
+    assert [call[0] for call in calls] == [str(mace_python), str(base_python)]
+
+    def configs(call):
+        start = call.index("--mlip-config") + 1
+        end = next(
+            (i for i, arg in enumerate(call[start:], start) if arg.startswith("--")), len(call)
+        )
+        return [Path(arg).name for arg in call[start:end]]
+
+    assert configs(calls[0]) == [path.name for path in materials]
+    assert configs(calls[1]) == ["hydragnn.yaml", "uma.yaml"]
+    assert "--allscaip" not in calls[0]
+    assert calls[1][calls[1].index("--allscaip-device") + 1] == "cuda"
+    assert all("--relax" in call for call in calls)
+    assert not runner.dispatch_environments(
+        *runner.parse_args(["--allscaip", *_manifest_args(tmp_path)])
+    )
+    single_family = runner.parse_args(
+        ["--mlip-config", str(BACKEND_SELECTIONS["uma"]), "--allscaip", *_manifest_args(tmp_path)]
+    )
+    assert not runner.dispatch_environments(*single_family)
+    assert len(calls) == 2
 
 
 def test_baseline_prediction_failures_raise(tmp_path, monkeypatch) -> None:
@@ -467,7 +544,8 @@ def test_builds_self_contained_release_bundle(tmp_path, monkeypatch, elemental_m
         for error in validator.validate_bundle(extracted, release=True)
     )
     assert "competition.yaml" in names
-    assert "starting_kit/baselines/hydragnn/model.py" in names
+    assert "starting_kit/baselines/mlip/model.py" in names
+    assert "starting_kit/mlip/materials/mace_omat_medium.yaml" in names
     assert "starting_kit/package_submission.py" in names
     assert "starting_kit/energy_references.py" in names
     assert "starting_kit/evaluate.py" in names
