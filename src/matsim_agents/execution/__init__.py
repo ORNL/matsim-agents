@@ -15,6 +15,7 @@ from matsim_agents.execution.contracts import (
     WorkflowResult,
     WorkflowStatus,
 )
+from matsim_agents.execution.iri import IRIError, IRIFacility, IRIPlatform, IRIWaitTimeout
 from matsim_agents.execution.provenance import RunStore, append_jsonl_record
 from matsim_agents.execution.resources import ResourceRequest
 from matsim_agents.execution.run_directory import ScientificRunDirectory, make_run_id
@@ -54,6 +55,10 @@ __all__ = [
     "ComputeBudget",
     "EvidenceLevel",
     "ExecutionPlatform",
+    "IRIError",
+    "IRIFacility",
+    "IRIPlatform",
+    "IRIWaitTimeout",
     "ProvenanceRecord",
     "ResourceRequest",
     "RunStore",
