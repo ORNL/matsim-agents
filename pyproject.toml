@@ -76,6 +76,8 @@ copilot = ["github-copilot-sdk>=1.0.31"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
 anthropic = ["langchain-anthropic>=0.2.0"]
+# Client for external Model Context Protocol servers (matsim-agents run --mcp-config).
+mcp = ["mcp>=2.0,<3", "jsonschema>=4.20"]
 huggingface = ["langchain-huggingface>=0.1.0", "hf_transfer", "transformers>=4.40", "accelerate>=0.30"]
 dev = [
     # Pin CI tools so behavior changes arrive in explicit dependency updates.

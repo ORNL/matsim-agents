@@ -43,6 +43,7 @@ the framework.
 - [vLLM versus HuggingFace Transformers](llm-backends-comparison.md)
 - [Downloading model weights](model-download.md) and [download safety policy](model-download-safety.md)
 - [Model Access Gateway](model-access-gateway.md)
+- [External MCP tools in `matsim-agents run`](mcp.md)
 
 ## 6. Run on HPC systems
 

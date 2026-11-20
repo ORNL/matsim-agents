@@ -1,0 +1,22 @@
+# External MCP servers for `matsim-agents run --mcp-config`.
+# Relative stdio paths resolve against this file's directory.
+mcp:
+  servers:
+    - name: demo
+      transport: stdio
+      command: python          # the Python environment where matsim-agents[mcp] is installed
+      args: [demo_server.py]
+      connect_timeout_s: 20
+      call_timeout_s: 30
+      # Deny-by-default: only these exact names may be used from this server.
+      allowed_tools: [convert_energy]
+      allowed_resources: ["matsim-demo://units"]
+
+    # A Streamable HTTP server. Credentials come from the host environment
+    # (`${VAR}`) and are never written to logs or audit records.
+    - name: demo_http
+      transport: streamable_http
+      url: http://127.0.0.1:8765/mcp
+      # headers: {Authorization: "Bearer ${DEMO_MCP_TOKEN}"}
+      enabled: false           # start `python demo_server.py --http 8765`, then set true
+      allowed_tools: [convert_energy]
