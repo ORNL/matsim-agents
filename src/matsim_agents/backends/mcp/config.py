@@ -28,24 +28,49 @@ import os
 import re
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 
 SERVER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# Shorter credentials cannot be scrubbed from outputs without corrupting
+# unrelated text, so they are rejected rather than silently left unredacted.
+MIN_SECRET_LENGTH = 4
+# Literal env values this long are treated as possible credentials; shorter
+# literals (LOG_LEVEL: INFO, DEBUG: "1") are ordinary settings.
+_LITERAL_ENV_SECRET_LENGTH = 8
 
 
-def expand_secret(value: str, *, field: str) -> SecretStr:
+def expand_secret(value: str, *, field: str, referenced: list[str] | None = None) -> SecretStr:
     """Substitute ``${VAR}`` references from the host environment.
 
-    A missing variable is an error that names the variable, never its value.
+    A missing or too-short variable is an error that names the variable, never
+    its value. Substituted values are appended to ``referenced`` so they can be
+    scrubbed on their own (for example the token inside ``Bearer ${TOKEN}``).
     """
 
     def substitute(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in os.environ:
             raise ValueError(f"{field}: environment variable {name} is not set")
-        return os.environ[name]
+        secret = os.environ[name]
+        if len(secret) < MIN_SECRET_LENGTH:
+            raise ValueError(
+                f"{field}: environment variable {name} is shorter than "
+                f"{MIN_SECRET_LENGTH} characters and cannot be redacted reliably"
+            )
+        if referenced is not None:
+            referenced.append(secret)
+        return secret
 
     return SecretStr(_ENV_REFERENCE.sub(substitute, value))
 
@@ -81,6 +106,8 @@ class MCPServerConfig(BaseModel):
         description="Exact resource URIs this run may read from this server; empty denies all.",
     )
 
+    _referenced_secrets: list[str] = PrivateAttr(default_factory=list)
+
     @field_validator("name")
     @classmethod
     def _valid_name(cls, value: str) -> str:
@@ -115,14 +142,40 @@ class MCPServerConfig(BaseModel):
                 raise ValueError(f"server {self.name!r}: streamable_http transport requires url")
             if not re.match(r"^https?://", self.url):
                 raise ValueError(f"server {self.name!r}: url must start with http:// or https://")
+            if urlsplit(self.url).username is not None:
+                raise ValueError(
+                    f"server {self.name!r}: put credentials in headers, not in the url"
+                )
+            for key, value in self.headers.items():
+                token = value.get_secret_value().split()[-1:] or [""]
+                if len(token[0]) < MIN_SECRET_LENGTH:
+                    raise ValueError(
+                        f"server {self.name!r}: header {key} is shorter than "
+                        f"{MIN_SECRET_LENGTH} characters and cannot be redacted reliably"
+                    )
             if self.command or self.args or self.env or self.cwd:
                 raise ValueError(f"server {self.name!r}: command/args/env/cwd apply only to stdio")
         return self
 
     def secret_values(self) -> list[str]:
-        """Configured credential values, used to scrub audit records and outputs."""
-        values = [v.get_secret_value() for v in (*self.env.values(), *self.headers.values())]
-        return [value for value in values if len(value) >= 4]
+        """Credential values used to scrub audit records, logs, and outputs.
+
+        Every header value and its final token (the credential in ``Bearer X``),
+        every value substituted from ``${VAR}``, and literal env values of at
+        least 8 characters. Longest first, so a value is replaced before any
+        shorter value it contains.
+        """
+        values = set(self._referenced_secrets)
+        for header in self.headers.values():
+            text = header.get_secret_value()
+            values.add(text)
+            values.update(text.split()[-1:])
+        values.update(
+            text
+            for text in (v.get_secret_value() for v in self.env.values())
+            if len(text) >= _LITERAL_ENV_SECRET_LENGTH
+        )
+        return sorted((v for v in values if len(v) >= MIN_SECRET_LENGTH), key=len, reverse=True)
 
 
 class MCPConfig(BaseModel):
@@ -147,7 +200,8 @@ class MCPConfig(BaseModel):
         return [server for server in self.servers if server.enabled]
 
     def secret_values(self) -> list[str]:
-        return [value for server in self.servers for value in server.secret_values()]
+        values = {value for server in self.servers for value in server.secret_values()}
+        return sorted(values, key=len, reverse=True)
 
 
 def parse_mcp_config(block: dict, *, base_dir: Path | None = None) -> MCPConfig:
@@ -158,17 +212,22 @@ def parse_mcp_config(block: dict, *, base_dir: Path | None = None) -> MCPConfig:
     if not isinstance(servers, list):
         raise ValueError("mcp block must define a servers list")
     prepared = []
+    referenced: list[list[str]] = []
     for index, raw in enumerate(servers):
         if not isinstance(raw, dict):
             raise ValueError(f"mcp.servers[{index}] must be a mapping")
         server = dict(raw)
         label = f"mcp.servers[{index}]"
+        server_secrets: list[str] = []
+        referenced.append(server_secrets)
         for key in ("env", "headers"):
             mapping = server.get(key) or {}
             if not isinstance(mapping, dict):
                 raise ValueError(f"{label}.{key} must be a mapping")
             server[key] = {
-                str(name): expand_secret(str(value), field=f"{label}.{key}.{name}")
+                str(name): expand_secret(
+                    str(value), field=f"{label}.{key}.{name}", referenced=server_secrets
+                )
                 for name, value in mapping.items()
             }
         if base_dir is not None and server.get("transport") == "stdio":
@@ -178,7 +237,10 @@ def parse_mcp_config(block: dict, *, base_dir: Path | None = None) -> MCPConfig:
                 resolved = base_dir / resolved
             server["cwd"] = str(resolved)
         prepared.append(server)
-    return MCPConfig(servers=prepared)
+    config = MCPConfig(servers=prepared)
+    for server, secrets in zip(config.servers, referenced, strict=True):
+        server._referenced_secrets = secrets
+    return config
 
 
 def load_mcp_config(path: str | Path) -> MCPConfig:

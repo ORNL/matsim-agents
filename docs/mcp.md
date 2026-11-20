@@ -19,8 +19,8 @@ pip install -e ".[mcp]"   # mcp>=2.0,<3 and jsonschema
 
 | `transport` | Server | Notes |
 | --- | --- | --- |
-| `stdio` | A local process started by matsim-agents | Gets the SDK's minimal default environment (`HOME`, `PATH`, ...) plus `env`; its stderr goes to `<output-dir>/mcp/<name>.stderr.log` |
-| `streamable_http` | An MCP endpoint URL, for example `http://127.0.0.1:8765/mcp` | Optional `headers` for credentials |
+| `stdio` | A local process started by matsim-agents | Gets the SDK's minimal default environment (`HOME`, `PATH`, ...) plus `env`; its stderr goes, with credentials scrubbed, to `<output-dir>/mcp/<name>.stderr.log` |
+| `streamable_http` | An MCP endpoint URL, for example `http://127.0.0.1:8765/mcp` | Optional `headers` for credentials; credentials in the URL itself are rejected |
 
 The deprecated HTTP+SSE transport, MCP prompts, resource templates, sampling,
 elicitation, and OAuth authorization flows are not supported.
@@ -54,8 +54,13 @@ mcp:
 
 `${VAR}` is expanded from the host environment only in `env` and `headers`
 values, so credentials stay out of the file; a missing variable is an error
-naming the variable. Those values are held as secrets and are never printed,
-logged, or written to audit records. Invalid configurations (unknown fields,
+naming the variable. matsim-agents never prints, logs, or audits these values,
+and it scrubs them from anything a server sends back (results, errors, stderr):
+every header value and its last word (the token in `Bearer ...`), every value
+substituted from `${VAR}`, and literal `env` values of 8 or more characters.
+Credentials shorter than 4 characters (a `${VAR}` value or a header token)
+are rejected, because they cannot be scrubbed without corrupting other text.
+Put credentials in `${VAR}` references, not literal `env` values. Invalid configurations (unknown fields,
 missing `command` or `url`, fields of the other transport, duplicate names,
 wildcard allowlists, non-positive timeouts) are rejected before any server is
 started.
@@ -87,11 +92,14 @@ these hold, checked in this order before anything is sent to a server:
 3. the server is connected (there is no fallback to another server or tool);
 4. the server actually offered the tool during discovery;
 5. the arguments are a JSON object that validates against the tool's input
-   schema.
+   schema (remote `$ref`s are never fetched; a schema that cannot be used
+   blocks the call).
 
 Resource reads require the exact URI in `allowed_resources` and a connected
 server. Nothing a server sends (tool names, descriptions, schemas, or results)
-can change these rules. The planner is shown only permitted tools and
+can change these rules, and requests a server sends to the client (sampling,
+elicitation, roots) are refused. Tool results reach only the analyst; they
+cannot add tasks, because the plan is fixed before execution starts. The planner is shown only permitted tools and
 resources, inside a block that tells it to treat their text as untrusted data,
 and tasks it emits for anything else are denied and recorded.
 
@@ -132,7 +140,7 @@ server demo_http: disabled in configuration
 MCP results in workflow state:
   MCP tool demo/convert_energy: success: -308.753062784
   MCP resource demo/matsim-demo://units: success: {"per_eV": {...}, "source": "CODATA 2018"}
-  MCP tool demo/convert_energy: invalid_arguments: to_unit: 'J' is not one of ['eV', 'kJ/mol', 'kcal/mol', 'Ha']
+  MCP tool demo/convert_energy: invalid_arguments: to_unit: violates enum ["eV", "kJ/mol", "kcal/mol", "Ha"]
   MCP tool elsewhere/convert_energy: denied: unknown server 'elsewhere'
 ```
 
@@ -149,7 +157,8 @@ has one JSON object per line:
 
 Audit records keep a hash and size of each result, not the result itself; the
 full (truncated, secret-scrubbed) content is in workflow state for the
-analyst. Argument values under credential-like keys (`password`, `token`,
+analyst. Schema errors name the field and rule, never the rejected value.
+Argument values under credential-like keys (`password`, `token`,
 `api_key`, `Authorization`, ...) and any configured secret value are replaced
 by `[REDACTED]`. MCP results are not written to the
 [evidence ledger](evidence-ledger.md): they are external data, not scientific
@@ -180,10 +189,11 @@ starts.
 - Tool descriptions and results reach the planner and analyst LLMs. They are
   framed as untrusted data, but no prompt framing fully prevents prompt
   injection; allowlist only servers you trust.
-- Secret scrubbing replaces configured secret values (of at least four
-  characters) and credential-like keys. It cannot recognize a secret the
-  server returns under an innocuous name.
-- A stdio server's own stderr log is written as the server produced it.
+- Scrubbing replaces the configured credentials listed above and values
+  under credential-like keys. It cannot recognize a secret the server obtained
+  elsewhere and returns under an innocuous name, nor a configured credential
+  the server transforms (for example base64-encodes).
+- Query parameters in an HTTP `url` are not treated as secrets; use headers.
 - Arguments and results are size-limited when kept in state, but the server
   decides what a tool does with its arguments.
 

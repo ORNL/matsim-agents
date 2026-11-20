@@ -51,8 +51,8 @@ def _pid_gone(pid: int) -> bool:
 def manager_factory(tmp_path):
     managers: list[MCPSessionManager] = []
 
-    def create(*servers: dict) -> MCPSessionManager:
-        config = MCPConfig(servers=list(servers))
+    def create(*servers: dict, config: MCPConfig | None = None) -> MCPSessionManager:
+        config = config or MCPConfig(servers=list(servers))
         audit = MCPAuditLog(tmp_path / "audit.jsonl", secrets=config.secret_values())
         manager = MCPSessionManager(config, audit=audit, log_dir=tmp_path / "logs")
         managers.append(manager)
@@ -192,23 +192,54 @@ def test_secrets_are_passed_to_the_server_but_redacted_everywhere(
             "servers": [
                 _stdio(
                     "a",
-                    env={"MATSIM_TEST_SECRET": "${HOST_SECRET}"},
-                    allowed_tools=["env_value", "add"],
+                    env={"MATSIM_TEST_SECRET": "Bearer ${HOST_SECRET}"},
+                    allowed_tools=["env_value", "stderr_env", "touch"],
                 )
             ]
         }
     )
-    manager = manager_factory(*[s.model_dump() | {"env": s.env} for s in config.servers])
-    record = manager.call_tool("a", "env_value", {"variable": "MATSIM_TEST_SECRET"})
-    assert record.outcome == "success"
-    assert record.content == [REDACTED]  # the server received it; the record does not keep it
+    manager = manager_factory(config=config)
+    whole = manager.call_tool("a", "env_value", {"variable": "MATSIM_TEST_SECRET"})
+    assert whole.outcome == "success"
+    assert whole.content == [REDACTED]  # the server received it; the record does not keep it
+    token_only = manager.call_tool(
+        "a", "env_value", {"variable": "MATSIM_TEST_SECRET", "last_word": True}
+    )
+    assert token_only.content == [REDACTED]
+    assert manager.call_tool("a", "stderr_env", {"variable": "MATSIM_TEST_SECRET"}).content == [
+        "written"
+    ]
     denied = manager.call_tool("a", "unlisted", {"api_key": "very-secret-credential"})
     assert denied.arguments == {"api_key": REDACTED}
+    # Schema errors name the rule, never the rejected value.
+    invalid = manager.call_tool("a", "touch", {"path": 987654321})
+    assert invalid.outcome == "invalid_arguments"
+    assert "987654321" not in invalid.error
+    assert "path: violates type" in invalid.error
     manager.close()
-    audit_text = (tmp_path / "audit.jsonl").read_text()
-    assert "very-secret-credential" not in audit_text
-    for log in (tmp_path / "logs").glob("*.log"):
-        assert "very-secret-credential" not in log.read_text()
+    stderr_log = (tmp_path / "logs" / "a.stderr.log").read_text()
+    assert stderr_log == f"server env MATSIM_TEST_SECRET={REDACTED}\n"
+    for path in [tmp_path / "audit.jsonl", *(tmp_path / "logs").glob("*")]:
+        assert "very-secret-credential" not in path.read_text()
+
+
+def test_unusable_tool_schema_is_rejected_without_network_or_crash(manager_factory, monkeypatch):
+    import socket as socket_module
+
+    manager = manager_factory(_stdio("a", allowed_tools=["add"]))
+    # A server-supplied schema with a remote $ref must not be fetched or crash the run.
+    manager._tools["a"]["add"].input_schema = {
+        "type": "object",
+        "properties": {"a": {"$ref": "https://example.invalid/schema.json"}},
+    }
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("schema validation attempted a network connection")
+
+    monkeypatch.setattr(socket_module, "create_connection", no_network)
+    record = manager.call_tool("a", "add", {"a": 1, "b": 2})
+    assert record.outcome == "invalid_arguments"
+    assert "input schema cannot be used" in record.error
 
 
 # ── connection failures ───────────────────────────────────────────────────────
@@ -512,7 +543,7 @@ def test_documented_example_runs_end_to_end(tmp_path):
         check=True,
     ).stdout
     assert "MCP tool demo/convert_energy: success: -308.75306" in out
-    assert "invalid_arguments: to_unit: 'J' is not one of" in out
+    assert "invalid_arguments: to_unit: violates enum" in out
     assert "denied: unknown server 'elsewhere'" in out
     events = [
         json.loads(line)["event"]
@@ -538,3 +569,97 @@ def test_server_crash_mid_run_is_recorded_and_isolated(manager_factory, tmp_path
     assert any(e["event"] == "disconnect" and e["server"] == "fragile" for e in audit)
     assert audit[-1]["event"] == "shutdown"
     assert audit[-1]["clean"] is True
+
+
+def _catalog_reading_model():
+    """A deterministic chat model that plans only from the MCP catalog it is shown.
+
+    It reads the planner's system prompt, picks the catalog tool whose required
+    arguments are all integers and match the numbers in the objective, and answers
+    through LangChain's real structured-output (tool-calling) path, so the
+    planner's own parsing and TaskSpec validation run unchanged.
+    """
+    import re
+
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    class CatalogReadingModel(BaseChatModel):
+        seen_catalogs: list = []
+
+        @property
+        def _llm_type(self) -> str:
+            return "catalog-reading-test-model"
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            system = messages[0].content
+            if "<mcp_catalog>" not in system:  # the analyst
+                return ChatResult(generations=[ChatGeneration(message=AIMessage("analysis"))])
+            catalog = json.loads(system.split("<mcp_catalog>")[1].split("</mcp_catalog>")[0])
+            self.seen_catalogs.append(catalog)
+            numbers = [int(n) for n in re.findall(r"-?\d+", messages[-1].content)]
+            tasks = []
+            for tool in catalog["tools"]:
+                schema = tool["input_schema"]
+                required = schema.get("required", [])
+                types_ = [schema["properties"][name].get("type") for name in required]
+                if required and types_ == ["integer"] * len(numbers):
+                    tasks.append(
+                        {
+                            "kind": "mcp_tool",
+                            "mcp_server": tool["mcp_server"],
+                            "mcp_tool": tool["mcp_tool"],
+                            "mcp_arguments": dict(zip(required, numbers, strict=True)),
+                        }
+                    )
+            plan = {"tasks": tasks, "rationale": "from catalog"}
+            call = {"name": "_Plan", "args": plan, "id": "1"}
+            message = AIMessage(content="", tool_calls=[call])
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    return CatalogReadingModel()
+
+
+def test_real_planner_selects_permitted_tool_from_discovered_schema(manager_factory, monkeypatch):
+    """Planner (real structured-output parsing) -> executor -> real MCP server."""
+    import matsim_agents.backends.llm.provider as llm_mod
+    from matsim_agents.orchestration.objective_graph import build_graph
+
+    monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
+    model = _catalog_reading_model()
+    monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: model)
+    manager = manager_factory(
+        # "slow" takes a number, "touch" a string: only "add" fits two integers.
+        _stdio("calc", allowed_tools=["add", "slow", "touch"]),
+        # Also offers "add", but nothing is allowlisted, so the planner never sees it.
+        _stdio("other", allowed_tools=[]),
+    )
+    final = build_graph().invoke(
+        MatSimState(objective="Add 20 and 22", llm_provider="vllm"),
+        config={"configurable": {"thread_id": "planner-e2e", "mcp_client": manager}},
+    )
+    catalog = model.seen_catalogs[0]
+    assert sorted((t["mcp_server"], t["mcp_tool"]) for t in catalog["tools"]) == [
+        ("calc", "add"),
+        ("calc", "slow"),
+        ("calc", "touch"),
+    ]
+    assert [
+        t.model_dump(include={"kind", "mcp_server", "mcp_tool", "mcp_arguments"})
+        for t in final["plan"]
+    ] == [
+        {
+            "kind": "mcp_tool",
+            "mcp_server": "calc",
+            "mcp_tool": "add",
+            "mcp_arguments": {"a": 20, "b": 22},
+        }
+    ]
+    [record] = final["mcp_results"]
+    assert (record.server, record.tool, record.outcome) == ("calc", "add", "success")
+    assert record.structured_content == {"result": 42}
+    assert final["analysis"] == "analysis"

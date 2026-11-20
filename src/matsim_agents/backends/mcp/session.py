@@ -56,6 +56,17 @@ _SHUTDOWN_GRACE_S = 30.0
 _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
 
 
+def _schema_errors(errors: list[Any]) -> str:
+    """Describe schema violations by location and rule, never by the offending value,
+    so a credential passed in the wrong field is not echoed into records."""
+    parts = []
+    for error in sorted(errors, key=lambda e: [str(part) for part in e.path]):
+        location = "/".join(map(str, error.path)) or "<arguments>"
+        rule = json.dumps(error.validator_value, default=str)
+        parts.append(f"{location}: violates {error.validator} {truncate(rule, 200)}")
+    return "; ".join(parts)
+
+
 class MCPUnavailableError(RuntimeError):
     """A request was sent to a server whose connection is closed."""
 
@@ -174,12 +185,7 @@ class MCPSessionManager:
 
     async def _open(self, server: MCPServerConfig, stack: AsyncExitStack) -> ClientSession:
         if server.transport == "stdio":
-            if self._log_dir is not None:
-                self._log_dir.mkdir(parents=True, exist_ok=True)
-                errlog = (self._log_dir / f"{server.name}.stderr.log").open("a", encoding="utf-8")
-            else:
-                errlog = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115 - closed by stack
-            stack.callback(errlog.close)
+            errlog = self._stderr_sink(server.name, stack)
             params = StdioServerParameters(
                 command=server.command,
                 args=list(server.args),
@@ -205,6 +211,38 @@ class MCPSessionManager:
                 client_info=types.Implementation(name="matsim-agents", version="0.1.0"),
             )
         )
+
+    def _stderr_sink(self, name: str, stack: AsyncExitStack):
+        """Where a stdio server's stderr goes: a scrubbed log file, or nowhere.
+
+        The server writes into a pipe; a thread copies each line to the log with
+        configured credentials replaced, so a server that prints its environment
+        cannot leak them into the run directory.
+        """
+        if self._log_dir is None:
+            sink = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115 - closed by stack
+            stack.callback(sink.close)
+            return sink
+        self._log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = self._log_dir / f"{name}.stderr.log"
+        read_fd, write_fd = os.pipe()
+        reader = os.fdopen(read_fd, "r", encoding="utf-8", errors="replace")
+        writer = os.fdopen(write_fd, "w", encoding="utf-8")
+        secrets = self._secrets
+
+        def copy() -> None:
+            with reader, log_path.open("a", encoding="utf-8") as log:
+                for line in reader:
+                    log.write(scrub_text(line, secrets))
+                    log.flush()
+
+        thread = threading.Thread(target=copy, name=f"matsim-mcp-{name}-stderr", daemon=True)
+        thread.start()
+        # Exit order (last registered runs first): the transport stops the server,
+        # then our write end closes, then the copier sees EOF and finishes.
+        stack.callback(thread.join, 5.0)
+        stack.callback(writer.close)
+        return writer
 
     async def _discover(self, server: MCPServerConfig, session: ClientSession) -> dict[str, Any]:
         init = await session.initialize()
@@ -426,18 +464,19 @@ class MCPSessionManager:
         try:
             validator_cls = jsonschema.validators.validator_for(schema)
             validator_cls.check_schema(schema)
-            errors = sorted(validator_cls(schema).iter_errors(arguments), key=str)
-        except jsonschema.SchemaError as exc:
+            errors = list(validator_cls(schema).iter_errors(arguments))
+        except Exception as exc:  # noqa: BLE001 - e.g. an unresolvable remote $ref
+            # The tool is not called when its schema cannot be checked; remote
+            # $refs are never fetched.
             return self._finish(
                 self._failure(
-                    base, "invalid_arguments", f"server sent an invalid input schema: {exc}"
+                    base,
+                    "invalid_arguments",
+                    f"the server's input schema cannot be used ({exc.__class__.__name__})",
                 )
             )
         if errors:
-            message = "; ".join(
-                f"{'/'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors
-            )
-            return self._finish(self._failure(base, "invalid_arguments", message))
+            return self._finish(self._failure(base, "invalid_arguments", _schema_errors(errors)))
 
         timeout = self.config.server(server).call_timeout_s
 

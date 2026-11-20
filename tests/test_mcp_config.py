@@ -50,7 +50,40 @@ mcp:
     # Secrets never appear in dumps or reprs.
     assert "s3cret" not in repr(config)
     assert "s3cret" not in config.model_dump_json()
+    # The bare token is scrubbed too, so a server echoing only the token is caught.
     assert set(config.secret_values()) == {"s3cret-token-value", "Bearer s3cret-token-value"}
+    assert config.secret_values()[0] == "Bearer s3cret-token-value"  # longest first
+
+
+def test_secret_values_cover_references_and_long_literals_only(monkeypatch):
+    monkeypatch.setenv("REF", "abcd1234")
+    config = parse_mcp_config(
+        {
+            "servers": [
+                _stdio(
+                    env={
+                        "WRAPPED": "token=${REF}",
+                        "LOG_LEVEL": "INFO",
+                        "LITERAL_KEY": "literal-key-value",
+                    }
+                )
+            ]
+        }
+    )
+    secrets = set(config.secret_values())
+    assert {"abcd1234", "token=abcd1234", "literal-key-value"} <= secrets
+    assert "INFO" not in secrets  # short literal settings are not treated as credentials
+
+
+def test_credentials_too_short_to_redact_and_url_credentials_are_rejected(monkeypatch):
+    monkeypatch.setenv("SHORT", "abc")
+    with pytest.raises(ValueError, match="SHORT is shorter than 4"):
+        parse_mcp_config({"servers": [_stdio(env={"T": "${SHORT}"})]})
+    http = {"name": "h", "transport": "streamable_http", "url": "http://127.0.0.1:1/mcp"}
+    with pytest.raises(ValueError, match="header Authorization is shorter"):
+        parse_mcp_config({"servers": [http | {"headers": {"Authorization": "Bearer ab"}}]})
+    with pytest.raises(ValueError, match="credentials in headers"):
+        parse_mcp_config({"servers": [http | {"url": "http://user:pw@127.0.0.1:1/mcp"}]})
 
 
 @pytest.mark.parametrize(

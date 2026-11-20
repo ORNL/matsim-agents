@@ -27,9 +27,15 @@ def build(name: str) -> MCPServer:
     def add(a: int, b: int) -> int:
         return a + b
 
-    @server.tool(description="Return the value of an environment variable of this server.")
-    def env_value(variable: str) -> str:
-        return os.environ.get(variable, "")
+    @server.tool(description="Return an environment variable (or its last word) of this server.")
+    def env_value(variable: str, last_word: bool = False) -> str:
+        value = os.environ.get(variable, "")
+        return value.split()[-1] if last_word and value else value
+
+    @server.tool(description="Write an environment variable of this server to its stderr.")
+    def stderr_env(variable: str) -> str:
+        print(f"server env {variable}={os.environ.get(variable, '')}", file=sys.stderr, flush=True)
+        return "written"
 
     @server.tool(description="Sleep, then return.")
     def slow(seconds: float) -> str:
