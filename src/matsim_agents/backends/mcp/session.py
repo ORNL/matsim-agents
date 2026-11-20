@@ -19,6 +19,7 @@ import asyncio
 import concurrent.futures
 import contextlib
 import json
+import math
 import os
 import threading
 from collections.abc import Awaitable, Callable
@@ -248,7 +249,9 @@ class MCPSessionManager:
         init = await session.initialize()
         tools: dict[str, MCPToolInfo] = {}
         cursor = None
-        for _ in range(_MAX_PAGES):
+        # A server that does not advertise tools (e.g. resources only) is valid;
+        # asking it for tools would fail the whole connection.
+        for _ in range(_MAX_PAGES if init.capabilities.tools is not None else 0):
             params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
             listing = await session.list_tools(params=params)
             for tool in listing.tools:
@@ -279,32 +282,52 @@ class MCPSessionManager:
         info = init.server_info
         return {"server_name": info.name, "server_version": info.version}
 
+    async def _serve_connected(
+        self,
+        server: MCPServerConfig,
+        session: ClientSession,
+        identity: dict[str, Any],
+        queue: asyncio.Queue,
+        settled: asyncio.Event,
+    ) -> None:
+        """Mark the server connected, then execute queued requests until shutdown."""
+        name = server.name
+        self._connected[name] = True
+        self._errors.pop(name, None)
+        self._audit_event(
+            "connect",
+            server=name,
+            transport=server.transport,
+            outcome="success",
+            tools=sorted(self._tools[name]),
+            resources=[r.uri for r in self._resources[name]],
+            **identity,
+        )
+        settled.set()
+        while (item := await queue.get()) is not None:
+            op, future = item
+            record = await op(session)
+            if not future.done():
+                future.set_result(record)
+
     async def _serve(
         self, server: MCPServerConfig, queue: asyncio.Queue, settled: asyncio.Event
     ) -> None:
         name = server.name
         try:
-            async with AsyncExitStack() as stack:
-                session = await self._open(server, stack)
-                with anyio.fail_after(server.connect_timeout_s):
+            # connect_timeout_s bounds opening the transport, the handshake, and
+            # discovery. The scope encloses the exit stack, so a timeout unwinds
+            # everything opened so far (the SDK shields stdio process shutdown),
+            # and its deadline is lifted once the server is connected.
+            deadline = anyio.current_time() + server.connect_timeout_s
+            with anyio.CancelScope(deadline=deadline) as connect_scope:
+                async with AsyncExitStack() as stack:
+                    session = await self._open(server, stack)
                     identity = await self._discover(server, session)
-                self._connected[name] = True
-                self._errors.pop(name, None)
-                self._audit_event(
-                    "connect",
-                    server=name,
-                    transport=server.transport,
-                    outcome="success",
-                    tools=sorted(self._tools[name]),
-                    resources=[r.uri for r in self._resources[name]],
-                    **identity,
-                )
-                settled.set()
-                while (item := await queue.get()) is not None:
-                    op, future = item
-                    record = await op(session)
-                    if not future.done():
-                        future.set_result(record)
+                    connect_scope.deadline = math.inf
+                    await self._serve_connected(server, session, identity, queue, settled)
+            if connect_scope.cancelled_caught:
+                raise TimeoutError
         except Exception as exc:  # noqa: BLE001 - recorded and surfaced per request
             error = scrub_text(_describe(exc), self._secrets)
             event = "disconnect" if self._connected.get(name) else "connect"

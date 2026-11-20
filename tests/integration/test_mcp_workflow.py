@@ -663,3 +663,61 @@ def test_real_planner_selects_permitted_tool_from_discovered_schema(manager_fact
     assert (record.server, record.tool, record.outcome) == ("calc", "add", "success")
     assert record.structured_content == {"result": 42}
     assert final["analysis"] == "analysis"
+
+
+def test_resource_only_server_connects_and_serves_allowlisted_resources(manager_factory, tmp_path):
+    """A server that does not advertise tools must not be asked for them."""
+    resource_only = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_resource_only_server.py"
+    manager = manager_factory(
+        {
+            "name": "docs",
+            "transport": "stdio",
+            "command": sys.executable,
+            "args": [str(resource_only)],
+            "allowed_tools": ["whoami"],
+            "allowed_resources": ["test://notes"],
+        }
+    )
+    assert manager.server_status()["docs"] == {
+        "transport": "stdio",
+        "enabled": True,
+        "connected": True,
+        "error": None,
+    }
+    assert manager.discovered_tools() == []
+    assert manager.permitted_tools() == []
+    assert [r.uri for r in manager.permitted_resources()] == ["test://notes"]
+    record = manager.read_resource("docs", "test://notes")
+    assert (record.outcome, record.content) == ("success", ["resource-only notes"])
+    # Allowlisting a tool the server does not offer still denies it.
+    assert manager.call_tool("docs", "whoami", {}).outcome == "denied"
+    connect = next(e for e in _audit(tmp_path) if e["event"] == "connect")
+    assert (connect["outcome"], connect["tools"], connect["resources"]) == (
+        "success",
+        [],
+        ["test://notes"],
+    )
+
+
+def test_connect_timeout_bounds_a_stalled_transport_opening(manager_factory, monkeypatch, tmp_path):
+    """connect_timeout_s covers opening the transport, and a timeout unwinds it."""
+    cleaned_up = []
+
+    async def stalled_open(self, server, stack):
+        stack.callback(cleaned_up.append, server.name)  # stands in for an opened resource
+        await anyio.sleep(3600)  # e.g. a transport that never finishes opening
+
+    import anyio
+
+    monkeypatch.setattr(MCPSessionManager, "_open", stalled_open)
+    started = time.monotonic()
+    manager = manager_factory(_stdio("stalled", allowed_tools=["whoami"], connect_timeout_s=1.0))
+    elapsed = time.monotonic() - started
+    # Bounded by connect_timeout_s, not by start()'s 30 s settle grace.
+    assert elapsed < 10, elapsed
+    status = manager.server_status()["stalled"]
+    assert (status["connected"], status["error"]) == (False, "timed out")
+    assert cleaned_up == ["stalled"]
+    assert manager.call_tool("stalled", "whoami", {}).outcome == "denied"
+    connect = next(e for e in _audit(tmp_path) if e["event"] == "connect")
+    assert (connect["server"], connect["outcome"]) == ("stalled", "timeout")
