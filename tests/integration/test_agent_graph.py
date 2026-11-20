@@ -212,6 +212,48 @@ class TestAnalystNode:
 # ── graph routing ─────────────────────────────────────────────────────────────
 
 
+def test_graph_nodes_receive_the_run_configuration():
+    """LangGraph injects ``config`` only for annotations it recognizes. A node typed
+    ``RunnableConfig | None`` under postponed annotations silently gets None, which
+    dropped --mlip-config/--output-dir (executor) and the MCP client (planner)."""
+    import warnings
+
+    from matsim_agents.orchestration.objective_graph import build_graph
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        build_graph()
+    assert not [w for w in caught if "'config' parameter should be typed" in str(w.message)]
+
+
+def test_executor_uses_mlip_selection_from_run_configuration(monkeypatch, si_vasp):
+    """The graph passes the run's configurable mlip block to the executor."""
+    import matsim_agents.orchestration.agents.executor as executor_mod
+    from matsim_agents.orchestration.objective_graph import build_graph
+
+    monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
+    seen = {}
+
+    def fake_mlip_config(cfg):
+        seen["mlip"] = cfg.get("mlip")
+        raise RuntimeError("stop after MLIP selection")
+
+    monkeypatch.setattr(executor_mod, "_mlip_config", fake_mlip_config)
+    import matsim_agents.orchestration.objective_graph as graph_mod
+
+    monkeypatch.setattr(
+        graph_mod,
+        "planner_node",
+        lambda state: {"pending_tasks": [TaskSpec(structure_path=si_vasp)]},
+    )
+    with pytest.raises(RuntimeError, match="stop after MLIP selection"):
+        build_graph().invoke(
+            MatSimState(objective="relax"),
+            config={"configurable": {"thread_id": "cfg", "mlip": {"backend": "mace"}}},
+        )
+    assert seen["mlip"] == {"backend": "mace"}
+
+
 class TestGraphRouting:
     """The conditional edge routes correctly based on pending_tasks/iteration."""
 
