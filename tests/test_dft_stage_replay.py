@@ -108,6 +108,15 @@ def test_step_limited_qe_relaxation_is_partial(tmp_path, pseudo_dir):
     assert not result.validations[0].passed
 
 
+def test_recorded_qe_scf_failure_reports_ionic_iteration_counts(tmp_path, pseudo_dir):
+    result = _relax(
+        tmp_path, "qe", "qe/scf_not_converged", relax_cell=False, pseudo_dir=str(pseudo_dir)
+    )
+    (stage,) = result.stages
+    assert stage.scf_converged is False
+    assert stage.scf_iterations_per_step == [2]
+
+
 def test_converged_vasp_cell_relaxation(tmp_path, potcar_dir):
     result = _relax(
         tmp_path, "vasp", "vasp/vc_relax_5steps", relax_cell=True, potcar_dir=str(potcar_dir)
@@ -136,6 +145,33 @@ def test_vasp_scf_limit_applies_to_the_final_ionic_step(tmp_path, potcar_dir, ne
         settings={"nelm": nelm},
     )
     assert result.stages[0].scf_converged is scf_converged
+    assert result.stages[0].scf_iterations_per_step == [13, 7, 6, 4, 4]
+
+
+@pytest.mark.parametrize(
+    ("code", "output", "expected"),
+    [
+        ("QE", "iteration # 1\nError in routine readpp (1):\n invalid pseudo\n", "readpp"),
+        ("VASP", "DAV: 1\n| Error reading item 'NELM' from file INCAR. |\n", "NELM"),
+    ],
+)
+def test_input_errors_after_calculation_started_are_classified(code, output, expected):
+    from matsim_agents.execution.recovery import FailureClass, classify_failure
+    from matsim_agents.workflows.relaxation import _not_converged
+
+    reason = _not_converged(code, 1, output, started=True)
+    assert expected in reason
+    assert (
+        classify_failure({"status": "failed", "failure_reason": reason, "scf_converged": False})
+        == FailureClass.APPROVAL_OR_INPUT
+    )
+
+
+def test_unrecognized_runtime_errors_do_not_change_failure_classification():
+    from matsim_agents.workflows.relaxation import _not_converged
+
+    output = "iteration # 1\nError in routine diagonalization (1):\n not found\n"
+    assert _not_converged("QE", 1, output, started=True) == "QE did not converge (return code 1)"
 
 
 @pytest.mark.parametrize("backend", ["qe", "vasp"])
