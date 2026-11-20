@@ -79,13 +79,18 @@ _INPUT_DIAGNOSTICS = (
 )
 
 
+def is_input_diagnostic(text: str) -> bool:
+    """Whether a code diagnostic identifies an invalid DFT input."""
+    return any(marker in text.lower() for marker in _INPUT_DIAGNOSTICS)
+
+
 def classify_failure(outcome: dict[str, Any], *, max_steps: int | None = None) -> FailureClass:
     """The failure class of a relaxation outcome that is failed or not converged."""
     error = outcome.get("failure_type")
     reason = str(outcome.get("failure_reason") or "").lower()
     if outcome.get("return_code") == WALLTIME_RETURN_CODE or "timed out" in reason:
         return FailureClass.WALLTIME
-    if any(marker in reason for marker in _INPUT_DIAGNOSTICS):
+    if is_input_diagnostic(reason):
         return FailureClass.APPROVAL_OR_INPUT
     if (
         error in _LAUNCHER_ERRORS

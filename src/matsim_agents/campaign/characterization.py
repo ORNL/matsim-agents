@@ -419,17 +419,20 @@ _ALLOCATION = ("nodes", "devices", "device_kind", "gpus")
 def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
     """What a relaxation step contributes: a numerical outcome or an infrastructure failure."""
     stage = result.stages[-1] if result.stages else None
+    scf_iterations = stage.scf_iterations_per_step if stage else None
     if result.status == "failed" or stage is None:
         return {
             "status": "failed",
             "failure_reason": result.failure_reason or "no stage result",
             "failure_type": result.failure_type,
             "return_code": stage.return_code if stage else None,
+            "scf_iterations_per_step": scf_iterations,
             **({name: getattr(stage, name) for name in _ALLOCATION} if stage else {}),
         }
     diagnostics = {
         "return_code": stage.return_code,
         "scf_converged": stage.scf_converged,
+        "scf_iterations_per_step": scf_iterations,
         **{name: getattr(stage, name) for name in _ALLOCATION},
     }
     if (
@@ -753,6 +756,14 @@ def _relaxation_evidence(
         gpu_hours=gpus * hours,
     )
     diagnosis = {"failure_class": outcome["failure_class"]} if outcome.get("failure_class") else {}
+    if outcome.get("failure_class"):
+        diagnosis.update(
+            {
+                key: outcome[key]
+                for key in ("return_code", "scf_converged", "scf_iterations_per_step")
+                if outcome.get(key) is not None
+            }
+        )
     common: dict[str, Any] = {
         "kind": "relaxation",
         "subject": contract.formula,

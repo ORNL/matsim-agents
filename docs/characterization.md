@@ -193,7 +193,16 @@ versioned policy `recovery-v1`:
 
 Every retry counts against `max_dft_calculations`. Each attempt is a ledger
 record whose `numerical_convergence.failure_class` names the class. The
-choice to retry or give up is a `DecisionRecord`: action
+record also preserves the return code, SCF convergence status, and observed
+SCF iteration counts per ionic step when available. QE's final SCF after
+`End final coordinates` is not included in the per-step counts. These
+diagnostics do not change the recovery settings or retry policy.
+Input-reader errors are retained even if the DFT calculation had started, so
+they can be classified as input failures rather than retried as SCF failures.
+This diagnostic approach is informed by the
+[Custodian VASP handlers](https://materialsproject.github.io/custodian/custodian.vasp.handlers.html);
+Custodian is not required.
+The choice to retry or give up is a `DecisionRecord`: action
 `recover:<class>`, `defer:<class>` (a retry the budget stopped), or
 `give_up:<class>`, actor `recovery-policy:recovery-v1`, `policy_version`,
 and `thresholds` (retries allowed and used, budget). A retry, with its

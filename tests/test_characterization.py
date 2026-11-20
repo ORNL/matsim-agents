@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -975,6 +976,7 @@ class FlakySCF(FakeRelax):
                 failure_reason="QE did not converge (return code 2)",
                 return_code=2,
                 scf_converged=False,
+                scf_iterations_per_step=[200],
             )
             return ScientificRelaxationResult(
                 run_id=f"run-{name}",
@@ -1008,10 +1010,42 @@ def test_an_unconverged_scf_is_retried_with_softer_mixing(system):
     failed = [e for e in ledger.evidence() if e.outcome == "failed_to_compute"]
     assert first.evidence_ids == [failed[0].evidence_id]
     assert failed[0].numerical_convergence["failure_class"] == "scf_not_converged"
+    assert failed[0].numerical_convergence == {
+        "failure_class": "scf_not_converged",
+        "return_code": 2,
+        "scf_converged": False,
+        "scf_iterations_per_step": [200],
+    }
     retried = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"][-1]
     assert retried.method.settings["mixing_beta"] == 0.2
     cost = ledger.summary()["cost"]
     assert cost["failed_jobs"] == 2 and cost["dft_calculations"] == 2
+
+
+def test_recorded_qe_failure_reaches_the_recovery_ledger(system):
+    tmp_path, structures, references = system
+    data = _dft(references, budget={"max_dft_calculations": 1})
+    fixtures = Path(__file__).parent / "data" / "dft_outputs"
+    data["methods"]["dft"]["launcher"] = [
+        sys.executable,
+        str(fixtures / "replay_launcher.py"),
+        str(fixtures / "qe" / "scf_not_converged"),
+    ]
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+
+    run_characterization(contract)
+
+    ledger = _ledger(contract)
+    [failed] = [e for e in ledger.evidence() if e.kind == "relaxation"]
+    assert failed.numerical_convergence == {
+        "failure_class": "scf_not_converged",
+        "return_code": 0,
+        "scf_converged": False,
+        "scf_iterations_per_step": [2],
+    }
+    [decision] = ledger.decisions()
+    assert decision.action == "defer:scf_not_converged"
+    assert decision.evidence_ids == [failed.evidence_id]
 
 
 def test_recovery_stops_at_the_policy_limit_and_the_budget(system):
