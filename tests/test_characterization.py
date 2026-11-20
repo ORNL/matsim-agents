@@ -1048,6 +1048,160 @@ def test_recorded_qe_failure_reaches_the_recovery_ledger(system):
     assert decision.evidence_ids == [failed.evidence_id]
 
 
+def _replayed_recovery_contract_data(system, backend, mode):
+    tmp_path, _, references = system
+    data = _dft(references, budget={"max_dft_calculations": 1})
+    data.pop("reference_energies")
+    structure = _structure(tmp_path / "Si.extxyz", "Si2" if backend == "qe" else "Si4")
+    data["methods"]["dft"]["settings"]["pseudopotentials"] = {"Si": "Si.UPF"}
+    data["observables"] = [
+        {
+            "name": "energy_per_atom",
+            "unit": "eV/atom",
+            "minimum_evidence_level": "converged_dft",
+        }
+    ]
+    fixtures = Path(__file__).parent / "data" / "dft_outputs"
+    dft = data["methods"]["dft"]
+    dft["launcher"] = [
+        sys.executable,
+        str(fixtures / "recovery_failure_launcher.py"),
+        backend,
+        str(fixtures),
+        mode,
+        str(tmp_path / "launcher-count"),
+    ]
+    if backend == "vasp":
+        potcars = tmp_path / "potcars"
+        (potcars / "Si").mkdir(parents=True)
+        (potcars / "Si" / "POTCAR").write_text("ENMAX = 245.345 eV\n")
+        dft.clear()
+        dft.update(
+            backend="vasp",
+            potcar_dir=str(potcars),
+            settings={"nelm": 4},
+            launcher=[
+                sys.executable,
+                str(fixtures / "recovery_failure_launcher.py"),
+                backend,
+                str(fixtures),
+                mode,
+                str(tmp_path / "launcher-count"),
+            ],
+        )
+    return data, structure
+
+
+def _replayed_recovery_contract(tmp_path, structure, data):
+    return CharacterizationContract.model_validate(
+        {
+            "contract_id": "replayed-recovery",
+            "objective": "Relax silicon",
+            "formula": "Si",
+            "structures": [str(structure)],
+            "recipe": "relaxation",
+            "output_root": str(tmp_path / "runs"),
+            **data,
+        }
+    )
+
+
+@pytest.mark.parametrize("backend", ["qe", "vasp"])
+def test_recorded_scf_failures_resume_and_exhaust_retries_with_written_inputs(system, backend):
+    tmp_path, _, _ = system
+    data, structure = _replayed_recovery_contract_data(system, backend, "always")
+
+    for budget in (1, 2, 3):
+        data["budget"] = {"max_dft_calculations": budget}
+        contract = _replayed_recovery_contract(tmp_path, structure, data)
+        run_characterization(contract)
+
+    run_dir = Path(contract.output_root) / f"characterization-{contract.contract_id}"
+    state = json.loads((run_dir / "characterization-state.json").read_text())
+    assert state["attempts"]["dft"] == 3
+    assert state["recovery"] == {}
+    ledger = _ledger(contract)
+    attempts = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"]
+    assert len(attempts) == 3
+    assert all(e.numerical_convergence["failure_class"] == "scf_not_converged" for e in attempts)
+    assert all(e.input_sha256 == hashes_of([structure]) for e in attempts)
+    decisions = [d for d in ledger.decisions() if d.subject == "relax-dft-000"]
+    assert [d.action for d in decisions] == [
+        "defer:scf_not_converged",
+        "recover:scf_not_converged",
+        "defer:scf_not_converged",
+        "recover:scf_not_converged",
+        "give_up:scf_not_converged",
+    ]
+    assert decisions[0].evidence_ids == decisions[1].evidence_ids == [attempts[0].evidence_id]
+    assert decisions[2].evidence_ids == decisions[3].evidence_ids == [attempts[1].evidence_id]
+    assert decisions[4].evidence_ids == [attempts[2].evidence_id]
+
+    name = "pw.in" if backend == "qe" else "INCAR"
+    inputs = []
+    for attempt in range(1, 4):
+        root = run_dir / "relax-dft-000"
+        if attempt > 1:
+            root = root / f"attempt-{attempt}"
+        [path] = root.glob(f"*/calculations/{backend}/{name}")
+        inputs.append(path.read_text())
+    if backend == "qe":
+        assert [e.method.settings.get("mixing_beta", 0.4) for e in attempts] == [0.4, 0.2, 0.1]
+        for text, beta, maxstep in zip(inputs, (0.4, 0.2, 0.1), (200, 400, 800), strict=True):
+            entries = dict(
+                (name.strip(), value.strip())
+                for line in text.splitlines()
+                if "=" in line
+                for name, value in [line.split("=", 1)]
+            )
+            assert float(entries["mixing_beta"].replace("d", "e")) == pytest.approx(beta)
+            assert int(entries["electron_maxstep"]) == maxstep
+        assert [e.numerical_convergence["scf_iterations_per_step"] for e in attempts] == [[2]] * 3
+    else:
+        assert [e.method.settings["nelm"] for e in attempts] == [4, 8, 16]
+        assert [e.method.settings.get("algo", "Normal") for e in attempts] == [
+            "Normal",
+            "All",
+            "All",
+        ]
+        for text, nelm, algo in zip(inputs, (4, 8, 16), ("Normal", "All", "All"), strict=True):
+            assert f"NELM   = {nelm}" in text
+            assert f"ALGO   = {algo}" in text
+        assert [e.numerical_convergence["scf_iterations_per_step"][-1] for e in attempts] == [
+            4,
+            8,
+            16,
+        ]
+
+
+@pytest.mark.parametrize("backend", ["qe", "vasp"])
+def test_recorded_scf_failure_recovers_successfully_after_resume(system, backend):
+    tmp_path, _, _ = system
+    data, structure = _replayed_recovery_contract_data(system, backend, "first")
+    contract = _replayed_recovery_contract(tmp_path, structure, data)
+    run_characterization(contract)
+    data["budget"] = {"max_dft_calculations": 2}
+    resumed = _replayed_recovery_contract(tmp_path, structure, data)
+    report = run_characterization(resumed)
+
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    attempts = [e for e in _ledger(resumed).evidence() if e.calculation_id == "relax-dft-000"]
+    assert len(attempts) == 2
+    assert attempts[0].numerical_convergence["failure_class"] == "scf_not_converged"
+    assert attempts[1].outcome == EvidenceOutcome.MEASURED
+    assert attempts[1].method.settings["mixing_beta" if backend == "qe" else "nelm"] == (
+        0.2 if backend == "qe" else 8
+    )
+    decisions = [d for d in _ledger(resumed).decisions() if d.subject == "relax-dft-000"]
+    assert [d.action for d in decisions] == [
+        "defer:scf_not_converged",
+        "recover:scf_not_converged",
+    ]
+    assert decisions[0].evidence_ids == decisions[1].evidence_ids == [attempts[0].evidence_id]
+    assert (tmp_path / "launcher-count").read_text() == "2"
+    assert outstanding_steps(resumed) == []
+
+
 def test_recovery_stops_at_the_policy_limit_and_the_budget(system):
     tmp_path, structures, references = system
     energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
