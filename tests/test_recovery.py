@@ -75,6 +75,40 @@ def test_scf_recovery_softens_mixing_without_editing_the_input():
     assert vasp == {"nelm": 200, "algo": "All"}
 
 
+def test_scf_recovery_reaches_the_written_pw_input(tmp_path):
+    from ase.build import bulk
+
+    from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+
+    def namelist_value(text, key):
+        for line in text.splitlines():
+            name, sep, value = line.partition("=")
+            if sep and name.strip() == key:
+                return float(value.strip().replace("d", "e"))
+        raise AssertionError(f"{key} missing from pw.in")
+
+    (tmp_path / "Si.upf").write_text("placeholder")
+    atoms = bulk("Si", "diamond", a=5.43)
+    settings: dict = {}
+    written = []
+    for attempt in range(3):
+        qe = QESettings(
+            calculation="relax",
+            pseudo_dir=str(tmp_path),
+            nstep=50,
+            forc_conv_thr_ry_au=0.001,
+            **settings,
+        )
+        path = tmp_path / f"pw{attempt}.in"
+        write_pw_input(atoms, qe, str(path))
+        text = path.read_text()
+        written.append(
+            (namelist_value(text, "mixing_beta"), namelist_value(text, "electron_maxstep"))
+        )
+        settings, _ = adjusted_settings(FailureClass.SCF_NOT_CONVERGED, "qe", settings, None)
+    assert written == [(0.4, 200), (0.2, 400), (0.1, 800)]
+
+
 def test_walltime_is_retried_only_with_a_timeout_to_extend():
     assert adjusted_settings(FailureClass.WALLTIME, "qe", {}, 600.0) == ({}, 1200.0)
     assert can_retry(FailureClass.WALLTIME, timeout_sec=600.0)
