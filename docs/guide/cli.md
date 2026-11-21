@@ -33,8 +33,9 @@ matsim-agents config schema explore -o explore.schema.json
 Kinds are `relax`, `characterize`, `debate`, `llm-check`, `al`, `explore`, and
 `workflow`. `config init` copies an annotated example and never overwrites an
 existing file. It needs a source checkout, because the templates are the files
-under `examples/`, and it copies them verbatim: relative paths in the copy still
-refer to the template's original location, so check them before running. `config schema` prints the JSON Schema for editor validation and
+under `examples/`, and it copies them verbatim. Relative paths in the copy were
+written for the template's directory but resolve against the copy's directory,
+so adjust them for the destination before running. `config schema` prints the JSON Schema for editor validation and
 completion.
 
 ## Common options of the agent commands
