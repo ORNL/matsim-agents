@@ -49,9 +49,10 @@ Reference pages:
 - [Choosing a scientific workflow](docs/guide/workflows.md)
 - [Running on DOE supercomputers](docs/guide/hpc.md)
 - [LLM backends](docs/guide/llm-backends.md)
+- [External MCP tools](docs/mcp.md)
 - [Hypothesis-driven discovery chat](docs/guide/discovery-chat.md)
 - [Python API](docs/guide/python-api.md)
-- [Active learning (HydraGNN and DFT)](docs/guide/active-learning.md)
+- [Active learning (MLIP and DFT)](docs/guide/active-learning.md)
 - [Codabench competition](docs/guide/codabench.md)
 - [Configuration reference](docs/guide/configuration.md)
 
@@ -59,10 +60,11 @@ Reference pages:
 
 ## Installation
 
-`matsim-agents` depends on HydraGNN (which itself wraps PyTorch + PyTorch
-Geometric). The provided installer delegates the heavy install to
-HydraGNN's official scripts so the same code path works on a laptop and
-on a DOE supercomputer.
+HydraGNN is one of the supported MLIP backends, not a requirement for every
+workflow. The base package can be installed with `pip install -e .`; install
+the dependencies for the selected MLIP, LLM, or other optional integration
+separately. The following installers prepare HydraGNN and its PyTorch/PyTorch
+Geometric stack through HydraGNN's official scripts:
 
 ```bash
 git clone git@code.ornl.gov:multi-agentic-ai-materials/matsim-agents.git
@@ -124,12 +126,12 @@ source .venv/bin/activate    # workstation case
 matsim-agents --help
 ```
 
-HydraGNN and optional FairChem/UMA share `.venv`. Current upstream
-`mace-torch==0.3.16` has a hard `e3nn==0.4.4` requirement, which conflicts with
-HydraGNN's `e3nn==0.5.1`. Requesting `INSTALL_MACE=1` therefore creates
-`.venv-mace` inside the matsim-agents checkout. It inherits the machine's
-PyTorch stack from `.venv` without modifying `.venv`; MACE jobs run in a
-separate Python process.
+The HPC installers put HydraGNN in `.venv` and, by default, create separate
+compatibility environments `.venv-uma` for FairChem/UMA and `.venv-mace` for
+MACE. Their `e3nn` requirements conflict with HydraGNN's. Select the prepared
+environment for the backend you run; `INSTALL_UMA=0` or `INSTALL_MACE=0` skips
+the corresponding HPC environment. On Aurora, `RUN_MODEL_TESTS=1` enables
+both environments regardless of those settings.
 
 To bootstrap the local Ollama daemon and pull a model in one go:
 
@@ -207,11 +209,10 @@ matsim-agents supervisor-run Li2MnO3 \
 
 To execute AL instead of dry-run, replace `--al-dry-run` with `--al-run`.
 
-### 3. Novelty-only exploration of exotic compositions
+### 4. Random-enriched exploration of exotic compositions
 
-For compositions that have no AFLOW prototype match (e.g. 5-element
-high-entropy alloys), disable the prototype branch entirely and let
-pyXtal characterize the configuration space:
+To request more pyXtal structures, including for compositions that have no
+AFLOW prototype match:
 
 ```bash
 matsim-agents chat \
@@ -219,10 +220,11 @@ matsim-agents chat \
   --n-random 200 --random-seed 42
 ```
 
-When the conversation introduces an unusual stoichiometry, the discovery
-wrapper will report `No AFLOW prototype match` and rely on the pyXtal
-pass; the resulting candidates are flagged `(novel)` in the stability
-table.
+This chat command still generates every applicable AFLOW prototype. If none
+matches, only the pyXtal pass contributes seeds; random candidates are flagged
+`(novel)`. Generation and deduplication can yield fewer than requested. For a
+strictly pyXtal-only search, use the [bounded exploration guide](docs/workflows/simple-exploration.md)
+with `generation.max_aflow_candidates: 0` and a positive `pyxtal_count`.
 
 ---
 
@@ -285,7 +287,7 @@ Common options (all commands that run an MLIP):
 | Flag | Description |
 |---|---|
 | `--mlip-config FILE` | YAML with an `mlip:` block: `backend` plus that backend's settings. |
-| `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
+| `--llm-provider {ollama,vllm,mag,copilot,openai,anthropic,huggingface}` | Chat backend; `mag` and `copilot` require an explicit model. Provider support varies by workflow; see the [LLM guide](docs/guide/llm-backends.md). |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
 
@@ -325,7 +327,7 @@ force inference.
 | `--ase-structure-optimizer {FIRE,BFGS,BFGSLineSearch}` | ASE optimizer for relaxations. |
 | `--maxiter INT` | Max relaxation steps per seed (default `200`). |
 | `--fmax FLOAT` | Stop relaxation when max residual force is below this (eV/Å, default `0.02`). |
-| `--n-random INT` | Number of supplementary pyXtal random structures per composition, in addition to every applicable AFLOW prototype decoration (default `50`). Set to `0` to disable the pyXtal pass; silently degrades to `0` if pyXtal is not installed. |
+| `--n-random INT` | Target number of supplementary pyXtal structures per composition (default `50`), in addition to applicable AFLOW prototypes. Set to `0` to disable; fewer may be generated, and a missing pyXtal emits a warning and skips the pass. |
 | `--random-seed INT` | RNG seed for the pyXtal sampler (reproducibility). |
 | `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
 | `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven escalation to active learning. |
@@ -343,6 +345,8 @@ force inference.
 |---|---|
 | `OBJECTIVE` | Natural-language task objective for planner/executor. |
 | `--max-iterations INT` | Maximum executor iterations before forcing analysis. |
+| `--mcp-config PATH` | Optional external MCP server configuration; see the [MCP guide](docs/mcp.md). |
+| `--mcp-audit-path PATH` | Override the MCP JSONL audit log location. |
 | `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven AL escalation after run relaxations. |
 | `--al-config PATH` | Base AL YAML used when run-path handoff is triggered. |
 | `--al-dry-run / --al-run` | Plan/report run->AL handoff only, or execute AL loop. |

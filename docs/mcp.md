@@ -194,10 +194,12 @@ starts.
 - Tool descriptions and results reach the planner and analyst LLMs. They are
   framed as untrusted data, but no prompt framing fully prevents prompt
   injection; allowlist only servers you trust.
-- Scrubbing replaces the configured credentials listed above and values
-  under credential-like keys. It cannot recognize a secret the server obtained
-  elsewhere and returns under an innocuous name, nor a configured credential
-  the server transforms (for example base64-encodes).
+- Scrubbing replaces the configured credentials listed above in text and
+  metadata. Credential-like keys are redacted in invocation arguments and
+  structured results, **not in free-form text**: even JSON-looking text with
+  an `access_token` key can expose a server-issued secret that is not configured.
+  Scrubbing also cannot recognize unconfigured secrets under innocuous keys or
+  configured credentials transformed by a server (for example base64-encoded).
 - Query parameters in an HTTP `url` are not treated as secrets; use headers.
 - Arguments and results are size-limited when kept in state, but the server
   decides what a tool does with its arguments.

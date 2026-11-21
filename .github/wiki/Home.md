@@ -2,7 +2,7 @@
 
 **Multi-agent AI framework for atomistic materials simulation and discovery.**
 
-`matsim-agents` orchestrates large language models (LLMs), machine-learned interatomic potentials (MLIPs), and ASE-based atomistic workflows into a single agentic loop. The user states a research objective in natural language; agents plan, run HydraGNN-driven simulations, score chemical and dynamical stability, and report the findings — with optional human review at every gate.
+`matsim-agents` orchestrates large language models (LLMs), machine-learned interatomic potentials (MLIPs), and ASE-based atomistic workflows. Agents can plan and execute relaxations using HydraGNN, UMA, or MACE, explore candidate structures, assess stability, and report findings. External MCP calls and active-learning handoffs are optional; results require scientific review.
 
 ---
 
@@ -26,26 +26,24 @@
                 ┌───────────────────────▼──────────────────────┐
                 │              LangGraph workflow              │
                 │                                              │
-                │   planner ───► executor ──┐                  │
-                │                  ▲        │                  │
-                │                  └────────┤  while pending   │
-                │                           ▼                  │
-                │                        analyst ──► END       │
-                └───────────────────────┬──────────────────────┘
-                                        │  tool calls
-                ┌───────────────────────▼──────────────────────┐
-                │              Discovery wrapper               │
-                │   composition parsing → phase enumeration    │
-                │   → relaxation (HydraGNN+ASE) → stability    │
+                │   planner → executor loop → UQ gate → analyst │
                 └───────────────────────┬──────────────────────┘
                                         │
                 ┌───────────────────────▼──────────────────────┐
-                │             Atomistic backends               │
-                │   HydraGNN (fused MLFF + BranchWeightMLP)    │
-                │   ASE (FIRE / BFGS / BFGSLineSearch)         │
-                │   pymatgen (optional prototypes)             │
+                │         Relaxations or MCP client calls       │
+                │       optional active-learning handoff        │
+                └───────────────────────┬──────────────────────┘
+                                        │
+                ┌───────────────────────▼──────────────────────┐
+                │   MLIP: HydraGNN / UMA / MACE; ASE           │
+                │   DFT (active learning): VASP / QE            │
                 └──────────────────────────────────────────────┘
 ```
+
+Chat and supervisor workflows also use a discovery wrapper for composition
+parsing, pymatgen AFLOW prototype enumeration, optional pyXtal random seeds,
+relaxation, and stability analysis. See the [architecture guide](https://github.com/ORNL/matsim-agents/blob/main/docs/guide/architecture.md)
+and [MCP guide](https://github.com/ORNL/matsim-agents/blob/main/docs/mcp.md).
 
 ---
 

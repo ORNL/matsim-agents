@@ -142,7 +142,8 @@ Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |
 |---|---|---|---|
-| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--mlip-config`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
+| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective; `--mlip-config` for relaxations; optional MCP and AL handoff configuration | planner/executor/UQ/analyst result; optional MCP records and audit, or AL handoff + JSONL audit |
+| Call approved external tools or read resources | `matsim-agents run` with `--mcp-config` | MCP extra, server configuration and an objective; no MLIP for MCP-only tasks | external MCP call records and JSONL audit; see [MCP guide](../mcp.md) |
 | Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--mlip-config`, LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
