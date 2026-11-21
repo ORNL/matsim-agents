@@ -12,8 +12,11 @@
 interatomic potentials, and ASE-based atomistic workflows into a single
 agentic loop. The user states a research objective in natural language;
 agents plan, run MLIP-driven simulations, score chemical and
-dynamical stability, and report the findings. Chat asks before each
-exploration, and DFT execution and model promotion require explicit approval.
+dynamical stability, and report the findings. By default, chat asks before
+each exploration (`--auto-confirm` skips the prompt). Explicit approvals gate
+DFT in `matsim-agents relax`, elemental-reference DFT, E3 campaign execution,
+and model promotion; active-learning DFT labeling runs without a separate
+approval once `al run` is started.
 
 The framework is **backend-agnostic**: HydraGNN, UMA, and the open MACE
 foundation-model families are selectable MLIP backends. The relaxation tool,

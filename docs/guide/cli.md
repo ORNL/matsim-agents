@@ -37,10 +37,18 @@ completion.
 
 ## Common options of the agent commands
 
+Options accepted by `run`, `chat`, and `supervisor-run`:
+
 | Option | Description |
 |---|---|
 | `--mlip-config FILE` | YAML with an `mlip:` block selecting the model; see [MLIP selection](configuration.md#mlip-selection). Required by `supervisor-run` and by `run`/`chat` when they relax structures. |
-| `--output-dir PATH` | Root directory for artifacts (default `outputs`). |
+| `--output-dir PATH` | Root directory for artifacts (`chat` and `supervisor-run` default to `outputs`). |
+
+LLM options of `run` and `chat` (`supervisor-run` does not call an LLM and has
+none of these options):
+
+| Option | Description |
+|---|---|
 | `--llm-provider NAME` | `ollama`, `vllm`, `mag`, `copilot`, `openai`, `anthropic`, or `huggingface` (default `ollama`). `mag` and `copilot` require `--llm-model`; see [LLM backends](llm-backends.md). |
 | `--llm-model NAME` | Provider-specific model identifier. `chat` defaults to `qwen2.5:14b`. |
 | `--llm-base-url URL` | Override the server URL (Ollama or vLLM `/v1` endpoint). |

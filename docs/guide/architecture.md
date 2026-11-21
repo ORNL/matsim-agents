@@ -250,9 +250,11 @@ before building a workflow on top of it.
 - **Relative chemical-stability scoring** (energy-above-hull style
   comparisons within the explored phase set).
 - **LLM-driven planner / executor / analyst** agents (LangGraph). The graphs
-  run without pausing for review; human control is exercised through the chat
-  confirmation prompt and explicit approvals for DFT execution and model
-  promotion.
+  run without pausing for review. Human control comes from the chat
+  confirmation prompt (on by default; `--auto-confirm` skips it) and from
+  explicit approvals for DFT in `relax`, elemental-reference DFT, E3 campaign
+  execution, and model promotion. Active-learning DFT labeling has no separate
+  approval once `al run` is started.
 - **Pluggable LLM backends**: Ollama, vLLM, MAG, Copilot, OpenAI, Anthropic,
   and Hugging Face Transformers (see [LLM backends](llm-backends.md)).
 - **Active-learning loop** with HydraGNN, UMA, or MACE as the surrogate and either
