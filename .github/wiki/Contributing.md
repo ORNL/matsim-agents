@@ -9,7 +9,7 @@ Thank you for contributing to `matsim-agents`! This page explains the pull reque
 Before opening a PR, make sure all of these pass locally:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,mcp]"   # mcp: runs the MCP client integration tests
 pip install langchain-ollama langchain-openai langchain-anthropic
 
 bash scripts/check.sh           # lint, docs/deployments, and non-GPU tests

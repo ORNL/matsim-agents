@@ -13,6 +13,7 @@ individual experiments or machines.
 | `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
 | `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
+| `backends.mcp` | Optional client for external Model Context Protocol servers: configuration, deny-by-default tool authorization, sessions, and audit records ([MCP tools](mcp.md)) |
 | `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
 | `seeding` | The only source of random generators and seeds: named streams derived from one configured seed ([reproducibility](reproducibility.md)) |
 | `execution` | Scheduler-neutral resources, launch contracts, provenance, and the backend capability registry |
@@ -85,7 +86,7 @@ enforced by `tests/test_package_boundaries.py`.
 | 6 | `orchestration`, `campaign` |
 | 5 | `active_learning`, `workflows` |
 | 4 | `discovery`, `training` |
-| 3 | `backends.llm`, `backends.dft`, `backends.mlip` |
+| 3 | `backends.llm`, `backends.dft`, `backends.mlip`, `backends.mcp` |
 | 2 | `execution`, `datasets` |
 | 1 | `seeding` |
 

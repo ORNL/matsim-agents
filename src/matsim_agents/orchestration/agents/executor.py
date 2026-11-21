@@ -1,7 +1,9 @@
 """Executor agent.
 
 Pops the next task from ``pending_tasks`` and dispatches it to the
-appropriate tool. For now only the "relax" task is implemented.
+appropriate tool: "relax" runs an MLIP relaxation, and "mcp_tool" /
+"mcp_resource" go to the run's MCP session manager, which authorizes them
+before any external call. MCP tasks need no MLIP selection.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import os
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
+from matsim_agents.backends.mcp.tasks import MCP_TASK_KINDS, execute_mcp_task
 from matsim_agents.backends.mlip.config import MLIPConfig, load_mlip_config, parse_mlip_config
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.orchestration.state import MatSimState
@@ -29,13 +32,23 @@ def _mlip_config(cfg: dict) -> MLIPConfig:
     )
 
 
-def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> dict:
+def executor_node(state: MatSimState, config: RunnableConfig = None) -> dict:
     if not state.pending_tasks:
         return {}
 
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
+
+    if task.kind in MCP_TASK_KINDS:
+        record = execute_mcp_task(cfg.get("mcp_client"), task)
+        return {
+            "pending_tasks": remaining,
+            "mcp_results": [record],
+            "iteration": state.iteration + 1,
+            "messages": [AIMessage(content=f"[executor] {record.summary_line()}")],
+        }
+
     mlip = _mlip_config(cfg)
 
     if task.kind != "relax":

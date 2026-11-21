@@ -10,8 +10,10 @@ from __future__ import annotations
 import os
 
 from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from matsim_agents.backends.mcp.tasks import planner_catalog
 from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
 
@@ -20,19 +22,31 @@ class _Plan(BaseModel):
     rationale: str = ""
 
 
-_SYSTEM_PROMPT = """You are the planning agent of a materials-discovery system.
+_TASKS_PROMPT = """You are the planning agent of a materials-discovery system.
 Decompose the user's objective into an ordered list of atomistic tasks.
 Available task kinds:
   - "relax": run HydraGNN-driven structure relaxation on a structure file
   - "analyze": summarize results so far
   - "report": produce the final report
-Always emit at least one "relax" task pointing at a real structure path
+"""
+_RELAX_RULE = """Always emit at least one "relax" task pointing at a real structure path
 mentioned in the objective."""
+_SYSTEM_PROMPT = _TASKS_PROMPT + _RELAX_RULE
 
 
-def planner_node(state: MatSimState) -> dict:
+def _system_prompt(mcp_catalog: str | None) -> str:
+    if mcp_catalog is None:
+        return _SYSTEM_PROMPT
+    # With approved MCP tools an objective may need no relaxation at all, so the
+    # relax rule is replaced by the MCP section's own rule for relax tasks.
+    return _TASKS_PROMPT.rstrip() + "\n" + mcp_catalog
+
+
+def planner_node(state: MatSimState, config: RunnableConfig = None) -> dict:
     if not state.objective:
         return {"plan": [], "pending_tasks": []}
+    cfg = (config or {}).get("configurable", {}) if config else {}
+    mcp_catalog = planner_catalog(cfg.get("mcp_client"))
 
     structure_paths = [
         tok
@@ -50,7 +64,7 @@ def planner_node(state: MatSimState) -> dict:
         ).with_structured_output(_Plan)
         plan: _Plan = llm.invoke(
             [
-                SystemMessage(content=_SYSTEM_PROMPT),
+                SystemMessage(content=_system_prompt(mcp_catalog)),
                 AIMessage(content=f"Objective: {state.objective}"),
             ]
         )
