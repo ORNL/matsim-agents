@@ -6,8 +6,17 @@ Every command that runs an MLIP reads one flat `mlip:` block, usually from
 `--mlip-config FILE`; an active-learning configuration works too. The
 `backend` key selects the model, and each backend accepts only its own fields.
 `${VAR}` references are expanded from the environment and the file's `vars:`
-mapping, and relative paths resolve against the file. Ready-made files are in
-[examples/mlip/](../../examples/mlip/).
+mapping. Relative paths resolve differently by backend:
+
+- `hydragnn`: `logdir`, `hydragnn_root`, `mlp_checkpoint`, `newhead_ft_config`,
+  and `ft_repo` resolve against the YAML file; `checkpoint` resolves against
+  `logdir`.
+- `uma`: `model_name` is a registry name unless it names an existing file
+  relative to the YAML file's directory, in which case that file is used.
+- `mace`: with `family: checkpoint`, `model` resolves against the YAML file;
+  otherwise `model` names a foundation model.
+
+Ready-made files are in [examples/mlip/](../../examples/mlip/).
 
 | Backend | Fields |
 |---|---|

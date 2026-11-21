@@ -32,7 +32,9 @@ matsim-agents config schema explore -o explore.schema.json
 
 Kinds are `relax`, `characterize`, `debate`, `llm-check`, `al`, `explore`, and
 `workflow`. `config init` copies an annotated example and never overwrites an
-existing file. `config schema` prints the JSON Schema for editor validation and
+existing file. It needs a source checkout, because the templates are the files
+under `examples/`, and it copies them verbatim: relative paths in the copy still
+refer to the template's original location, so check them before running. `config schema` prints the JSON Schema for editor validation and
 completion.
 
 ## Common options of the agent commands
@@ -74,7 +76,7 @@ Active-learning handoff options shared by all three commands:
 | `--al-config PATH` | Base active-learning YAML used when the handoff fires. |
 | `--al-dry-run / --al-run` | Only plan and record the handoff (default), or execute the loop. |
 | `--uq-top-weight-threshold` | Trigger when the mean top branch weight is below this value (default `0.6`). |
-| `--uq-min-unreliable-fraction` | Trigger when the low-confidence fraction exceeds this value (default `0.25`). |
+| `--uq-min-unreliable-fraction` | Trigger when the low-confidence fraction is at least this value (default `0.25`; one of four results is enough). |
 | `--uq-min-relaxations-for-handoff` | Relaxations required before evaluation (default `1` for `run`, `3` otherwise). |
 | `--al-handoff-audit-path PATH` | JSONL file for decisions (default `<output-dir>/discovery/al_handoff_events.jsonl`). |
 

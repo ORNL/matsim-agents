@@ -171,9 +171,9 @@ cp examples/mlip/mace-mp-medium.yaml mlip.yaml
 ```
 
 `examples/mlip/hydragnn-gfm.yaml` selects the HydraGNN foundation model from a
-HydraGNN checkout named by `HYDRAGNN_DIR`; `${VAR}` references and relative
-paths in the file are resolved when it is loaded. The fields of each backend's
-block are listed in the [configuration reference](docs/guide/configuration.md#mlip-selection).
+HydraGNN checkout named by `HYDRAGNN_DIR`; `${VAR}` references are expanded
+when the file is loaded. Each backend's fields and how its relative paths
+resolve are listed in the [configuration reference](docs/guide/configuration.md#mlip-selection).
 
 ### 1. Run the agent graph end-to-end
 

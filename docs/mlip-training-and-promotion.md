@@ -490,8 +490,9 @@ AFLOW, or pyXtal candidates so duplicate unary phases are not relaxed twice.
 Campaigns use this comparison for held-out incumbent/candidate evaluation and
 promotion only. Active-learning acquisition, force metrics, same-composition
 polymorph ranking, and method-specific hull construction retain their existing
-semantics. Training without energy comparison does not require elemental
-references. Before training a candidate that will be compared, the active-learning
+semantics. Disabling energy comparison does not remove the training-reference
+requirement: `trainer.enabled: true` always needs `trainer.training_references`
+or `trainer.validation_reference_set`. Before training a candidate that will be compared, the active-learning
 loop checks element coverage and requires the reference backend/method signature
 to match the generated compound labels. Use the campaign's recorded DFT method
 signature, not a descriptive label from an unrelated hull protocol.
