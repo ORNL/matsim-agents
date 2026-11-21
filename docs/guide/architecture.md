@@ -1,10 +1,13 @@
 # Architecture and capabilities
 
+This page describes the agent graphs, workflows, and what is available today.
+For the Python package layout, see [package architecture](../architecture.md).
+
 ## Architecture
 
 Reusable standalone workflow graphics:
-- [docs/workflows/agentic-ai-workflow.md](../../docs/workflows/agentic-ai-workflow.md)
-- [docs/workflows/agentic-ai-workflow-slides.md](../../docs/workflows/agentic-ai-workflow-slides.md)
+- [docs/workflows/agentic-ai-workflow.md](../workflows/agentic-ai-workflow.md)
+- [docs/workflows/agentic-ai-workflow-slides.md](../workflows/agentic-ai-workflow-slides.md)
 
 ```
                 ┌──────────────────────────────────────────────┐
@@ -246,10 +249,14 @@ before building a workflow on top of it.
 - **AA-stacked 2-D multilayer** construction.
 - **Relative chemical-stability scoring** (energy-above-hull style
   comparisons within the explored phase set).
-- **LLM-driven planner / executor / reporter** agents (LangGraph) with
-  optional human-in-the-loop gates.
-- **Pluggable LLM backends**: vLLM (Frontier ROCm), Hugging Face
-  Transformers, and OpenAI-compatible HTTP endpoints.
+- **LLM-driven planner / executor / analyst** agents (LangGraph). The graphs
+  run without pausing for review. Human control comes from the chat
+  confirmation prompt (on by default; `--auto-confirm` skips it) and from
+  explicit approvals for DFT in `relax`, elemental-reference DFT, E3 campaign
+  execution, and model promotion. Active-learning DFT labeling has no separate
+  approval once `al run` is started.
+- **Pluggable LLM backends**: Ollama, vLLM, MAG, Copilot, OpenAI, Anthropic,
+  and Hugging Face Transformers (see [LLM backends](llm-backends.md)).
 - **Active-learning loop** with HydraGNN, UMA, or MACE as the surrogate and either
   VASP 6.6 or Quantum ESPRESSO `pw.x` as the DFT labeller, selectable
   via a single `dft.backend:` YAML field. Includes ensemble /
@@ -276,7 +283,8 @@ before building a workflow on top of it.
       AA-stacked only).
 - [ ] **2-D heterostructures** (e.g. graphene/h-BN, MoS₂/WSe₂) with
       lattice-mismatch search.
-- [ ] **MD agent**: NVT/NPT runs with the same HydraGNN calculator.
+- [ ] **MD agent**: NVT/NPT runs driven by the agents with the selected MLIP
+      calculator (active learning already runs MLIP MD).
 - [ ] **MCP tool server** so external clients (Claude Desktop, IDE
       agents) can call the discovery wrapper directly.
 - [ ] **Distributed executor** for parallel composition exploration on

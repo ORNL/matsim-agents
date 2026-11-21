@@ -1,6 +1,112 @@
 # Choosing a scientific workflow
 
+Start with the selection matrix, then copy a starter command. The later
+sections explain how the workflows build on each other and the rules they
+enforce. Command options are listed in the [command-line guide](cli.md).
+
 ## Workflow selection matrix
+
+| Goal | Recommended entry point | Required inputs | Typical outputs |
+|---|---|---|---|
+| Bounded MLIP phase search without Python or LLMs | `matsim-agents explore check/run/summary` | exploration YAML with an `mlip:` block | ranked relaxations with resumable checkpoints; see [small phase search](../workflows/simple-exploration.md) |
+| Relax one structure with an MLIP, DFT, or MLIP then DFT | `matsim-agents relax <config.yaml>` | relaxation YAML (`mode: mlip`, `dft`, or `mlip-dft`) | run directory with provenance and optimized structure |
+| Answer a characterization question (relaxed structure, energy ranking, hull stability) | `matsim-agents characterize <contract.yaml>` | characterization contract | report stating whether the evidence suffices; see [characterization](../characterization.md) |
+| Qualify an LLM deployment before scientific use | `matsim-agents llm-check <config.yaml>` | LLM check YAML | readiness report; see [LLM readiness](../llm-readiness.md) |
+| Debate one hypothesis among several LLMs | `matsim-agents debate <config.yaml>` | debate YAML with participants and rounds | transcript, verdicts, and model provenance; see [scientific debate](../scientific-debate.md) |
+| Frozen E3 presets and a common check/run/status/resume interface | `matsim-agents workflow ...` | workflow YAML (`matsim-agents workflow init`) | wrapper status plus native run evidence; see [run a campaign](../workflows/run-campaigns.md) |
+| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective; `--mlip-config` for relaxations; optional MCP and AL handoff configuration | planner/executor/UQ/analyst result; optional MCP records and audit, or AL handoff + JSONL audit |
+| Call approved external tools or read resources | `matsim-agents run` with `--mcp-config` | MCP extra, server configuration and an objective; no MLIP for MCP-only tasks | external MCP call records and JSONL audit; see [MCP guide](../mcp.md) |
+| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--mlip-config` (omit with `--llm-only`), LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
+| Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
+| Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
+| Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
+| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--mlip-config`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
+| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `--mlip-config` replacing its `mlip` block | iteration state dirs, dataset, optional retrained model logdirs |
+| Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
+
+Notes:
+
+- `run`, `chat`, and `supervisor-run` can escalate to AL using `--al-config` plus UQ policy flags.
+- Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
+
+## Minimum viable commands
+
+Use these as starter templates; replace paths with your environment.
+`hydragnn.yaml` stands for an `mlip:` block with your HydraGNN model:
+
+```yaml
+mlip:
+  backend: hydragnn
+  logdir: /path/to/hydragnn_logdir
+  mlp_checkpoint: /path/to/mlp_branch_weights.pt
+```
+
+```bash
+# 1) Core graph: planner -> executor -> uq_gate -> analyst
+matsim-agents run \
+  "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
+  --mlip-config hydragnn.yaml
+
+# 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
+matsim-agents run \
+  "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
+
+# 1b) Core graph with UQ-triggered AL handoff planning
+matsim-agents run \
+  "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
+  --mlip-config hydragnn.yaml \
+  --trigger-al-handoff \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 2) Interactive discovery chat
+matsim-agents chat \
+  --mlip-config hydragnn.yaml
+
+# 2a) Interactive discovery chat with UMA relaxations
+matsim-agents chat \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
+
+# 2b) Interactive chat with proposer/critic multi-LLM hypothesis debate
+matsim-agents chat \
+  --mlip-config hydragnn.yaml \
+  --llm-peer-review \
+  --critic-llm-provider ollama \
+  --critic-llm-model qwen2.5:14b \
+  --peer-review-rounds 2
+
+# 2c) Multi-critic panel mode (multiple critics + cross-critique)
+matsim-agents chat \
+  --mlip-config hydragnn.yaml \
+  --llm-peer-review \
+  --critic-panel-models "qwen2.5:14b,llama3.1:8b,mistral:7b" \
+  --critic-panel-providers "ollama,ollama,ollama" \
+  --peer-review-rounds 2 \
+  --critic-cross-critique
+
+# 3) Supervisor orchestration with AL handoff planning
+matsim-agents supervisor-run Li2MnO3 \
+  --mlip-config hydragnn.yaml \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 3a) Supervisor orchestration with UMA relaxations
+matsim-agents supervisor-run Li2MnO3 \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 4) Standalone active learning run
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml
+
+# 4a) Same AL config, UMA surrogate instead of HydraGNN
+matsim-agents al run examples/active_learning/al_config.example.yaml \
+  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
+```
+
+## How the workflows fit together
 
 ### Composable scientific workflow hierarchy
 
@@ -26,11 +132,11 @@ reason; they are not silently dropped or included in phase rankings.
 
 The authoritative guide to relaxation, active learning, phase exploration,
 agentic investigation, approval gates, evidence levels, and current execution
-status is [docs/scientific-workflows.md](../../docs/scientific-workflows.md).
+status is [docs/scientific-workflows.md](../scientific-workflows.md).
 Run-directory layout and restart rules are documented in
-[docs/run-artifacts-and-restarts.md](../../docs/run-artifacts-and-restarts.md), while
+[docs/run-artifacts-and-restarts.md](../run-artifacts-and-restarts.md), while
 scheduler-neutral ensemble DFT execution is documented in
-[docs/distributed-dft-dispatch.md](../../docs/distributed-dft-dispatch.md).
+[docs/distributed-dft-dispatch.md](../distributed-dft-dispatch.md).
 
 #### Unified structure relaxation
 
@@ -48,13 +154,13 @@ ranking of polymorphs, or thermodynamic stability against declared DFT
 references. The contract fixes observables, units, minimum fidelity, methods,
 tolerances, budget, and approvals; the report concludes only when the evidence
 suffices (MLIP energies never establish stability) and otherwise lists what is
-missing. See [docs/characterization.md](../../docs/characterization.md) and
+missing. See [docs/characterization.md](../characterization.md) and
 `examples/characterization/`.
 
 Campaigns and characterizations record every result, failure, hypothesis
 revision, and review decision in a hash-chained, append-only evidence ledger
 (`evidence-ledger.jsonl`), checked with `matsim-agents ledger verify`. See
-[docs/evidence-ledger.md](../../docs/evidence-ledger.md).
+[docs/evidence-ledger.md](../evidence-ledger.md).
 
 #### Active-learning safety defaults
 
@@ -86,7 +192,7 @@ is rejected when the configuration loads, before any MD or DFT runs. UMA and
 MACE fine-tune with low-rank adapters by default (`trainer.finetune_mode: lora`;
 `full` trains all weights), and `trainer.start_from: foundation` retrains the
 configured model each time instead of the last promoted one. See
-[Fine-tuning UMA and MACE](../../docs/scientific-workflows.md#fine-tuning-uma-and-mace).
+[Fine-tuning UMA and MACE](../mlip-training-and-promotion.md#fine-tuning-uma-and-mace).
 
 **Evaluating fine-tuned MLIPs.** `python -m matsim_agents.active_learning.finetune_eval
 --mlip-config FILE` fine-tunes the selected model (any backend) with the recipe in
@@ -95,7 +201,7 @@ trajectories, structures, compositions, conditions, or AL iterations) into
 train, validation, and test partitions with a content-addressed manifest and
 leakage checks, selects between the foundation and fine-tuned model on
 validation only, and evaluates the frozen choice on test and named test
-domains with per-group errors. See [MLIP evaluation](../../docs/mlip-evaluation.md).
+domains with per-group errors. See [MLIP evaluation](../mlip-evaluation.md).
 
 Held-out model energy comparisons and promotion use **formation-energy
 errors**, subtracting each method's own elemental energies on the same fixed
@@ -107,7 +213,7 @@ See [Energy comparison and promotion](active-learning.md#energy-comparison-and-p
 #### Consistent multi-node DFT labeling
 
 Where DFT runs is declared in the config's `resources:` block
-([resource dispatch](../../docs/resource-dispatch.md)): the `dft` pool's nodes are
+([resource dispatch](../resource-dispatch.md)): the `dft` pool's nodes are
 split into stable, disjoint groups of `nodes_per_job`, and each group processes
 one serial queue, so a node is never reused while its preceding VASP/QE step is
 still running. Ranks per node are the pool's devices per node times
@@ -137,101 +243,5 @@ Isolated atoms are not hull endpoints; they are appropriate only for optional
 cohesive or atomization-energy diagnostics. Competing compound references are
 currently model-scored at their manifest geometries, so these results remain
 explicitly labeled `mlip_proxy` rather than DFT thermodynamics.
-
-Use this table to choose the right entry point quickly.
-
-| Goal | Recommended entry point | Required inputs | Typical outputs |
-|---|---|---|---|
-| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective; `--mlip-config` for relaxations; optional MCP and AL handoff configuration | planner/executor/UQ/analyst result; optional MCP records and audit, or AL handoff + JSONL audit |
-| Call approved external tools or read resources | `matsim-agents run` with `--mcp-config` | MCP extra, server configuration and an objective; no MLIP for MCP-only tasks | external MCP call records and JSONL audit; see [MCP guide](../mcp.md) |
-| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--mlip-config`, LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
-| Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
-| Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
-| Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
-| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--mlip-config`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
-| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `--mlip-config` replacing its `mlip` block | iteration state dirs, dataset, optional retrained model logdirs |
-| Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
-
-Notes:
-
-- `run`, `chat`, and `supervisor-run` can escalate to AL using `--al-config` plus UQ policy flags.
-- Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
-
-### Minimum viable commands
-
-Use these as starter templates; replace paths with your environment.
-`hydragnn.yaml` stands for an `mlip:` block with your HydraGNN model:
-
-```yaml
-mlip:
-  backend: hydragnn
-  logdir: /path/to/hydragnn_logdir
-  mlp_checkpoint: /path/to/mlp_branch_weights.pt
-```
-
-```bash
-# 1) Core graph: planner -> executor -> uq_gate -> analyst
-matsim-agents run \
-  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlip-config hydragnn.yaml
-
-# 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
-matsim-agents run \
-  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
-
-# 1b) Core graph with UQ-triggered AL handoff planning
-matsim-agents run \
-  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlip-config hydragnn.yaml \
-  --trigger-al-handoff \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
-
-# 2) Interactive discovery chat
-matsim-agents chat \
-  --mlip-config hydragnn.yaml
-
-# 2b) Interactive chat with proposer/critic multi-LLM hypothesis debate
-matsim-agents chat \
-  --mlip-config hydragnn.yaml \
-  --llm-peer-review \
-  --critic-llm-provider ollama \
-  --critic-llm-model qwen2.5:14b \
-  --peer-review-rounds 2
-
-# 2c) True multi-critic panel mode (multiple critics + cross-critique)
-matsim-agents chat \
-  --mlip-config hydragnn.yaml \
-  --llm-peer-review \
-  --critic-panel-models "qwen2.5:14b,llama3.1:8b,mistral:7b" \
-  --critic-panel-providers "ollama,ollama,ollama" \
-  --peer-review-rounds 2 \
-  --critic-cross-critique
-
-# 2a) Interactive discovery chat with UMA relaxations
-matsim-agents chat \
-  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
-
-# 3) Supervisor orchestration with AL handoff planning
-matsim-agents supervisor-run Li2MnO3 \
-  --mlip-config hydragnn.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
-
-# 3a) Supervisor orchestration with UMA relaxations
-matsim-agents supervisor-run Li2MnO3 \
-  --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
-
-# 4) Standalone active learning run
-matsim-agents al validate-config examples/active_learning/al_config.example.yaml
-matsim-agents al run examples/active_learning/al_config.example.yaml
-
-# 4b) Same AL config, UMA surrogate instead of HydraGNN
-matsim-agents al run examples/active_learning/al_config.example.yaml \
-  --mlip-config examples/mlip/uma-s-1p1-omat.yaml
-```
 
 ---

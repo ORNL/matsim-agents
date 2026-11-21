@@ -92,7 +92,7 @@ dev = [
 matsim-agents = "matsim_agents.cli:app"
 
 [project.urls]
-Repository = "https://code.ornl.gov/multi-agentic-ai-materials/matsim-agents"
+Repository = "https://github.com/ORNL/matsim-agents"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/matsim_agents"]

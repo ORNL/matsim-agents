@@ -1,12 +1,10 @@
 # Codabench competition
 
-## Codabench Competition
-
 The `benchmarks/codabench/` directory contains a fully self-contained
 [Codabench](https://www.codabench.org/) challenge called the
 **Matsim-Agents Materials Discovery Challenge**.
 
-### What is tested
+## What is tested
 
 121 completed atomistic test structures from a dataset originally designed
 across 11 material classes — 2D
@@ -26,7 +24,7 @@ and interstitial variants. Tasks cover:
 The overall score is a weighted average mapped to [0, 1]; tasks with no
 submission are excluded (not penalised).
 
-### Leaderboard — public / private split
+## Leaderboard — public / private split
 
 To prevent participants from reverse-engineering the reference labels by
 repeatedly probing the leaderboard, the 121 completed structures are split into
@@ -52,7 +50,7 @@ the competition. To switch to final ranking, change the key prefix from
 **Submission rate limit**: 3 submissions per day, enforced via
 `max_submissions_per_day: 3` in `competition.yaml`.
 
-### Baselines
+## Baselines
 
 Two baseline adapters are provided in `benchmarks/codabench/baselines/`:
 `mlip/` builds any matsim-agents MLIP from an `mlip:` YAML block, and
@@ -87,7 +85,7 @@ UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
 accepted before use at <https://huggingface.co/facebook/UMA> and
 <https://huggingface.co/facebook/OMol25>).
 
-### Reference convention and release requirements
+## Reference convention and release requirements
 
 Task 1 compares formation energies, not raw total-energy zeros. Both baseline
 and submitted-model runners evaluate the declared pure-element geometries
@@ -123,7 +121,7 @@ The builder validates the assembled release before creating the ZIP.
 Synthetic unit tests and mocked model-catalog tests are software checks, not
 evidence of real MLIP/DFT scientific accuracy or completed competition data.
 
-### Directory layout
+## Directory layout
 
 ```
 benchmarks/codabench/

@@ -1,6 +1,50 @@
 # Configuration reference
 
-## Configuration reference
+## MLIP selection
+
+Every command that runs an MLIP reads one flat `mlip:` block, usually from
+`--mlip-config FILE`; an active-learning configuration works too. The
+`backend` key selects the model, and each backend accepts only its own fields.
+`${VAR}` references are expanded from the environment and the file's `vars:`
+mapping. Relative paths resolve differently by backend:
+
+- `hydragnn`: `logdir`, `hydragnn_root`, `mlp_checkpoint`, `newhead_ft_config`,
+  and `ft_repo` resolve against the YAML file; `checkpoint` resolves against
+  `logdir`.
+- `uma`: `model_name` is a registry name unless it names an existing file
+  relative to the YAML file's directory, in which case that file is used.
+- `mace`: with `family: checkpoint`, `model` resolves against the YAML file;
+  otherwise `model` names a foundation model.
+
+Ready-made files are in [examples/mlip/](../../examples/mlip/).
+
+| Backend | Fields |
+|---|---|
+| `hydragnn` | `logdir` (with `config.json` and checkpoint), `checkpoint`, `mlp_checkpoint` (BranchWeightMLP `.pt`), `inference_head`, `precision`, `mlp_precision`, `hydragnn_root`, `newhead_ft_config`, `ft_repo`, `radius`, `max_neighbours`, `charge`, `spin` |
+| `uma` | `model_name`, `task_name` (`omat`, `omol`, `oc20`, `odac`, `omc`), `precision`, `charge`, `spin`, `dropout` |
+| `mace` | `family`, `model`, `head`, `precision`, `dispersion`, `dropout` |
+| all | `device` (`cuda`, `cpu`, `xpu`), `ensemble_models`, `fine_tuner` |
+
+HydraGNN uses fused 16-head inference by default, which requires
+`mlp_checkpoint`. To pin one head for MLIP inference, set `inference_head` to a
+case-insensitive dataset name or its index, for example
+`inference_head: OMat24`. Pinned mode invokes only that decoder, does not require
+the branch MLP, and does not report branch-weight uncertainty. It preserves
+the loader's precision/autocast context, including `bf16`, during energy and
+force inference.
+
+| Index | Dataset | Index | Dataset |
+|---:|---|---:|---|
+| 0 | Alexandria | 8 | OMol25 |
+| 1 | ANI1x | 9 | OMol25-neutral |
+| 2 | MPTrj | 10 | OMol25-non-neutral |
+| 3 | OC2020 | 11 | OPoly2026 |
+| 4 | OC2022 | 12 | Nabla2DFT |
+| 5 | OC25 | 13 | QCML |
+| 6 | ODAC23 | 14 | QM7X |
+| 7 | OMat24 | 15 | transition1x |
+
+## Agent graph state
 
 ### `MatSimState`
 
@@ -39,16 +83,16 @@ for configuration, authorization, and result handling. The planner also
 accepts `analyze` and `report`, but the executor currently requires an MLIP
 selection and then skips those kinds.
 
-### `RelaxStructureInput` / `RelaxationResult`
+## `RelaxStructureInput` / `RelaxationResult`
 
-See [`src/matsim_agents/backends/mlip/relaxation.py`](../../src/matsim_agents/backends/mlip/relaxation.py) — fields mirror the
-options of the upstream HydraGNN ASE script
-(`structure_optimization_ASE.py`).
+See [`src/matsim_agents/backends/mlip/relaxation.py`](../../src/matsim_agents/backends/mlip/relaxation.py).
+`RelaxStructureInput` takes the structure path, the `mlip` selection, and the
+optimizer settings; the same settings apply to every MLIP backend.
 
-### Standalone DFT relaxers (outside the AL loop)
+## Standalone DFT relaxers (outside the AL loop)
 
 For cases where the user wants a *real* DFT relaxation rather than the
-cheap HydraGNN one (e.g. validating a discovered structure, refining a
+cheaper MLIP one (e.g. validating a discovered structure, refining a
 final candidate), two drivers ship under `src/matsim_agents/backends/dft/`
 with matching APIs:
 
@@ -86,7 +130,7 @@ trajectory + walltime + convergence flag from the native output files
 > sampling. The standalone relaxers are intended for one-off DFT validation
 > work outside the AL pipeline.
 
-### MLIP warm-start benchmarks
+## MLIP warm-start benchmarks
 
 A second pair of sibling drivers wraps the standalone relaxers in a
 "cold start vs MLIP-warm start" experiment and emits a JSON summary

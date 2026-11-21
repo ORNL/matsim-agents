@@ -67,7 +67,8 @@ def chat(
         "--n-random",
         help="Number of supplementary pyXtal random structures per composition "
         "(in addition to every applicable AFLOW prototype decoration). "
-        "Set to 0 to disable. Silently degrades to 0 if pyxtal is not installed.",
+        "Set to 0 to disable; fewer may be generated. Skipped with a warning if pyxtal "
+        "is not installed.",
     ),
     random_seed: int = typer.Option(0, "--random-seed", help="Seed for the pyXtal RNG."),
     llm_provider: str = typer.Option("ollama", "--llm-provider", case_sensitive=False),

@@ -101,7 +101,7 @@ def run(
     llm_provider: str = typer.Option(
         "ollama",
         "--llm-provider",
-        help="LLM backend: ollama | vllm | openai | anthropic.",
+        help="LLM backend: ollama | vllm | mag | copilot | openai | anthropic | huggingface.",
         case_sensitive=False,
     ),
     llm_model: str | None = typer.Option(

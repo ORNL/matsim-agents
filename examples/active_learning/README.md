@@ -112,7 +112,7 @@ and subtracts its own elemental values. Configuration loading checks file
 existence; execution checks geometry hashes, coverage, and DFT method
 compatibility. These inputs are existing DFT calculations, not requests to run
 DFT automatically. See the
-[manifest schema and promotion contract](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
+[manifest schema and promotion contract](../../docs/mlip-training-and-promotion.md).
 
 For built-in HydraGNN fine-tuning, set `mlip.hydragnn_root` to the HydraGNN
 source checkout (the Frontier examples use `${HYDRAGNN_DIR}`). The training

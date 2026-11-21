@@ -179,7 +179,7 @@ and restarts. Existing train/held-out assignments never change. Small batches
 are retained, with training and promotion explicitly deferred until the
 cumulative training and validation partitions meet their minimum sizes;
 there is no automatic pooling across formulas or increase in DFT selection.
-See [the manifest schema and compatibility checks](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
+See [the manifest schema and compatibility checks](../mlip-training-and-promotion.md).
 
 Full walkthrough — including templated INCAR / `pw.in` files, in-allocation
 launcher details, and per-backend ROCm/MPI gotchas — lives in

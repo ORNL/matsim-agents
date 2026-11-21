@@ -22,8 +22,8 @@ bash scripts/check.sh           # lint, docs/deployments, and non-GPU tests
 | Branch pattern | Purpose |
 |---|---|
 | `main` | Protected. Only merged PRs land here. |
-| `dev` | Integration branch for feature work (CI runs here too). |
 | `feature/<name>` | Short-lived feature branches. CI runs on push. |
+| other topic branches (`fix/...`, `docs/...`) | CI runs on the pull request. |
 
 **Never push directly to `main`.** Open a pull request from your branch.
 
@@ -35,10 +35,10 @@ bash scripts/check.sh           # lint, docs/deployments, and non-GPU tests
 2. Write your changes. Keep commits focused — one logical change per commit.
 3. Push to your branch and open a PR targeting `main`.
 4. **All CI checks must pass** before the PR can be merged:
-   - `Lint + type check` — ruff lint, ruff format, mypy
+   - `Lint + type check` — `scripts/check.sh lint` (ruff, documentation and deployment validators) and informational mypy
    - `Smoke tests (Python 3.11–3.14)` matrix
    - `Integration tests (agent graph + chat)`
-   - `Full test suite + coverage`
+   - `Full test suite + coverage` (fails below 80% coverage)
    - **`CI passed`** — the gate job that summarises all of the above
 5. **At least 1 approving review** is required (admins can bypass this deliberately).
 6. **All PR conversations must be resolved** before merging.

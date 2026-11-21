@@ -559,7 +559,7 @@ relaxations concurrently:
   `training`, the MD workers exit after sampling so their device memory is free
   for DFT; when its devices are its own, the workers and the driver's
   calculators stay loaded across iterations and reload only after a promotion
-  ([Keeping the surrogate loaded](scientific-workflows.md#keeping-the-surrogate-loaded-across-iterations)).
+  ([Keeping the surrogate loaded](mlip-training-and-promotion.md#keeping-the-surrogate-loaded-across-iterations)).
   Shipped AL configs and the `active-learning-sequential` layouts declare an
   `mlip` pool on the first node, sharing devices with `dft` and `training`.
 - **Driver device.** MLIP work done in the driver itself (AL model loading,

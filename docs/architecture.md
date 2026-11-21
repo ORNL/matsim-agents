@@ -1,5 +1,9 @@
 # Package architecture
 
+This page is for contributors: it maps Python packages to their responsibilities.
+For the agent graphs, workflows, and current capabilities, see
+[Architecture and capabilities](guide/architecture.md).
+
 The library is organized around stable scientific responsibilities rather than
 individual experiments or machines.
 
