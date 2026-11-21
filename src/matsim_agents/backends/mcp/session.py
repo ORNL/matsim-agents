@@ -53,6 +53,8 @@ from matsim_agents.backends.mcp.records import (
 )
 
 _MAX_PAGES = 100
+_MAX_CONTENT_BLOCKS = 64
+_CONTENT_OMITTED = "[additional content omitted]"
 _SHUTDOWN_GRACE_S = 30.0
 
 _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
@@ -141,7 +143,9 @@ class MCPSessionManager:
 
     def close(self) -> None:
         """Close every session and stop stdio server processes. Safe to call twice."""
-        if self._closed or not self._started:
+        if not self._started or (
+            self._closed and (self._thread is None or not self._thread.is_alive())
+        ):
             self._closed = True
             return
         self._closed = True
@@ -154,6 +158,8 @@ class MCPSessionManager:
         clean = self._thread is None or not self._thread.is_alive()
         if self._audit:
             self._audit.write("shutdown", clean=clean, servers=self.server_status())
+        if not clean:
+            raise RuntimeError("MCP sessions did not shut down within the cleanup timeout")
 
     def _run_loop(self) -> None:
         try:
@@ -166,6 +172,8 @@ class MCPSessionManager:
     async def _main(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop = asyncio.Event()
+        if self._closed:
+            self._stop.set()
         servers = self.config.enabled_servers()
         settled = {server.name: asyncio.Event() for server in servers}
         for server in self.config.servers:
@@ -173,6 +181,12 @@ class MCPSessionManager:
             if not server.enabled:
                 self._errors[server.name] = "disabled in configuration"
         async with anyio.create_task_group() as group:
+
+            async def cancel_on_stop() -> None:
+                await self._stop.wait()
+                group.cancel_scope.cancel()
+
+            group.start_soon(cancel_on_stop)
             for server in servers:
                 queue: asyncio.Queue = asyncio.Queue()
                 self._queues[server.name] = queue
@@ -181,9 +195,6 @@ class MCPSessionManager:
                 await event.wait()
             self._ready.set()
             await self._stop.wait()
-            for queue in self._queues.values():
-                if queue is not None:
-                    queue.put_nowait(None)
 
     async def _open(self, server: MCPServerConfig, stack: AsyncExitStack) -> ClientSession:
         if server.transport == "stdio":
@@ -266,9 +277,11 @@ class MCPSessionManager:
             if not cursor:
                 break
         resources: list[MCPResourceInfo] = []
-        if init.capabilities.resources is not None:
-            listing = await session.list_resources()
-            resources = [
+        cursor = None
+        for _ in range(_MAX_PAGES if init.capabilities.resources is not None else 0):
+            params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
+            listing = await session.list_resources(params=params)
+            resources.extend(
                 MCPResourceInfo(
                     server=server.name,
                     uri=str(resource.uri),
@@ -277,7 +290,10 @@ class MCPSessionManager:
                     mime_type=resource.mime_type,
                 )
                 for resource in listing.resources
-            ]
+            )
+            cursor = listing.next_cursor
+            if not cursor:
+                break
         self._tools[server.name] = tools
         self._resources[server.name] = resources
         info = init.server_info
@@ -307,7 +323,12 @@ class MCPSessionManager:
         settled.set()
         while (item := await queue.get()) is not None:
             op, future = item
-            record = await op(session)
+            try:
+                record = await op(session)
+            except BaseException:
+                if not future.done():
+                    future.set_exception(MCPUnavailableError(f"server {name!r} disconnected"))
+                raise
             if not future.done():
                 future.set_result(record)
 
@@ -398,6 +419,14 @@ class MCPSessionManager:
             self._audit.write(event, **fields)
 
     def _finish(self, record: MCPCallRecord) -> MCPCallRecord:
+        fields = ("server", "tool", "resource_uri", "authorization_reason")
+        record = record.model_copy(
+            update={
+                field: scrub_text(value, self._secrets)
+                for field in fields
+                if isinstance(value := getattr(record, field), str)
+            }
+        )
         if self._audit:
             self._audit.record_call(record)
         return record
@@ -409,12 +438,15 @@ class MCPSessionManager:
 
         def enqueue() -> None:
             queue = self._queues.get(server)
-            if queue is None:
+            if self._closed or queue is None:
                 future.set_exception(MCPUnavailableError(f"server {server!r} is not connected"))
             else:
                 queue.put_nowait((op, future))
 
-        self._loop.call_soon_threadsafe(enqueue)
+        try:
+            self._loop.call_soon_threadsafe(enqueue)
+        except RuntimeError as exc:
+            raise MCPUnavailableError("the MCP session manager is not running") from exc
         return future.result(timeout=timeout)
 
     def _base(self, kind: str, server: str, started: str, decision: AuthorizationDecision, **kw):
@@ -452,14 +484,41 @@ class MCPSessionManager:
             error=truncate(scrub_text(error, self._secrets), 2000),
         )
 
-    def _content(self, blocks: list[Any]) -> list[str]:
+    def _content(self, blocks: list[Any], *, resource: bool = False) -> list[str]:
         parts = []
+        size = 0
+        omitted = False
         for block in blocks:
+            if len(parts) == _MAX_CONTENT_BLOCKS or size == MAX_CONTENT_CHARS:
+                omitted = True
+                break
             text = getattr(block, "text", None)
             if isinstance(text, str):
-                parts.append(truncate(scrub_text(text, self._secrets), MAX_CONTENT_CHARS))
+                text = scrub_text(text, self._secrets)
+            elif resource:
+                text = "[binary resource content omitted]"
             else:
-                parts.append(f"[{getattr(block, 'type', 'non-text')} content omitted]")
+                text = f"[{getattr(block, 'type', 'non-text')} content omitted]"
+            remaining = MAX_CONTENT_CHARS - size
+            if len(text) > remaining:
+                parts.append(text[:remaining])
+                size += remaining
+                omitted = True
+                break
+            parts.append(text)
+            size += len(text)
+        if omitted:
+            while parts and size + len(_CONTENT_OMITTED) > MAX_CONTENT_CHARS:
+                excess = size + len(_CONTENT_OMITTED) - MAX_CONTENT_CHARS
+                if len(parts[-1]) <= excess:
+                    size -= len(parts.pop())
+                else:
+                    parts[-1] = parts[-1][:-excess]
+                    size -= excess
+            if len(parts) == _MAX_CONTENT_BLOCKS:
+                parts[-1] += _CONTENT_OMITTED
+            else:
+                parts.append(_CONTENT_OMITTED)
         return parts
 
     def call_tool(self, server: str, tool: str, arguments: dict[str, Any] | None) -> MCPCallRecord:
@@ -530,6 +589,7 @@ class MCPSessionManager:
                     outcome="tool_error",
                     error=truncate(" ".join(content), 2000) or "tool reported an error",
                     content=content,
+                    structured_content=structured,
                     content_sha256=digest,
                 )
             return MCPCallRecord(
@@ -562,13 +622,7 @@ class MCPSessionManager:
                 return self._failure(
                     base, "protocol_error", f"unsupported result type {type(result).__name__}"
                 )
-            content = []
-            for item in result.contents:
-                text = getattr(item, "text", None)
-                if isinstance(text, str):
-                    content.append(truncate(scrub_text(text, self._secrets), MAX_CONTENT_CHARS))
-                else:
-                    content.append("[binary resource content omitted]")
+            content = self._content(result.contents, resource=True)
             return MCPCallRecord(
                 **base,
                 finished_at=now_utc(),

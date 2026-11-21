@@ -60,6 +60,8 @@ every header value and its last word (the token in `Bearer ...`), every value
 substituted from `${VAR}`, and literal `env` values of 8 or more characters.
 Credentials shorter than 4 characters (a `${VAR}` value or a header token)
 are rejected, because they cannot be scrubbed without corrupting other text.
+Multiline `env` and `headers` values are rejected because stderr is scrubbed
+line by line.
 Put credentials in `${VAR}` references, not literal `env` values. Invalid configurations (unknown fields,
 missing `command` or `url`, fields of the other transport, duplicate names,
 wildcard allowlists, non-positive timeouts) are rejected before any server is
@@ -70,7 +72,7 @@ started.
 1. `run` loads the configuration and starts one background event loop for the
    whole run.
 2. Each enabled server is connected concurrently: the transport is opened, the
-   MCP session is initialized, and tools (all pages) and resources are listed
+   MCP session is initialized, and tools and resources (all pages) are listed
    within `connect_timeout_s`.
 3. A server that cannot be started, refuses the connection, or does not answer
    in time is marked unavailable and its process is stopped at once; other
@@ -78,8 +80,8 @@ started.
 4. The planner, executor, and analyst run. Requests to one server are executed
    one at a time.
 5. When the graph finishes, or fails, every session is closed and every stdio
-   server process is stopped. A `shutdown` audit record states whether this
-   completed cleanly.
+   server process is stopped, cancelling in-flight requests. A `shutdown` audit
+   record states whether this completed cleanly; a cleanup timeout raises an error.
 
 ## Tool authorization
 
@@ -156,7 +158,8 @@ has one JSON object per line:
 | `shutdown` | `clean` and the final status of each server |
 
 Audit records keep a hash and size of each sanitized result, not the result
-itself; truncated, secret-scrubbed content is in workflow state for the
+itself; secret-scrubbed text content is limited to 8,000 characters and 64
+blocks per response in workflow state for the
 analyst. Configured secrets are also scrubbed from the planner's discovery
 catalog without changing the execution schemas. Schema errors name the field
 and rule, never the rejected value. Argument and structured-result values under

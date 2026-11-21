@@ -13,8 +13,10 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -185,6 +187,155 @@ def test_resources_are_read_only_when_allowlisted(manager_factory):
     hidden = manager.read_resource("a", "test://hidden")
     assert hidden.outcome == "denied"
     assert hidden.content == []
+
+
+def test_record_metadata_is_scrubbed_after_authorization(manager_factory, monkeypatch):
+    from mcp import types
+
+    secret = "metadata-secret"
+    uri = f"test://notes?token={secret}"
+    manager = manager_factory(
+        _stdio("a", env={"TOKEN": secret}, allowed_resources=[uri], allowed_tools=["add"])
+    )
+    session = MagicMock()
+    session.read_resource = AsyncMock(
+        return_value=types.ReadResourceResult(
+            contents=[types.TextResourceContents(uri=uri, text="ok")]
+        )
+    )
+    monkeypatch.setattr(manager, "_submit", lambda server, op, timeout: asyncio.run(op(session)))
+    record = manager.read_resource("a", uri)
+    assert record.outcome == "success"
+    session.read_resource.assert_awaited_once_with(uri)
+    assert secret not in record.model_dump_json()
+    assert secret not in record.summary_line()
+    denied = manager.read_resource("a", f"test://unlisted?token={secret}")
+    assert denied.outcome == "denied"
+    assert secret not in denied.model_dump_json()
+    denied_tool = manager.call_tool("a", f"missing-{secret}", {})
+    assert secret not in denied_tool.model_dump_json()
+
+
+def test_resource_discovery_follows_pagination(manager_factory):
+    manager = manager_factory(_stdio("a", allowed_resources=["test://second"]))
+    session = MagicMock()
+    session.initialize = AsyncMock(
+        return_value=SimpleNamespace(
+            capabilities=SimpleNamespace(tools=None, resources=object()),
+            server_info=SimpleNamespace(name="a", version="1"),
+        )
+    )
+    resource = SimpleNamespace(
+        uri="test://second", name="second", description="on page two", mime_type="text/plain"
+    )
+    session.list_resources = AsyncMock(
+        side_effect=[
+            SimpleNamespace(resources=[], next_cursor="next"),
+            SimpleNamespace(resources=[resource], next_cursor=None),
+        ]
+    )
+    asyncio.run(manager._discover(manager.config.server("a"), session))
+    assert session.list_resources.await_count == 2
+    assert session.list_resources.await_args_list[1].kwargs["params"].cursor == "next"
+    assert manager.permitted_resources()[0].description == "on page two"
+
+
+def test_shutdown_cancels_active_and_queued_calls(manager_factory, monkeypatch, tmp_path):
+    import matsim_agents.backends.mcp.session as session_module
+
+    monkeypatch.setattr(session_module, "_SHUTDOWN_GRACE_S", 3.0)
+    marker = tmp_path / "started"
+    pid_file = tmp_path / "pid"
+    manager = manager_factory(
+        _stdio("a", "--pid-file", str(pid_file), allowed_tools=["slow"], call_timeout_s=20)
+    )
+    records = []
+    active = threading.Thread(
+        target=lambda: records.append(
+            manager.call_tool("a", "slow", {"seconds": 20, "marker": str(marker)})
+        )
+    )
+    active.start()
+    deadline = time.monotonic() + 5
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert marker.exists()
+    queued = threading.Thread(
+        target=lambda: records.append(manager.call_tool("a", "slow", {"seconds": 20}))
+    )
+    queued.start()
+    deadline = time.monotonic() + 5
+    while manager._queues["a"].qsize() == 0 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert manager._queues["a"].qsize() == 1
+    manager.close()
+    active.join(3)
+    queued.join(3)
+    assert not active.is_alive() and not queued.is_alive()
+    assert sorted(record.outcome for record in records) == ["connection_error", "connection_error"]
+    assert _pid_gone(int(pid_file.read_text()))
+    shutdown = next(event for event in _audit(tmp_path) if event["event"] == "shutdown")
+    assert shutdown["clean"] is True
+
+
+def test_shutdown_cancels_connection_in_progress(monkeypatch):
+    import anyio
+
+    import matsim_agents.backends.mcp.session as session_module
+
+    opened = threading.Event()
+    cleaned = threading.Event()
+
+    async def stalled_open(self, server, stack):
+        stack.callback(cleaned.set)
+        opened.set()
+        await anyio.sleep(60)
+
+    monkeypatch.setattr(session_module, "_SHUTDOWN_GRACE_S", 3.0)
+    monkeypatch.setattr(MCPSessionManager, "_open", stalled_open)
+    manager = MCPSessionManager(MCPConfig(servers=[_stdio("a", connect_timeout_s=60)]))
+    starter = threading.Thread(target=manager.start)
+    starter.start()
+    assert opened.wait(5)
+    manager.close()
+    starter.join(3)
+    assert not starter.is_alive()
+    assert cleaned.is_set()
+
+
+def test_result_content_has_shared_limits_and_error_structured_content(
+    manager_factory, monkeypatch
+):
+    from mcp import types
+
+    manager = manager_factory(
+        _stdio("a", allowed_tools=["add"], allowed_resources=["test://notes"])
+    )
+    session = MagicMock()
+    blocks = [types.TextContent(text="x" * 1000) for _ in range(20)]
+    session.call_tool = AsyncMock(
+        return_value=types.CallToolResult(
+            content=blocks,
+            structuredContent={"token": "issued-token", "detail": "bad"},
+            isError=True,
+        )
+    )
+    session.read_resource = AsyncMock(
+        return_value=types.ReadResourceResult(
+            contents=[types.TextResourceContents(uri="test://notes", text="x") for _ in range(1000)]
+        )
+    )
+    monkeypatch.setattr(manager, "_submit", lambda server, op, timeout: asyncio.run(op(session)))
+    tool = manager.call_tool("a", "add", {"a": 1, "b": 2})
+    resource = manager.read_resource("a", "test://notes")
+    for record in (tool, resource):
+        assert sum(map(len, record.content)) <= MAX_CONTENT_CHARS
+        assert len(record.content) <= 64
+        assert "omitted" in "".join(record.content)
+    assert tool.structured_content == {"token": REDACTED, "detail": "bad"}
+    assert tool.content_sha256 == sha256_json(
+        {"content": tool.content, "structured_content": tool.structured_content}
+    )
 
 
 def test_secrets_are_passed_to_the_server_but_redacted_everywhere(

@@ -135,6 +135,47 @@ def test_yaml_without_mcp_block_is_rejected(tmp_path):
         load_mcp_config(path)
 
 
+@pytest.mark.parametrize(
+    "server",
+    [
+        {"name": "a", "transport": "streamable_http", "url": "http://user:secret-value@host/mcp"},
+        {"name": "a", "transport": "stdio", "command": "python", "api_key": "secret-value"},
+    ],
+)
+def test_cli_config_validation_errors_do_not_expose_input_values(tmp_path, server):
+    import traceback
+
+    from typer.testing import CliRunner
+
+    from matsim_agents.cli import app
+
+    path = tmp_path / "mcp.yaml"
+    path.write_text(json.dumps({"mcp": {"servers": [server]}}))
+    result = CliRunner().invoke(app, ["run", "x", "--mcp-config", str(path)])
+    assert result.exit_code != 0
+    assert "secret-value" not in result.output
+    assert "credentials in headers" in result.output or "api_key" in result.output
+    with pytest.raises(ValueError) as error:
+        load_mcp_config(path)
+    assert "secret-value" not in "".join(traceback.format_exception(error.value))
+
+
+@pytest.mark.parametrize("value", ["first-line\nsecond-line", "first-line\rsecond-line"])
+def test_multiline_environment_and_header_values_are_rejected(value, monkeypatch):
+    monkeypatch.setenv("MULTILINE", value)
+    http = {"name": "h", "transport": "streamable_http", "url": "https://example.test/mcp"}
+    for server in (
+        _stdio(env={"KEY": value}),
+        _stdio(env={"KEY": "${MULTILINE}"}),
+        http | {"headers": {"Authorization": value}},
+    ):
+        with pytest.raises(ValueError, match="multiline"):
+            parse_mcp_config({"servers": [server]})
+    for server in (_stdio(env={"KEY": value}), http | {"headers": {"Authorization": value}}):
+        with pytest.raises(ValueError, match="multiline"):
+            MCPConfig(servers=[server])
+
+
 # ── authorization ─────────────────────────────────────────────────────────────
 
 

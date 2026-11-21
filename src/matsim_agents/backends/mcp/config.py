@@ -36,6 +36,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     SecretStr,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -107,6 +108,16 @@ class MCPServerConfig(BaseModel):
     )
 
     _referenced_secrets: list[str] = PrivateAttr(default_factory=list)
+
+    @field_validator("env", "headers")
+    @classmethod
+    def _single_line_values(cls, values: dict[str, SecretStr]) -> dict[str, SecretStr]:
+        if any(
+            "\n" in value.get_secret_value() or "\r" in value.get_secret_value()
+            for value in values.values()
+        ):
+            raise ValueError("multiline env and header values are not supported")
+        return values
 
     @field_validator("name")
     @classmethod
@@ -255,10 +266,18 @@ def load_mcp_config(path: str | Path) -> MCPConfig:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
-        raise ValueError(f"{path}: invalid YAML: {error}") from error
+        mark = getattr(error, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise ValueError(f"{path}: invalid YAML{location}") from None
     if not isinstance(data, dict) or "mcp" not in data:
         raise ValueError(f"{path}: expected a mapping with an mcp block")
     try:
         return parse_mcp_config(data["mcp"], base_dir=path.parent)
+    except ValidationError as error:
+        details = [
+            f"{'.'.join(map(str, item['loc'])) or 'mcp'}: {item['msg']}"
+            for item in error.errors(include_input=False, include_context=False, include_url=False)
+        ]
+        raise ValueError(f"{path}: {'; '.join(details)}") from None
     except ValueError as error:
         raise ValueError(f"{path}: {error}") from error

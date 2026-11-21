@@ -38,7 +38,9 @@ def build(name: str) -> MCPServer:
         return "written"
 
     @server.tool(description="Sleep, then return.")
-    def slow(seconds: float) -> str:
+    def slow(seconds: float, marker: str | None = None) -> str:
+        if marker:
+            Path(marker).write_text("started")
         time.sleep(seconds)
         return "done"
 
