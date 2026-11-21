@@ -237,7 +237,7 @@ def parse_mcp_config(block: dict, *, base_dir: Path | None = None) -> MCPConfig:
                 resolved = base_dir / resolved
             server["cwd"] = str(resolved)
         prepared.append(server)
-    config = MCPConfig(servers=prepared)
+    config = MCPConfig.model_validate({**block, "servers": prepared})
     for server, secrets in zip(config.servers, referenced, strict=True):
         server._referenced_secrets = secrets
     return config

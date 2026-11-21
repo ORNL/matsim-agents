@@ -91,7 +91,7 @@ def planner_catalog(client: MCPSessionManager | None) -> str | None:
             {
                 "mcp_server": tool.server,
                 "mcp_tool": tool.name,
-                "description": truncate(tool.description, MAX_DESCRIPTION_CHARS),
+                "description": tool.description,
                 "input_schema": tool.input_schema,
             }
             for tool in tools
@@ -100,9 +100,12 @@ def planner_catalog(client: MCPSessionManager | None) -> str | None:
             {
                 "mcp_server": resource.server,
                 "mcp_resource_uri": resource.uri,
-                "description": truncate(resource.description, MAX_DESCRIPTION_CHARS),
+                "description": resource.description,
             }
             for resource in resources
         ],
     }
+    catalog = redact(catalog, client.config.secret_values(), sensitive_keys=False)
+    for entry in catalog["tools"] + catalog["resources"]:
+        entry["description"] = truncate(entry["description"], MAX_DESCRIPTION_CHARS)
     return PLANNER_MCP_PROMPT.format(catalog=json.dumps(catalog, indent=2, sort_keys=True))

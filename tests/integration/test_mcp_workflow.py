@@ -7,6 +7,7 @@ MCP SDK; LLMs are replaced by scripted stand-ins, and no network beyond
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import socket
@@ -14,14 +15,19 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 pytest.importorskip("mcp")
 
 from matsim_agents.backends.mcp.config import MCPConfig  # noqa: E402
-from matsim_agents.backends.mcp.records import REDACTED, MCPAuditLog  # noqa: E402
+from matsim_agents.backends.mcp.records import (  # noqa: E402
+    MAX_CONTENT_CHARS,
+    REDACTED,
+    MCPAuditLog,
+    sha256_json,
+)
 from matsim_agents.backends.mcp.session import MCPSessionManager  # noqa: E402
 from matsim_agents.orchestration.state import MatSimState, TaskSpec  # noqa: E402
 
@@ -224,7 +230,7 @@ def test_secrets_are_passed_to_the_server_but_redacted_everywhere(
 
 
 def test_unusable_tool_schema_is_rejected_without_network_or_crash(manager_factory, monkeypatch):
-    import socket as socket_module
+    import urllib.request
 
     manager = manager_factory(_stdio("a", allowed_tools=["add"]))
     # A server-supplied schema with a remote $ref must not be fetched or crash the run.
@@ -233,13 +239,91 @@ def test_unusable_tool_schema_is_rejected_without_network_or_crash(manager_facto
         "properties": {"a": {"$ref": "https://example.invalid/schema.json"}},
     }
 
+    attempts = []
+
     def no_network(*args, **kwargs):
+        attempts.append(args)
         raise AssertionError("schema validation attempted a network connection")
 
-    monkeypatch.setattr(socket_module, "create_connection", no_network)
+    monkeypatch.setattr(urllib.request, "urlopen", no_network)
     record = manager.call_tool("a", "add", {"a": 1, "b": 2})
     assert record.outcome == "invalid_arguments"
     assert "input schema cannot be used" in record.error
+    assert attempts == []
+
+    manager._tools["a"]["add"].input_schema = {
+        "$defs": {"number": {"type": "integer"}},
+        "type": "object",
+        "properties": {"a": {"$ref": "#/$defs/number"}},
+    }
+    assert manager.call_tool("a", "add", {"a": 1, "b": 2}).outcome == "success"
+
+
+def test_results_are_scrubbed_before_truncation_and_hashing(manager_factory, monkeypatch, tmp_path):
+    from mcp import types
+
+    secret = "configured-secret"
+    manager = manager_factory(
+        _stdio(
+            "a",
+            env={"SECRET": secret},
+            allowed_tools=["add"],
+            allowed_resources=["test://notes"],
+        )
+    )
+    text = "x" * (MAX_CONTENT_CHARS - 5) + secret
+    session = MagicMock()
+    session.call_tool = AsyncMock(
+        return_value=types.CallToolResult(
+            content=[types.TextContent(text=text)],
+            structuredContent={"access_token": "new-server-issued-token", "echo": secret},
+        )
+    )
+    session.read_resource = AsyncMock(
+        return_value=types.ReadResourceResult(
+            contents=[types.TextResourceContents(uri="test://notes", text=text)]
+        )
+    )
+    monkeypatch.setattr(manager, "_submit", lambda server, op, timeout: asyncio.run(op(session)))
+
+    result = manager.call_tool("a", "add", {"a": 1, "b": 2})
+    assert result.structured_content == {"access_token": REDACTED, "echo": REDACTED}
+    assert result.content_sha256 == sha256_json(
+        {"content": result.content, "structured_content": result.structured_content}
+    )
+    assert secret[:5] not in result.content[0]
+    resource = manager.read_resource("a", "test://notes")
+    assert secret[:5] not in resource.content[0]
+    failure = manager._failure(
+        {
+            "kind": "tool",
+            "server": "a",
+            "started_at": "t",
+            "authorized": True,
+            "authorization_reason": "test",
+        },
+        "protocol_error",
+        "x" * 1995 + secret,
+    )
+    assert secret[:5] not in failure.error
+    manager._tools["a"]["add"].input_schema = {
+        "type": "object",
+        "properties": {"a": {"enum": ["x" * 192 + secret]}},
+    }
+    invalid = manager.call_tool("a", "add", {"a": "not-allowed"})
+    assert invalid.outcome == "invalid_arguments"
+    assert secret[:5] not in invalid.error
+
+    session.call_tool.return_value = types.CallToolResult(
+        content=[], structuredContent={"result": "x" * (MAX_CONTENT_CHARS + 1)}
+    )
+    manager._tools["a"]["add"].input_schema = {"type": "object"}
+    large = manager.call_tool("a", "add", {})
+    assert large.structured_content == {"omitted": "structured content exceeded the size limit"}
+    assert large.content_sha256 == sha256_json(
+        {"content": [], "structured_content": large.structured_content}
+    )
+    assert "new-server-issued-token" not in (tmp_path / "audit.jsonl").read_text()
 
 
 # ── connection failures ───────────────────────────────────────────────────────

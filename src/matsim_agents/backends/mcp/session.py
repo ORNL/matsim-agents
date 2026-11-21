@@ -34,6 +34,7 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 from mcp.shared.exceptions import MCPError
+from referencing import Registry
 
 from matsim_agents.backends.mcp.authorization import AuthorizationDecision, MCPAuthorizer
 from matsim_agents.backends.mcp.config import MCPConfig, MCPServerConfig
@@ -57,13 +58,13 @@ _SHUTDOWN_GRACE_S = 30.0
 _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
 
 
-def _schema_errors(errors: list[Any]) -> str:
+def _schema_errors(errors: list[Any], secrets: tuple[str, ...]) -> str:
     """Describe schema violations by location and rule, never by the offending value,
     so a credential passed in the wrong field is not echoed into records."""
     parts = []
     for error in sorted(errors, key=lambda e: [str(part) for part in e.path]):
         location = "/".join(map(str, error.path)) or "<arguments>"
-        rule = json.dumps(error.validator_value, default=str)
+        rule = scrub_text(json.dumps(error.validator_value, default=str), secrets)
         parts.append(f"{location}: violates {error.validator} {truncate(rule, 200)}")
     return "; ".join(parts)
 
@@ -448,7 +449,7 @@ class MCPSessionManager:
             **base,
             finished_at=now_utc(),
             outcome=outcome,
-            error=scrub_text(truncate(error, 2000), self._secrets),
+            error=truncate(scrub_text(error, self._secrets), 2000),
         )
 
     def _content(self, blocks: list[Any]) -> list[str]:
@@ -456,7 +457,7 @@ class MCPSessionManager:
         for block in blocks:
             text = getattr(block, "text", None)
             if isinstance(text, str):
-                parts.append(scrub_text(truncate(text, MAX_CONTENT_CHARS), self._secrets))
+                parts.append(truncate(scrub_text(text, self._secrets), MAX_CONTENT_CHARS))
             else:
                 parts.append(f"[{getattr(block, 'type', 'non-text')} content omitted]")
         return parts
@@ -487,7 +488,7 @@ class MCPSessionManager:
         try:
             validator_cls = jsonschema.validators.validator_for(schema)
             validator_cls.check_schema(schema)
-            errors = list(validator_cls(schema).iter_errors(arguments))
+            errors = list(validator_cls(schema, registry=Registry()).iter_errors(arguments))
         except Exception as exc:  # noqa: BLE001 - e.g. an unresolvable remote $ref
             # The tool is not called when its schema cannot be checked; remote
             # $refs are never fetched.
@@ -499,7 +500,9 @@ class MCPSessionManager:
                 )
             )
         if errors:
-            return self._finish(self._failure(base, "invalid_arguments", _schema_errors(errors)))
+            return self._finish(
+                self._failure(base, "invalid_arguments", _schema_errors(errors, self._secrets))
+            )
 
         timeout = self.config.server(server).call_timeout_s
 
@@ -514,14 +517,12 @@ class MCPSessionManager:
                     base, "protocol_error", f"unsupported result type {type(result).__name__}"
                 )
             content = self._content(result.content)
-            structured = redact(result.structured_content, self._secrets, sensitive_keys=False)
+            structured = redact(result.structured_content, self._secrets)
             if structured is not None and len(json.dumps(structured, default=str)) > (
                 MAX_CONTENT_CHARS
             ):
                 structured = {"omitted": "structured content exceeded the size limit"}
-            digest = sha256_json(
-                {"content": content, "structured_content": result.structured_content}
-            )
+            digest = sha256_json({"content": content, "structured_content": structured})
             if result.is_error:
                 return MCPCallRecord(
                     **base,
@@ -565,7 +566,7 @@ class MCPSessionManager:
             for item in result.contents:
                 text = getattr(item, "text", None)
                 if isinstance(text, str):
-                    content.append(scrub_text(truncate(text, MAX_CONTENT_CHARS), self._secrets))
+                    content.append(truncate(scrub_text(text, self._secrets), MAX_CONTENT_CHARS))
                 else:
                     content.append("[binary resource content omitted]")
             return MCPCallRecord(

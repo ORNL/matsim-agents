@@ -9,7 +9,15 @@ from pydantic import ValidationError
 
 from matsim_agents.backends.mcp.authorization import MCPAuthorizer
 from matsim_agents.backends.mcp.config import MCPConfig, load_mcp_config, parse_mcp_config
-from matsim_agents.backends.mcp.records import REDACTED, MCPAuditLog, MCPCallRecord, redact
+from matsim_agents.backends.mcp.records import (
+    MAX_DESCRIPTION_CHARS,
+    REDACTED,
+    MCPAuditLog,
+    MCPCallRecord,
+    MCPResourceInfo,
+    MCPToolInfo,
+    redact,
+)
 from matsim_agents.backends.mcp.tasks import execute_mcp_task, planner_catalog
 from matsim_agents.orchestration.state import TaskSpec
 
@@ -115,6 +123,11 @@ def test_duplicate_server_names_and_missing_env_are_rejected(monkeypatch):
         parse_mcp_config({"servers": [_stdio(env={"X": "${NOT_SET_ANYWHERE}"})]})
 
 
+def test_unknown_mcp_block_fields_are_rejected():
+    with pytest.raises(ValidationError, match="unknown_field"):
+        parse_mcp_config({"servers": [_stdio()], "unknown_field": 1})
+
+
 def test_yaml_without_mcp_block_is_rejected(tmp_path):
     path = tmp_path / "other.yaml"
     path.write_text("mlip: {backend: mace}\n")
@@ -205,6 +218,37 @@ def test_redaction_of_keys_and_configured_secret_values():
     assert redacted["password"] == REDACTED
     assert redacted["nested"][0]["Authorization"] == REDACTED
     assert redacted["nested"][1]["author"] == "kept"
+
+
+def test_planner_catalog_scrubs_secrets_without_mutating_execution_schemas():
+    from unittest.mock import MagicMock
+
+    secret = "secret-credential"
+    schema = {
+        "type": "object",
+        "properties": {"token": {"type": "string", "default": secret}, secret: {"type": "string"}},
+    }
+    tool = MCPToolInfo(
+        server="a",
+        name="tool",
+        description="x" * (MAX_DESCRIPTION_CHARS - 3) + secret,
+        input_schema=schema,
+    )
+    resource = MCPResourceInfo(server="a", uri="test://notes", description=secret)
+    client = MagicMock()
+    client.config.secret_values.return_value = [secret]
+    client.permitted_tools.return_value = [tool]
+    client.permitted_resources.return_value = [resource]
+
+    prompt = planner_catalog(client)
+    assert secret not in prompt
+    catalog = json.loads(prompt.split("<mcp_catalog>")[1].split("</mcp_catalog>")[0])
+    assert secret[:5] not in catalog["tools"][0]["description"]
+    assert catalog["tools"][0]["input_schema"]["properties"]["token"]["default"] == REDACTED
+    assert REDACTED in catalog["tools"][0]["input_schema"]["properties"]
+    assert catalog["resources"][0]["description"] == REDACTED
+    assert tool.input_schema == schema
+    assert tool.input_schema["properties"]["token"]["default"] == secret
 
 
 def test_audit_log_scrubs_secrets_and_omits_content(tmp_path):

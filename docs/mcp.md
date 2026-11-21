@@ -155,12 +155,14 @@ has one JSON object per line:
 | `disconnect` | a server's connection failed after it had connected |
 | `shutdown` | `clean` and the final status of each server |
 
-Audit records keep a hash and size of each result, not the result itself; the
-full (truncated, secret-scrubbed) content is in workflow state for the
-analyst. Schema errors name the field and rule, never the rejected value.
-Argument values under credential-like keys (`password`, `token`,
-`api_key`, `Authorization`, ...) and any configured secret value are replaced
-by `[REDACTED]`. MCP results are not written to the
+Audit records keep a hash and size of each sanitized result, not the result
+itself; truncated, secret-scrubbed content is in workflow state for the
+analyst. Configured secrets are also scrubbed from the planner's discovery
+catalog without changing the execution schemas. Schema errors name the field
+and rule, never the rejected value. Argument and structured-result values under
+credential-like keys (`password`, `token`, `api_key`, `Authorization`, ...)
+and any configured secret value are replaced by `[REDACTED]`. MCP results are
+not written to the
 [evidence ledger](evidence-ledger.md): they are external data, not scientific
 evidence.
 

@@ -64,7 +64,7 @@ def redact(value: Any, secrets: Iterable[str] = (), *, sensitive_keys: bool = Tr
     secrets = tuple(secrets)
     if isinstance(value, dict):
         return {
-            str(key): REDACTED
+            scrub_text(str(key), secrets): REDACTED
             if sensitive_keys and _SENSITIVE_KEY.search(str(key))
             else redact(item, secrets, sensitive_keys=sensitive_keys)
             for key, item in value.items()
