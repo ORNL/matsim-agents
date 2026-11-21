@@ -1,7 +1,5 @@
 # Hypothesis-driven discovery chat
 
-## Hypothesis-driven discovery chat
-
 The `chat` REPL is more than a wrapper around the LLM — it is a
 **closed loop between dialogue and atomistic simulation**:
 
@@ -39,6 +37,25 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 5. The summary is fed back into the conversation as a discovery user-turn
   payload so the LLM can refine its hypothesis on the next turn.
 
+## Chat modes
+
+- **LLM-only chat** (`--llm-only`) needs no `--mlip-config` or atomistic
+  environment. It disables `/relax`, `/al`, and automatic exploration, and the
+  system prompt states those limits.
+- **Hypothesis debate** (`--llm-peer-review`): a critic model challenges each
+  proposal and the proposer revises for `--peer-review-rounds` rounds. Use
+  `--critic-llm-*` for one critic, or `--critic-panel-models` (with optional
+  aligned providers and base URLs) for a panel; `--critic-cross-critique`
+  lets critics challenge each other first.
+- **Resource plans** (`--resources FILE`): the plan's `llm` pool starts or
+  names the proposer (`--llm-server`) and critics (`--critic-llm-servers`), and
+  its `mlip` pool relaxes candidates concurrently, one worker per device. See
+  [resource dispatch](../resource-dispatch.md).
+
+All options are listed in the [command-line guide](cli.md#chat-hypothesis-driven-discovery).
+
+## Slash commands and active-learning handoff
+
 Discovery chat can also run optional control actions through slash commands:
 
 - **Single-structure relaxation command**:
@@ -64,6 +81,8 @@ If `--al-handoff-audit-path` is not set, handoff events default to:
 <output_dir>/discovery/al_handoff_events.jsonl
 ```
 
+## Session transcripts and resume
+
 Every session writes its transcript as it goes, to
 `<output_dir>/chat/<UTC timestamp>_<suffix>/`: `transcript.md` for reading,
 `contributions.jsonl` with one record per message (your turns, the proposer's
@@ -76,6 +95,8 @@ already explored, and their results) is saved atomically to `session.json` in
 the same directory; `matsim-agents chat --resume <session id or directory>`
 continues it, appending to the same transcript and skipping compositions that
 were already explored. Models and tools come from the new command line.
+
+## Output artifacts
 
 Output artifacts per composition (under `--output-dir`):
 
@@ -91,6 +112,8 @@ outputs/discovery/<formula>/
 Seeds carry their provenance (`source`, `prototype_id`, `space_group`,
 `needs_dft_verification`) on the `PhaseCandidate` Pydantic model so
 downstream scorers can filter or weight them.
+
+## Limitations
 
 > **Honest caveats.** The AFLOW prototype set covers known crystal
 > topologies for stoichiometries that match an existing entry — exotic

@@ -7,6 +7,7 @@ the framework.
 ## 1. Install and check your environment
 
 - [Installation](../README.md#installation)
+- [Command-line guide](guide/cli.md): diagnostics, starter configurations, and agent command options
 - Run `matsim-agents doctor` to see which Python, DFT, MLIP and LLM backends are usable here.
 - [Backend capabilities](capabilities.md): what each backend needs and supports
 - [MACE dependencies](mace-dependencies.md) and [frozen HydraGNN source](hydragnn-frozen-source.md)
@@ -25,7 +26,8 @@ the framework.
 - [Characterization contracts](characterization.md)
 - [Scientific hypothesis debate](scientific-debate.md)
 - [Hypothesis-driven discovery chat](guide/discovery-chat.md)
-- [Active learning (HydraGNN and DFT)](guide/active-learning.md)
+- [Active learning (MLIP and DFT)](guide/active-learning.md)
+- [MLIP training references and model promotion](mlip-training-and-promotion.md)
 - [Competing-phase reference hulls](reference-hulls.md)
 
 ## 4. Read results and restart safely
@@ -64,12 +66,20 @@ the framework.
 
 - [Python API](guide/python-api.md)
 - [Extend a workflow](workflows/extend-library.md)
-- [Configuration reference](guide/configuration.md)
+- [Configuration reference](guide/configuration.md), including the `mlip:` block
 - [Architecture and capabilities](guide/architecture.md) and
   [package architecture](architecture.md)
 - Workflow diagrams: [page](workflows/agentic-ai-workflow.md),
   [slides](workflows/agentic-ai-workflow-slides.md)
 
-## 8. Benchmarks
+## 8. Examples and benchmarks
 
+- Example configurations: [MLIP selection](../examples/mlip/),
+  [active learning](../examples/active_learning/README.md),
+  [characterization](../examples/characterization/),
+  [debate](../examples/debate/), [workflows](../examples/workflows/), and
+  [paper cases](../examples/paper_cases/README.md)
 - [Codabench competition](guide/codabench.md)
+- [Benchmarks overview](../benchmarks/README.md),
+  [Si/SiC known-answer suite](../benchmarks/known_answers/README.md), and
+  [portability release gate](../benchmarks/portability/README.md)

@@ -1,15 +1,15 @@
 # LLM backends
 
-## LLM backends
+## Providers
 
 Set the provider at runtime via CLI flag, environment variable, or in
 code. Local/open-source backends are the default.
 
 For a detailed comparison of the two open-source local backends (vLLM vs
 HuggingFace Transformers + Accelerate) — including pros, cons, and guidance
-for Frontier (ROCm) — see [docs/llm-backends-comparison.md](../../docs/llm-backends-comparison.md).
+for Frontier (ROCm) — see [docs/llm-backends-comparison.md](../llm-backends-comparison.md).
 For Genesis Mission hosted models through the Model Access Gateway, see the
-[MAG setup and usage guide](../../docs/model-access-gateway.md).
+[MAG setup and usage guide](../model-access-gateway.md).
 
 | Provider | Install | Typical model | Notes |
 |---|---|---|---|
@@ -26,7 +26,7 @@ currently accepts only `ollama`, `vllm`, `openai`, `anthropic`, and
 `huggingface`. The generated [capability matrix](../capabilities.md) lists
 providers with registered defaults, so it does not list `mag` or `copilot`.
 
-### Downloading models for vLLM
+## Downloading models for vLLM
 
 For the vLLM backend you need to download the model weights locally before
 starting the server. The recommended model for matsim-agents on HPC is
@@ -40,7 +40,9 @@ hf download Qwen/Qwen2.5-72B-Instruct \
 
 For detailed instructions — including Frontier-specific steps, running the
 download as a background job, and resuming interrupted downloads — see
-[docs/model-download.md](../../docs/model-download.md).
+[docs/model-download.md](../model-download.md).
+
+## Environment variables and defaults
 
 Configuration knobs:
 
@@ -82,7 +84,7 @@ Explicit `max_completion_tokens` and `request_timeout` arguments override their
 environment variables without parsing the overridden values. Both sources
 use the same configuration validation; invalid limits fail before any request.
 
-### Multi-model scientific debate
+## Multi-model scientific debate
 
 Use `matsim-agents debate debate.yaml` to assign one scientific hypothesis to
 an enclave of two or more independently configured LLMs. The YAML specifies
@@ -91,10 +93,10 @@ plus the user-selected `rounds`. Models see and directly challenge prior peer
 arguments; speaking order rotates each round. A final synthesis preserves both
 consensus and unresolved disputes, while the complete transcript and model
 provenance are retained in a uniquely named run directory. See
-[`docs/scientific-workflows.md`](../../docs/scientific-workflows.md) for the complete
+[`docs/scientific-workflows.md`](../scientific-workflows.md) for the complete
 configuration and evidence limitations.
 
-The dedicated [scientific debate guide](../../docs/scientific-debate.md) documents
+The dedicated [scientific debate guide](../scientific-debate.md) documents
 all four equal/role-based and independent/designated modalities with runnable
 YAML examples and their different outcome semantics.
 
@@ -106,7 +108,7 @@ options for workflows that intentionally need an asymmetric review panel.
 The same debate is available as the `multi_llm_debate` hypothesis-discussion
 mode of `InvestigationConfig`. It replaces the single-LLM discussion before
 phase exploration; it is not embedded in active learning. See
-[the integration guide](../../docs/scientific-debate.md#using-debate-inside-the-agentic-materials-workflow).
+[the integration guide](../scientific-debate.md#using-debate-inside-the-agentic-materials-workflow).
 
 Before using a real model in a scientific workflow, qualify its configuration,
 endpoint or local artifacts, loading, structured output, multi-turn behavior,
@@ -116,7 +118,7 @@ resource visibility, and latency independently:
 matsim-agents llm-check examples/llm_check/llm_check.example.yaml
 ```
 
-See [docs/llm-readiness.md](../../docs/llm-readiness.md) for the stage contract,
+See [docs/llm-readiness.md](../llm-readiness.md) for the stage contract,
 artifacts, distributed checks, and portability integration.
 
 The provider factory can address arbitrary compatible model identifiers.
@@ -124,7 +126,7 @@ The provider factory can address arbitrary compatible model identifiers.
 `deployments/common/open-model-catalog.json` and therefore has catalog,
 download, launch, and benchmark coverage on the supported facilities.
 
-### First-class open-model support
+## First-class open-model support
 
 The generic `vllm` and `huggingface` providers can address arbitrary model
 identifiers, but a checkpoint is called **first-class supported** only when it

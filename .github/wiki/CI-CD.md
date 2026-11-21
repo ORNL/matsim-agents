@@ -6,7 +6,7 @@ This page describes the Continuous Integration setup for `matsim-agents`, how to
 
 ## Overview
 
-Every push and every pull request targeting `main` triggers the CI pipeline defined in [`.github/workflows/ci.yml`](https://github.com/ORNL/matsim-agents/blob/main/.github/workflows/ci.yml).
+Every push to `main` or a `feature/**` branch, and every pull request targeting `main`, triggers the CI pipeline defined in [`.github/workflows/ci.yml`](https://github.com/ORNL/matsim-agents/blob/main/.github/workflows/ci.yml).
 
 **A pull request cannot be merged into `main` until the `CI passed` gate job turns green.**
 
@@ -23,19 +23,22 @@ smoke (Python 3.11 / 3.12 / 3.13 / 3.14) ──► integration ──► full �
 
 | Job | Trigger dependency | Python | What it does |
 |---|---|---|---|
-| **Lint + type check** | always | 3.11 | `ruff check`, `ruff format --check`, `mypy` (informational) |
+| **Lint + type check** | always | 3.11 | `bash scripts/check.sh lint` (ruff, documentation, deployment, and Codabench validators); `mypy` (informational) |
 | **Smoke tests** | always | 3.11, 3.12, 3.13, 3.14 | LLM provider factory tests — no model weights, CPU only |
 | **Integration tests** | after smoke | 3.11 | Full agent graph + chat-flow tests with mocked LLM |
-| **Full test suite + coverage** | after smoke + integration | 3.11 | All non-GPU tests, uploads `coverage.xml` artifact |
+| **Full test suite + coverage** | after smoke + integration | 3.11 | `bash scripts/check.sh coverage`: all non-GPU tests, fails below 80% coverage, uploads `coverage.xml` |
 | **CI passed** | after all four above | — | Gate job: fails if any upstream job failed or was cancelled |
 
 ### Lint + type check
 
-Runs [ruff](https://docs.astral.sh/ruff/) in two passes:
+Runs `bash scripts/check.sh lint`, which performs:
 
 ```bash
-ruff check src/ tests/     # lint rules E, F, I, B, UP, SIM
-ruff format --check src/ tests/   # formatting check (black==21.5b1 style)
+ruff check src/ tests/ scripts/diagnostics/validate_documentation.py
+ruff format --check src/ tests/ scripts/diagnostics/validate_documentation.py
+python scripts/diagnostics/validate_documentation.py   # links, imports, README CLI reference
+python scripts/diagnostics/validate_deployments.py
+python benchmarks/codabench/validate_bundle.py
 ```
 
 `mypy` runs with `--ignore-missing-imports` and is set to `continue-on-error` — type errors are **informational only** and do not block the pipeline.
@@ -48,7 +51,7 @@ pytest tests/smoke/ -v --tb=short -p no:warnings
 
 Files: [`tests/smoke/test_llm_providers.py`](https://github.com/ORNL/matsim-agents/blob/main/tests/smoke/test_llm_providers.py)
 
-Tests the `get_chat_model()` factory for every supported provider (Ollama, vLLM, OpenAI, Anthropic, HuggingFace) using `unittest.mock` — no real API calls or model weights are needed.
+Tests the `get_chat_model()` factory for the supported providers using `unittest.mock` — no real API calls or model weights are needed. The job installs `.[dev]` without the `mcp` extra.
 
 Runs on every supported Python minor version: **3.11, 3.12, 3.13, and 3.14**.
 
@@ -58,27 +61,26 @@ Runs on every supported Python minor version: **3.11, 3.12, 3.13, and 3.14**.
 pytest tests/integration/ -v --tb=short -p no:warnings
 ```
 
-Files:
-- [`tests/integration/test_agent_graph.py`](https://github.com/ORNL/matsim-agents/blob/main/tests/integration/test_agent_graph.py) — planner / executor / analyst LangGraph nodes with a fake LLM
-- [`tests/integration/test_chat_flow.py`](https://github.com/ORNL/matsim-agents/blob/main/tests/integration/test_chat_flow.py) — `chat_once()` and `DiscoveryChatSession` with mocked exploration
+Covers the agent graph and chat flow with a fake LLM, the MCP client workflow,
+the active-learning dry run, and DFT warm-start drivers with mocked backends.
 
-Requires smoke tests to pass first.
+Requires smoke tests to pass first. The job installs `.[dev,mcp]`.
 
 ### Full test suite + coverage
 
 ```bash
-pytest tests/ -v --tb=short -m "not gpu" \
-  --cov=matsim_agents \
-  --cov-report=term-missing \
-  --cov-report=xml:coverage.xml \
-  -p no:warnings
+bash scripts/check.sh coverage
 ```
 
-Runs everything (smoke + integration + phase explorer + discovery + state/graph tests), skipping tests marked `@pytest.mark.gpu`.
+Runs every test except those marked `@pytest.mark.gpu`, with coverage, and fails
+if total coverage is below 80%. The job installs `.[dev,mcp]` and a CPU build of
+PyTorch for the MLIP regression tests.
 
 The `coverage.xml` artifact is uploaded and retained for 7 days.
 
-> **Note:** Tests that require `pymatgen` (e.g. `test_double_perovskite_detected`, `test_spinel_detected_for_AB2X4`) are decorated with `@requires_pymatgen` and automatically **skipped** on CI where pymatgen is not installed. They run normally on HPC environments where pymatgen is available.
+> **Note:** Tests that need an optional dependency are skipped only where that
+> dependency is missing. `pymatgen` is installed with the core `pyxtal`
+> dependency, so tests guarded by `@requires_pymatgen` run in CI.
 
 ### CI passed (gate job)
 
@@ -113,16 +115,18 @@ The `main` branch is protected by rules set in the repository settings (Settings
 
 ```bash
 cd matsim-agents
-pip install -e ".[dev]"
+pip install -e ".[dev,mcp]"
 pip install langchain-ollama langchain-openai langchain-anthropic
 ```
+
+`bash scripts/check.sh` runs the lint step and the non-GPU test suite in one
+command; `bash scripts/check.sh docs|lint|test|coverage` runs one stage.
 
 ### Run individual tiers
 
 ```bash
-# Lint
-ruff check src/ tests/
-ruff format --check src/ tests/
+# Lint, documentation, and deployment checks
+bash scripts/check.sh lint
 
 # Smoke tests only (fast, no weights)
 pytest tests/smoke/ -v
@@ -149,21 +153,19 @@ pytest tests/smoke/test_llm_providers.py -v -k "ollama"
 | Mark | Meaning |
 |---|---|
 | `@pytest.mark.gpu` | Requires a GPU; skipped in CI |
-| `@pytest.mark.skipif(not pymatgen_available, ...)` | Requires pymatgen; skipped when not installed |
+| `@pytest.mark.skipif(not <dependency>_available, ...)` | Requires an optional dependency; skipped when it is not installed |
 
 ---
 
-## Test inventory
+## Test layout
 
-| File | Tier | Count | Notes |
-|---|---|---|---|
-| `tests/smoke/test_llm_providers.py` | Smoke | 12 | LLM factory, all providers, CPU, mocked |
-| `tests/integration/test_agent_graph.py` | Integration | 12 | Planner/executor/analyst graph, fake LLM |
-| `tests/integration/test_chat_flow.py` | Integration | 9 | `chat_once()`, `DiscoveryChatSession`, mocked exploration |
-| `tests/test_seeds.py` | Full | — | Crystal-phase seed generation and ranking |
-| `tests/test_workflow_policies.py` | Full | — | Phase-exploration and workflow policy contracts |
-| `tests/test_discovery.py` | Full | — | Discovery wrapper |
-| `tests/test_state_and_graph.py` | Full | — | `MatSimState`, LangGraph wiring |
+| Location | Tier | Scope |
+|---|---|---|
+| `tests/smoke/` | Smoke | LLM provider factory, CPU only, mocked |
+| `tests/integration/` | Integration | Agent graph, chat flow, MCP client, active-learning dry run, and DFT warm-start drivers with fakes or mocks |
+| `tests/` | Full | Discovery, workflows, backends, documentation and deployment contracts |
+
+Run `pytest --collect-only -q` for the current test inventory.
 
 ---
 

@@ -12,8 +12,8 @@
 interatomic potentials, and ASE-based atomistic workflows into a single
 agentic loop. The user states a research objective in natural language;
 agents plan, run MLIP-driven simulations, score chemical and
-dynamical stability, and report the findings — with optional human
-review at every gate.
+dynamical stability, and report the findings. Chat asks before each
+exploration, and DFT execution and model promotion require explicit approval.
 
 The framework is **backend-agnostic**: HydraGNN, UMA, and the open MACE
 foundation-model families are selectable MLIP backends. The relaxation tool,
@@ -45,6 +45,7 @@ and scientific approvals remain explicit.
 Start with the [documentation index](docs/index.md), which is organized by task.
 Reference pages:
 
+- [Command-line guide](docs/guide/cli.md)
 - [Architecture and capabilities](docs/guide/architecture.md)
 - [Choosing a scientific workflow](docs/guide/workflows.md)
 - [Running on DOE supercomputers](docs/guide/hpc.md)
@@ -60,16 +61,42 @@ Reference pages:
 
 ## Installation
 
-HydraGNN is one of the supported MLIP backends, not a requirement for every
-workflow. The base package can be installed with `pip install -e .`; install
-the dependencies for the selected MLIP, LLM, or other optional integration
-separately. The following installers prepare HydraGNN and its PyTorch/PyTorch
-Geometric stack through HydraGNN's official scripts:
+matsim-agents requires Python 3.11–3.14.
 
 ```bash
-git clone git@code.ornl.gov:multi-agentic-ai-materials/matsim-agents.git
+git clone https://github.com/ORNL/matsim-agents.git
 cd matsim-agents
+```
 
+### Lightweight install (one MLIP, no HydraGNN)
+
+For a workstation or a first trial, install the package with one MLIP backend
+and one LLM provider:
+
+```bash
+python -m venv .venv-mace
+source .venv-mace/bin/activate
+pip install -e ".[mace,ollama]"
+matsim-agents doctor
+```
+
+| Extras | Purpose |
+|---|---|
+| `mace`, `uma`, `hydragnn` | MLIP backends. HydraGNN itself and its compiled PyTorch Geometric extensions are installed separately (below). |
+| `ollama`, `vllm`, `openai`, `anthropic`, `huggingface`, `mag`, `copilot` | LLM providers; see [LLM backends](docs/guide/llm-backends.md). |
+| `mcp` | Client for external MCP servers used by `matsim-agents run --mcp-config`. |
+| `dev` | Test, lint, and type-check tools. |
+
+MACE, UMA, and HydraGNN require mutually incompatible `e3nn` versions, so
+install each MLIP backend in its own environment. `matsim-agents doctor` reports
+which backends the active environment can use without loading a model.
+
+### HydraGNN and HPC installers
+
+The following installers prepare HydraGNN and its PyTorch/PyTorch Geometric
+stack through HydraGNN's official scripts:
+
+```bash
 # Local workstation (CPU or single GPU)
 ./scripts/setup_env.sh
 
@@ -84,24 +111,10 @@ called with `PLATFORM=frontier`, `PLATFORM=aurora`, or
 `PLATFORM=perlmutter`, it delegates immediately to the corresponding canonical
 facility `install.sh` above. Each facility installer runs HydraGNN's current
 official HPC installer first and leaves HydraGNN and matsim-agents in one
-verified environment.
+verified environment. Facility toolchains, including the Frontier ROCm version
+matrix, are described in [Running on DOE supercomputers](docs/guide/hpc.md).
 
-### ROCm version matrix on Frontier
-
-The three Frontier-targeted backends in this repo do **not** all use the
-same ROCm version. The combinations below are what is actually wired up
-in the scripts and what you should expect at runtime:
-
-| Backend | Module | Why this version |
-|---|---|---|
-| **HydraGNN Conda environment** | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; created by HydraGNN's installer at `matsim-agents/.venv/` |
-| **vLLM model server** | `rocm/7.2.0` | Isolated Python `venv` at `matsim-agents/.venv-vllm/`; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
-| **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
-
-QE and the Python/ML stacks are deliberately never co-loaded in the same
-shell; they couple through Slurm + the filesystem.
-
-Environment overrides accepted by the installer:
+Environment overrides accepted by the installers:
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -146,23 +159,24 @@ BOOTSTRAP_OLLAMA=1 OLLAMA_MODELS="qwen2.5:14b llama3.1:8b" \
 
 Every command that runs an MLIP takes `--mlip-config FILE`, a YAML file whose
 `mlip:` block selects the backend (`hydragnn`, `uma`, or `mace`) and its
-settings. `examples/mlip/` has ready-made files for UMA, MACE, and HydraGNN; an
-active-learning config works too. The examples below use a HydraGNN
-foundation model:
+settings. Start from a ready-made file in [examples/mlip/](examples/mlip/), for
+example the MACE-MP-0 model installed by the lightweight install above:
 
-```yaml
-# mlip.yaml (relative paths resolve against this file)
-mlip:
-  backend: hydragnn
-  logdir: ./multidataset_hpo-BEST6-fp64
-  mlp_checkpoint: ./mlp_branch_weights.pt
+```bash
+cp examples/mlip/mace-mp-medium.yaml mlip.yaml
+# Edit mlip.yaml: set device to cuda, xpu, or cpu for this machine.
 ```
+
+`examples/mlip/hydragnn-gfm.yaml` selects the HydraGNN foundation model from a
+HydraGNN checkout named by `HYDRAGNN_DIR`; `${VAR}` references and relative
+paths in the file are resolved when it is loaded. The fields of each backend's
+block are listed in the [configuration reference](docs/guide/configuration.md#mlip-selection).
 
 ### 1. Run the agent graph end-to-end
 
 ```bash
 matsim-agents run \
-  "Relax structures/mos2-B_Defect-Free_PBE.vasp and report the final energy." \
+  "Relax examples/characterization/structures/MgO-rocksalt.vasp and report the final energy." \
   --mlip-config mlip.yaml \
   --llm-provider ollama --llm-model qwen2.5:14b
 ```
@@ -177,23 +191,24 @@ matsim-agents chat \
   --n-random 50 --random-seed 0
 ```
 
-A typical session:
+A typical session (abridged; energies and paths are illustrative):
 
 ```
 you> I want a Pb-free halide double perovskite for photovoltaics with band gap near 1.5 eV.
 
 assistant> A promising candidate is Cs2AgBiBr6 ...
 
-Proposed composition detected: AgBiBr6Cs2. Run HydraGNN-based phase exploration? [y/N]: y
+Proposed composition detected: AgBiBr6Cs2. Run surrogate-based phase exploration? [y/N]: y
 
 >>> Exploring composition AgBiBr6Cs2
-  starting double_perovskite   .../AgBiBr6Cs2_double_perovskite.vasp
-  done    double_perovskite   E=-365.4123 eV  |F|max=0.0118 eV/Å  steps=112
+  starting  <prototype id>            .../AgBiBr6Cs2_<prototype id>.vasp
+  converged <prototype id>            E=-365.4123 eV  |F|max=0.0118 eV/Å  steps=112
+  ...
 
 Stability report for AgBiBr6Cs2:
-  Predicted ground state: AgBiBr6Cs2_double_perovskite_optimized_structure.vasp
-  E/atom = -9.1353 eV   |F|max = 0.012 eV/Å   dynamically_stable_proxy = True
-  Chemical-stability proxy: PASS
+Composition AgBiBr6Cs2: 52 candidate seed(s) relaxed (2 prototype + 50 random).
+Predicted ground state: .../AgBiBr6Cs2_<prototype id>_optimized_structure.vasp (E/atom = -9.1353 eV, |F|max = 0.0118 eV/Å, dynamically_stable_proxy = True, source = prototype, ...).
+Chemical-stability proxy: PASS.
 
 you> Now suggest a Sb-substituted variant.
 ```
@@ -243,7 +258,7 @@ matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
 matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
 matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
-matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MACE phase search
+matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MLIP phase search
 matsim-agents explore run CONFIG.yaml      # generate, select, relax, and rank MLIP-only batches
 matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reasons, and errors
 matsim-agents explore status RUN_DIRECTORY # last saved checkpoint progress; no scheduler query
@@ -259,12 +274,14 @@ matsim-agents workflow resume RUN_DIRECTORY [--native-run DIR] # native restart 
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
+matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents e1-development MANIFEST.json --output DIR [--max-new-requests N] [--retry-errors]  # run one candidate's E1 development questions; held-out questions are not accepted
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
+matsim-agents coordination init|add|claim|heartbeat|complete|fail ...  # manage tasks; see docs/hpc-task-coordination.md
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml [--mlip-config FILE]  # active-learning loop (MLIP <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
@@ -282,91 +299,11 @@ Exit codes are the same for every command: `0` success, `1` the command ran but
 the scientific work, a preflight check or a required backend failed, and `2` a
 usage or configuration error (bad option, unreadable or invalid file).
 
-Common options (all commands that run an MLIP):
-
-| Flag | Description |
-|---|---|
-| `--mlip-config FILE` | YAML with an `mlip:` block: `backend` plus that backend's settings. |
-| `--llm-provider {ollama,vllm,mag,copilot,openai,anthropic,huggingface}` | Chat backend; `mag` and `copilot` require an explicit model. Provider support varies by workflow; see the [LLM guide](docs/guide/llm-backends.md). |
-| `--llm-model NAME` | Provider-specific model identifier. |
-| `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
-
-The `mlip:` block is flat; each backend accepts only its own fields:
-
-| Backend | Fields |
-|---|---|
-| `hydragnn` | `logdir` (with `config.json` and checkpoint), `checkpoint`, `mlp_checkpoint` (BranchWeightMLP `.pt`), `inference_head`, `precision`, `mlp_precision`, `hydragnn_root`, `newhead_ft_config`, `ft_repo`, `radius`, `max_neighbours`, `charge`, `spin` |
-| `uma` | `model_name`, `task_name` (`omat`, `omol`, `oc20`, `odac`, `omc`), `precision`, `charge`, `spin`, `dropout` |
-| `mace` | `family`, `model`, `head`, `precision`, `dispersion`, `dropout` |
-| all | `device` (`cuda`, `cpu`, `xpu`), `ensemble_models` |
-
-HydraGNN uses fused 16-head inference by default, which requires
-`mlp_checkpoint`. To pin one head for MLIP inference, set `inference_head` in the
-`mlip:` block to a case-insensitive dataset name or its index, for example
-`inference_head: OMat24`. Pinned mode invokes only that decoder, does not require
-the branch MLP, and does not report branch-weight uncertainty. It preserves
-the loader's precision/autocast context, including `bf16`, during energy and
-force inference.
-
-| Index | Dataset | Index | Dataset |
-|---:|---|---:|---|
-| 0 | Alexandria | 8 | OMol25 |
-| 1 | ANI1x | 9 | OMol25-neutral |
-| 2 | MPTrj | 10 | OMol25-non-neutral |
-| 3 | OC2020 | 11 | OPoly2026 |
-| 4 | OC2022 | 12 | Nabla2DFT |
-| 5 | OC25 | 13 | QCML |
-| 6 | ODAC23 | 14 | QM7X |
-| 7 | OMat24 | 15 | transition1x |
-
-`chat`-specific:
-
-| Flag | Description |
-|---|---|
-| `--output-dir PATH` | Where discovery artifacts are written (default `./outputs`). |
-| `--ase-structure-optimizer {FIRE,BFGS,BFGSLineSearch}` | ASE optimizer for relaxations. |
-| `--maxiter INT` | Max relaxation steps per seed (default `200`). |
-| `--fmax FLOAT` | Stop relaxation when max residual force is below this (eV/Å, default `0.02`). |
-| `--n-random INT` | Target number of supplementary pyXtal structures per composition (default `50`), in addition to applicable AFLOW prototypes. Set to `0` to disable; fewer may be generated, and a missing pyXtal emits a warning and skips the pass. |
-| `--random-seed INT` | RNG seed for the pyXtal sampler (reproducibility). |
-| `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
-| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven escalation to active learning. |
-| `--al-config PATH` | Base AL YAML used when handoff is triggered. |
-| `--al-dry-run / --al-run` | Plan/report AL handoff only, or execute AL loop. |
-| `--uq-top-weight-threshold FLOAT` | Trigger handoff when mean top branch weight is below this value. |
-| `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when the low-confidence fraction exceeds this value. |
-| `--uq-min-relaxations-for-handoff INT` | Minimum number of relaxations before evaluating handoff policy. |
-| `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and handoff audit artifacts. |
-| `--resume ID_OR_PATH` | Continue a saved session (its id under `<output-dir>/chat/`, or its directory). |
-
-`run`-specific:
-
-| Flag | Description |
-|---|---|
-| `OBJECTIVE` | Natural-language task objective for planner/executor. |
-| `--max-iterations INT` | Maximum executor iterations before forcing analysis. |
-| `--mcp-config PATH` | Optional external MCP server configuration; see the [MCP guide](docs/mcp.md). |
-| `--mcp-audit-path PATH` | Override the MCP JSONL audit log location. |
-| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven AL escalation after run relaxations. |
-| `--al-config PATH` | Base AL YAML used when run-path handoff is triggered. |
-| `--al-dry-run / --al-run` | Plan/report run->AL handoff only, or execute AL loop. |
-| `--uq-top-weight-threshold FLOAT` | Trigger handoff when mean top branch weight is below this value. |
-| `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when low-confidence fraction exceeds this value. |
-| `--uq-min-relaxations-for-handoff INT` | Minimum relaxations before evaluating run-path handoff policy. |
-| `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and run->AL handoff audit artifacts. |
-
-`supervisor-run`-specific:
-
-| Flag | Description |
-|---|---|
-| `COMPOSITION` | Target composition for one supervisor pass (e.g. `Li2MnO3`). |
-| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven AL handoff policy. |
-| `--al-config PATH` | Base AL YAML used for optional handoff execution. |
-| `--al-dry-run / --al-run` | Dry-run handoff planning or real AL execution. |
-| `--uq-top-weight-threshold FLOAT` | UQ threshold on mean top branch weight. |
-| `--uq-min-unreliable-fraction FLOAT` | UQ threshold on low-confidence fraction. |
-| `--uq-min-relaxations-for-handoff INT` | Min relaxations required before handoff is considered. |
-| `--al-handoff-audit-path PATH` | Optional JSONL path for decision artifacts. |
+Options for `run`, `chat`, and `supervisor-run`, starter configurations,
+diagnostics, and package tools are described in the
+[command-line guide](docs/guide/cli.md). The fields of each backend's `mlip:`
+block, including HydraGNN decoder-head selection, are listed in the
+[configuration reference](docs/guide/configuration.md#mlip-selection).
 
 ---
 
@@ -400,11 +337,16 @@ matsim-agents/
 
 ## Contributing
 
-1. Fork and create a feature branch.
-2. `pip install -e .[dev]`
-3. `pytest` and `ruff check .` before pushing.
-4. Open a merge request on
-   [code.ornl.gov/multi-agentic-ai-materials/matsim-agents](https://code.ornl.gov/multi-agentic-ai-materials/matsim-agents).
+1. Fork the repository or create a feature branch.
+2. Install the development tools: `pip install -e ".[dev,mcp]"`.
+3. Run `bash scripts/check.sh` (lint, documentation and deployment checks, and
+   non-GPU tests) before pushing.
+4. Open a pull request against `main` on
+   [GitHub](https://github.com/ORNL/matsim-agents).
+
+The [contributing guide](.github/wiki/Contributing.md) covers code style, test
+tiers, and review rules; [CI/CD](.github/wiki/CI-CD.md) describes the required
+checks.
 
 ---
 

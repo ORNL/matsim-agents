@@ -1,12 +1,11 @@
 # Python API
 
-## Programmatic API
-
 Every entry point takes the MLIP as `mlip=`: a `HydraGNNConfig`, `UMAConfig`, or
 `MACEConfig` (from `matsim_agents.backends.mlip.config`), or an equivalent
 mapping with a `backend` key. `load_mlip_config(path)` reads the `mlip:` block of
 a YAML file such as `examples/mlip/uma-s-1p1-omat.yaml`, and
-`parse_mlip_config(mapping)` validates a mapping. The examples below use
+`parse_mlip_config(mapping)` validates a mapping. The examples below use a
+HydraGNN model; any of the three configurations works:
 
 ```python
 from matsim_agents.backends.mlip.config import HydraGNNConfig
@@ -23,7 +22,7 @@ mlip = HydraGNNConfig(
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
 result = relax_with_mlip(RelaxStructureInput(
-    structure_path="structures/mos2.vasp",
+    structure_path="examples/characterization/structures/MgO-rocksalt.vasp",
     mlip=mlip,
     optimizer="FIRE",
     maxiter=200,
@@ -55,8 +54,9 @@ result = explore_composition(
     random_seed=None,
 )
 
-# Novelty-heavy run for an exotic / high-entropy composition with no
-# AFLOW match — rely entirely on pyXtal.
+# Random-enriched run for an exotic / high-entropy composition. Matching
+# AFLOW prototypes are still included; with none, only pyXtal contributes.
+# Fewer than n_random structures may be generated.
 result = explore_composition(
     "FeCoNiCrMn",
     mlip=mlip,
@@ -76,7 +76,7 @@ from matsim_agents.orchestration.state import MatSimState
 graph = build_graph()
 final = graph.invoke(
     MatSimState(
-        objective="Relax structures/foo.vasp and summarize.",
+        objective="Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize.",
         llm_provider="ollama",
         llm_model="qwen2.5:14b",
     ),

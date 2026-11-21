@@ -1,6 +1,8 @@
-# HPC Platforms Documentation Index
+# HPC platforms index
 
-This page centralizes HPC-oriented documentation for matsim-agents.
+This page lists the build scripts, launchers, and guides for each facility and
+backend. For how the facilities are set up and why their software stacks are
+kept separate, start with [Running on DOE supercomputers](guide/hpc.md).
 
 For E4-B HydraGNN execution, use the
 [frozen-source cloning and installation requirement](hydragnn-frozen-source.md).
@@ -50,7 +52,27 @@ Highlights:
 - QE CMake GPU flags: `QE_GPU="openmp;oneapi"`, `QE_GPU_ARCHS=intel_gpu_pvc`
 - validated repository run with full install to `external/quantum-espresso/install-gpu/`
 
+### Perlmutter (NERSC, NVIDIA A100)
+
+- Guide: [docs/quantum-espresso-perlmutter.md](quantum-espresso-perlmutter.md)
+- Build scripts overview: [deployments/perlmutter/setup/QE-BUILD-GUIDE.md](../deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
+- Setup docs: [deployments/perlmutter/setup/README.md](../deployments/perlmutter/setup/README.md)
+- Launcher: [deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh](../deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh)
+
+Highlights:
+
+- NVIDIA-focused GPU build flow (A100/sm_80)
+- Frontier-style phased setup for reproducibility
+
 ## VASP by platform
+
+VASP installations, licensing, and runtime selection common to all platforms
+are described in [VASP installations and runtime](vasp-hpc-runtime.md).
+
+### Frontier (OLCF, AMD MI250X)
+
+- Build script: [deployments/frontier/setup/build-vasp-gpu-frontier.sh](../deployments/frontier/setup/build-vasp-gpu-frontier.sh)
+- Launchers: [deployments/frontier/launchers/run-vasp-gpu-frontier.sh](../deployments/frontier/launchers/run-vasp-gpu-frontier.sh) (standalone), [deployments/frontier/launchers/_vasp-step-frontier.sh](../deployments/frontier/launchers/_vasp-step-frontier.sh) (AL loop DFT step)
 
 ### Aurora (ALCF, Intel PVC)
 
@@ -75,18 +97,6 @@ Highlights:
 - OpenACC GPU port built with NVHPC 25.5 / CUDA 12.9, `cray-mpich/8.1.30`, netlib scaLAPACK
 - catalogues every runtime fix: NCCL P2P/SHM disable, CUDA-aware MPI, NVHPC `qd` libs, `--exclusive` multi-node dispatch, per-case `nodes_per_job`, and `resume`-state hygiene
 - explains how to verify a single-point SCF actually converged (`TOTEN` / `E0=` / `</modeling>`, not `reached required accuracy`)
-
-## Quantum Espresso on Perlmutter
-
-- Guide: [docs/quantum-espresso-perlmutter.md](quantum-espresso-perlmutter.md)
-- Build scripts overview: [deployments/perlmutter/setup/QE-BUILD-GUIDE.md](../deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
-- Setup docs: [deployments/perlmutter/setup/README.md](../deployments/perlmutter/setup/README.md)
-- Launcher: [deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh](../deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh)
-
-Highlights:
-
-- NVIDIA-focused GPU build flow (A100/sm_80)
-- Frontier-style phased setup for reproducibility
 
 ## vLLM inference serving by platform
 
@@ -124,4 +134,4 @@ See the Frontier vLLM smoke test: [deployments/frontier/smoke-tests/smoke-vllm-s
 - Building QE on your target machine: start with the platform QE guide above.
 - Running matsim-agents with local models on HPC: read
   [docs/model-download.md](model-download.md) first, then use your platform
-  setup scripts under `scripts/setup/<platform>/`.
+  setup scripts under `deployments/<platform>/setup/`.
