@@ -20,16 +20,18 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
         vs BAX₃). This recovers fcc/bcc/hcp/rocksalt/zincblende/
         wurtzite/fluorite/rutile/perovskite/spinel/Heusler/MAX/… from a
         single uniform source — no per-stoichiometry rules.
-     2. **pyXtal random search** (`--n-random N`). `N` random crystals
-        are drawn uniformly across the 230 space groups, respecting
-        Wyckoff multiplicities and minimum interatomic distances. Each
+     2. **pyXtal random search** (`--n-random N`). The generator targets
+        up to `N` unique random crystals, sampling space groups uniformly
+        across 1–230 and respecting Wyckoff multiplicities and minimum
+        interatomic distances. Failed attempts and deduplication can yield
+        fewer than `N` seeds. Each
         such seed is tagged `needs_dft_verification=True` and surfaced
         with a `(novel)` marker in the live table so it is treated as
         a candidate for follow-up DFT validation rather than a
         publishable claim. When the target composition has no AFLOW
         match (e.g. a 5-element high-entropy alloy), this is the only
         active source and `--n-random` should be raised accordingly.
-   - **relaxes** each seed with HydraGNN + ASE (FIRE/BFGS).
+   - **relaxes** each seed with the selected MLIP + ASE (FIRE/BFGS).
    - **scores** chemical stability (ΔE/atom ranking, near-degeneracy
      warning) and a dynamical-stability proxy (max residual force),
      keeping the `source` (`prototype` vs `random`) and AFLOW

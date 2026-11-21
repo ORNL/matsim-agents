@@ -134,9 +134,10 @@ flowchart TD
     enumerated (e.g. ABX₃ *vs* BAX₃). No hand-coded prototype tables.
   - **pyXtal random search** (`--n-random N`, novelty pass) — for
     compositions with no AFLOW match (high-entropy alloys, exotic
-    stoichiometries) or simply for novelty exploration, draws `N`
-    random crystals uniformly across the 230 space groups, respecting
-    Wyckoff multiplicities and minimum-distance constraints. Seeds
+    stoichiometries) or simply for novelty exploration, targets up to `N`
+    unique crystals while sampling the 230 space groups uniformly, respecting
+    Wyckoff multiplicities and minimum-distance constraints. Failed attempts
+    and deduplication can yield fewer than `N` seeds. Seeds
     from this path are tagged `needs_dft_verification=True` and called
     out as `(novel)` in the stability report so they get DFT-validated
     before any publication claim. pyXtal is a core dependency (installed
@@ -155,7 +156,8 @@ flowchart TD
   target offload, Aurora PVC via `oneapi`/`openmp`, Perlmutter A100 via
   CUDA). Build scripts and SLURM/PBS launchers are checked in for each
   site — see [Portability across DOE supercomputers](hpc.md#portability-across-doe-supercomputers).
-- **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
+- **Pluggable LLMs**: Ollama, vLLM, MAG, Copilot, OpenAI, Anthropic, and
+  Hugging Face via a single factory; MAG and Copilot require an explicit model.
 - **Active-learning loop** (`matsim-agents al run`): MLIP-driven MD
   generates candidates → ensemble / MC-dropout uncertainty selects the
   most informative → a DFT backend (**VASP 6.6** *or* **Quantum
@@ -202,12 +204,14 @@ restart-friendly HPC kernels for heavy computation.
 Four nodes share a typed `MatSimState`:
 
 - **planner** — turns the objective into a list of `TaskSpec` items
-  (kinds: `relax`, `analyze`, `report`). Uses the LLM with structured
+  (kinds: `relax`, `analyze`, `report`, `mcp_tool`, `mcp_resource`). Uses the LLM with structured
   output; falls back to a deterministic plan when the LLM is unavailable.
-- **executor** — pops the next task, dispatches the matching tool
-  (currently `relax_structure`), appends a `RelaxationResult` to the
-  state, increments `iteration`. Routed back to itself until the queue
-  drains or `max_iterations` is reached.
+- **executor** — pops the next task and runs an MLIP relaxation or an
+  authorized external MCP tool/resource request. It appends the corresponding
+  result to state and increments `iteration`; `analyze` and `report` tasks
+  currently require an MLIP selection and are then skipped without incrementing
+  `iteration`. It loops until the queue drains or `max_iterations`
+  is reached. See the [MCP guide](../mcp.md).
 - **uq_gate** — aggregates branch-weight confidence over relaxation
   results and applies policy thresholds. If low-confidence criteria are
   met and handoff is enabled, this node can launch active learning
@@ -246,7 +250,7 @@ before building a workflow on top of it.
   optional human-in-the-loop gates.
 - **Pluggable LLM backends**: vLLM (Frontier ROCm), Hugging Face
   Transformers, and OpenAI-compatible HTTP endpoints.
-- **Active-learning loop** with HydraGNN as the surrogate and either
+- **Active-learning loop** with HydraGNN, UMA, or MACE as the surrogate and either
   VASP 6.6 or Quantum ESPRESSO `pw.x` as the DFT labeller, selectable
   via a single `dft.backend:` YAML field. Includes ensemble /
   MC-dropout uncertainty scoring, in-allocation parallel DFT dispatch,
@@ -254,14 +258,16 @@ before building a workflow on top of it.
   `${VAR:-default}` substitution in all YAML configs.
 - **LLM-generated MD seeds** as a first-class seed source
   (`md.seed_source.kind: prompt`).
+- **Formation-energy reference sets and competing-phase hulls** using
+  declared, method-compatible references; incomplete sets produce provisional
+  results. Completeness checks do not establish scientific completeness or
+  validate the chosen references. See [reference hulls](../reference-hulls.md).
 
 ### Not yet implemented (roadmap)
 
 - [ ] **Phonon-based dynamical stability** (phonopy / finite differences).
-- [ ] **Formation-energy reference set** for *absolute* (not relative)
-      chemical-stability scoring.
-- [ ] **Richer phase enumeration** via pymatgen prototypes / CALYPSO /
-      USPEX hooks.
+- [ ] **Additional phase-enumeration sources** beyond the pymatgen AFLOW
+      prototypes and pyXtal, such as CALYPSO / USPEX hooks.
 - [ ] **Symmetry-aware ordering enumeration** via `enumlib` (today's
       enumerator is random-shuffle + `StructureMatcher` dedup).
 - [ ] **Anisotropic / per-axis lattice scans** (today's scan is
@@ -275,7 +281,7 @@ before building a workflow on top of it.
       agents) can call the discovery wrapper directly.
 - [ ] **Distributed executor** for parallel composition exploration on
       HPC.
-- [ ] **Pluggable MLFF backends** (MACE, NequIP, Orb) behind the same
+- [ ] **Additional MLFF backends** such as NequIP and Orb behind the same
       calculator interface.
 
 ---

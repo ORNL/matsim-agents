@@ -91,11 +91,17 @@ never appears in the parsed `ALConfig`.
 `md.seed_source.kind` selects how initial MD structures are obtained:
 
 - `paths` — a curated list of POSCAR / CIF / XYZ files on disk.
+- `compositions` — an explicit list of formulas expanded into prototype
+  seeds, with optional supplementary pyXtal seeds.
 - `prompt` — the LLM proposes plausible compositions for a target
   objective (e.g. *“Pb-free halide perovskites for PV”*) and the loop
   materialises seed structures by running the same crystal-prototype
   enumerator used by the discovery wrapper. No curated structure
   collection is required.
+
+For `compositions` and `prompt`, `max_phases_per_composition` caps
+prototype-derived seeds and `n_random` requests additional pyXtal seeds
+(default `0`); the generated count can be lower.
 
 ### Random seed
 

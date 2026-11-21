@@ -10,6 +10,8 @@
 | `plan` | `list[TaskSpec]` | Tasks emitted by the planner. |
 | `pending_tasks` | `list[TaskSpec]` | Queue consumed by the executor. |
 | `results` | `list[RelaxationResult]` | Accumulated tool outputs. |
+| `mcp_results` | `list[MCPCallRecord]` | Accumulated external MCP call records, separate from scientific results. |
+| `handoff_events` | `list[str]` | UQ-driven active-learning handoff events. |
 | `analysis` | `str \| None` | Final analyst summary. |
 | `iteration` / `max_iterations` | `int` | Executor loop guard. |
 | `llm_provider` / `llm_model` / `llm_base_url` | `str \| None` | LLM selection. |
@@ -18,16 +20,24 @@
 
 ```python
 TaskSpec(
-    kind="relax",                  # relax | analyze | report
+    kind="relax",                  # relax | analyze | report | mcp_tool | mcp_resource
     structure_path="foo.vasp",
     optimizer="FIRE",              # FIRE | BFGS | BFGSLineSearch
     maxiter=200,
     maxstep=1e-2,
-    charge=0.0,
-    spin=0.0,
+    charge=None,                   # None uses the selected MLIP's configuration
+    spin=None,
     random_displacement=False,
+    displacement_seed=None,        # required when random_displacement is enabled
 )
 ```
+
+MCP tool tasks require `mcp_server`, `mcp_tool`, and optionally
+`mcp_arguments`; resource tasks require `mcp_server` and `mcp_resource_uri`.
+They need no structure path or MLIP selection. See the [MCP guide](../mcp.md)
+for configuration, authorization, and result handling. The planner also
+accepts `analyze` and `report`, but the executor currently requires an MLIP
+selection and then skips those kinds.
 
 ### `RelaxStructureInput` / `RelaxationResult`
 

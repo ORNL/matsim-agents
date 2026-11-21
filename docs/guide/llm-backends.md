@@ -21,6 +21,11 @@ For Genesis Mission hosted models through the Model Access Gateway, see the
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
 | **`huggingface`** | `pip install matsim-agents[huggingface]` | `Qwen/Qwen2.5-72B-Instruct` | Direct HF Transformers + Accelerate; no server needed. Ideal as fallback on HPC when vLLM is unavailable. Set `MATSIM_HF_MODEL_PATH` to a local model directory. |
 
+Provider support can vary by workflow: active-learning prompt seed configuration
+currently accepts only `ollama`, `vllm`, `openai`, `anthropic`, and
+`huggingface`. The generated [capability matrix](../capabilities.md) lists
+providers with registered defaults, so it does not list `mag` or `copilot`.
+
 ### Downloading models for vLLM
 
 For the vLLM backend you need to download the model weights locally before

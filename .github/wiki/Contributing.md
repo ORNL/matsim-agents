@@ -104,23 +104,26 @@ stable package responsibilities and link to focused guides instead.
 
 ### Optional-dependency tests
 
-If your test requires an optional dependency (e.g. `pymatgen`), guard it with:
+If your test requires an optional dependency (e.g. `mcp`), guard it with:
 
 ```python
 import importlib.util
 import pytest
 
-pymatgen_available = importlib.util.find_spec("pymatgen") is not None
-requires_pymatgen = pytest.mark.skipif(
-    not pymatgen_available, reason="pymatgen not installed"
+mcp_available = importlib.util.find_spec("mcp") is not None
+requires_mcp = pytest.mark.skipif(
+    not mcp_available, reason="mcp not installed"
 )
 
-@requires_pymatgen
+@requires_mcp
 def test_my_feature():
     ...
 ```
 
-Tests guarded this way are **skipped** on CI (where pymatgen is not installed) and run normally on HPC environments.
+Tests guarded this way run wherever the dependency is installed and otherwise
+skip. CI explicitly installs the `mcp` extra in its integration and full-suite
+jobs, but not the smoke job. `pymatgen` is installed as a dependency of core `pyxtal`,
+so it is not an example of a dependency generally absent from CI.
 
 ### GPU tests
 
