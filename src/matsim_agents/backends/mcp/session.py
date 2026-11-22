@@ -63,10 +63,15 @@ _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
 def _schema_errors(errors: list[Any], secrets: tuple[str, ...]) -> str:
     """Describe schema violations by location and rule, never by the offending value,
     so a credential passed in the wrong field is not echoed into records."""
+    # The rule is JSON-encoded, which escapes quotes, backslashes and (by default)
+    # non-ASCII characters, so scrub the encoded forms of each secret as well.
+    encoded = {json.dumps(secret, ensure_ascii=False)[1:-1] for secret in secrets}
+    encoded |= {json.dumps(secret)[1:-1] for secret in secrets}
+    forms = sorted(set(secrets) | encoded, key=len, reverse=True)
     parts = []
     for error in sorted(errors, key=lambda e: [str(part) for part in e.path]):
         location = "/".join(map(str, error.path)) or "<arguments>"
-        rule = scrub_text(json.dumps(error.validator_value, default=str), secrets)
+        rule = scrub_text(json.dumps(error.validator_value, default=str), forms)
         parts.append(f"{location}: violates {error.validator} {truncate(rule, 200)}")
     return "; ".join(parts)
 
@@ -132,7 +137,15 @@ class MCPSessionManager:
         self._thread.start()
         servers = self.config.enabled_servers()
         wait = max((s.connect_timeout_s for s in servers), default=0.0) + _SHUTDOWN_GRACE_S
-        if not self._ready.wait(wait):
+        try:
+            settled = self._ready.wait(wait)
+        except BaseException:
+            # Interrupted (e.g. Ctrl-C) while servers were connecting: the caller
+            # never gets the manager, so close it here, then let the interrupt through.
+            with contextlib.suppress(RuntimeError):
+                self.close()
+            raise
+        if not settled:
             self.close()
             raise RuntimeError("MCP connections did not settle within the connect timeout")
         if self._startup_error is not None:
@@ -323,6 +336,10 @@ class MCPSessionManager:
         settled.set()
         while (item := await queue.get()) is not None:
             op, future = item
+            # False when the caller gave up while the request waited in the queue:
+            # it already recorded a timeout, so the request must not be sent.
+            if not future.set_running_or_notify_cancel():
+                continue
             try:
                 record = await op(session)
             except BaseException:
@@ -447,7 +464,14 @@ class MCPSessionManager:
             self._loop.call_soon_threadsafe(enqueue)
         except RuntimeError as exc:
             raise MCPUnavailableError("the MCP session manager is not running") from exc
-        return future.result(timeout=timeout)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            if future.cancel():  # still queued: withdrawn, it will never be sent
+                raise
+            # Already running: its own call_timeout_s deadline ends it, so report
+            # what actually happened rather than a timeout.
+            return future.result(timeout=_SHUTDOWN_GRACE_S)
 
     def _base(self, kind: str, server: str, started: str, decision: AuthorizationDecision, **kw):
         return {

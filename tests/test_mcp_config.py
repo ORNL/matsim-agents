@@ -315,3 +315,46 @@ def test_audit_log_scrubs_secrets_and_omits_content(tmp_path):
     assert entry["authorization_reason"].startswith("tool is allowlisted")
     assert "content" not in entry
     assert entry["content_chars"] == len("output mentioning s3cret-value")
+
+
+# ── Copilot review follow-ups ─────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # No "@", so urlsplit reads the credential as a port and the old check
+        # accepted it; the HTTP client then echoed "Invalid port: '<secret>'".
+        "http://admin:hunter2pw/mcp",
+        "http://[::1]:hunter2pw/mcp",
+        "http://admin:hunter2pw@[::1/mcp",
+        "http://host/mcp\nhunter2pw",
+        "http://host/ hunter2pw",
+        "http:///hunter2pw",
+    ],
+)
+def test_malformed_urls_are_rejected_without_echoing_them(url, tmp_path):
+    server = {"name": "h", "transport": "streamable_http", "url": url}
+    with pytest.raises(ValueError) as parsed:
+        parse_mcp_config({"servers": [server]})
+    assert "hunter2pw" not in str(parsed.value)
+    path = tmp_path / "mcp.yaml"
+    path.write_text(json.dumps({"mcp": {"servers": [server]}}))
+    with pytest.raises(ValueError) as loaded:
+        load_mcp_config(path)
+    assert "hunter2pw" not in str(loaded.value)
+    assert "url is malformed" in str(loaded.value) or "credentials" in str(loaded.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:8765/mcp",
+        "https://mcp.example.org/mcp",
+        "http://[::1]:8080/mcp",
+        "http://localhost/mcp?x=1",
+    ],
+)
+def test_well_formed_urls_are_still_accepted(url):
+    server = {"name": "h", "transport": "streamable_http", "url": url}
+    assert parse_mcp_config({"servers": [server]}).servers[0].url == url

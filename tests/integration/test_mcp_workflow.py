@@ -956,3 +956,85 @@ def test_connect_timeout_bounds_a_stalled_transport_opening(manager_factory, mon
     assert manager.call_tool("stalled", "whoami", {}).outcome == "denied"
     connect = next(e for e in _audit(tmp_path) if e["event"] == "connect")
     assert (connect["server"], connect["outcome"]) == ("stalled", "timeout")
+
+
+# ── Copilot review follow-ups ─────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("secret", ['pa"ss-word-1', "back\\slash-sec", "pässwörd-xyz"])
+def test_schema_errors_scrub_json_escaped_secrets(secret):
+    """A schema value is JSON-encoded before scrubbing; escaping must not hide a secret."""
+    import jsonschema
+
+    from matsim_agents.backends.mcp.session import _schema_errors
+
+    schema = {"type": "object", "properties": {"x": {"enum": [secret, "other"]}}}
+    errors = list(jsonschema.Draft202012Validator(schema).iter_errors({"x": "nope"}))
+    described = _schema_errors(errors, (secret,))
+    for form in (secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]):
+        assert form not in described
+    assert REDACTED in described
+    assert "x: violates enum" in described
+
+
+def test_a_queued_call_past_its_deadline_is_never_sent(manager_factory, monkeypatch, tmp_path):
+    """A caller that gave up (and recorded a timeout) must not have its call run later."""
+    import matsim_agents.backends.mcp.session as session_module
+
+    manager = manager_factory(_stdio("a", allowed_tools=["touch", "whoami"], call_timeout_s=0.5))
+    gate = threading.Event()
+
+    async def occupy_queue(session):  # holds the server's queue, like a long tool call
+        import anyio
+
+        await anyio.to_thread.run_sync(gate.wait)
+        return None
+
+    blocker = threading.Thread(target=lambda: manager._submit("a", occupy_queue, 30))
+    blocker.start()
+    marker = tmp_path / "late-call"
+    with monkeypatch.context() as patch:
+        patch.setattr(session_module, "_SHUTDOWN_GRACE_S", 0.0)  # caller waits call_timeout_s
+        expired = manager.call_tool("a", "touch", {"path": str(marker)})
+    assert expired.outcome == "timeout"
+    gate.set()
+    blocker.join(10)
+    # Anything still queued for "a" has run once this later call returns.
+    assert manager.call_tool("a", "whoami", {}).content == ["a"]
+    assert not marker.exists(), "the expired call was sent to the server after its deadline"
+
+
+def test_interrupted_startup_closes_connections_and_server_processes(tmp_path):
+    """An interrupt (Ctrl-C) while start() waits must not leave servers running."""
+    pid_file = tmp_path / "pid"
+    # A long connect timeout, so only close() (not the timeout) can stop the server.
+    config = MCPConfig(
+        servers=[_stdio("a", "--hang", "--pid-file", str(pid_file), connect_timeout_s=60)]
+    )
+    manager = MCPSessionManager(config, audit=MCPAuditLog(tmp_path / "audit.jsonl"))
+    real_ready = manager._ready
+
+    class InterruptedWait:
+        def wait(self, timeout=None):
+            deadline = time.monotonic() + 10
+            while not pid_file.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            raise KeyboardInterrupt
+
+        def set(self):
+            real_ready.set()
+
+    manager._ready = InterruptedWait()
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            manager.start()
+        pid = int(pid_file.read_text())
+        deadline = time.monotonic() + 8
+        while not _pid_gone(pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert _pid_gone(pid), "the server process outlived the interrupted start()"
+        assert not manager._thread.is_alive()
+        assert _audit(tmp_path)[-1]["event"] == "shutdown"
+    finally:
+        if pid_file.exists() and not _pid_gone(int(pid_file.read_text())):
+            os.kill(int(pid_file.read_text()), 9)
