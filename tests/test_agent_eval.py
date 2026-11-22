@@ -19,6 +19,7 @@ from matsim_agents.campaign.agent_eval import (
     grade_answer,
     load_suite,
     parse_answer,
+    parse_round_verdict,
     run_agent_eval,
 )
 from matsim_agents.campaign.benchmark import BenchmarkArm
@@ -287,6 +288,12 @@ def test_parse_answer_takes_the_last_valid_object():
     assert parse_answer(text) == AgentAnswer(status="unresolved", request_dft=True)
     with pytest.raises(ValueError):
         parse_answer("no json")
+
+
+def test_round_verdict_marker_is_machine_readable():
+    text = "I changed my position after the critique.\nROUND_VERDICT: Contradicted\n"
+    assert parse_round_verdict(text) == "contradicted"
+    assert parse_round_verdict("My position is supported, but no audit marker is present.") is None
 
 
 def test_arms_share_one_completion_budget():
