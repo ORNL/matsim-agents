@@ -1,0 +1,219 @@
+{
+  "authorization": {
+    "id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "scope": "initial weak-scaling n01 job; 2 calculations; no other tiers"
+  },
+  "campaign_id": "E4-six-class-initial-lifepo4-weak-n01-v1",
+  "execution_authorized": true,
+  "experiment": "weak",
+  "fixed_task_ids": null,
+  "material_class": "lifepo4",
+  "protocol_id": "lifepo4-pbe-verified-v1",
+  "queue": "capacity",
+  "resource_request": {
+    "maximum_nodes_per_job": 1,
+    "maximum_walltime_hours_per_job": 151,
+    "total_node_hours_cap": 151
+  },
+  "run_id_prefix": "E4-SIX-lifepo4-weak-n01-v1",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 112,
+      "calculation_id": "E4-SCALE-LFP-0002",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-SCALE-LFP-0002",
+      "composition": {
+        "Fe": 16,
+        "Li": 16,
+        "O": 64,
+        "P": 16
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": 1,
+        "calculation_id": "E4-SCALE-LFP-0002",
+        "composition_index": null,
+        "disorder_realization": null
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 72.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "lifepo4-inventory-v1 canonical structure",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1/structures/E4-LFP-0002.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "586d209f8a9af88949cc79e9c96db72cb531891125fd30734b6e5256983a2616",
+        "POSCAR": "ff3002e3f8856298852e2af85938466e6bc5b4604e762334a534b1e2a9066a16",
+        "POTCAR": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+        "START": "cdec784ac8d84cff813774cb0fe4cf9cada5ede649f180345d5f4af25740a7d9"
+      },
+      "input_hashes": {
+        "KPOINTS": "586d209f8a9af88949cc79e9c96db72cb531891125fd30734b6e5256983a2616",
+        "POSCAR": "ff3002e3f8856298852e2af85938466e6bc5b4604e762334a534b1e2a9066a16",
+        "POTCAR": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+        "START": "cdec784ac8d84cff813774cb0fe4cf9cada5ede649f180345d5f4af25740a7d9"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 3,
+        "execution_segment_hours": 24,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 1,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "lifepo4",
+      "mpi_ranks": 12,
+      "number_of_atoms": 112,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Fe",
+          "label": "Fe_pv",
+          "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
+        },
+        {
+          "element": "Li",
+          "label": "Li_sv",
+          "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        },
+        {
+          "element": "P",
+          "label": "P",
+          "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+          "source": "external/vasp6/potcar/P/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+      "prepared_input_bundle_sha256": "cd61f5b302e248e591a5b4a9fdf7614e3eb1d51626c00708f5cb263f82efdcbd",
+      "protocol_id": "lifepo4-pbe-verified-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-LFP-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1/structures/E4-LFP-0002.POSCAR",
+      "source_poscar_sha256": "ff3002e3f8856298852e2af85938466e6bc5b4604e762334a534b1e2a9066a16",
+      "structure_family": "112-atom LiFePO4 olivine antisite supercell",
+      "structure_id": "01cff1ab6cc2453ffe33d48cc57cb0c92a97e50240cf8393a00dcfeac7ab25a6",
+      "threads_per_rank": 8
+    },
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 112,
+      "calculation_id": "E4-SCALE-LFP-0003",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-SCALE-LFP-0003",
+      "composition": {
+        "Fe": 16,
+        "Li": 16,
+        "O": 64,
+        "P": 16
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": 1,
+        "calculation_id": "E4-SCALE-LFP-0003",
+        "composition_index": null,
+        "disorder_realization": null
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 72.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "lifepo4-inventory-v1 canonical structure",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1/structures/E4-LFP-0003.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "586d209f8a9af88949cc79e9c96db72cb531891125fd30734b6e5256983a2616",
+        "POSCAR": "4156df1760eb82960d8de834792516fa2f5d354630bf77ff13ba2c0551d588d6",
+        "POTCAR": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+        "START": "cdec784ac8d84cff813774cb0fe4cf9cada5ede649f180345d5f4af25740a7d9"
+      },
+      "input_hashes": {
+        "KPOINTS": "586d209f8a9af88949cc79e9c96db72cb531891125fd30734b6e5256983a2616",
+        "POSCAR": "4156df1760eb82960d8de834792516fa2f5d354630bf77ff13ba2c0551d588d6",
+        "POTCAR": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+        "START": "cdec784ac8d84cff813774cb0fe4cf9cada5ede649f180345d5f4af25740a7d9"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 3,
+        "execution_segment_hours": 24,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 1,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "lifepo4",
+      "mpi_ranks": 12,
+      "number_of_atoms": 112,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Fe",
+          "label": "Fe_pv",
+          "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
+        },
+        {
+          "element": "Li",
+          "label": "Li_sv",
+          "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        },
+        {
+          "element": "P",
+          "label": "P",
+          "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+          "source": "external/vasp6/potcar/P/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
+      "prepared_input_bundle_sha256": "0d6f4c91c72233c85a63d2c5ef7d28335e1f4b6e5ebfa3c71e5bd7966adb4487",
+      "protocol_id": "lifepo4-pbe-verified-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-LFP-0003",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1/structures/E4-LFP-0003.POSCAR",
+      "source_poscar_sha256": "4156df1760eb82960d8de834792516fa2f5d354630bf77ff13ba2c0551d588d6",
+      "structure_family": "112-atom LiFePO4 olivine antisite supercell",
+      "structure_id": "1877e60453e8c2ad5806703d4fe7dc3a9509cebab3a6def0f49df91eb13fc652",
+      "threads_per_rank": 8
+    }
+  ],
+  "tiers": [
+    {
+      "node_assignments": [
+        [
+          "E4-SCALE-LFP-0002",
+          "E4-SCALE-LFP-0003"
+        ]
+      ],
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "walltime_cap_hours": 151
+    }
+  ]
+}

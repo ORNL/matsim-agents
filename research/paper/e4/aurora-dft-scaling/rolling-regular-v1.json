@@ -1,0 +1,585 @@
+{
+  "allocation": "HydraGNN",
+  "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+  "available_node_hours_snapshot": 36465,
+  "combined_reserved_node_hours": 34685,
+  "execution_authorized": true,
+  "existing_inflight_node_hours_reserved": 386,
+  "jobs": [
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9069490.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "bcc_refractory-weak-n01",
+      "job_name": "e4r-bcc-w1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-weak-n01.json",
+      "manifest_sha256": "5e038e444056bf2e4011b0f553f7cb5d24f9d41185832ab42e8bbf2e3f144483",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 49,
+      "nodes": 1,
+      "run_id_prefix": "E4-ROLL-bcc_refractory-weak-n01-v1",
+      "walltime_hours": 49
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-weak-n01"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "bcc_refractory-weak-n02",
+      "job_name": "e4r-bcc-w2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-weak-n02.json",
+      "manifest_sha256": "e9684b71149e2ebad22896a208a1e845793c7a90fbe10ddf19337a141f68311e",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 98,
+      "nodes": 2,
+      "run_id_prefix": "E4-ROLL-bcc_refractory-weak-n02-v1",
+      "walltime_hours": 49
+    },
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9090503.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "fcc_hea-weak-n02",
+      "job_name": "e4r-fcc-w2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-weak-n02.json",
+      "manifest_sha256": "ec0eebb772f22dc3b98f20d7afbf1978c0cdc6ca0da5e9664d32bc8964a668f1",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 202,
+      "nodes": 2,
+      "run_id_prefix": "E4-ROLL-fcc_hea-weak-n02-v1",
+      "walltime_hours": 101
+    },
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9092466.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "lifepo4-weak-n02",
+      "job_name": "e4r-lfp-w2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-weak-n02.json",
+      "manifest_sha256": "0de033fed987e31bd702d79ad415c3a28a2b982ee80ecd7343c674b28f6d1f19",
+      "material_class": "lifepo4",
+      "node_hours_cap": 302,
+      "nodes": 2,
+      "run_id_prefix": "E4-ROLL-lifepo4-weak-n02-v1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-weak-n02"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "bcc_refractory-weak-n04",
+      "job_name": "e4r-bcc-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-weak-n04.json",
+      "manifest_sha256": "2e5f653137e72f475ef0ef114ced72a6f998bc4c34ecc80a419dca527d06a48f",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 196,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-bcc_refractory-weak-n04-v1",
+      "walltime_hours": 49
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-weak-n02"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "fcc_hea-weak-n04",
+      "job_name": "e4r-fcc-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-weak-n04.json",
+      "manifest_sha256": "380c0248825d1dd9bec71e340a82117e02d88900d17f885392f1d40df46857f8",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 404,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-fcc_hea-weak-n04-v1",
+      "walltime_hours": 101
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-weak-n02"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "lifepo4-weak-n04",
+      "job_name": "e4r-lfp-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-weak-n04.json",
+      "manifest_sha256": "4a71c0786597344b29846d26a4595daa0f19a82f208ad66198d1203e21028e0d",
+      "material_class": "lifepo4",
+      "node_hours_cap": 604,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-lifepo4-weak-n04-v1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9092467.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "phosphorene-weak-n04",
+      "job_name": "e4r-phos-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/phosphorene-weak-n04.json",
+      "manifest_sha256": "79e5fb55c2a371876a394592251471050c8e581b46cb83e09429109a647d3820",
+      "material_class": "phosphorene",
+      "node_hours_cap": 100,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-phosphorene-weak-n04-v1",
+      "walltime_hours": 25
+    },
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9092468.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "zn_formate_mof-weak-n04",
+      "job_name": "e4r-zn-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/zn_formate_mof-weak-n04.json",
+      "manifest_sha256": "b048c8ace3d33a89fc881b09fdba19df1ad6b93d8d90c30ccf4bfb934153fbb2",
+      "material_class": "zn_formate_mof",
+      "node_hours_cap": 84,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-zn_formate_mof-weak-n04-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [],
+      "after_pbs_job_ids": [
+        "9092469.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+      ],
+      "experiment": "weak",
+      "job_key": "nb_ta_o-weak-n04",
+      "job_name": "e4r-nb-w4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/nb_ta_o-weak-n04.json",
+      "manifest_sha256": "1d6cb3bbd3d9c6cfce7c6362efcd8496d02796d012f56167700baf360c4cbb7b",
+      "material_class": "nb_ta_o",
+      "node_hours_cap": 84,
+      "nodes": 4,
+      "run_id_prefix": "E4-ROLL-nb_ta_o-weak-n04-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "bcc_refractory-weak-n08",
+      "job_name": "e4r-bcc-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-weak-n08.json",
+      "manifest_sha256": "44121353f7b25661523e615f452ae10c2b525f5aa43aabb12224dbe3ff4716b4",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 392,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-bcc_refractory-weak-n08-v1",
+      "walltime_hours": 49
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "fcc_hea-weak-n08",
+      "job_name": "e4r-fcc-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-weak-n08.json",
+      "manifest_sha256": "122886e9ba3c22cc00e6728cbf08575d265a0132f5e03f5f645503fcc7814d6f",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 808,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-fcc_hea-weak-n08-v1",
+      "walltime_hours": 101
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "lifepo4-weak-n08",
+      "job_name": "e4r-lfp-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-weak-n08.json",
+      "manifest_sha256": "2e89320bbbd605f388a63aa27726371b901cac0c5094c72ded7f9bedcc32da4e",
+      "material_class": "lifepo4",
+      "node_hours_cap": 1208,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-lifepo4-weak-n08-v1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "phosphorene-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "phosphorene-weak-n08",
+      "job_name": "e4r-phos-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/phosphorene-weak-n08.json",
+      "manifest_sha256": "4f76e06f6ed351b1a626e450b90430b78cd19e4d05b0dc847c4ae5509297e43a",
+      "material_class": "phosphorene",
+      "node_hours_cap": 200,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-phosphorene-weak-n08-v1",
+      "walltime_hours": 25
+    },
+    {
+      "after_job_keys": [
+        "zn_formate_mof-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "zn_formate_mof-weak-n08",
+      "job_name": "e4r-zn-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/zn_formate_mof-weak-n08.json",
+      "manifest_sha256": "e740dadcccb7f2925a6f461819705b9003f495b5fa40bc2e8df12769c12d673c",
+      "material_class": "zn_formate_mof",
+      "node_hours_cap": 168,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-zn_formate_mof-weak-n08-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [
+        "nb_ta_o-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "nb_ta_o-weak-n08",
+      "job_name": "e4r-nb-w8",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/nb_ta_o-weak-n08.json",
+      "manifest_sha256": "82f5b2ced887172884e8fe2f0fca5cbead994936ae551ca8562ae1bd8e614805",
+      "material_class": "nb_ta_o",
+      "node_hours_cap": 168,
+      "nodes": 8,
+      "run_id_prefix": "E4-ROLL-nb_ta_o-weak-n08-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "bcc_refractory-weak-n16",
+      "job_name": "e4r-bcc-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-weak-n16.json",
+      "manifest_sha256": "a7023d45c27622828a6d51a57ace026e09092842959e8008dc5d71e66ac18994",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 784,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-bcc_refractory-weak-n16-v1",
+      "walltime_hours": 49
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "fcc_hea-weak-n16",
+      "job_name": "e4r-fcc-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-weak-n16.json",
+      "manifest_sha256": "42c2a3a7630aa0f368d31f6b6539e6bf5f61bec9aa5c72acaaa4454b59da7994",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 1616,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-fcc_hea-weak-n16-v1",
+      "walltime_hours": 101
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "lifepo4-weak-n16",
+      "job_name": "e4r-lfp-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-weak-n16.json",
+      "manifest_sha256": "b179d84f4c0819df1cb48c026b1e98e90622f21dd1525d1f47452111eb2b2eed",
+      "material_class": "lifepo4",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-lifepo4-weak-n16-v1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "phosphorene-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "phosphorene-weak-n16",
+      "job_name": "e4r-phos-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/phosphorene-weak-n16.json",
+      "manifest_sha256": "6962dbd1b1a7a14ff847fb2926bb9677cf400e1265ce92582d0da6e1af46404a",
+      "material_class": "phosphorene",
+      "node_hours_cap": 400,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-phosphorene-weak-n16-v1",
+      "walltime_hours": 25
+    },
+    {
+      "after_job_keys": [
+        "zn_formate_mof-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "zn_formate_mof-weak-n16",
+      "job_name": "e4r-zn-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/zn_formate_mof-weak-n16.json",
+      "manifest_sha256": "a628bc7aaeedc9a97a2aee01c3103639465f7b32feb4b4769e3a0200846dacf9",
+      "material_class": "zn_formate_mof",
+      "node_hours_cap": 336,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-zn_formate_mof-weak-n16-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [
+        "nb_ta_o-weak-n08"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "weak",
+      "job_key": "nb_ta_o-weak-n16",
+      "job_name": "e4r-nb-w16",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/nb_ta_o-weak-n16.json",
+      "manifest_sha256": "31ea68397edb7d9b176c7db147d80fc5a269ad29201203f9e62a99579c9466fe",
+      "material_class": "nb_ta_o",
+      "node_hours_cap": 336,
+      "nodes": 16,
+      "run_id_prefix": "E4-ROLL-nb_ta_o-weak-n16-v1",
+      "walltime_hours": 21
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "bcc_refractory-strong-n16-segment-1",
+      "job_name": "e4r-bcc-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-strong-n16-segment-1.json",
+      "manifest_sha256": "d1d4de23c9ba42c791c4e50fad8bbdf3b87b8283f6c2a7a84a310032c0b2b172",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 2688,
+      "nodes": 16,
+      "run_id": "E4-ROLL-bcc_refractory-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-bcc_refractory-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 168
+    },
+    {
+      "after_job_keys": [
+        "bcc_refractory-strong-n16-segment-1"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "bcc_refractory-strong-n16-segment-2",
+      "job_name": "e4r-bcc-s16-2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/bcc_refractory-strong-n16-segment-2.json",
+      "manifest_sha256": "26212c1c5fb271a9b819d8e6b4c81f25ba07ee7ced67eb370bc9d39b1d8661ed",
+      "material_class": "bcc_refractory",
+      "node_hours_cap": 400,
+      "nodes": 16,
+      "run_id": "E4-ROLL-bcc_refractory-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-bcc_refractory-strong-n16-v1",
+      "segment_id": "segment-2",
+      "walltime_hours": 25
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "fcc_hea-strong-n16-segment-1",
+      "job_name": "e4r-fcc-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-strong-n16-segment-1.json",
+      "manifest_sha256": "d05da64702ba1c5072d32c536cba1e721a5c599828dcf905d44161f11f8c08e7",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-fcc_hea-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-fcc_hea-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-strong-n16-segment-1"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "fcc_hea-strong-n16-segment-2",
+      "job_name": "e4r-fcc-s16-2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-strong-n16-segment-2.json",
+      "manifest_sha256": "d05da64702ba1c5072d32c536cba1e721a5c599828dcf905d44161f11f8c08e7",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-fcc_hea-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-fcc_hea-strong-n16-v1",
+      "segment_id": "segment-2",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "fcc_hea-strong-n16-segment-2"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "fcc_hea-strong-n16-segment-3",
+      "job_name": "e4r-fcc-s16-3",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/fcc_hea-strong-n16-segment-3.json",
+      "manifest_sha256": "98d7cfd0ffa0aba866c80342d61191cbfde7a13bbc667a95b8e9edecd8cd2a69",
+      "material_class": "fcc_hea",
+      "node_hours_cap": 1616,
+      "nodes": 16,
+      "run_id": "E4-ROLL-fcc_hea-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-fcc_hea-strong-n16-v1",
+      "segment_id": "segment-3",
+      "walltime_hours": 101
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "lifepo4-strong-n16-segment-1",
+      "job_name": "e4r-lfp-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-strong-n16-segment-1.json",
+      "manifest_sha256": "3c8d7e3d000764d01a4e7f3f23ca20e5a8fef08fa53d911d3ef99c8781cbb4bb",
+      "material_class": "lifepo4",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-lifepo4-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-lifepo4-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-strong-n16-segment-1"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "lifepo4-strong-n16-segment-2",
+      "job_name": "e4r-lfp-s16-2",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-strong-n16-segment-2.json",
+      "manifest_sha256": "3c8d7e3d000764d01a4e7f3f23ca20e5a8fef08fa53d911d3ef99c8781cbb4bb",
+      "material_class": "lifepo4",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-lifepo4-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-lifepo4-strong-n16-v1",
+      "segment_id": "segment-2",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-strong-n16-segment-2"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "lifepo4-strong-n16-segment-3",
+      "job_name": "e4r-lfp-s16-3",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-strong-n16-segment-3.json",
+      "manifest_sha256": "3c8d7e3d000764d01a4e7f3f23ca20e5a8fef08fa53d911d3ef99c8781cbb4bb",
+      "material_class": "lifepo4",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-lifepo4-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-lifepo4-strong-n16-v1",
+      "segment_id": "segment-3",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "lifepo4-strong-n16-segment-3"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "lifepo4-strong-n16-segment-4",
+      "job_name": "e4r-lfp-s16-4",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/lifepo4-strong-n16-segment-4.json",
+      "manifest_sha256": "3c8d7e3d000764d01a4e7f3f23ca20e5a8fef08fa53d911d3ef99c8781cbb4bb",
+      "material_class": "lifepo4",
+      "node_hours_cap": 2416,
+      "nodes": 16,
+      "run_id": "E4-ROLL-lifepo4-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-lifepo4-strong-n16-v1",
+      "segment_id": "segment-4",
+      "walltime_hours": 151
+    },
+    {
+      "after_job_keys": [
+        "phosphorene-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "phosphorene-strong-n16-segment-1",
+      "job_name": "e4r-phos-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/phosphorene-strong-n16-segment-1.json",
+      "manifest_sha256": "cac3dfa07c34b9e1e413af534a4b70edf03a0fdeb28501582f18ff23f54de703",
+      "material_class": "phosphorene",
+      "node_hours_cap": 1552,
+      "nodes": 16,
+      "run_id": "E4-ROLL-phosphorene-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-phosphorene-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 97
+    },
+    {
+      "after_job_keys": [
+        "zn_formate_mof-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "zn_formate_mof-strong-n16-segment-1",
+      "job_name": "e4r-zn-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/zn_formate_mof-strong-n16-segment-1.json",
+      "manifest_sha256": "2450fcaba8308848fed3c917abbf3f3b1586b232fee2651008b2910f4d9c0c03",
+      "material_class": "zn_formate_mof",
+      "node_hours_cap": 1296,
+      "nodes": 16,
+      "run_id": "E4-ROLL-zn_formate_mof-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-zn_formate_mof-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 81
+    },
+    {
+      "after_job_keys": [
+        "nb_ta_o-weak-n04"
+      ],
+      "after_pbs_job_ids": [],
+      "experiment": "strong",
+      "job_key": "nb_ta_o-strong-n16-segment-1",
+      "job_name": "e4r-nb-s16-1",
+      "manifest": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/runs/e4-scaling/rolling-regular-v1/manifests/nb_ta_o-strong-n16-segment-1.json",
+      "manifest_sha256": "0e85e8d565e699cdc602d83f79354e4543144f93dddd4d8aa8c39f7a1cd032a5",
+      "material_class": "nb_ta_o",
+      "node_hours_cap": 1296,
+      "nodes": 16,
+      "run_id": "E4-ROLL-nb_ta_o-strong-n16-v1-20261115T192740Z",
+      "run_id_prefix": "E4-ROLL-nb_ta_o-strong-n16-v1",
+      "segment_id": "segment-1",
+      "walltime_hours": 81
+    }
+  ],
+  "max_total_user_jobs": 5,
+  "poll_interval_seconds": 60,
+  "queue": "capacity",
+  "rolling_jobs_maximum_node_hours": 34299,
+  "schema_version": 1,
+  "source_campaign": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4/research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
+  "source_campaign_sha256": "7138d0c7446084891926505bb9f921199e8f1941d751f847b0443ea3320db927"
+}

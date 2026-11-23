@@ -1,0 +1,290 @@
+{
+  "additional_user_authorized_jobs": [
+    {
+      "calculation_ids": [
+        "E4-SCALE-LFP-0002",
+        "E4-SCALE-LFP-0003"
+      ],
+      "expected_node_hours": 86,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/lifepo4-weak-n01.json",
+      "manifest_sha256": "841565bac748e20182612a6cb7c3f94529c4ec3eacd0ed033d0d5d00a71359c8",
+      "material_class": "lifepo4",
+      "maximum_job_walltime_hours": 151,
+      "maximum_node_hours": 151,
+      "nodes": 1,
+      "pbs_job_id": "9092466.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "reason": "fresh retry; previous n1 completed 21 ionic steps then resume rejected after policy-hash change",
+      "run_id": "E4-SIX-lifepo4-weak-n01-v1-retry2-20261115",
+      "run_id_prefix": "E4-SIX-lifepo4-weak-n01-v1",
+      "submission_status": "submitted; queued"
+    },
+    {
+      "calculation_ids": [
+        "E4-PHOSS-0001",
+        "E4-PHOSS-0002",
+        "E4-PHOSS-0003",
+        "E4-PHOSS-0004"
+      ],
+      "expected_node_hours": 18.8,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/phosphorene-weak-n02.json",
+      "manifest_sha256": "83f0ade92240a9494ffffc45f703b3a2a3c405731cffbd313e4ab48d6e974ea1",
+      "material_class": "phosphorene",
+      "maximum_job_walltime_hours": 25,
+      "maximum_node_hours": 50,
+      "nodes": 2,
+      "pbs_job_id": "9092467.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "reason": "next weak-scaling tier; n01 completed",
+      "run_id": "E4-SIX-phosphorene-weak-n02-v1-20261115",
+      "run_id_prefix": "E4-SIX-phosphorene-weak-n02-v1",
+      "submission_status": "submitted; queued"
+    },
+    {
+      "calculation_ids": [
+        "E4-ZNFS-0001",
+        "E4-ZNFS-0002",
+        "E4-ZNFS-0003",
+        "E4-ZNFS-0004"
+      ],
+      "expected_node_hours": 7.2,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/zn_formate_mof-weak-n02.json",
+      "manifest_sha256": "b6d8baf7e68df4a812983546e6edbc1c7ea9afe75dbbfc68741474a850547b3a",
+      "material_class": "zn_formate_mof",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 42,
+      "nodes": 2,
+      "pbs_job_id": "9092468.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "reason": "next weak-scaling tier; n01 completed",
+      "run_id": "E4-SIX-zn_formate_mof-weak-n02-v1-20261115",
+      "run_id_prefix": "E4-SIX-zn_formate_mof-weak-n02-v1",
+      "submission_status": "submitted; queued"
+    },
+    {
+      "calculation_ids": [
+        "E4-NBTAO56-0001",
+        "E4-NBTAO56-0002",
+        "E4-NBTAO56-0003",
+        "E4-NBTAO56-0004"
+      ],
+      "expected_node_hours": 14.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/nb_ta_o-weak-n02.json",
+      "manifest_sha256": "efd8aa714d32d8e92281c8755530e4eab4abe12edb000d861a2c17f00e96c137",
+      "material_class": "nb_ta_o",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 42,
+      "nodes": 2,
+      "pbs_job_id": "9092469.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "reason": "next weak-scaling tier; n01 completed",
+      "run_id": "E4-SIX-nb_ta_o-weak-n02-v1-20261115",
+      "run_id_prefix": "E4-SIX-nb_ta_o-weak-n02-v1",
+      "submission_status": "submitted; queued"
+    }
+  ],
+  "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+  "authorization_source": "User explicitly authorized start of all six E4 material-class campaigns in this conversation.",
+  "execution_authorized": true,
+  "fcc_retry": {
+    "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "change": {
+      "ENCUT_unchanged": true,
+      "KPOINTS_unchanged": true,
+      "MAGMOM_unchanged": true,
+      "NELM": {
+        "from": 200,
+        "to": 400
+      },
+      "cumulative_task_budget_hours": 48,
+      "execution_segments": [
+        24,
+        24
+      ],
+      "physical_model_unchanged": true
+    },
+    "execution_authorized": true,
+    "execution_budget_preserved": {
+      "cumulative_task_hours": 48,
+      "scheduler_walltime_hours_per_segment": 25,
+      "segments": [
+        24,
+        24
+      ],
+      "shutdown_margin_hours": 1
+    },
+    "focused_test": "tests/test_e4_scaling.py: 9 passed; wrapper bash -n passed",
+    "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/fcc_hea-weak-n01-nelm400-retry.json",
+    "manifest_sha256": "ddea4048ca526180c33c0ea7da1feec84cc55e01ecf469520c55e7ab14636ec6",
+    "material_class": "fcc_hea",
+    "max_job_walltime_hours": 101,
+    "node_hours_cap": 101,
+    "observed_failure": "EDIFF not reached after all 200 SCF iterations at first ionic step",
+    "pbs_job_id": "9090503.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "physical_settings_unchanged": [
+      "PBE",
+      "ENCUT=480 eV",
+      "ISPIN=2",
+      "ISMEAR=1 SIGMA=0.10",
+      "KPAR=8",
+      "MAGMOM",
+      "Gamma 2x2x2",
+      "EDIFF=1e-6",
+      "EDIFFG=-0.02"
+    ],
+    "reason": "First FCC attempt exhausted NELM=200 before EDIFF; OUTCAR confirms EDIFF was not reached. Retry overrides NELM to 400.",
+    "source_failed_job": "9077294 and retry 9088098",
+    "submission_status": "queued"
+  },
+  "initial_jobs": [
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-SCALE-FCC-0001",
+        "E4-SCALE-FCC-0002"
+      ],
+      "expected_node_hours": 42.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/fcc_hea-weak-n01.json",
+      "manifest_sha256": "b4a3ffe6e687c13dd45df21b44b6378b04c898bee8eda1dbee85de4efe8da35e",
+      "material_class": "fcc_hea",
+      "maximum_job_walltime_hours": 101,
+      "maximum_node_hours": 101,
+      "nodes": 1,
+      "pbs_job_id": "9077294.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-fcc_hea-weak-n01-v1",
+      "submission_status": "failed; PBS Exit_status=-20 after VASP began; retry submitted"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-SCALE-LFP-0002",
+        "E4-SCALE-LFP-0003"
+      ],
+      "expected_node_hours": 86.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/lifepo4-weak-n01.json",
+      "manifest_sha256": "841565bac748e20182612a6cb7c3f94529c4ec3eacd0ed033d0d5d00a71359c8",
+      "material_class": "lifepo4",
+      "maximum_job_walltime_hours": 151,
+      "maximum_node_hours": 151,
+      "nodes": 1,
+      "pbs_job_id": "9077295.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-lifepo4-weak-n01-v1",
+      "submission_status": "running"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-PHOSS-0001",
+        "E4-PHOSS-0002"
+      ],
+      "expected_node_hours": 9.4,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/phosphorene-weak-n01.json",
+      "manifest_sha256": "a1e39b39030c243db94c0205583ea6cd11e5230d73eceef700890f70b9875410",
+      "material_class": "phosphorene",
+      "maximum_job_walltime_hours": 25,
+      "maximum_node_hours": 25,
+      "nodes": 1,
+      "pbs_job_id": "9077296.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-phosphorene-weak-n01-v1",
+      "submission_status": "queued"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-ZNFS-0001",
+        "E4-ZNFS-0002"
+      ],
+      "expected_node_hours": 3.6,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/zn_formate_mof-weak-n01.json",
+      "manifest_sha256": "1598af86ff56c63cfb841cc73f8cfa44462967028cb9cdafc5dd5eb3bef6c060",
+      "material_class": "zn_formate_mof",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 21,
+      "nodes": 1,
+      "pbs_job_id": "9077297.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-zn_formate_mof-weak-n01-v1",
+      "submission_status": "completed; both calculations converged"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-NBTAO56-0001",
+        "E4-NBTAO56-0002"
+      ],
+      "expected_node_hours": 7.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/nb_ta_o-weak-n01.json",
+      "manifest_sha256": "5633976a2e4fb94307da218fa72d4f1365d090ac4b285b38cfba20cd0acf2db0",
+      "material_class": "nb_ta_o",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 21,
+      "nodes": 1,
+      "pbs_job_id": "9088099.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-nb_ta_o-weak-n01-v1",
+      "submission_status": "queued"
+    }
+  ],
+  "preserved_bcc_execution": {
+    "active_job_id": "9069491.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "additional_existing_authorized_bcc_remaining_node_hour_cap": 1440,
+    "authorization_manifest": "research/paper/e4/aurora-dft-scaling/priority-scaling/authorized/strong-manifest.json",
+    "completed_weak_n01_job": "9069490.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "state": "running; not modified or resubmitted"
+  },
+  "production_plan": "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
+  "production_plan_sha256": "7138d0c7446084891926505bb9f921199e8f1941d751f847b0443ea3320db927",
+  "remaining_campaigns": "All other v4 tier jobs remain in v4 plan, not authorized by these five initial-job records; full-plan expected shortfall and reservation are separate requests.",
+  "request_id": "E4-SIX-INITIAL-ALL-CLASSES-20261111",
+  "resource_totals": {
+    "additional_job_count": 4,
+    "additional_jobs_submitted_node_hour_cap": 285,
+    "additional_node_hours_cap": 285,
+    "combined_maximum_node_hours": 1759,
+    "existing_bcc_strong_job_preserved": "9069491",
+    "existing_bcc_weak_n01_completed": true,
+    "expected_node_hours": 148.0,
+    "initial_plus_additional_max_node_hours": 604,
+    "maximum_node_hours": 319,
+    "new_jobs": 5,
+    "reserved_existing_bcc_node_hours": 1440
+  },
+  "scheduler_constraints": {
+    "max_nodes": 16,
+    "max_queued_jobs_per_user": 5,
+    "max_running_jobs_per_user": 2,
+    "max_walltime_hours": 168,
+    "queue": "capacity",
+    "reservation_tiers_32_64_128_not_submitted": true
+  },
+  "schema_version": 1,
+  "status": "initial all-class tranche submitted; Zn, phosphorene and NbTaO n01 completed; FCC NELM400 retry running; LiFePO4 and weak n02 extensions queued/running per PBS",
+  "submission_result": {
+    "accepted_initial_jobs": 5,
+    "additional_job_ids": {
+      "lifepo4": "9092466.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "nb_ta_o": "9092469.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "phosphorene": "9092467.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+      "zn_formate_mof": "9092468.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov"
+    },
+    "additional_jobs_submitted": 4,
+    "existing_bcc_strong_job": "9069491 completed Exit_status=1; not modified or resubmitted",
+    "fcc_first_attempt": "9077294 exited -20 after VASP started; no validated checkpoint, retry starts fresh",
+    "fcc_retry_job_id": "9088098.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "nb_ta_o_job_id": "9088099.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "rejected_initial_jobs": 0
+  }
+}
