@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tempfile
 from collections import Counter
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast, get_args
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -297,6 +298,31 @@ class AgentEvalGrade(BaseModel):
     problems: list[str] = Field(default_factory=list)
 
 
+class RoundVerdictAudit(BaseModel):
+    contribution_id: str
+    participant: str
+    model: str
+    round: int
+    status: Verdict | None = None
+
+
+class ParticipantVerdictAudit(BaseModel):
+    contribution_id: str
+    participant: str
+    model: str
+    answer: AgentAnswer | None = None
+
+
+class AggregationAudit(BaseModel):
+    rule: Literal["strict-majority-of-all-participants"] = "strict-majority-of-all-participants"
+    participant_count: int
+    valid_answers: int
+    abstentions: int
+    votes: dict[Verdict, int]
+    strict_majority: bool
+    outcome: Verdict | None = None
+
+
 class ArmAnswer(BaseModel):
     """What one arm answered for one case, and what it cost."""
 
@@ -309,6 +335,9 @@ class ArmAnswer(BaseModel):
     completion_tokens: int = 0
     latency_s: float = 0.0
     parse_failures: int = 0
+    round_verdicts: list[RoundVerdictAudit] = Field(default_factory=list)
+    participant_verdicts: list[ParticipantVerdictAudit] = Field(default_factory=list)
+    aggregation: AggregationAudit | None = None
 
 
 class AgentEvalRecord(ArmAnswer):
@@ -530,6 +559,15 @@ def grade_answer(
     )
 
 
+def parse_round_verdict(text: str) -> Verdict | None:
+    matches = re.findall(
+        r"^\s*ROUND_VERDICT\s*:\s*(supported|contradicted|unresolved)\s*$",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    return cast(Verdict, matches[-1].lower()) if matches else None
+
+
 def aggregate_answers(answers: list[AgentAnswer | None]) -> AgentAnswer | None:
     """Strict majority of the whole panel; unparsed replies (None) abstain."""
     valid = [a for a in answers if a is not None]
@@ -562,6 +600,25 @@ def _debate_answers(
     failures = answers.count(None)
     with open(result.contributions_path, encoding="utf-8") as stream:
         contributions = [json.loads(line) for line in stream if line.strip()]
+    round_verdicts = [
+        RoundVerdictAudit(
+            contribution_id=turn.turn_id,
+            participant=turn.participant,
+            model=turn.model,
+            round=turn.round,
+            status=parse_round_verdict(turn.response),
+        )
+        for turn in result.turns
+    ]
+    participant_verdicts = [
+        ParticipantVerdictAudit(
+            contribution_id=verdict.contribution_id,
+            participant=verdict.participant,
+            model=verdict.model,
+            answer=answers[index] if index < len(answers) else None,
+        )
+        for index, verdict in enumerate(result.verdicts)
+    ]
     return answers, ArmAnswer(
         answer=None,
         responses=[verdict.response for verdict in result.verdicts],
@@ -572,6 +629,8 @@ def _debate_answers(
         completion_tokens=sum(c.get("completion_tokens") or 0 for c in contributions),
         latency_s=round(sum(c.get("latency_s") or 0.0 for c in contributions), 3),
         parse_failures=failures,
+        round_verdicts=round_verdicts,
+        participant_verdicts=participant_verdicts,
     )
 
 
@@ -604,6 +663,10 @@ def _debate_evidence_scopes(packet: AgentEvalPacket) -> dict[str, list[str]]:
 
 
 def _merge(parts: list[ArmAnswer], answer: AgentAnswer | None) -> ArmAnswer:
+    participant_verdicts = [v for p in parts for v in p.participant_verdicts]
+    valid = [v.answer for v in participant_verdicts if v.answer is not None]
+    votes = Counter(v.status for v in valid)
+    strict_majority = bool(valid) and max(votes.values()) * 2 > len(participant_verdicts)
     return ArmAnswer(
         answer=answer,
         responses=[r for p in parts for r in p.responses],
@@ -614,6 +677,18 @@ def _merge(parts: list[ArmAnswer], answer: AgentAnswer | None) -> ArmAnswer:
         completion_tokens=sum(p.completion_tokens for p in parts),
         latency_s=round(sum(p.latency_s for p in parts), 3),
         parse_failures=sum(p.parse_failures for p in parts),
+        round_verdicts=[v for p in parts for v in p.round_verdicts],
+        participant_verdicts=participant_verdicts,
+        aggregation=AggregationAudit(
+            participant_count=len(participant_verdicts),
+            valid_answers=len(valid),
+            abstentions=len(participant_verdicts) - len(valid),
+            votes={status: votes[status] for status in get_args(Verdict)},
+            strict_majority=strict_majority,
+            outcome=answer.status if answer is not None else None,
+        )
+        if participant_verdicts
+        else None,
     )
 
 
@@ -662,6 +737,13 @@ def run_arm(
             rounds=config.rounds,
             synthesis_method="independent_verdicts",
             max_completion_tokens=tokens,
+            round_response_instruction=(
+                "Return a single JSON object with scientific_hypotheses and a response string. "
+                "In response, give your argument and end with exactly one line: "
+                "ROUND_VERDICT: supported, ROUND_VERDICT: contradicted, or "
+                "ROUND_VERDICT: unresolved. This line records your current position at the "
+                "end of this critique round, not your final verdict."
+            ),
             final_response_instruction=ANSWER_FORMAT,
             output_root=str(output_root),
             **_debate_evidence_scopes(packet),
