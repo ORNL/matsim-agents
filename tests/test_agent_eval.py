@@ -11,7 +11,10 @@ from matsim_agents.campaign.agent_eval import (
     AgentAnswer,
     AgentEvalConfig,
     AgentEvalPacket,
+    ArmAnswer,
     DecisionCriterion,
+    ParticipantVerdictAudit,
+    _merge,
     aggregate_answers,
     assessment_packet,
     case_prompt,
@@ -87,9 +90,12 @@ def _oracle(prompt: str) -> str:
             state_status = (
                 "supported_by_mlip" if case.expected_status == "supported" else "challenged_by_mlip"
             )
+    response = "The declared evidence and criterion determine the assessment."
+    if "Panel contributions so far:" in prompt:
+        response += f"\nROUND_VERDICT: {case.expected_status}"
     return json.dumps(
         {
-            "response": "The declared evidence and criterion determine the assessment.",
+            "response": response,
             "status": case.expected_status,
             "evidence_ids": sorted(set(ids)) if decisive else [],
             "request_dft": case.dft_request_justified,
@@ -294,6 +300,55 @@ def test_round_verdict_marker_is_machine_readable():
     text = "I changed my position after the critique.\nROUND_VERDICT: Contradicted\n"
     assert parse_round_verdict(text) == "contradicted"
     assert parse_round_verdict("My position is supported, but no audit marker is present.") is None
+
+
+@pytest.mark.parametrize(
+    ("answers", "expected_outcome", "expected_votes", "strict_majority"),
+    [
+        (
+            ["supported", "supported", "contradicted"],
+            "supported",
+            {"supported": 2, "contradicted": 1, "unresolved": 0},
+            True,
+        ),
+        (
+            ["supported", "contradicted"],
+            "unresolved",
+            {"supported": 1, "contradicted": 1, "unresolved": 0},
+            False,
+        ),
+        (
+            ["contradicted", None, None],
+            "unresolved",
+            {"supported": 0, "contradicted": 1, "unresolved": 0},
+            False,
+        ),
+    ],
+)
+def test_merge_records_majority_tie_and_abstention_audit(
+    answers, expected_outcome, expected_votes, strict_majority
+):
+    parsed = [AgentAnswer(status=status) if status is not None else None for status in answers]
+    participant_verdicts = [
+        ParticipantVerdictAudit(
+            contribution_id=f"verdict-{index}",
+            participant=f"m{index}",
+            model=f"model-{index}",
+            answer=answer,
+        )
+        for index, answer in enumerate(parsed)
+    ]
+    merged = _merge(
+        [ArmAnswer(answer=None, participant_verdicts=participant_verdicts)],
+        aggregate_answers(parsed),
+    )
+
+    assert merged.aggregation is not None
+    assert merged.aggregation.outcome == expected_outcome
+    assert merged.aggregation.votes == expected_votes
+    assert merged.aggregation.strict_majority is strict_majority
+    assert merged.aggregation.valid_answers == sum(answer is not None for answer in parsed)
+    assert merged.aggregation.abstentions == parsed.count(None)
 
 
 def test_arms_share_one_completion_budget():
@@ -535,7 +590,7 @@ def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
         assert summary[arm].numerical_cost["dft_calculations"] == 0
     # Every model call got the arm's share of the budget and the decoding settings.
     assert {c["max_tokens"] for c in calls} == {6000, 3000, 1000}
-    assert all(c["temperature"] == 0.3 for c in calls)
+    assert all(c["temperature"] == 0.3 for c in calls), calls
     comparison = next(
         c
         for c in result.comparisons
@@ -545,6 +600,26 @@ def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
     run_dir = Path(result.run_dir)
     answers = [json.loads(line) for line in (run_dir / "answers.jsonl").read_text().splitlines()]
     assert len(answers) == n_cases * len(config.arms)
+    cross_critique = next(a for a in answers if a["arm"] == "multi_llm_cross_critique")
+    assert len(cross_critique["round_verdicts"]) == len(_participants(2)) * 2
+    assert {(v["participant"], v["round"]) for v in cross_critique["round_verdicts"]} == {
+        ("m0", 1),
+        ("m1", 1),
+        ("m0", 2),
+        ("m1", 2),
+    }
+    assert all(
+        v["status"] == cross_critique["answer"]["status"] for v in cross_critique["round_verdicts"]
+    )
+    assert [v["answer"]["status"] for v in cross_critique["participant_verdicts"]] == [
+        cross_critique["answer"]["status"],
+        cross_critique["answer"]["status"],
+    ]
+    assert cross_critique["aggregation"]["outcome"] == cross_critique["answer"]["status"]
+    assert cross_critique["aggregation"]["participant_count"] == 2
+    assert cross_critique["aggregation"]["valid_answers"] == 2
+    assert cross_critique["aggregation"]["abstentions"] == 0
+    assert cross_critique["aggregation"]["strict_majority"] is True
     single = next(a for a in answers if a["arm"] == "single_llm")
     assert single["models"] == ["fake:model-0"]
     debate_dir = Path(single["run_directories"][0])

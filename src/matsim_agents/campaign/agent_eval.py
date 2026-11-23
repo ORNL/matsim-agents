@@ -738,10 +738,11 @@ def run_arm(
             synthesis_method="independent_verdicts",
             max_completion_tokens=tokens,
             round_response_instruction=(
-                "End the argument with exactly one line declaring your current verdict snapshot: "
+                "Return a single JSON object with scientific_hypotheses and a response string. "
+                "In response, give your argument and end with exactly one line: "
                 "ROUND_VERDICT: supported, ROUND_VERDICT: contradicted, or "
-                "ROUND_VERDICT: unresolved. This line is not your final verdict; it records "
-                "your position at the end of this critique round."
+                "ROUND_VERDICT: unresolved. This line records your current position at the "
+                "end of this critique round, not your final verdict."
             ),
             final_response_instruction=ANSWER_FORMAT,
             output_root=str(output_root),
