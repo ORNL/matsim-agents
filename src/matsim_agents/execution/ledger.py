@@ -247,6 +247,18 @@ class HypothesisRecord(_Record):
     scientific_rationale: str = ""
     proposed_tests: list[str] = Field(default_factory=list)
     agent_model_id: str | None = None
+    traceability: dict[str, Any] | None = Field(
+        None,
+        description="Scoring version, score and evidence-packet digests, and LLM accounting.",
+    )
+
+    def content_id(self) -> str:
+        # An unset traceability is left out so revisions written before it existed keep
+        # their identifiers.
+        payload = self.model_dump(mode="json", exclude={self.ID_FIELD, "recorded_at"})
+        if payload.get("traceability") is None:
+            payload.pop("traceability", None)
+        return f"{self.ID_PREFIX}-{_sha256_text(_canonical(payload))[:24]}"
 
 
 # A review's own cost record; it changes no workflow state, so it need cite no evidence.
