@@ -11,11 +11,11 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from ase import Atoms
 
 from matsim_agents.backends.dft.qe_relax import _ATOMIC_MASS  # noqa: PLC2701
-from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
 MAX_LABEL_LENGTH = 3
 _ROUND = 12
@@ -142,7 +142,7 @@ def _label(element: str, ordinal: int, count: int) -> str:
 
 def build_magnetic_types(
     atoms: Atoms,
-    config: MagneticConfiguration | None,
+    config: Any | None,  # discovery.magnetism.MagneticConfiguration (higher layer)
     pseudopotentials: Mapping[str, str],
 ) -> QEMagneticTypes:
     """Build the type table. ``config=None`` means a spin-unpolarized calculation."""
