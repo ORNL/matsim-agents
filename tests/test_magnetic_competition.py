@@ -8,11 +8,11 @@ from ase.build import bulk
 
 from matsim_agents.discovery import magnetism_generators as gen
 from matsim_agents.discovery.magnetic_competition import (
+    StateEvaluation,
     method_fingerprint,
     plan_competition,
     rank_states,
     run_pending,
-    StateEvaluation,
 )
 from matsim_agents.discovery.magnetic_results import result_from_moments
 
