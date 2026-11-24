@@ -25,7 +25,7 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
 | 6 | Mechanism registry and NEB preparation | `kinetics/gas_mechanisms.py` | `IMPLEMENTED_TESTED` | No barriers computed. |
 | 7 | Cluster-dynamics bridge | `kinetics/cluster_dynamics.py` | `IMPLEMENTED_TESTED` | Bubble physics rejected as future work; bubble kinetics `NOT_ESTABLISHED`. |
 | 8 | Transfer-driven gas acquisition | `campaign/gas_transfer.py` | `IMPLEMENTED_TESTED` | Not shown to beat random selection on any real data. |
-| 9 | 1,024-site QE campaign | `workflows/gas_qe_campaign.py` | `INPUT_BLOCKED` | Re/Os/H/He pseudopotentials absent from the Frontier cache; own dispatch, not `slurm_jobs`. |
+| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `INPUT_BLOCKED` | Re/Os/H/He pseudopotentials absent from the Frontier cache; own dispatch, not `slurm_jobs`. |
 | 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_UNVERIFIED` | Not installed here; layout and `columns=` block unverified; index file name unresolved. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |

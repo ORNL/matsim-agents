@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from matsim_agents.campaign import gas_qe_campaign as gq
 from matsim_agents.campaign.budget import BudgetLedger
 from matsim_agents.campaign.qe_plan import ResourceLimits, ResourceRequest
 from matsim_agents.workflows import full_supercell_campaign as fsc
-from matsim_agents.workflows import gas_qe_campaign as gq
 
 CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
 UPF = (
