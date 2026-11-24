@@ -86,7 +86,7 @@ class TransferData:
 class RidgeEnsemble:
     """Bootstrap ridge ensemble; the spread across members is the uncertainty."""
 
-    def __init__(self, *, alpha: float = 1e-3, members: int = 12, seed: int = 0, tag: str = ""):
+    def __init__(self, *, alpha: float = 1e-3, members: int = 12, seed: int, tag: str = ""):
         self.alpha, self.members, self.seed, self.tag = alpha, members, seed, tag
         self._w: np.ndarray | None = None
 

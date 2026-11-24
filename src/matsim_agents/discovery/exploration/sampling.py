@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
-import numpy as np
+from matsim_agents.seeding import numpy_rng
 
 Strategy = Literal["random", "stratified", "adaptive", "adaptive_exploration"]
 
@@ -40,7 +40,7 @@ def split_validation(candidate_ids: Sequence[str], fraction: float, seed: int) -
         raise ValueError("validation fraction must be in (0, 1)")
     ids = sorted(set(candidate_ids))
     n_val = min(max(1, round(fraction * len(ids))), len(ids) - 1) if len(ids) > 1 else 0
-    chosen = set(np.random.default_rng(seed).choice(len(ids), size=n_val, replace=False).tolist())
+    chosen = set(numpy_rng(seed).choice(len(ids), size=n_val, replace=False).tolist())
     validation = tuple(ids[i] for i in sorted(chosen))
     available = tuple(c for i, c in enumerate(ids) if i not in chosen)
     return PoolSplit(validation, available, seed)
@@ -51,7 +51,7 @@ def sample_random(
 ) -> list[Selection]:
     ids = sorted(candidates)
     k = min(n, len(ids))
-    rng = np.random.default_rng([seed, round_index])
+    rng = numpy_rng(seed, round_index)
     picks = sorted(rng.choice(len(ids), size=k, replace=False).tolist())
     p = k / len(ids) if ids else None
     return [Selection(ids[i], "random", seed, round_index, "all", p) for i in picks]
@@ -101,7 +101,7 @@ def sample_stratified(
         k = quota[stratum]
         if k == 0:
             continue
-        rng = np.random.default_rng([seed, round_index, index])
+        rng = numpy_rng(seed, round_index, index)
         picks = sorted(rng.choice(len(members), size=k, replace=False).tolist())
         for i in picks:
             out.append(
@@ -133,7 +133,7 @@ def sample_adaptive(
     ranked = sorted(ids, key=lambda c: (-scores[c], c))
     exploit = ranked[:n_exploit]
     rest = ranked[n_exploit:]
-    rng = np.random.default_rng([seed, round_index, 99])
+    rng = numpy_rng(seed, round_index, 99)
     explore_idx = sorted(rng.choice(len(rest), size=min(n_explore, len(rest)), replace=False))
     explore = [rest[i] for i in explore_idx]
     p_explore = len(explore) / len(rest) if rest else None

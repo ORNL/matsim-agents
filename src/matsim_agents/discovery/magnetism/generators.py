@@ -12,6 +12,7 @@ import numpy as np
 from ase import Atoms
 
 from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.seeding import numpy_rng
 
 Sublattices = Mapping[int, str]
 
@@ -256,7 +257,7 @@ def seeded_collinear_alternatives(
     if len(magnetic) < 2:
         raise ValueError("at least two magnetic atoms are needed for antiparallel patterns")
     n_up = min(max(1, round(up_fraction * len(magnetic))), len(magnetic) - 1)
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     sym_of = dict(zip(ids, symbols, strict=True))
     seen: set[str] = set()
     out: list[MagneticConfiguration] = []

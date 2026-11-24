@@ -56,11 +56,13 @@ def test_coverage_complete_and_rejects_foreign_ids():
 
 
 def test_convergence_needs_enough_samples_and_separates_uncertainties():
-    few = convergence_report("dE", [0.1, 0.2], 0.05)
+    few = convergence_report("dE", [0.1, 0.2], 0.05, seed=20261113)
     assert not few.converged and few.mean is None and "fewer than" in few.note
-    tight = convergence_report("dE", [1.0 + 0.001 * (i % 3) for i in range(60)], 0.01)
+    tight = convergence_report(
+        "dE", [1.0 + 0.001 * (i % 3) for i in range(60)], 0.01, seed=20261113
+    )
     assert tight.converged and tight.half_width < 0.01
-    loose = convergence_report("dE", [float(i) for i in range(10)], 0.01)
+    loose = convergence_report("dE", [float(i) for i in range(10)], 0.01, seed=20261113)
     assert not loose.converged and loose.half_width > 0.01
     for report in (tight, loose):
         assert "not assessed" in report.physical_uncertainty

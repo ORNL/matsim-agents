@@ -24,6 +24,7 @@ from matsim_agents.discovery.exploration.magnetic_surrogate import (
     select_for_labeling,
 )
 from matsim_agents.discovery.exploration.sampling import sample_random
+from matsim_agents.seeding import numpy_rng
 
 Evaluator = Callable[[CandidateRecord, Atoms], dict]
 
@@ -31,7 +32,7 @@ Evaluator = Callable[[CandidateRecord, Atoms], dict]
 def synthetic_structure(n_cr: int, seed: int) -> Atoms:
     """Fe-Cr bcc 2x2x2 supercell (16 atoms) with ``n_cr`` randomly placed Cr atoms."""
     atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * (2, 2, 2)
-    sites = np.random.default_rng(seed).choice(len(atoms), size=n_cr, replace=False)
+    sites = numpy_rng(seed).choice(len(atoms), size=n_cr, replace=False)
     symbols = atoms.get_chemical_symbols()
     for i in sites:
         symbols[int(i)] = "Cr"
@@ -41,7 +42,7 @@ def synthetic_structure(n_cr: int, seed: int) -> Atoms:
 
 
 def make_candidate(index: int, seed: int) -> tuple[CandidateRecord, Atoms]:
-    rng = np.random.default_rng([seed, index])
+    rng = numpy_rng(seed, index)
     n_cr = int(rng.integers(1, 9))
     atoms = synthetic_structure(n_cr, int(rng.integers(0, 2**31 - 1)))
     record = CandidateRecord.from_atoms(
@@ -153,7 +154,7 @@ class StrategyResult:
 
 def _landscape(n_strata: int, per_stratum: int, seed: int):
     """Strata with known true means and very different noise levels (heteroscedastic)."""
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     means = rng.normal(0.0, 1.0, n_strata)
     sigmas = np.geomspace(0.05, 2.0, n_strata)
     pool, truth = {}, {}
@@ -170,7 +171,7 @@ def _stable_label(
     # hash() is salted per process; use a stable integer derived from the id instead
     digest = sum((i + 1) * ord(c) for i, c in enumerate(cid))
     mean, sigma = truth[stratum]
-    rng = np.random.default_rng([seed, digest])
+    rng = numpy_rng(seed, digest)
     return float(mean + sigma * rng.standard_normal())
 
 

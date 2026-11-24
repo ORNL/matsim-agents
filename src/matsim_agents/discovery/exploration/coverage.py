@@ -8,10 +8,11 @@ computed here; the other two are carried as explicit "not assessed" fields, neve
 from __future__ import annotations
 
 import math
-import random
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+
+from matsim_agents.seeding import python_rng
 
 Z95 = 1.959963984540054
 
@@ -35,7 +36,7 @@ def bootstrap_mean_interval(
     """Percentile bootstrap interval of the mean, deterministic for ``seed``; None for n < 2."""
     if len(values) < 2:
         return None
-    rng = random.Random(seed)
+    rng = python_rng(seed)
     n = len(values)
     means = sorted(sum(rng.choice(values) for _ in range(n)) / n for _ in range(n_boot))
     lo = means[int(((1 - level) / 2) * (n_boot - 1))]
@@ -120,7 +121,7 @@ def convergence_report(
     values: Sequence[float],
     target_half_width: float,
     *,
-    seed: int = 0,
+    seed: int,
     min_n: int = 5,
 ) -> ConvergenceReport:
     """Statistical convergence of a sampled mean. Fewer than ``min_n`` values is never converged."""
