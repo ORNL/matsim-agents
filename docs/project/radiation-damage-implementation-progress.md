@@ -121,6 +121,9 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - [x] A3.6 Defect environment metadata (`radiation_defect_environments.py`)
   - Vacancy first/second-shell indices and composition from the parent lattice (A2 neighbour lists; other vacated sites are listed separately). Interstitial nearest atoms, distances and coordination from the defective structure with minimum-image distances. Smallest periodic vacancy-interstitial separation. Parent-versus-defective composition change, with inputs checked against the configuration.
   - Limitation: geometric metadata only; no energies, stability or qualification.
+- [x] A3.7a Lattice-site assignment (`radiation_defect_mapping.assign_lattice_sites`)
+  - Each relaxed atom maps to its nearest parent site by minimum-image distance. Statuses: `on_site`, `off_lattice` (nearest site beyond `site_tolerance`), `ambiguous` (second-nearest site within `ambiguity_margin`), `conflict` (several atoms claim one site; none is merged or dropped). Vacant sites exclude sites made uncertain by ambiguous atoms. Fixed-cell only; mismatched cells, non-periodic or non-finite input are rejected.
+  - Limitation: geometric only; thresholds are fractions of the lattice parameter and have not been calibrated against relaxed MLIP or DFT structures.
 
 ## Progress log
 
@@ -148,4 +151,5 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - A3.1 to A3.4: `tests/test_radiation_defects.py` 71 passed, 0 failed, 0 skipped. Ruff check and format pass. A3.4b needed three test-side correction rounds (fixture size, species validated before ASE, minimum-image vectors in a test).
 - A3.5: `generate_frenkel_pair`. `tests/test_radiation_defects.py` 82 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - A3.6: `radiation_defect_environments.py`. `tests/test_radiation_defect_environments.py` 6 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
+- A3.7a: `radiation_defect_mapping.py`. `tests/test_radiation_defect_mapping.py` 8 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
