@@ -128,6 +128,13 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         caveats="Supported or contradicted is unreachable without a qualified barrier.",
     ),
     RadiationCapability(
+        name="qualification-matrix",
+        summary="Evidence-gated qualification status per capability and material.",
+        entry_points=("matsim_agents.workflows.radiation_qualification:promote",),
+        tests=("tests/test_radiation_qualification.py",),
+        caveats="A fresh matrix has nothing qualified; promotion needs measured evidence.",
+    ),
+    RadiationCapability(
         name="transition-network",
         summary="Directed transition network with NEB evidence ingestion and validation.",
         entry_points=(
