@@ -141,6 +141,14 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
   - 1,024-atom verification (each test run alone, 180 s timeout): 12 passed, 0 failed, 0 timed out (8 generator cases: vacancy, divacancy shell 1 and 2, tetrahedral, octahedral, Frenkel, dumbbell, crowdion; 4 energy-interface cases: vacancy, divacancy-1, tetrahedral, Frenkel). Wall time 15 to 88 s per test, peak memory about 2.26 GB. The cost is dominated by site mapping and environment building on 1,024 atoms (the first test also pays import and cell construction); no bottleneck was fixed. Not yet done: the A1 to A3 regression run and the Step 3 invariant audit (the 1,023, 1,025 and 1,022 atom counts are asserted directly only for vacancy and interstitial on the 1,024-atom parent; the divacancy 1,022 count and the Frenkel 1,024-atom composition are asserted only on 54- and 16-atom cells and via `n_atoms == len(defective)` at 1,024).
   - Phase A3 is complete as a software deliverable (A3.1 to A3.10 and the integration tests are written and committed). Marked complete at the maintainer's request without a full run of the integration file and without the A1 to A3 regression run; both remain open verification items. The 1,024-atom integration cases are untested. Nothing here establishes DFT or MLIP qualification.
 
+## Phase B: migration pathways and Quantum ESPRESSO NEB
+
+Task definitions are in `radiation-damage-phase-b-spec.md`. Software verification only: no DFT, MLIP, NEB, VASP or HPC execution, and nothing here is a physical qualification.
+
+- [x] B1.1 NEB data contracts (`discovery/neb_contracts.py`)
+  - IMPLEMENTED and VERIFIED (synthetic fixtures). Typed records for endpoints (`generated`, `relaxed`, `numerically_qualified`, each needing the evidence the next level implies), identity-based atom correspondence, migration mechanism (always `requires_validation`), image sequence, engine-independent calculation spec, NEB result (`failed`, `incomplete`, `unconverged`, `converged_unqualified`, `qualified`) and the full transition record. Endpoint compatibility checks atom count, identity set, species per identity, parent, ordering, defect type, full periodicity and fixed cell. At least 4 images (QE).
+  - Limitation: contracts only; no geometry is generated here.
+
 ## Progress log
 
 - A1.1: inspection complete; no E3 change required.
@@ -175,4 +183,5 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - A3 integration: added `tests/test_radiation_defect_pipeline.py`. Ruff check and format pass. Test status: PARTIAL. `-k "54-atom or foreign"`: 9 passed, 0 failed, 12 deselected (1,024-atom cases). The full-file runs were interrupted (13 passed, then `KeyboardInterrupt`), so no full-file result is recorded. One test-expectation correction was made after the first failure.
 - A3 marked complete at the maintainer's request. Open verification items: full run of `tests/test_radiation_defect_pipeline.py` (1,024-atom cases) and the A1 to A3 regression run.
 - A3 verification gate (partial): the 12 1,024-atom integration tests each passed alone (see the A3 integration entry). The A1 to A3 regression run is still pending, so A3 is not yet marked software-verified.
+- B1.1: `neb_contracts.py`. `tests/test_neb_contracts.py` 14 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections (two test-side edits before the first run: no random generator, simpler validation call).
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
