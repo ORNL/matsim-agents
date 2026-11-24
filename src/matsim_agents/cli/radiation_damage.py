@@ -14,7 +14,11 @@ from matsim_agents.cli._app import app, console
 
 rd_app = typer.Typer(
     add_completion=False,
-    help="Vacancy-hop recovery workflow for seeded BCC alloys (exploratory, unqualified).",
+    help=(
+        "Vacancy-hop recovery workflow for seeded BCC alloys (exploratory, unqualified). "
+        "Scope: the vacancy-hop BCC workflow only; other mechanisms are not driven by "
+        "this command."
+    ),
 )
 app.add_typer(rd_app, name="radiation-damage")
 

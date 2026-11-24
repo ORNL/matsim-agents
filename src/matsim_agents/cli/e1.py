@@ -8,9 +8,11 @@ from pathlib import Path
 import typer
 
 from matsim_agents.cli._app import app, console
+from matsim_agents.cli.benchmark import benchmark_app
 
 
-@app.command("e1-development")
+@app.command("e1-development", hidden=True, deprecated=True)
+@benchmark_app.command("e1")
 def e1_development(
     manifest: Path = typer.Argument(..., exists=True, dir_okay=False),
     output: Path = typer.Option(..., "--output", "-o", file_okay=False),
@@ -26,7 +28,10 @@ def e1_development(
         help="Dispatch at most this many unrecorded requests in this invocation.",
     ),
 ) -> None:
-    """Run development questions for one candidate; held-out questions are not accepted."""
+    """Run E1 development questions for one candidate; held-out questions are not accepted.
+
+    Preferred entry point: ``matsim-agents benchmark e1`` (``e1-development`` is deprecated).
+    """
     from matsim_agents.workflows.e1 import E1DevelopmentManifest, run_e1_development
 
     document = json.loads(manifest.read_text(encoding="utf-8"))

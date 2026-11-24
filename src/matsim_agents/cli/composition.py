@@ -1,4 +1,4 @@
-"""Composition mode: ``supervisor-run`` for one target composition."""
+"""Composition mode: ``explore-and-learn`` (alias ``supervisor-run``) for one composition."""
 
 from __future__ import annotations
 
@@ -21,7 +21,8 @@ from matsim_agents.cli.options import (
 )
 
 
-@app.command("supervisor-run")
+@app.command("supervisor-run", hidden=True, deprecated=True)
+@app.command("explore-and-learn")
 def supervisor_run(
     composition: str = typer.Argument(..., help="Target composition, e.g. Li2MnO3."),
     mlip_config: Path = typer.Option(
@@ -67,7 +68,11 @@ def supervisor_run(
         "Optional JSONL path for UQ decision and handoff audit records."
     ),
 ):
-    """Run LangGraph supervisor: discovery exploration -> UQ gate -> optional AL handoff."""
+    """Integrated exploration and active-learning workflow for one target composition.
+
+    When to use: one composition, MLIP exploration, then an optional hand-off to DFT active
+    learning when the uncertainty gate says the MLIP is unreliable.
+    """
     from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
 
     cfg = SupervisorConfig(

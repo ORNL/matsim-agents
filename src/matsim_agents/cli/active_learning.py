@@ -1,4 +1,4 @@
-"""Active-learning subcommand group: ``matsim-agents al ...``."""
+"""Active-learning subcommand group: ``matsim-agents active-learning ...`` (alias ``al``)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ al_app = typer.Typer(
     add_completion=False,
     help="MLIP <-> DFT (VASP or Quantum ESPRESSO) active-learning loop.",
 )
-app.add_typer(al_app, name="al")
+app.add_typer(al_app, name="active-learning")
+app.add_typer(al_app, name="al", hidden=True)
 
 
 @al_app.command("run")

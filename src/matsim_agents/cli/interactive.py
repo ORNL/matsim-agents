@@ -157,6 +157,8 @@ def chat(
 ):
     """Interactive hypothesis-generation chat that triggers atomistic exploration.
 
+    When to use: you want to explore ideas conversationally, with a human confirming each step.
+
     Defaults to Qwen 2.5 (14B) served via a local Ollama daemon.
     """
     from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, run_chat
