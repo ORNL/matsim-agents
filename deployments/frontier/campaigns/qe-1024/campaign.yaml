@@ -1,0 +1,42 @@
+# Production 1,024-atom W-Ta-Cr-V-Hf-Mo QE campaign. Validated by
+# matsim_agents.workflows.full_supercell_campaign before any input is written.
+campaign_id: wtacrvhfmo-1024
+parent_supercell:
+  lattice: bcc
+  conventional_repeats: [8, 8, 8]
+  expected_parent_atoms: 1024
+  lattice_parameter: 3.16
+  ordering: random
+  seed: 1
+  composition: {W: 640, Ta: 128, Cr: 64, V: 96, Hf: 32, Mo: 64}
+numerical_qualification:
+  require_full_parent_supercell: true
+  prohibit_smaller_cell_substitution: true
+defects:
+  vacancy_site: 0
+  interstitial_site: 0
+  interstitial_species: W
+  interstitial_site_type: octahedral
+  frenkel_site: 5
+  frenkel_anchor: 40
+  divacancy_site: 0
+  divacancy_shell: 1
+qe:
+  # Only Mo-PBE.upf exists here; W, Ta, Cr, V, Hf are missing -> INPUT_BLOCKED.
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/external/quantum-espresso/src/pseudo
+  ecutwfc_ry: 45.0
+  ecutrho_ry: 360.0
+  smearing: mv
+  degauss_ry: 0.02
+  kpts: [1, 1, 1]
+  conv_thr_ry: 1.0e-6
+  mixing_beta: 0.2
+  neb_images: 5
+slurm:
+  account: LRN110
+  qos: debug
+  partition: batch
+  nodes: 8
+  walltime: "02:00:00"
+  job_name: qe-1024-validation
+  max_concurrent_jobs: 1
