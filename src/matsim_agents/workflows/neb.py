@@ -367,6 +367,7 @@ def ingest_neb_results(
         endpoints_qualified=qualified_endpoints,
         provenance={
             "pathway_id": pathway.pathway_id,
+            "transition_id": pathway.transition.transition_id,
             "config_hash": stage.config_hash,
             "input_sha256": stage.input_sha256,
             "stage_index": str(stage.index),

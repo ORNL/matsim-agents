@@ -99,6 +99,8 @@ class TransitionEvent(BaseModel):
             ev = self.evidence
             if ev is None or ev.neb_state != "qualified" or not ev.endpoints_qualified:
                 raise ValueError("qualified needs qualified NEB evidence and endpoints")
+            if not ev.climbing_image_used:
+                raise ValueError("qualified needs a climbing-image NEB")
             if self.attempt_frequency_hz is None:
                 raise ValueError("qualified needs an explicit attempt frequency")
         return self

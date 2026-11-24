@@ -63,11 +63,28 @@ def attach_neb_result(
                 f"E_f - E_r = {forward - reverse:.4f} eV disagrees with E_N - E_0 = {delta:.4f} eV"
             )
 
+    result_transition = result.provenance.get("transition_id")
+    if result_transition is not None and result_transition != transition.transition_id:
+        raise EvidenceError(
+            f"the NEB result belongs to transition {result_transition!r}, "
+            f"not {transition.transition_id!r}"
+        )
+    spec = transition.calculation
+    if spec is not None:
+        if result.method_id != spec.method_id:
+            raise EvidenceError(
+                f"result method {result.method_id!r} differs from declared {spec.method_id!r}"
+            )
+        if result.n_images != spec.n_images:
+            raise EvidenceError(
+                f"result has {result.n_images} images, the transition declares {spec.n_images}"
+            )
+
     events = _events_for(network, transition.transition_id)
     source = state_from_endpoint(transition.initial)
     if events["forward"].source_id != source.state_id:
         raise EvidenceError("NEB initial endpoint does not match the event source state")
-    if network.state(events["forward"].target_id).parent_id != transition.final.parent_id:
+    if events["forward"].target_id != state_from_endpoint(transition.final).state_id:
         raise EvidenceError("NEB final endpoint does not match the event target state")
 
     warnings = list(result.warnings)

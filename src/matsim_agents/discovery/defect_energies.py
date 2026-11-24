@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 from ase import Atoms
 
+from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.defects import (
     CHARGE_LIMITATION,
     MAGNETISM_LIMITATION,
@@ -98,6 +99,8 @@ def classified_defect_formation_energy(
         raise ValueError("relaxed structure does not match the classified outcome")
     if len(parent) != config.n_parent_atoms:
         raise ValueError(f"parent has {len(parent)} atoms, config expects {config.n_parent_atoms}")
+    if occupation_fingerprint(parent) != config.parent_ordering_id:
+        raise ValueError("parent is not the host ordering this defect was generated from")
     if not chemical_potentials:
         raise ValueError("at least one chemical-potential vertex is required")
     for vertex, mu in chemical_potentials.items():

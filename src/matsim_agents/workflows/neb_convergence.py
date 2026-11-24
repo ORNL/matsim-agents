@@ -107,7 +107,13 @@ def check_neb_run(
         failures.append("path error missing; missing is not zero")
     elif err > force_threshold_eV_per_A:
         failures.append(f"path not converged (max error {err} eV/A)")
-    climbing_ok = run.climbing_image_used and err is not None and math.isfinite(err)
+    climbing_ok = (
+        run.climbing_image_used
+        and err is not None
+        and math.isfinite(err)
+        and err <= force_threshold_eV_per_A
+        and run.n_images >= min_images
+    )
     if not run.climbing_image_used:
         failures.append("no climbing image")
     if run.n_imaginary_modes_at_saddle is None:

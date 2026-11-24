@@ -92,6 +92,9 @@ def validate_network(network: TransitionNetwork, initial_state_id: str) -> Netwo
         issues.append(f"{len(unreachable)} states are unreachable from the initial state")
     if network.provenance.synthetic:
         issues.append("network is synthetic; it is not scientific evidence")
+    n_synthetic = sum(1 for e in events if e.evidence and e.evidence.synthetic)
+    if n_synthetic:
+        issues.append(f"{n_synthetic} transitions rest on synthetic barrier evidence")
 
     return NetworkReport(
         n_states=len(states),
@@ -99,7 +102,7 @@ def validate_network(network: TransitionNetwork, initial_state_id: str) -> Netwo
         n_candidate=counts["candidate"],
         n_unqualified=counts["unqualified"],
         n_qualified=counts["qualified"],
-        n_synthetic_evidence=sum(1 for e in events if e.evidence and e.evidence.synthetic),
+        n_synthetic_evidence=n_synthetic,
         qualified_fraction=counts["qualified"] / n if n else 0.0,
         evidence_fraction=with_barrier / n if n else 0.0,
         missing_barrier=missing_barrier,
@@ -113,6 +116,7 @@ def validate_network(network: TransitionNetwork, initial_state_id: str) -> Netwo
             and reach_qualified
             and not missing_reverse
             and not network.provenance.synthetic
+            and not n_synthetic
         ),
         ready_for_exploratory_kmc=runnable and reach_barriers and reach_freq,
         issues=tuple(issues),

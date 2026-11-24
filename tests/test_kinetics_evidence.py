@@ -89,3 +89,41 @@ def test_evidence_for_another_pathway_is_rejected():
     other = _hop().transition.model_copy(update={"transition_id": "something-else"})
     with pytest.raises(EvidenceError, match="no forward event"):
         attach_neb_result(net, other, _result())
+
+
+def test_result_recorded_for_another_transition_is_rejected():
+    net, transition = _setup()
+    swapped = _result(provenance={"transition_id": "other-pathway"})
+    with pytest.raises(EvidenceError, match="belongs to transition"):
+        attach_neb_result(net, transition, swapped)
+
+
+def test_result_must_match_the_declared_calculation():
+    from matsim_agents.discovery.neb_contracts import NebCalculationSpec
+
+    fields = NebCalculationSpec.model_fields
+    if "method_id" not in fields or "n_images" not in fields:
+        pytest.skip("calculation spec has no method_id/n_images")
+    net, transition = _setup()
+    if transition.calculation is None:
+        pytest.skip("fixture transition has no calculation spec")
+    with pytest.raises(EvidenceError, match="images"):
+        attach_neb_result(
+            net,
+            transition,
+            _result(
+                method_id=transition.calculation.method_id,
+                n_images=transition.calculation.n_images + 1,
+            ),
+        )
+
+
+def test_synthetic_evidence_blocks_qualified_kmc_on_a_real_network():
+    from matsim_agents.kinetics.transitions import state_from_endpoint
+    from matsim_agents.kinetics.validation import validate_network
+
+    net, transition = _setup()
+    attach_neb_result(net, transition, _result(), attempt_frequency_hz=1e13, synthetic=True)
+    report = validate_network(net, state_from_endpoint(transition.initial).state_id)
+    assert not report.ready_for_qualified_kmc
+    assert any("synthetic barrier" in issue for issue in report.issues)

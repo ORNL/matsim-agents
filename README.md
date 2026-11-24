@@ -290,6 +290,9 @@ matsim-agents coordination init|add|claim|heartbeat|complete|fail ...  # manage 
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml [--mlip-config FILE]  # active-learning loop (MLIP <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
+matsim-agents active-learning run|validate-config ...  # same commands as `al`
+matsim-agents explore-and-learn COMPOSITION [options]  # discovery followed by active learning
+matsim-agents magnetic generate|policies|show ...  # collinear magnetic starting states for QE
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
 matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan's LLM servers are up
