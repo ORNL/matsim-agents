@@ -30,7 +30,6 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 from matsim_agents.active_learning import trainer as trainer_mod
-from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
     AcquisitionConfig,
     ALConfig,
@@ -40,6 +39,7 @@ from matsim_agents.active_learning.config import (
     TrainerConfig,
 )
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
 from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig

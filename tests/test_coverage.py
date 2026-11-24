@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.coverage import (
+from matsim_agents.discovery.exploration.coverage import (
     bootstrap_mean_interval,
     convergence_report,
     coverage_report,

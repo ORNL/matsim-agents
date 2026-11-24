@@ -228,8 +228,8 @@ def test_llm_replay_admissibility_requires_purpose_and_ledger_citations(tmp_path
 
 
 def test_rule_based_ensemble_uses_stored_committee_forces():
-    from matsim_agents.active_learning.candidates import Candidate
     from matsim_agents.active_learning.config import AcquisitionConfig
+    from matsim_agents.active_learning.md_sampler import Candidate
     from matsim_agents.active_learning.uncertainty import select_candidates
 
     pool = _pool(6)

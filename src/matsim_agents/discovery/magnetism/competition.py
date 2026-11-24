@@ -1,4 +1,4 @@
-"""Plan, execute (when authorized) and rank competing collinear magnetic states (M6).
+"""Plan, execute (when authorized) and rank competing collinear magnetic states.
 
 The ranking covers only the states that were evaluated under one identical numerical method.
 It never claims a global magnetic ground state.
@@ -14,13 +14,13 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.discovery.magnetic_results import (
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.discovery.magnetism.results import (
     ClassificationTolerances,
     MagneticResult,
     classify_moments,
     spin_reversed_equivalent,
 )
-from matsim_agents.discovery.magnetism import MagneticConfiguration
 
 NOT_GLOBAL_GROUND_STATE = (
     "lowest energy among the evaluated states only; unsampled magnetic arrangements, "

@@ -1,4 +1,4 @@
-"""Synthetic scalability demonstrations (M19).
+"""Synthetic scalability demonstrations.
 
 Everything here uses a synthetic evaluator, so results measure software behaviour (throughput,
 recovery, memory, sampling mechanics) and are never scientific evidence. Records produced by
@@ -17,13 +17,13 @@ import numpy as np
 from ase import Atoms
 from ase.build import bulk
 
-from matsim_agents.discovery.candidates import CandidateManifest, CandidateRecord
-from matsim_agents.discovery.surrogate import (
+from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
+from matsim_agents.discovery.exploration.magnetic_surrogate import (
     LabeledExample,
     StratumMeanSurrogate,
     select_for_labeling,
 )
-from matsim_agents.discovery.sampling import sample_random
+from matsim_agents.discovery.exploration.sampling import sample_random
 
 Evaluator = Callable[[CandidateRecord, Atoms], dict]
 
@@ -76,7 +76,7 @@ class RunStats:
     evaluations: dict[str, int]
 
 
-def ingest(manifest: CandidateManifest, n: int, seed: int) -> tuple[int, int]:
+def ingest_synthetic_candidates(manifest: CandidateManifest, n: int, seed: int) -> tuple[int, int]:
     added = duplicates = 0
     for index in range(n):
         record, _ = make_candidate(index, seed)
@@ -87,7 +87,7 @@ def ingest(manifest: CandidateManifest, n: int, seed: int) -> tuple[int, int]:
     return added, duplicates
 
 
-def process(
+def evaluate_pending(
     manifest: CandidateManifest,
     seed: int,
     *,
@@ -131,11 +131,11 @@ def run_scale_demo(path: str | Path, n: int, seed: int, *, crash_fraction: float
     tracemalloc.start()
     started = time.perf_counter()
     manifest = CandidateManifest(manifest_path)
-    added, duplicates = ingest(manifest, n, seed)
-    process(manifest, seed, crash_after=int(crash_fraction * added), calls=calls)
+    added, duplicates = ingest_synthetic_candidates(manifest, n, seed)
+    evaluate_pending(manifest, seed, crash_after=int(crash_fraction * added), calls=calls)
     resumed = CandidateManifest(manifest_path)  # fresh process view of the on-disk log
     resumed.recover_interrupted()
-    process(resumed, seed, calls=calls)
+    evaluate_pending(resumed, seed, calls=calls)
     seconds = time.perf_counter() - started
     peak = tracemalloc.get_traced_memory()[1] / 2**20
     tracemalloc.stop()

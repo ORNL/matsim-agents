@@ -13,7 +13,7 @@ Sources, in order of precedence:
 
 In all cases the final output is a list of ``Path`` objects pointing at
 ``.vasp`` (or other ASE-supported) seed files on disk. The MD sampler in
-:mod:`active_learning.candidates` consumes them unchanged.
+:mod:`active_learning.md_sampler` consumes them unchanged.
 
 Why seed structures (and not relaxed ones)?
 -------------------------------------------

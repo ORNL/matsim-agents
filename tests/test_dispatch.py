@@ -8,16 +8,16 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.candidates import CandidateManifest, CandidateRecord
-from matsim_agents.discovery.dispatch import (
+from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
+from matsim_agents.discovery.exploration.dispatch import (
     FACILITIES,
     FacilityProfile,
+    apply_scheduler_states,
     batches_of,
-    dispatch,
-    dispatchable,
-    ingest_result,
     node_hours,
-    reconcile,
+    ready_for_dispatch,
+    record_result,
+    submit_pending_batches,
 )
 from matsim_agents.execution import slurm_jobs as sj
 
@@ -79,19 +79,21 @@ def test_dispatch_batches_submit_once_and_survive_repeat(tmp_path):
     manifest, _ = _manifest(tmp_path, 6)
     sched = FakeScheduler()
     slurm = tmp_path / "jobs.json"
-    report = dispatch(manifest, slurm, PROFILE, _cmd, batch_size=3, runner=sched)
+    report = submit_pending_batches(manifest, slurm, PROFILE, _cmd, batch_size=3, runner=sched)
     assert len(report.submitted) == 2 and not report.deferred and report.stop_reason is None
     assert all(s == "queued" for s in manifest.status.values())
-    again = dispatch(manifest, slurm, PROFILE, _cmd, batch_size=3, runner=sched)
+    again = submit_pending_batches(manifest, slurm, PROFILE, _cmd, batch_size=3, runner=sched)
     assert again.submitted == () and len(sched.submissions) == 2
     reopened = CandidateManifest(tmp_path / "cand.jsonl")
-    assert dispatchable(reopened) == []
+    assert ready_for_dispatch(reopened) == []
 
 
 def test_sbatch_arguments_use_profile_and_caps(tmp_path):
     manifest, _ = _manifest(tmp_path, 2)
     sched = FakeScheduler()
-    dispatch(manifest, tmp_path / "j.json", PROFILE, _cmd, batch_size=2, gpus=1, runner=sched)
+    submit_pending_batches(
+        manifest, tmp_path / "j.json", PROFILE, _cmd, batch_size=2, gpus=1, runner=sched
+    )
     argv = sched.submissions[0]
     assert argv[argv.index("-A") + 1] == "LRN110" and "-q" in argv and "debug" in argv
     assert "--gpus-per-node=1" in argv and argv[argv.index("-N") + 1] == "1"
@@ -101,20 +103,24 @@ def test_gpu_cap_defers_without_error_and_resumes_later(tmp_path):
     manifest, _ = _manifest(tmp_path, 8)
     sched = FakeScheduler()
     slurm = tmp_path / "j.json"
-    report = dispatch(manifest, slurm, PROFILE, _cmd, batch_size=2, gpus=1, runner=sched)
+    report = submit_pending_batches(
+        manifest, slurm, PROFILE, _cmd, batch_size=2, gpus=1, runner=sched
+    )
     assert len(report.submitted) == sj.MAX_OUTSTANDING_GPU_JOBS == 2
     assert len(report.deferred) == 2 and "outstanding" in report.stop_reason
     assert len(sched.submissions) == 2
     for job in sched.states:
         sched.states[job] = ("COMPLETED", "0:0", "00:05:00")
     sj.refresh_manifest(slurm, runner=sched)
-    more = dispatch(manifest, slurm, PROFILE, _cmd, batch_size=2, gpus=1, runner=sched)
+    more = submit_pending_batches(
+        manifest, slurm, PROFILE, _cmd, batch_size=2, gpus=1, runner=sched
+    )
     assert len(more.submitted) == 2
 
 
 def test_max_submissions_limits_a_single_call(tmp_path):
     manifest, _ = _manifest(tmp_path, 6)
-    report = dispatch(
+    report = submit_pending_batches(
         manifest, tmp_path / "j.json", PROFILE, _cmd, batch_size=2, max_submissions=1,
         runner=FakeScheduler(),
     )  # fmt: skip
@@ -126,13 +132,15 @@ def test_unverified_facility_refuses_to_dispatch(tmp_path):
     manifest, _ = _manifest(tmp_path, 2)
     sched = FakeScheduler()
     with pytest.raises(sj.SlurmJobError, match="not verified"):
-        dispatch(
+        submit_pending_batches(
             manifest, tmp_path / "j.json", FACILITIES["aurora"], _cmd, batch_size=1, runner=sched
         )
     assert sched.argvs == []
     custom = FacilityProfile("x", "A", "debug", "batch", verified=False)
     with pytest.raises(sj.SlurmJobError):
-        dispatch(manifest, tmp_path / "j.json", custom, _cmd, batch_size=1, runner=sched)
+        submit_pending_batches(
+            manifest, tmp_path / "j.json", custom, _cmd, batch_size=1, runner=sched
+        )
 
 
 def test_stage_dependencies_hold_children_until_parents_are_done(tmp_path):
@@ -144,23 +152,23 @@ def test_stage_dependencies_hold_children_until_parents_are_done(tmp_path):
         child_atoms, generation_method="t", parent_ids=[parent.candidate_id]
     )
     manifest.add(child)
-    assert [r.candidate_id for r in dispatchable(manifest)] == [parent.candidate_id]
-    ingest_result(manifest, parent.candidate_id, {"energy_eV": -1.0})
-    assert [r.candidate_id for r in dispatchable(manifest)] == [child.candidate_id]
+    assert [r.candidate_id for r in ready_for_dispatch(manifest)] == [parent.candidate_id]
+    record_result(manifest, parent.candidate_id, {"energy_eV": -1.0})
+    assert [r.candidate_id for r in ready_for_dispatch(manifest)] == [child.candidate_id]
     with pytest.raises(ValueError):
-        ingest_result(manifest, child.candidate_id, {})
+        record_result(manifest, child.candidate_id, {})
 
 
 def test_reconcile_never_treats_leaving_the_queue_as_success(tmp_path):
     manifest, records = _manifest(tmp_path, 4)
     sched = FakeScheduler()
     slurm = tmp_path / "j.json"
-    dispatch(manifest, slurm, PROFILE, _cmd, batch_size=2, runner=sched)
+    submit_pending_batches(manifest, slurm, PROFILE, _cmd, batch_size=2, runner=sched)
     first, second = sorted(sched.states)
     sched.states[first] = ("COMPLETED", "0:0", "00:05:00")
     sched.states[second] = ("TIMEOUT", "0:0", "00:15:00")
     entries = sj.refresh_manifest(slurm, runner=sched)
-    outcome = reconcile(manifest, entries)
+    outcome = apply_scheduler_states(manifest, entries)
     assert len(outcome["awaiting_result"]) == 2 and len(outcome["failed"]) == 2
     assert not any(s == "done" for s in manifest.status.values())
     failed = outcome["failed"][0]
@@ -174,7 +182,7 @@ def test_measured_node_hours_come_from_scheduler_elapsed_time(tmp_path):
     manifest, _ = _manifest(tmp_path, 2)
     sched = FakeScheduler()
     slurm = tmp_path / "j.json"
-    dispatch(manifest, slurm, PROFILE, _cmd, batch_size=2, runner=sched)
+    submit_pending_batches(manifest, slurm, PROFILE, _cmd, batch_size=2, runner=sched)
     assert node_hours(sj.load_manifest(slurm)) == {}  # nothing measured yet
     (job,) = sched.states
     sched.states[job] = ("COMPLETED", "0:0", "00:30:00")

@@ -1,4 +1,4 @@
-"""Magnetic consistency checks for formation energies, NEB barriers and CT-KMC rates (M8).
+"""Magnetic consistency checks for formation energies, NEB barriers and CT-KMC rates.
 
 Energies are only differenced when they come from one numerical method and one magnetic
 treatment. The checks return verdicts with reasons; they never adjust energies.
@@ -11,8 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from matsim_agents.discovery.magnetic_results import MagneticResult, classify_moments
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.discovery.magnetism.results import MagneticResult, classify_moments
 
 K_B_EV_PER_K = 8.617333262e-5
 Verdict = Literal["consistent", "inconsistent", "insufficient_evidence"]

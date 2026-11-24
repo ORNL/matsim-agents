@@ -1,4 +1,4 @@
-"""Quantitative coverage and statistical-convergence reports (M18).
+"""Quantitative coverage and statistical-convergence reports.
 
 Statistical uncertainty (finite sampling) is reported separately from physical uncertainty
 (model/functional choice) and numerical uncertainty (convergence settings). Only the first is

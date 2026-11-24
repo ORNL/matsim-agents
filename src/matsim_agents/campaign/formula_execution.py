@@ -16,9 +16,9 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.backends.mlip.config import MLIPConfig

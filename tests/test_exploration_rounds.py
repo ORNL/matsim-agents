@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.workflows import (
     ExplorationConfig,

@@ -29,8 +29,8 @@ from collections.abc import Sequence
 import numpy as np
 from ase import Atoms
 
-from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import AcquisitionConfig
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.backends.mlip.dropout import enable_dropout
 from matsim_agents.seeding import numpy_rng, seeded_torch
 

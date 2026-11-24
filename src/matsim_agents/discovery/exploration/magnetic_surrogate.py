@@ -1,4 +1,4 @@
-"""Model-agnostic magnetic surrogate and active-learning interface (M17).
+"""Model-agnostic magnetic surrogate and active-learning interface.
 
 Any model that implements ``MagneticSurrogate`` plugs in. Training is refused when it would leak
 validation information: shared ids, shared content (same structure hash, or same canonical
@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from matsim_agents.discovery.sampling import Selection, sample_adaptive
+from matsim_agents.discovery.exploration.sampling import Selection, sample_adaptive
 
 MIN_VALIDATION = 10
 
@@ -111,7 +111,7 @@ def _mean_std(values: Sequence[float]) -> tuple[float, float]:
 
 
 @dataclass(frozen=True)
-class Evaluation:
+class HeldOutEvaluation:
     n: int
     rmse: float | None
     mae: float | None
@@ -123,16 +123,20 @@ def evaluate(
     validation: Sequence[LabeledExample],
     *,
     min_n: int = MIN_VALIDATION,
-) -> Evaluation:
+) -> HeldOutEvaluation:
     """Held-out error. Below ``min_n`` examples, or with synthetic labels, no figure is given."""
     if any(e.label_source != "dft" for e in validation):
-        return Evaluation(len(validation), None, None, "validation labels are not DFT evidence")
+        return HeldOutEvaluation(
+            len(validation), None, None, "validation labels are not DFT evidence"
+        )
     if len(validation) < min_n:
-        return Evaluation(len(validation), None, None, f"fewer than {min_n} validation examples")
+        return HeldOutEvaluation(
+            len(validation), None, None, f"fewer than {min_n} validation examples"
+        )
     errors = [model.predict(e.candidate_id, e.stratum).mean - e.target for e in validation]
     rmse = math.sqrt(sum(x * x for x in errors) / len(errors))
     mae = sum(abs(x) for x in errors) / len(errors)
-    return Evaluation(len(errors), rmse, mae, "held-out error on independent validation set")
+    return HeldOutEvaluation(len(errors), rmse, mae, "held-out error on independent validation set")
 
 
 def select_for_labeling(
@@ -157,7 +161,7 @@ def select_for_labeling(
     )
 
 
-def deterministic_fallback(
+def surrogate_or_fallback(
     model: MagneticSurrogate | None, train: Sequence[LabeledExample]
 ) -> MagneticSurrogate:
     """Return ``model`` when it is usable, else a fitted ``StratumMeanSurrogate``."""

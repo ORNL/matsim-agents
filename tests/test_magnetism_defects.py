@@ -6,14 +6,14 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.magnetic_results import result_from_moments
-from matsim_agents.discovery.magnetism_defects import (
+from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.discovery.magnetism.defects import (
     InsertedMoment,
     check_neb_magnetic_compatibility,
     derive_defect_configuration,
     flag_magnetic_path,
 )
+from matsim_agents.discovery.magnetism.results import result_from_moments
 
 A = 2.87
 

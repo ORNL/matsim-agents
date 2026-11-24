@@ -1,9 +1,15 @@
-"""Non-blocking batch dispatch of candidates to a scheduler (M16).
+"""Non-blocking batch dispatch of candidates to a scheduler.
 
 Builds on ``CandidateManifest`` (identity, resume) and ``execution.slurm_jobs`` (duplicate
-prevention, the outstanding-GPU-job cap, one-retry rule). Nothing here waits or polls: dispatch
-submits what the caps allow and returns, and a later ``reconcile`` call reads one ``sacct``.
-A job leaving the queue is not success; candidates stay ``queued`` until a result is ingested.
+prevention, the outstanding-GPU-job cap, one-retry rule). Nothing here waits or polls.
+
+Typical cycle:
+
+1. ``submit_pending_batches`` submits what the caps allow and returns.
+2. ``slurm_jobs.refresh_manifest`` then ``apply_scheduler_states`` read one ``sacct``.
+3. ``record_result`` marks a candidate done once its result payload is parsed.
+
+A job leaving the queue is not success; candidates stay ``queued`` until a result is recorded.
 """
 
 from __future__ import annotations
@@ -13,7 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from matsim_agents.discovery.candidates import CandidateManifest, CandidateRecord
+from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
 from matsim_agents.execution import slurm_jobs as sj
 
 
@@ -58,7 +64,7 @@ def batch_name(prefix: str, ids: Sequence[str]) -> str:
     return f"{prefix}-{digest}"
 
 
-def dispatchable(manifest: CandidateManifest) -> list[CandidateRecord]:
+def ready_for_dispatch(manifest: CandidateManifest) -> list[CandidateRecord]:
     """Not yet submitted, with every parent candidate already done (stage dependencies)."""
     return [
         r
@@ -80,7 +86,7 @@ class DispatchReport:
 CommandFor = Callable[[Sequence[str]], tuple[str, ...]]
 
 
-def dispatch(
+def submit_pending_batches(
     manifest: CandidateManifest,
     slurm_manifest: str | Path,
     profile: FacilityProfile,
@@ -104,7 +110,7 @@ def dispatch(
     reused: list[str] = []
     deferred: list[tuple[str, ...]] = []
     stop: str | None = None
-    for ids in batches_of(dispatchable(manifest), batch_size):
+    for ids in batches_of(ready_for_dispatch(manifest), batch_size):
         if stop is not None or (max_submissions is not None and len(submitted) >= max_submissions):
             deferred.append(ids)
             stop = stop or "submission limit reached"
@@ -125,9 +131,10 @@ def dispatch(
             deferred.append(ids)
             stop = str(error)
             continue
-        (submitted if was_submitted else reused).append(
-            (spec.name, entry.job_id) if was_submitted else spec.name
-        )
+        if was_submitted:
+            submitted.append((spec.name, entry.job_id))
+        else:
+            reused.append(spec.name)
         for cid in ids:
             manifest.set_status(
                 cid,
@@ -146,11 +153,13 @@ def elapsed_seconds(text: str | None) -> int | None:
         return None
 
 
-def reconcile(manifest: CandidateManifest, entries: Sequence[sj.JobEntry]) -> dict[str, list[str]]:
+def apply_scheduler_states(
+    manifest: CandidateManifest, entries: Sequence[sj.JobEntry]
+) -> dict[str, list[str]]:
     """Apply scheduler states to candidates after ``refresh_manifest``.
 
     Failed jobs fail their candidates (terminal, with the diagnosis). Completed jobs only mark
-    the candidates ``awaiting_result``; they become ``done`` through ``ingest_result``.
+    the candidates ``awaiting_result``; they become ``done`` through ``record_result``.
     """
     by_job = {e.job_id: e for e in entries}
     out: dict[str, list[str]] = {"failed": [], "awaiting_result": [], "running": []}
@@ -178,7 +187,7 @@ def reconcile(manifest: CandidateManifest, entries: Sequence[sj.JobEntry]) -> di
     return out
 
 
-def ingest_result(manifest: CandidateManifest, candidate_id: str, result: dict) -> None:
+def record_result(manifest: CandidateManifest, candidate_id: str, result: dict) -> None:
     """Mark a candidate done only with an explicit result payload."""
     if not result:
         raise ValueError("an empty result cannot mark a candidate done")

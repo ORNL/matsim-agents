@@ -15,7 +15,7 @@ from matsim_agents.discovery.composition import (
     extract_compositions,
     parse_composition,
 )
-from matsim_agents.discovery.seeds import (
+from matsim_agents.discovery.seed_structures import (
     PhaseCandidate,
     SeedGenerationAction,
     compatible_prototypes,

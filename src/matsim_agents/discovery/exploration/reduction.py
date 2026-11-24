@@ -1,4 +1,4 @@
-"""Auditable redundancy reduction of a candidate pool (M13).
+"""Auditable redundancy reduction of a candidate pool.
 
 Order of operations: exact-hash duplicates, then translation and global-spin-reversal
 equivalents, then optional per-stratum thinning. Candidates containing a rare local environment
@@ -18,20 +18,20 @@ import numpy as np
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 
-from matsim_agents.discovery.candidates import CandidateRecord
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.exploration.candidates import CandidateRecord
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
-DECIMALS = 3
+KEY_DECIMALS = 3
 
 
 @dataclass(frozen=True)
-class PoolItem:
+class CandidateStructure:
     record: CandidateRecord
     atoms: Atoms
     magnetic: MagneticConfiguration | None = None
 
 
-def _moments(item: PoolItem) -> np.ndarray:
+def _moments(item: CandidateStructure) -> np.ndarray:
     atoms, config = item.atoms, item.magnetic
     if config is None or not config.spin_polarized or config.initial_moments_muB is None:
         return np.zeros(len(atoms))
@@ -40,7 +40,7 @@ def _moments(item: PoolItem) -> np.ndarray:
     return np.array([by_id.get(int(i), 0.0) for i in ids], dtype=float)
 
 
-def symmetry_key(item: PoolItem, *, reverse_spin: bool) -> str:
+def symmetry_key(item: CandidateStructure, *, reverse_spin: bool) -> str:
     """Canonical hash minimised over lattice translations (and global spin reversal)."""
     atoms = item.atoms
     scaled = atoms.get_scaled_positions(wrap=True)
@@ -50,10 +50,14 @@ def symmetry_key(item: PoolItem, *, reverse_spin: bool) -> str:
     signs = (1.0, -1.0) if reverse_spin else (1.0,)
     best: str | None = None
     for origin in scaled:
-        shifted = np.round(scaled - origin, DECIMALS) % 1.0
+        shifted = np.round(scaled - origin, KEY_DECIMALS) % 1.0
         for sign in signs:
             rows = sorted(
-                (s, *[f"{x:.{DECIMALS}f}" for x in row], f"{sign * m + 0.0:.{DECIMALS - 1}f}")
+                (
+                    s,
+                    *[f"{x:.{KEY_DECIMALS}f}" for x in row],
+                    f"{sign * m + 0.0:.{KEY_DECIMALS - 1}f}",
+                )
                 for s, row, m in zip(symbols, shifted, moments, strict=True)
             )
             digest = hashlib.sha256(
@@ -64,7 +68,7 @@ def symmetry_key(item: PoolItem, *, reverse_spin: bool) -> str:
     return best
 
 
-def local_environments(item: PoolItem, cutoff: float) -> frozenset[str]:
+def local_environments(item: CandidateStructure, cutoff: float) -> frozenset[str]:
     """Per-atom environment strings, invariant to global spin reversal (relative alignment)."""
     atoms = item.atoms
     i_idx, j_idx = neighbor_list("ij", atoms, cutoff)
@@ -97,8 +101,8 @@ class ReductionReport:
         return dict(Counter(r.reason for r in self.removed))
 
 
-def reduce_pool(
-    items: Iterable[PoolItem],
+def deduplicate_candidates(
+    items: Iterable[CandidateStructure],
     *,
     cutoff: float = 3.0,
     rare_max_count: int = 2,
@@ -108,7 +112,7 @@ def reduce_pool(
     pool = sorted(items, key=lambda it: it.record.candidate_id)
     removed: list[Removal] = []
 
-    unique: dict[str, PoolItem] = {}
+    unique: dict[str, CandidateStructure] = {}
     for item in pool:
         cid = item.record.candidate_id
         if cid in unique:
@@ -116,8 +120,8 @@ def reduce_pool(
         else:
             unique[cid] = item
 
-    representative: dict[str, PoolItem] = {}
-    survivors: list[PoolItem] = []
+    representative: dict[str, CandidateStructure] = {}
+    survivors: list[CandidateStructure] = []
     for item in unique.values():
         key = symmetry_key(item, reverse_spin=True)
         rep = representative.get(key)
@@ -139,11 +143,11 @@ def reduce_pool(
         if any(frequency[env] <= rare_max_count for env in envs)
     }
 
-    kept: list[PoolItem] = []
+    kept: list[CandidateStructure] = []
     if max_per_stratum is None:
         kept = survivors
     else:
-        strata: dict[str, list[PoolItem]] = {}
+        strata: dict[str, list[CandidateStructure]] = {}
         for item in survivors:
             strata.setdefault(item.record.stratum or item.record.composition, []).append(item)
         for _, members in sorted(strata.items()):
@@ -169,6 +173,8 @@ def pool_from(
     atoms_list: Sequence[Atoms],
     records: Sequence[CandidateRecord],
     configs: Sequence[MagneticConfiguration | None] | None = None,
-) -> list[PoolItem]:
+) -> list[CandidateStructure]:
     configs = configs or [None] * len(records)
-    return [PoolItem(r, a, c) for r, a, c in zip(records, atoms_list, configs, strict=True)]
+    return [
+        CandidateStructure(r, a, c) for r, a, c in zip(records, atoms_list, configs, strict=True)
+    ]

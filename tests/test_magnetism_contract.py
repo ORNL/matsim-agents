@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.magnetism import (
+from matsim_agents.discovery.magnetism.config import (
     MagneticConfiguration,
     qe_polarization_from_moment,
     reject_unsupported,

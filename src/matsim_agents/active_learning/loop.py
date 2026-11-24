@@ -39,7 +39,6 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.active_learning.candidates import Candidate, sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
@@ -53,6 +52,7 @@ from matsim_agents.active_learning.evaluate import (
     evaluate_frames,
     evaluate_promotion_candidate,
 )
+from matsim_agents.active_learning.md_sampler import Candidate, sample_md_candidates
 from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,

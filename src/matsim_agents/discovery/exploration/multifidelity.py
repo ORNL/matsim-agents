@@ -1,4 +1,4 @@
-"""Multifidelity screening of magnetic candidates (M15).
+"""Multifidelity screening of magnetic candidates.
 
 F0 descriptors, F1 MLIP (geometry and energy only), F2 spin-polarized DFT, F3 NEB.
 A candidate is promoted by recorded evidence, never by fidelity order alone. Magnetic claims need
@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Fidelity = Literal["F0", "F1", "F2", "F3"]
-ORDER: tuple[Fidelity, ...] = ("F0", "F1", "F2", "F3")
-MAGNETIC_CAPABLE: frozenset[str] = frozenset({"F2", "F3"})
+FIDELITY_ORDER: tuple[Fidelity, ...] = ("F0", "F1", "F2", "F3")
+MAGNETIC_FIDELITIES: frozenset[str] = frozenset({"F2", "F3"})
 F1_LIMITATION = (
     "MLIP evidence is geometry and energy only; it cannot confirm, rank or rule out magnetic states"
 )
@@ -54,7 +54,7 @@ class PromotionDecision:
 
 
 def _allowed(rule: PromotionRule) -> None:
-    if ORDER.index(rule.target) <= ORDER.index(rule.source):
+    if FIDELITY_ORDER.index(rule.target) <= FIDELITY_ORDER.index(rule.source):
         raise ValueError("a promotion must go to a higher fidelity")
 
 
@@ -108,7 +108,7 @@ def magnetic_claims_allowed(evidence: Iterable[FidelityEvidence]) -> tuple[bool,
     good = [
         e
         for e in rows
-        if e.fidelity in MAGNETIC_CAPABLE and e.converged and e.magnetic_state_resolved
+        if e.fidelity in MAGNETIC_FIDELITIES and e.converged and e.magnetic_state_resolved
     ]
     if good:
         return True, f"{len(good)} converged spin-polarized evaluation(s)"
@@ -145,7 +145,7 @@ class CostLedger:
                 "wasted_on_unconverged": self.wasted[f],
                 "mean_cost": self.spent[f] / self.counts[f],
             }
-            for f in ORDER
+            for f in FIDELITY_ORDER
             if self.counts[f]
         }
 

@@ -1,4 +1,4 @@
-"""Material-family policies that decide which collinear magnetic trials to generate (M9).
+"""Material-family policies that decide which collinear magnetic trials to generate.
 
 A policy lists starting states worth evaluating. It is not a claim about the true magnetic
 ground state, and all moments are starting values (muB) that DFT may change or collapse.
@@ -12,11 +12,11 @@ from typing import Literal
 
 from ase import Atoms
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
 Trial = Literal["nonmagnetic", "ferromagnetic", "antiparallel_solute", "bcc_afm"]
-STATEMENT = "starting-state policy; not a ground-state claim and not qualified"
+POLICY_DISCLAIMER = "starting-state policy; not a ground-state claim and not qualified"
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class MagneticPolicy:
     solute_moments_muB: Mapping[str, float]
     rationale: str
     default_trial: Trial = "nonmagnetic"
-    statement: str = STATEMENT
+    statement: str = POLICY_DISCLAIMER
 
     def matches(self, symbols: set[str]) -> bool:
         if not symbols <= self.elements:

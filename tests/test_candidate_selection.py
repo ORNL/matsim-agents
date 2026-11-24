@@ -4,7 +4,7 @@ from ase.build import bulk
 from ase.io import write
 from pymatgen.io.ase import AseAtomsAdaptor
 
-from matsim_agents.discovery.selection import (
+from matsim_agents.discovery.structural_screening import (
     CandidateSelection,
     _neighbor_fingerprint,
     select_diverse_candidates,
@@ -87,7 +87,7 @@ def test_neighbor_descriptor_is_periodic_and_permutation_invariant():
 
 def test_fingerprint_ties_keep_input_order(structures, monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.discovery.selection._neighbor_fingerprint",
+        "matsim_agents.discovery.structural_screening._neighbor_fingerprint",
         lambda structure, species: np.zeros(8),
     )
     paths = [structures(kind) for kind in ("fcc", "bcc", "sc")]

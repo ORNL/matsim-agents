@@ -1,4 +1,4 @@
-"""Carry collinear magnetic configurations through point defects and NEB images (M7).
+"""Carry collinear magnetic configurations through point defects and NEB images.
 
 Vacancies keep every remaining atom's parent moment (matched by ``atom_id``). Atoms that have no
 parent moment (interstitials, substitutions) get a moment only from an explicit value or a named
@@ -15,12 +15,12 @@ import numpy as np
 from ase import Atoms
 from pydantic import ValidationError
 
-from matsim_agents.discovery.magnetic_results import (
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.discovery.magnetism.results import (
     ClassificationTolerances,
     MagneticResult,
     classify_moments,
 )
-from matsim_agents.discovery.magnetism import MagneticConfiguration
 
 InsertedPolicy = Literal["explicit", "zero_documented"]
 

@@ -1,4 +1,4 @@
-"""Content-addressed candidate records and a resumable append-only manifest (M12).
+"""Content-addressed candidate records and a resumable append-only manifest.
 
 A candidate's identity is the hash of what defines it (structure, magnetic state, defect and
 generation recipe), never of a run-specific name, so the same candidate generated twice is the
@@ -20,10 +20,10 @@ import numpy as np
 from ase import Atoms
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
 Status = Literal["generated", "queued", "running", "done", "failed", "skipped"]
-TERMINAL: frozenset[str] = frozenset({"done", "failed", "skipped"})
+TERMINAL_STATUSES: frozenset[str] = frozenset({"done", "failed", "skipped"})
 POSITION_DECIMALS = 5
 
 
@@ -175,7 +175,7 @@ class CandidateManifest:
     ) -> None:
         if candidate_id not in self.records:
             raise KeyError(f"unknown candidate {candidate_id}")
-        if self.status[candidate_id] in TERMINAL and status not in TERMINAL:
+        if self.status[candidate_id] in TERMINAL_STATUSES and status not in TERMINAL_STATUSES:
             raise ValueError(
                 f"candidate {candidate_id} is {self.status[candidate_id]}; "
                 "terminal states cannot be reopened"
@@ -192,7 +192,7 @@ class CandidateManifest:
     def pending(self) -> list[CandidateRecord]:
         """Candidates not in a terminal state, in insertion order (running ones included so
         an interrupted run re-queues them)."""
-        return [r for cid, r in self.records.items() if self.status[cid] not in TERMINAL]
+        return [r for cid, r in self.records.items() if self.status[cid] not in TERMINAL_STATUSES]
 
     def counts(self) -> dict[str, int]:
         return dict(Counter(self.status.values()))

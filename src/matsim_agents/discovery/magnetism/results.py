@@ -1,4 +1,4 @@
-"""Parse and classify converged collinear magnetic results from QE output (M5).
+"""Parse and classify converged collinear magnetic results from QE output.
 
 The classification is descriptive: ``afm_like`` means opposite-sign local moments with small
 net moment under the stated tolerances, never proof of an antiferromagnetic ground state, and a
@@ -16,9 +16,9 @@ from typing import Literal
 import numpy as np
 from ase import Atoms
 
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
-Classification = Literal[
+MagneticClassification = Literal[
     "nonmagnetic",
     "fm_like",
     "afm_like",
@@ -139,7 +139,7 @@ def result_from_moments(
 
 def classify_moments(
     result: MagneticResult, tol: ClassificationTolerances | None = None
-) -> Classification:
+) -> MagneticClassification:
     tol = tol or ClassificationTolerances()
     if not result.converged:
         return "not_converged"
@@ -164,7 +164,7 @@ def classify_moments(
 
 @dataclass(frozen=True)
 class StateComparison:
-    classification: Classification
+    classification: MagneticClassification
     requested_mode: str
     relation: Literal[
         "same_arrangement",

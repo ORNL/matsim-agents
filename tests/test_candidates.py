@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.candidates import (
+from matsim_agents.discovery.exploration.candidates import (
     CandidateManifest,
     CandidateRecord,
     candidate_identity,
     structure_hash,
 )
+from matsim_agents.discovery.magnetism import generators as gen
 
 
 def _atoms():

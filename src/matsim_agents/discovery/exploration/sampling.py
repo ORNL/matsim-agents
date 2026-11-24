@@ -1,4 +1,4 @@
-"""Seeded random, stratified and adaptive candidate sampling (M14).
+"""Seeded random, stratified and adaptive candidate sampling.
 
 Every selection carries the strategy, seed, round and inclusion probability, so a campaign can be
 audited and re-weighted. The validation set is drawn first, uniformly at random, and is disjoint
@@ -8,7 +8,7 @@ from anything the samplers can return, so adaptive selection can never leak into
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -214,6 +214,3 @@ def _plateaued(rule: StopRule, state: CampaignState) -> bool:
 
 def stratum_counts(selections: Sequence[Selection]) -> dict[str, int]:
     return dict(Counter(s.stratum for s in selections))
-
-
-Scorer = Callable[[str], float]

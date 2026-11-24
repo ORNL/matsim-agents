@@ -10,7 +10,7 @@ from ase.build import bulk
 
 from matsim_agents.backends.dft.qe import _write_pw_from_template
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
-from matsim_agents.discovery import magnetism_generators as gen
+from matsim_agents.discovery.magnetism import generators as gen
 
 A = 2.87
 PSEUDOS = {"Fe": "Fe.pbe.UPF", "Cr": "Cr.pbe.UPF"}

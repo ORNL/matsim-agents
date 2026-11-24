@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.magnetic_results import (
+from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.discovery.magnetism.results import (
     ClassificationTolerances,
     classify_moments,
     compare_with_request,

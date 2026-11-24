@@ -44,7 +44,7 @@ from matsim_agents.campaign.surrogate_hull import (
 from matsim_agents.campaign.unary_references import relax_unary_references, unary_cache_directory
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
@@ -2148,7 +2148,7 @@ def test_generation_action_carries_the_attempt_generation_seed():
     from types import SimpleNamespace
 
     from matsim_agents.backends.mlip.config import MACEConfig
-    from matsim_agents.discovery.seeds import SeedGenerationAction
+    from matsim_agents.discovery.seed_structures import SeedGenerationAction
 
     action = SeedGenerationAction(
         action_id="a", formula="NbO", formula_units=1, pyxtal_count=1, random_seed=1

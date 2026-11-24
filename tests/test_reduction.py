@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 from ase.build import bulk
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.candidates import CandidateRecord
-from matsim_agents.discovery.reduction import PoolItem, reduce_pool
+from matsim_agents.discovery.exploration.candidates import CandidateRecord
+from matsim_agents.discovery.exploration.reduction import CandidateStructure, deduplicate_candidates
+from matsim_agents.discovery.magnetism import generators as gen
 
 A = 2.87
 
@@ -27,7 +27,7 @@ def _item(atoms, magnetic=None, *, defect=None, stratum=None, recipe=None):
         recipe=recipe,
         stratum=stratum,
     )
-    return PoolItem(record, atoms, magnetic)
+    return CandidateStructure(record, atoms, magnetic)
 
 
 def _vacancy(index):
@@ -43,7 +43,7 @@ def test_equivalent_vacancies_collapse_to_one_and_conserve_counts():
     for index in range(len(base)):
         vac = _vacancy(index)
         items.append(_item(vac, fm_for(vac), defect={"site": index}))
-    report = reduce_pool(items)
+    report = deduplicate_candidates(items)
     assert len(report.kept) == 1
     assert report.reasons == {"translation_equivalent": len(base) - 1}
     assert len(report.kept) + len(report.removed) == report.n_input
@@ -62,7 +62,7 @@ def test_translated_copy_and_exact_duplicate_are_removed_with_reasons():
     translated.wrap()
     other = _item(translated, fm, recipe={"copy": 1})
     original = _item(atoms, fm)
-    report = reduce_pool([original, other, original])
+    report = deduplicate_candidates([original, other, original])
     assert report.reasons == {"exact_duplicate": 1, "translation_equivalent": 1}
     assert len(report.kept) == 1
 
@@ -79,7 +79,7 @@ def test_global_spin_reversal_is_distinguished_from_real_difference():
         _item(atoms, gen.custom_collinear(atoms, "s", m), recipe={"n": n})
         for n, m in enumerate((up, down, partial))
     ]
-    report = reduce_pool(items)
+    report = deduplicate_candidates(items)
     assert report.reasons == {"spin_reversal_equivalent": 1}
     assert len(report.kept) == 2
 
@@ -91,7 +91,7 @@ def test_fm_and_afm_and_nm_are_all_kept():
         _item(atoms, gen.ferromagnetic(atoms, "s", {"Fe": 2.2})),
         _item(atoms, gen.bcc_afm(atoms, "s", A, {"Fe": 2.2})),
     ]
-    assert len(reduce_pool(items).kept) == 3
+    assert len(deduplicate_candidates(items).kept) == 3
 
 
 def test_thinning_retains_rare_environments_and_is_order_independent():
@@ -106,14 +106,14 @@ def test_thinning_retains_rare_environments_and_is_order_independent():
     rare = _item(solute, stratum="bulk")
     pool = [*items, rare]
 
-    report = reduce_pool(pool, max_per_stratum=2)
+    report = deduplicate_candidates(pool, max_per_stratum=2)
     assert rare.record.candidate_id in report.kept
     assert report.rare_retained == (rare.record.candidate_id,)
     assert len(report.kept) == 2  # the rare one plus one common candidate
     assert report.reasons.get("thinned") == 5
     assert report.n_input == len(report.kept) + len(report.removed)
 
-    shuffled = reduce_pool(list(reversed(pool)), max_per_stratum=2)
+    shuffled = deduplicate_candidates(list(reversed(pool)), max_per_stratum=2)
     assert shuffled.kept == report.kept
 
 
@@ -125,5 +125,5 @@ def test_rare_candidates_survive_even_beyond_the_cap():
         atoms.symbols[n + 8] = "Cr"
         atoms.symbols[(n + 4) % 16] = "Ni"
         pool.append(_item(atoms, recipe={"n": n}, stratum="s"))
-    report = reduce_pool(pool, max_per_stratum=1, rare_max_count=5)
+    report = deduplicate_candidates(pool, max_per_stratum=1, rare_max_count=5)
     assert len(report.kept) == len(report.rare_retained) >= 1

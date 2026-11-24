@@ -32,7 +32,7 @@ from itertools import combinations
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel
 
 

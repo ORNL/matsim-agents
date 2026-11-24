@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery import magnetism_generators as gen
-from matsim_agents.discovery.magnetic_consistency import (
+from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.discovery.magnetism.consistency import (
     ConsistencyReport,
     MagneticEvidence,
     arrhenius_rate,
@@ -18,7 +18,7 @@ from matsim_agents.discovery.magnetic_consistency import (
     gate_transition_for_kmc,
     rate_sensitivity,
 )
-from matsim_agents.discovery.magnetic_results import result_from_moments
+from matsim_agents.discovery.magnetism.results import result_from_moments
 
 A = 2.87
 IDS = [0, 1]

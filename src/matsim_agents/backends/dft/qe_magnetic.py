@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from ase import Atoms
 
 from matsim_agents.backends.dft.qe_relax import _ATOMIC_MASS  # noqa: PLC2701
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
 MAX_LABEL_LENGTH = 3
 _ROUND = 12

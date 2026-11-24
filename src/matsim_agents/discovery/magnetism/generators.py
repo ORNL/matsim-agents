@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 from ase import Atoms
 
-from matsim_agents.discovery.magnetism import MagneticConfiguration
+from matsim_agents.discovery.magnetism.config import MagneticConfiguration
 
 Sublattices = Mapping[int, str]
 

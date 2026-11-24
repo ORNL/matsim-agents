@@ -14,7 +14,7 @@ from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, WorkerOutcome, WorkerSlot
 from matsim_agents.backends.mlip.relaxation import CalculatorCache, RelaxStructureInput
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
 

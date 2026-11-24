@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from matsim_agents.discovery.candidates import CandidateManifest
-from matsim_agents.discovery.synthetic_campaign import (
+from matsim_agents.discovery.exploration.candidates import CandidateManifest
+from matsim_agents.discovery.exploration.demo import (
     compare_strategies,
-    ingest,
+    evaluate_pending,
+    ingest_synthetic_candidates,
     make_candidate,
-    process,
     run_scale_demo,
 )
 
@@ -24,22 +24,22 @@ def test_candidates_are_reproducible_and_carry_their_index():
 
 def test_ingest_is_idempotent(tmp_path):
     manifest = CandidateManifest(tmp_path / "m.jsonl")
-    added, dup = ingest(manifest, 50, seed=3)
-    again_added, again_dup = ingest(manifest, 50, seed=3)
+    added, dup = ingest_synthetic_candidates(manifest, 50, seed=3)
+    again_added, again_dup = ingest_synthetic_candidates(manifest, 50, seed=3)
     assert added + dup == 50 and again_added == 0 and again_dup == 50
 
 
 def test_interrupted_run_recovers_without_repeating_finished_work(tmp_path):
     path = tmp_path / "m.jsonl"
     manifest = CandidateManifest(path)
-    added, _ = ingest(manifest, 40, seed=5)
+    added, _ = ingest_synthetic_candidates(manifest, 40, seed=5)
     calls: dict[str, int] = {}
-    finished = process(manifest, 5, crash_after=15, calls=calls)
+    finished = evaluate_pending(manifest, 5, crash_after=15, calls=calls)
     assert finished == 15
     reopened = CandidateManifest(path)
     assert reopened.counts()["done"] == 15 and reopened.counts()["running"] == 1
     assert reopened.recover_interrupted() != []
-    process(reopened, 5, calls=calls)
+    evaluate_pending(reopened, 5, calls=calls)
     assert reopened.counts() == {"done": added}
     assert max(calls.values()) == 1  # no candidate evaluated twice
     assert len(calls) == added
@@ -55,8 +55,8 @@ def test_scale_demo_records_measured_numbers(tmp_path):
 
 def test_results_are_labelled_synthetic(tmp_path):
     manifest = CandidateManifest(tmp_path / "m.jsonl")
-    ingest(manifest, 5, seed=1)
-    process(manifest, 1)
+    ingest_synthetic_candidates(manifest, 5, seed=1)
+    evaluate_pending(manifest, 1)
     results = [d["result"] for d in manifest.details.values()]
     assert results and all(r["label_source"] == "synthetic" for r in results)
 

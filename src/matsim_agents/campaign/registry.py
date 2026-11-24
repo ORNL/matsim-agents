@@ -12,7 +12,7 @@ from ase.io import read as ase_read
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.campaign.acquisition import FormulaAcquisitionMetrics
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.seeding import python_rng
 

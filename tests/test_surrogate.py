@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.surrogate import (
+from matsim_agents.discovery.exploration.magnetic_surrogate import (
     LabeledExample,
     LeakageError,
     MagneticSurrogate,
     StratumMeanSurrogate,
     check_leakage,
-    deterministic_fallback,
     evaluate,
     fit_without_leakage,
     select_for_labeling,
+    surrogate_or_fallback,
 )
 
 
@@ -94,7 +94,7 @@ def test_active_selection_prefers_uncertain_strata_and_is_deterministic():
 
 
 def test_deterministic_fallback_replaces_a_missing_model():
-    chosen = deterministic_fallback(None, [_ex(1, "a", 1.0), _ex(2, "a", 2.0)])
+    chosen = surrogate_or_fallback(None, [_ex(1, "a", 1.0), _ex(2, "a", 2.0)])
     assert chosen.name == "stratum_mean" and chosen.predict("x", "a").mean == pytest.approx(1.5)
     custom = Recording()
-    assert deterministic_fallback(custom, []) is custom
+    assert surrogate_or_fallback(custom, []) is custom
