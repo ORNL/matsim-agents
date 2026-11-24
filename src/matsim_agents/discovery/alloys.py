@@ -9,6 +9,7 @@ the requested composition is met exactly.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -31,6 +32,7 @@ from pymatgen.core import Element
 
 CrystalStructure = Literal["bcc"]
 OrderingMode = Literal["random"]
+SROStatus = Literal["converged", "not_converged"]
 
 DEFAULT_REPEATS = (8, 8, 8)
 DEFAULT_LATTICE_PARAMETER = 3.16
@@ -39,6 +41,8 @@ BCC_SECOND_SHELL = 6
 BCC_FIRST_SHELL_RATIO = float(np.sqrt(3) / 2)
 BCC_SECOND_SHELL_RATIO = 1.0
 BCC_THIRD_SHELL_RATIO = float(np.sqrt(2))
+_ALPHA_TOL = 1e-9
+_ROW_TOL = 1e-6
 
 
 class AlloySpec(BaseModel):
@@ -241,13 +245,19 @@ class SROTarget(BaseModel):
     weight: float = Field(default=1.0, gt=0, allow_inf_nan=False)
 
 
+class InvalidSROTargetError(ValueError):
+    """Targets violate a necessary physical or mathematical constraint (no search is run)."""
+
+
 @dataclass(frozen=True, eq=False)
 class TargetedSROResult:
     """Outcome of ``generate_targeted_sro``: a bounded-search configuration, not an equilibrium.
 
-    ``objective`` is the weighted squared deviation of the achieved targeted alphas, and
-    ``sro`` the full measured descriptor of ``atoms``. ``converged`` only says that
-    ``objective <= tolerance``; unreachable targets leave it False with the best SRO reported.
+    ``objective`` is the weighted squared deviation of the achieved targeted alphas, recomputed
+    from ``atoms``, and ``sro`` the full measured descriptor of ``atoms``. ``converged`` only
+    says that ``objective <= tolerance``; a valid target that is not reached leaves it False
+    (``status == "not_converged"``) with the best SRO reported. Invalid targets never produce a
+    result: they raise ``InvalidSROTargetError``.
     """
 
     atoms: Atoms
@@ -260,39 +270,101 @@ class TargetedSROResult:
     tolerance: float
     converged: bool
 
+    @property
+    def status(self) -> SROStatus:
+        return "converged" if self.converged else "not_converged"
+
+
+@dataclass(frozen=True, eq=False)
+class TargetComparison:
+    """One targeted (shell, pair) entry: requested alpha against the measured alpha."""
+
+    shell: int
+    pair: tuple[str, str]
+    target: float
+    achieved: float
+    deviation: float
+    weight: float
+
+
+@dataclass(frozen=True, eq=False)
+class TargetedSROValidation:
+    """Independent re-measurement of a ``TargetedSROResult`` from its returned structure."""
+
+    comparisons: tuple[TargetComparison, ...]
+    objective: float
+    max_abs_deviation: float
+    status: SROStatus
+    reproducibility_checked: bool
+
+
+def _alpha_lower_bound(composition: np.ndarray, a: int, b: int) -> float:
+    """P(b|a) <= 1 and P(a|b) <= 1 give alpha_ab >= 1 - 1 / max(c_a, c_b)."""
+    return 1.0 - 1.0 / max(composition[a], composition[b])
+
+
+def _alpha_upper_bound(composition: np.ndarray, a: int) -> float:
+    """Diagonal bound: the z N_a bonds of a-atoms hold at most z min(N_a, N_k) non-a ends per k."""
+    c_a = composition[a]
+    others = sum(min(c_a, c) for k, c in enumerate(composition) if k != a)
+    p_min = max(0.0, 1.0 - others / c_a)
+    return 1.0 - p_min / c_a
+
 
 def _canonical_targets(
     targets: Sequence[SROTarget], species: tuple[str, ...], composition: np.ndarray
 ) -> dict[tuple[int, int, int], SROTarget]:
-    """Validate targets and merge symmetric duplicates, keyed by (shell, i, j) with i <= j."""
+    """Necessary-condition checks on targets; merge symmetric duplicates by (shell, i, j), i <= j.
+
+    These are cheap bounds from probability normalization and finite counts, not a proof that
+    a target is achievable. Violations raise ``InvalidSROTargetError``.
+    """
     position = {symbol: k for k, symbol in enumerate(species)}
     merged: dict[tuple[int, int, int], SROTarget] = {}
     for target in targets:
+        if target.shell not in (1, 2):
+            raise InvalidSROTargetError(f"unsupported coordination shell: {target.shell!r}")
+        if not math.isfinite(target.alpha):
+            raise InvalidSROTargetError(f"target alpha must be finite, got {target.alpha}")
         missing = [symbol for symbol in target.pair if symbol not in position]
         if missing:
-            raise ValueError(f"target species not in structure: {missing}")
+            raise InvalidSROTargetError(f"target species not in structure: {missing}")
         a, b = sorted(position[symbol] for symbol in target.pair)
-        # Lower bound: pair counts cannot exceed z * min(N_a, N_b).
-        lower = 1.0 - 1.0 / max(composition[a], composition[b])
-        if not lower - 1e-12 <= target.alpha <= 1.0 + 1e-12:
-            raise ValueError(
+        lower = _alpha_lower_bound(composition, a, b)
+        upper = 1.0 if a != b else _alpha_upper_bound(composition, a)
+        if not lower - _ALPHA_TOL <= target.alpha <= upper + _ALPHA_TOL:
+            raise InvalidSROTargetError(
                 f"target alpha {target.alpha} for {target.pair} is outside the attainable "
-                f"range [{lower:.6g}, 1] for this composition"
+                f"range [{lower:.6g}, {upper:.6g}] for this composition"
             )
         key = (target.shell, a, b)
-        if key in merged and abs(merged[key].alpha - target.alpha) > 1e-12:
-            raise ValueError(f"conflicting targets for shell {target.shell} pair {target.pair}")
+        if key in merged and abs(merged[key].alpha - target.alpha) > _ALPHA_TOL:
+            raise InvalidSROTargetError(
+                f"contradictory targets for shell {target.shell} pair {target.pair}: "
+                f"alpha_ij = alpha_ji but got {merged[key].alpha} and {target.alpha}"
+            )
         merged.setdefault(key, target)
     n = len(species)
     for shell in (1, 2):
         for a in range(n):
             row = [merged.get((shell, min(a, b), max(a, b))) for b in range(n)]
-            if all(row):
-                total = sum(c * t.alpha for c, t in zip(composition, row, strict=True))
-                if abs(total) > 1e-6:
-                    raise ValueError(
+            given = [(c, t) for c, t in zip(composition, row, strict=True) if t is not None]
+            if not given:
+                continue
+            if len(given) == n:
+                total = sum(c * t.alpha for c, t in given)
+                if abs(total) > _ROW_TOL:
+                    raise InvalidSROTargetError(
                         f"targets for shell {shell} species {species[a]} violate "
                         f"sum_j c_j alpha_ij = 0 (got {total:.3g})"
+                    )
+            else:
+                # Specified P(j|i) = c_j (1 - alpha_ij) cannot already exceed total probability 1.
+                probability = sum(c * (1.0 - t.alpha) for c, t in given)
+                if probability > 1.0 + _ROW_TOL:
+                    raise InvalidSROTargetError(
+                        f"targets for shell {shell} species {species[a]} imply specified "
+                        f"conditional probabilities summing to {probability:.6g} > 1"
                     )
     return merged
 
@@ -391,6 +463,97 @@ def generate_targeted_sro(
         seed=seed,
         tolerance=tolerance,
         converged=current <= tolerance,
+    )
+
+
+def validate_targeted_sro(
+    start: Atoms,
+    result: TargetedSROResult,
+    lattice_parameter: float,
+    targets: Sequence[SROTarget],
+    *,
+    check_reproducibility: bool = True,
+    atol: float = 1e-9,
+) -> TargetedSROValidation:
+    """Re-measure ``result.atoms`` and check every reported quantity against it.
+
+    Nothing cached by the optimizer is trusted: alpha, the objective and the convergence flag
+    are recomputed from the returned structure; counts, sites and cell are compared with
+    ``start``; and (by default) the search is replayed from ``result.seed`` with the same
+    tolerance and ``result.attempts`` budget, which must reproduce the structure exactly.
+    Any inconsistency raises ``ValueError``; otherwise the achieved-versus-target comparison is
+    returned, with ``status`` taken from the recomputed objective.
+    """
+    final, initial = result.atoms, start
+    if len(final) != len(initial):
+        raise ValueError("returned structure has a different number of atoms")
+    if Counter(final.get_chemical_symbols()) != Counter(initial.get_chemical_symbols()):
+        raise ValueError("elemental counts changed")
+    if not np.array_equal(final.positions, initial.positions):
+        raise ValueError("lattice-site positions changed")
+    if not (np.array_equal(final.cell, initial.cell) and np.array_equal(final.pbc, initial.pbc)):
+        raise ValueError("periodic cell changed")
+
+    measured = warren_cowley_sro(final, lattice_parameter, result.sro.species)
+    for name in ("first_shell", "second_shell"):
+        reported, fresh = getattr(result.sro, name), getattr(measured, name)
+        if not (
+            np.array_equal(reported.pair_counts, fresh.pair_counts)
+            and np.allclose(reported.alpha, fresh.alpha, rtol=0.0, atol=atol)
+        ):
+            raise ValueError(f"reported {name} SRO does not match the returned structure")
+
+    merged = _canonical_targets(targets, measured.species, measured.composition)
+    comparisons = []
+    for (shell, a, b), target in merged.items():
+        alpha = (measured.first_shell if shell == 1 else measured.second_shell).alpha[a, b]
+        comparisons.append(
+            TargetComparison(
+                shell=shell,
+                pair=(measured.species[a], measured.species[b]),
+                target=target.alpha,
+                achieved=float(alpha),
+                deviation=float(alpha - target.alpha),
+                weight=target.weight,
+            )
+        )
+    objective = sum(c.weight * c.deviation**2 for c in comparisons)
+    if not math.isclose(objective, result.objective, rel_tol=1e-9, abs_tol=atol):
+        raise ValueError(f"reported objective {result.objective} != recomputed {objective}")
+    if (objective <= result.tolerance) != result.converged:
+        raise ValueError("convergence flag disagrees with the recomputed objective")
+
+    initial_measured = warren_cowley_sro(initial, lattice_parameter, measured.species)
+    initial_objective = sum(
+        t.weight
+        * (
+            (initial_measured.first_shell if s == 1 else initial_measured.second_shell).alpha[a, b]
+            - t.alpha
+        )
+        ** 2
+        for (s, a, b), t in merged.items()
+    )
+    if not math.isclose(initial_objective, result.initial_objective, rel_tol=1e-9, abs_tol=atol):
+        raise ValueError("reported initial objective does not match the start structure")
+
+    if check_reproducibility:
+        replay = generate_targeted_sro(
+            initial,
+            lattice_parameter,
+            targets,
+            seed=result.seed,
+            tolerance=result.tolerance,
+            max_attempts=result.attempts,
+        )
+        if replay.atoms.get_chemical_symbols() != final.get_chemical_symbols():
+            raise ValueError("result is not reproducible from its seed")
+
+    return TargetedSROValidation(
+        comparisons=tuple(comparisons),
+        objective=float(objective),
+        max_abs_deviation=max(abs(c.deviation) for c in comparisons),
+        status="converged" if objective <= result.tolerance else "not_converged",
+        reproducibility_checked=check_reproducibility,
     )
 
 
