@@ -36,6 +36,7 @@ BCC_FIRST_SHELL = 8
 BCC_SECOND_SHELL = 6
 BCC_FIRST_SHELL_RATIO = float(np.sqrt(3) / 2)
 BCC_SECOND_SHELL_RATIO = 1.0
+BCC_THIRD_SHELL_RATIO = float(np.sqrt(2))
 
 
 class AlloySpec(BaseModel):
@@ -128,6 +129,17 @@ def first_neighbor_list(
     cutoff = 0.5 * (BCC_FIRST_SHELL_RATIO + BCC_SECOND_SHELL_RATIO) * lattice_parameter
     i, j, vectors = neighbor_list("ijD", atoms, cutoff)
     return i, j, vectors
+
+
+def second_neighbor_list(
+    atoms: Atoms, lattice_parameter: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Periodic directed (i, j, vector) pairs within the second BCC shell (distance a)."""
+    inner = 0.5 * (BCC_FIRST_SHELL_RATIO + BCC_SECOND_SHELL_RATIO) * lattice_parameter
+    outer = 0.5 * (BCC_SECOND_SHELL_RATIO + BCC_THIRD_SHELL_RATIO) * lattice_parameter
+    i, j, vectors = neighbor_list("ijD", atoms, outer)
+    keep = np.linalg.norm(vectors, axis=1) >= inner
+    return i[keep], j[keep], vectors[keep]
 
 
 def assign_species(spec: AlloySpec) -> list[str]:

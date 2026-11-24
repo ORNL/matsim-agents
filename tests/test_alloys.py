@@ -9,12 +9,14 @@ from pydantic import ValidationError
 
 from matsim_agents.discovery.alloys import (
     BCC_FIRST_SHELL,
+    BCC_SECOND_SHELL,
     AlloySpec,
     assign_species,
     bcc_site_count,
     build_bcc_supercell,
     first_neighbor_list,
     generate_alloy,
+    second_neighbor_list,
 )
 
 REFERENCE_COUNTS = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
@@ -130,6 +132,36 @@ def test_first_neighbor_list_on_reference_structure_excludes_second_shell():
     coordination = np.bincount(i, minlength=len(atoms))
     assert set(coordination) == {BCC_FIRST_SHELL}
     assert np.allclose(np.linalg.norm(vectors, axis=1), np.sqrt(3) * spec.lattice_parameter / 2)
+
+
+@pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
+def test_second_neighbor_list_gives_six_axis_aligned_neighbours_per_site(repeats):
+    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats)
+    atoms = build_bcc_supercell(spec)
+    i, _, vectors = second_neighbor_list(atoms, spec.lattice_parameter)
+    a = spec.lattice_parameter
+
+    assert len(i) == BCC_SECOND_SHELL * len(atoms)
+    assert np.allclose(np.linalg.norm(vectors, axis=1), a)
+    directions = np.rint(vectors / a).astype(int)
+    expected = {(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)}
+    for site in range(len(atoms)):
+        assert {tuple(d) for d in directions[i == site]} == expected
+
+
+def test_second_shell_is_disjoint_from_first_and_reciprocal_on_reference_structure():
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=5)
+    atoms = generate_alloy(spec)
+    first_i, _, _ = first_neighbor_list(atoms, spec.lattice_parameter)
+    i, j, vectors = second_neighbor_list(atoms, spec.lattice_parameter)
+
+    assert set(np.bincount(i, minlength=len(atoms))) == {BCC_SECOND_SHELL}
+    assert len(first_i) + len(i) == (BCC_FIRST_SHELL + BCC_SECOND_SHELL) * len(atoms)
+
+    units = np.rint(vectors / spec.lattice_parameter).astype(int)
+    forward = set(zip(i.tolist(), j.tolist(), map(tuple, units.tolist()), strict=True))
+    reverse = {(b, a, tuple(-x for x in d)) for a, b, d in forward}
+    assert forward == reverse
 
 
 def test_generated_alloy_has_exact_species_counts():

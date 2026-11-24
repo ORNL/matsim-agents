@@ -48,8 +48,10 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - File: `src/matsim_agents/discovery/alloys.py` (`first_neighbor_list`).
   - Periodic directed pairs from ASE `neighbor_list` with a cutoff at the midpoint of the first and second shells; no all-pairs matrix.
   - Acceptance: eight first neighbours per site for small supercells and the 1,024-atom reference; periodic image vectors are body diagonals of length sqrt(3)/2 a.
-- [ ] A2.2 Second-neighbor-shell identification
-  - Acceptance: six second neighbours per site; consistent with A2.1 shell labels.
+- [x] A2.2 Second-neighbor-shell identification
+  - File: `src/matsim_agents/discovery/alloys.py` (`second_neighbor_list`).
+  - Reuses the A2.1 `neighbor_list` call with an outer cutoff at the midpoint of the second and third shells, then keeps pairs at or beyond the first/second midpoint.
+  - Acceptance: six second neighbours per site (axis-aligned, length a) for small supercells and the 1,024-atom reference; shell disjoint from A2.1; directed pairs reciprocal.
 - [ ] A2.3 Warren-Cowley SRO descriptors
   - Acceptance: first- and second-shell parameters for all species pairs; pair-count reciprocity; measured (not assumed) SRO for random occupations.
 
@@ -62,5 +64,6 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - Scope check: `benchmarks/`, `runs/`, and existing `src/` and `tests/` files are unchanged (git status).
 - Not done: targeted SRO, SQS-like and local-clustering orderings (out of scope for A1; `OrderingMode` only admits `random`).
 - A2.1: added `first_neighbor_list` in `alloys.py` (ASE `neighbor_list`, cutoff between shells). `tests/test_alloys.py`: 24 passed, including 3 new first-shell tests (1x1x1, 2x2x2, 3x2x4 supercells, and the 1,024-atom reference). Ruff check and format pass.
-- A2.2 and A2.3: not started.
+- A2.2: added `second_neighbor_list` in `alloys.py`. `tests/test_alloys.py`: 35 passed, including 3 new second-shell tests (1x1x1, 2x2x2, 3x2x4 supercells) and a reference-structure test for disjointness from the first shell and reciprocity. Ruff check and format pass.
+- A2.3: not started.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
