@@ -214,9 +214,15 @@ def uncertainty_diversity_selector(
     cost_pool: np.ndarray,
     X_train: np.ndarray,
     n: int,
+    weights: np.ndarray | None = None,
 ) -> list[int]:
-    """Greedy uncertainty x distance-to-selected; ties break on index. Cost-blind by design."""
+    """Greedy uncertainty x distance-to-selected; ties break on index. Cost-blind by design.
+
+    ``weights`` optionally scales each pool row's score (e.g. magnetic or defect relevance).
+    """
     _, sigma = model.predict(X_pool)
+    if weights is not None:
+        sigma = sigma * np.asarray(weights, dtype=float)
     scale = np.maximum(X_pool.std(axis=0), 1e-12)
     anchors = [row for row in X_train / scale]
     chosen: list[int] = []
