@@ -161,6 +161,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - [x] B1.6 Pathway serialization (`neb_serialization.py`; 10 tests). `pathway.json` metadata (no coordinates) plus ASE-readable extxyz with lossless floats; file hashes, geometry fingerprints, content-derived `pathway_id`, atomic write, tamper detection and re-validation on read.
 - [x] B2.1 QE NEB config contract (`backends/dft/qe_neb.py`; 22 tests). Explicit, frozen, hashable `QENebConfig`; no composition-derived defaults; Cr requires a recorded `magnetic_treatment`; managed keys cannot be overridden via extras. Consistency only, not physical adequacy.
 - [x] B2.2 `neb.x` input writer (`backends/dft/qe_neb_input.py`; 13 tests). Single-file format checked against the QE `INPUT_NEB.def` documentation; no-CI/auto/manual CI; a `from_scratch` input can never request climbing images; identity/species/cell/finite checks; atomic write with hash; golden test. Not run through a real `neb.x`.
+- [x] B2.3 `neb.x` execution (`backends/dft/qe_neb_run.py`; 12 tests with mock executables). `-inp` never stdin; reuses `run_launcher`; run record with argv, cwd, input/config/log hashes, timestamps, exit code and status; `convergence_assessed` is always false; logs never overwritten. Only mock executables were run, never real `neb.x`.
 
 ## Progress log
 
@@ -204,4 +205,5 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - B1.6: added `write_pathway`/`read_pathway`; measured that ASE's extxyz writer keeps 8 decimals (breaks fingerprints), so frames are written with `repr` floats; 10 tests passed.
 - B2.1: added `QENebConfig` (images, path_thr in eV/Ang, schemes, manual CI images, pseudopotentials, PW settings, spin, execution); 22 tests passed.
 - B2.2: added `render_neb_input`/`write_neb_input`; layout follows the QE NEB docs (`CLIMBING_IMAGES` card inside `BEGIN_PATH_INPUT`); 13 tests passed. Two golden-fixture whitespace typos were fixed in the test (the writer was correct).
+- B2.3: added `run_neb`/`NebRunRecord`; stderr is merged into stdout by `run_launcher`, and the record says so; 12 tests passed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
