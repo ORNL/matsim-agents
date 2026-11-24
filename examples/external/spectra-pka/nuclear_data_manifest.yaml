@@ -1,0 +1,8 @@
+# Record of the nuclear data you point the adapter at. Fill this in yourself; the adapter does
+# not download or verify the physics of the data. The file is for your own provenance.
+library: REPLACE-WITH-LIBRARY-NAME-AND-RELEASE   # e.g. the FISPACT-II / NJOY data release you used
+processing: REPLACE-WITH-PROCESSING-NOTE          # e.g. NJOY/GROUPR group structure
+source: REPLACE-WITH-WHERE-YOU-OBTAINED-IT
+files:
+  - {isotope: W182, file: REPLACE, sha256: REPLACE}
+  - {isotope: Ta181, file: REPLACE, sha256: REPLACE}

@@ -59,7 +59,7 @@ test_matsim_perlmutter.out
 # External code built/installed via scripts/setup/* (e.g. quantum-espresso).
 # Repo "owns" the path layout via the build scripts, but artifacts (source
 # clones, build trees, install prefixes) are too large for git.
-external/
+/external/
 
 # Explicit proprietary VASP inputs used for Aurora builds.
 external/vasp6/src/vasp.6.6.1/
