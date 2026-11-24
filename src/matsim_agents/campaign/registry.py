@@ -47,7 +47,7 @@ def calculation_id(
     settings: dict[str, Any],
     magnetic_initial: dict[str, Any] | None,
 ) -> str:
-    """Stable ID of one calculation: same structure under different numerics or magnetism differs."""
+    """Stable ID of one calculation; other numerics or magnetism give another ID."""
     payload = json.dumps(
         {
             "structure": structure_hash,
@@ -187,7 +187,7 @@ class CandidateRegistry(BaseModel):
     def target_coverage(
         self, subspaces: dict[int, list[tuple[str, ...]]] | None = None
     ) -> dict[str, int]:
-        """Records per target subspace; a structure covers a subspace only on an exact element match."""
+        """Records per target subspace, counted only on an exact element-set match."""
         subspaces = subspaces or hierarchy_subspaces()
         counts = {chemical_system(sub): 0 for subs in subspaces.values() for sub in subs}
         for record in self.candidates.values():
