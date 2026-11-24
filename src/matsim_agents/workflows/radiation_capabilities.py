@@ -183,6 +183,17 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         tests=("tests/test_radiation_kinetics_qualification.py",),
         caveats="Synthetic networks; says nothing about attempt frequencies or real materials.",
     ),
+    RadiationCapability(
+        name="scalability-reproducibility",
+        summary="Toy KMC cost scaling, bitwise seeded reproducibility, environment record.",
+        entry_points=(
+            "matsim_agents.workflows.radiation_scalability:measure_scaling",
+            "matsim_agents.workflows.radiation_scalability:check_reproducibility",
+            "matsim_agents.workflows.radiation_scalability:environment_record",
+        ),
+        tests=("tests/test_radiation_scalability.py",),
+        caveats="CPU toy chain only; the repository has no lock file, so nothing is pinned.",
+    ),
 )
 
 

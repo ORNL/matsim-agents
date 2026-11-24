@@ -124,6 +124,23 @@ def branching_network(k1_hz: float, k2_hz: float) -> tuple[TransitionNetwork, st
     return net, a.state_id
 
 
+def chain_network(n_states: int, rate_hz: float = 1.0e3) -> tuple[TransitionNetwork, str]:
+    """``n_states`` states in a line, forward hops only, the last absorbing (synthetic)."""
+    if n_states < 2:
+        raise ValueError("n_states must be at least 2")
+    net = TransitionNetwork(_PROV)
+    last = n_states - 1
+    states = [
+        _state(f"c{i}", **({"absorbing": True, "absorbing_kind": "sink"} if i == last else {}))
+        for i in range(n_states)
+    ]
+    for s in states:
+        net.add_state(s)
+    for i in range(last):
+        _add_edge(net, states[i], states[i + 1], rate_hz, i % 2)
+    return net, states[0].state_id
+
+
 def _positive(**values: float) -> None:
     for name, value in values.items():
         if not math.isfinite(value) or value <= 0:
@@ -244,6 +261,7 @@ __all__ = [
     "BenchmarkResult",
     "KineticBenchmarkReport",
     "branching_network",
+    "chain_network",
     "check_arrhenius",
     "check_branching",
     "check_first_passage",
