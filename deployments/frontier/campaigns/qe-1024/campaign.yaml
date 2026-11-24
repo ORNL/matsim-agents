@@ -22,8 +22,15 @@ defects:
   divacancy_site: 0
   divacancy_shell: 1
 qe:
-  # Only Mo-PBE.upf exists here; W, Ta, Cr, V, Hf are missing -> INPUT_BLOCKED.
-  pseudo_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/external/quantum-espresso/src/pseudo
+  # pslibrary 1.0.0 PBE PAW, downloaded 2026-11-24; checksums in SHA256SUMS next to the files.
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudopotentials:
+    W: W.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Ta: Ta.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Cr: Cr.pbe-spn-kjpaw_psl.1.0.0.UPF
+    V: V.pbe-spnl-kjpaw_psl.1.0.0.UPF
+    Hf: Hf.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Mo: Mo.pbe-spn-kjpaw_psl.1.0.0.UPF
   ecutwfc_ry: 45.0
   ecutrho_ry: 360.0
   smearing: mv
