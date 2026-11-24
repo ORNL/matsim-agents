@@ -101,8 +101,12 @@ def run_local(
         stdout, stderr, code = proc.stdout or "", proc.stderr or "", proc.returncode
     except subprocess.TimeoutExpired as exc:
         timed_out = True
-        stdout = (exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else exc.stdout) or ""
-        stderr = (exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr) or ""
+        stdout = (
+            exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else exc.stdout
+        ) or ""
+        stderr = (
+            exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr
+        ) or ""
         code = None
     except OSError as exc:
         stdout, stderr, code = "", f"cannot execute {executable}: {exc}", None

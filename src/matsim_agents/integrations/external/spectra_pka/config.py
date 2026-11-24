@@ -186,7 +186,9 @@ def load_config_file(path: str | Path) -> ConfigFile:
     if campaign is not None:
         campaign = campaign.model_copy(
             update={
-                "flux": campaign.flux.model_copy(update={"file": _absolute(campaign.flux.file, base)}),
+                "flux": campaign.flux.model_copy(
+                    update={"file": _absolute(campaign.flux.file, base)}
+                ),
                 "channels": tuple(
                     ch.model_copy(update={"pka_file": _absolute(ch.pka_file, base)})
                     for ch in campaign.channels

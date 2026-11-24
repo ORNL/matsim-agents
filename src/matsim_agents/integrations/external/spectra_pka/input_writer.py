@@ -88,8 +88,7 @@ def build_input_text(spec: CampaignSpec) -> str:
         f"pka_filetype={PKA_FILETYPE}",
         f"do_mtd_sums={_fortran_bool(spec.options.do_mtd_sums)}",
         f"do_global_sums={_fortran_bool(spec.options.do_global_sums)}",
-        "do_exclude_light_from_total="
-        f"{_fortran_bool(spec.options.do_exclude_light_from_total)}",
+        f"do_exclude_light_from_total={_fortran_bool(spec.options.do_exclude_light_from_total)}",
         f"energies_once_perfile={_fortran_bool(spec.options.energies_once_perfile)}",
         f"max_global_recoils={spec.options.max_global_recoils}",
     ]
@@ -111,7 +110,9 @@ def stage_inputs(spec: CampaignSpec, run_dir: Path) -> StagedInputs:
     """Create ``run_dir``, link the user's data into it, and write the input file."""
     for ch in spec.channels:
         if not ch.pka_file.is_file():
-            raise InputError(f"PKA file for {ch.parent_ele}{ch.parent_num} not found: {ch.pka_file}")
+            raise InputError(
+                f"PKA file for {ch.parent_ele}{ch.parent_num} not found: {ch.pka_file}"
+            )
     if not spec.flux.file.is_file():
         raise InputError(f"flux file not found: {spec.flux.file}")
     text = build_input_text(spec)

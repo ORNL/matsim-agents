@@ -40,7 +40,10 @@ def cfg(tmp_path_factory):
     pdir = tmp_path_factory.mktemp("pseudo")
     host = write_pseudos(pdir, HOST)
     return fsc.FullSupercellCampaign.model_validate(
-        {**json.loads(base.model_dump_json()), "qe": {**base.qe.model_dump(), "pseudo_dir": str(pdir), "pseudopotentials": host}}
+        {
+            **json.loads(base.model_dump_json()),
+            "qe": {**base.qe.model_dump(), "pseudo_dir": str(pdir), "pseudopotentials": host},
+        }
     )
 
 

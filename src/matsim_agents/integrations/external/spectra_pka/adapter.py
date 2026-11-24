@@ -25,8 +25,8 @@ from matsim_agents.integrations.external.spectra_pka.input_writer import (
     stage_inputs,
 )
 from matsim_agents.integrations.external.spectra_pka.parser import (
-    ParseError,
     ParsedOutput,
+    ParseError,
     parse_output_file,
     to_pka_spectrum,
 )
@@ -64,7 +64,9 @@ class PreparedRun:
 
 @dataclass(frozen=True)
 class RunResult:
-    status: str  # DRY_RUN | SUBMITTED | EXECUTION_FAILED | PARSE_FAILED | STRUCTURALLY_INVALID | STRUCTURALLY_VALID
+    # DRY_RUN | SUBMITTED | EXECUTION_FAILED | PARSE_FAILED
+    # | STRUCTURALLY_INVALID | STRUCTURALLY_VALID
+    status: str
     run_dir: Path
     command: tuple[str, ...]
     outcome: RunOutcome | None = None
@@ -151,9 +153,7 @@ def collect(
             spectrum = to_pka_spectrum(parsed, scenario_from_campaign(campaign), provenance)
         except ParseError as exc:
             return RunResult("PARSE_FAILED", run_dir, command, outcome, report, message=str(exc))
-    return RunResult(
-        report.status.value, run_dir, command, outcome, report, spectrum, message=""
-    )
+    return RunResult(report.status.value, run_dir, command, outcome, report, spectrum, message="")
 
 
 def run(

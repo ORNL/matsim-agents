@@ -160,7 +160,9 @@ def _classify(comments: list[str]) -> tuple[BlockKind, dict]:
                 "recoil_element": _element(m["el"]),
                 "recoil_mass_number": int(m["num"]),
             }
-    raise ParseError("unrecognised block title: " + " | ".join(c.strip()[:70] for c in comments[:3]))
+    raise ParseError(
+        "unrecognised block title: " + " | ".join(c.strip()[:70] for c in comments[:3])
+    )
 
 
 def _expected_columns(kind: BlockKind, has_error: bool, has_tdam: bool) -> int:
