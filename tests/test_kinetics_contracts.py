@@ -100,5 +100,8 @@ def test_rate_record_validates_temperature_and_rate():
         )
     with pytest.raises(ValidationError):
         TransitionRate(
-            transition_id="t1", temperature_K=300.0, rate_per_s=float("inf"), qualification="candidate"
+            transition_id="t1",
+            temperature_K=300.0,
+            rate_per_s=float("inf"),
+            qualification="candidate",
         )
