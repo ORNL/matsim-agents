@@ -17,6 +17,7 @@ from matsim_agents.discovery.alloys import (
     first_neighbor_list,
     generate_alloy,
     second_neighbor_list,
+    warren_cowley_sro,
 )
 
 REFERENCE_COUNTS = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
@@ -162,6 +163,116 @@ def test_second_shell_is_disjoint_from_first_and_reciprocal_on_reference_structu
     forward = set(zip(i.tolist(), j.tolist(), map(tuple, units.tolist()), strict=True))
     reverse = {(b, a, tuple(-x for x in d)) for a, b, d in forward}
     assert forward == reverse
+
+
+def _b2_binary(repeats):
+    """W on cube corners, Mo on body centres: perfectly ordered CsCl-type BCC."""
+    spec = AlloySpec(
+        counts={"Mo": bcc_site_count(repeats) // 2, "W": bcc_site_count(repeats) // 2},
+        repeats=repeats,
+    )
+    atoms = build_bcc_supercell(spec)
+    parity = np.rint(2 * atoms.positions / spec.lattice_parameter).astype(int).sum(axis=1) % 2
+    atoms.set_chemical_symbols(["W" if p == 0 else "Mo" for p in parity])
+    return atoms, spec.lattice_parameter
+
+
+@pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
+def test_ordered_b2_binary_has_analytic_sro_in_both_shells(repeats):
+    atoms, a = _b2_binary(repeats)
+    result = warren_cowley_sro(atoms, a)
+    n_each = len(atoms) // 2
+
+    assert result.species == ("Mo", "W")
+    assert np.allclose(result.composition, [0.5, 0.5])
+    # First shell: every neighbour is on the other sublattice.
+    assert np.allclose(result.first_shell.alpha, [[1, -1], [-1, 1]])
+    assert np.array_equal(result.first_shell.pair_counts, [[0, 8 * n_each], [8 * n_each, 0]])
+    # Second shell: every neighbour is on the same sublattice.
+    assert np.allclose(result.second_shell.alpha, [[-1, 1], [1, -1]])
+    assert np.array_equal(result.second_shell.pair_counts, [[6 * n_each, 0], [0, 6 * n_each]])
+
+
+def test_pair_counts_reuse_neighbour_lists_without_double_counting():
+    atoms, a = _b2_binary((2, 2, 2))
+    result = warren_cowley_sro(atoms, a)
+    assert result.first_shell.pair_counts.sum() == len(first_neighbor_list(atoms, a)[0])
+    assert result.second_shell.pair_counts.sum() == len(second_neighbor_list(atoms, a)[0])
+
+
+def test_reference_alloy_gives_two_6x6_matrices_satisfying_identities():
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=5)
+    result = warren_cowley_sro(generate_alloy(spec), spec.lattice_parameter)
+    species_counts = np.array([REFERENCE_COUNTS[s] for s in result.species])
+
+    assert result.species == ("Cr", "Hf", "Mo", "Ta", "V", "W")
+    assert np.allclose(result.composition, species_counts / 1024)
+    for shell, z in (
+        (result.first_shell, BCC_FIRST_SHELL),
+        (result.second_shell, BCC_SECOND_SHELL),
+    ):
+        assert shell.alpha.shape == (6, 6)
+        assert shell.pair_counts.sum() == z * 1024
+        assert np.array_equal(shell.pair_counts, shell.pair_counts.T)
+        assert np.array_equal(shell.pair_counts.sum(axis=1), z * species_counts)
+        assert np.allclose(shell.conditional_probability.sum(axis=1), 1.0)
+        assert np.allclose(shell.alpha @ result.composition, 0.0)
+        assert np.allclose(shell.alpha, shell.alpha.T)
+
+
+def test_random_alloy_reports_measured_nonzero_sro_that_depends_on_seed():
+    first_spec = AlloySpec(counts=REFERENCE_COUNTS, seed=1)
+    second_spec = AlloySpec(counts=REFERENCE_COUNTS, seed=2)
+    first = warren_cowley_sro(generate_alloy(first_spec), first_spec.lattice_parameter)
+    second = warren_cowley_sro(generate_alloy(second_spec), second_spec.lattice_parameter)
+    w = first.species.index("W")
+
+    assert np.any(first.first_shell.alpha != 0.0)
+    assert not np.allclose(first.first_shell.alpha, second.first_shell.alpha)
+    assert abs(first.first_shell.alpha[w, w]) < 0.05
+
+
+def test_sro_is_deterministic_for_identical_inputs():
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=9)
+    one = warren_cowley_sro(generate_alloy(spec), spec.lattice_parameter)
+    two = warren_cowley_sro(generate_alloy(spec), spec.lattice_parameter)
+    assert np.array_equal(one.first_shell.alpha, two.first_shell.alpha)
+    assert np.array_equal(one.second_shell.alpha, two.second_shell.alpha)
+
+
+def test_single_species_structure_has_zero_sro():
+    atoms = build_bcc_supercell(AlloySpec(counts={"W": 16}, repeats=(2, 2, 2)))
+    atoms.set_chemical_symbols(["W"] * 16)
+    result = warren_cowley_sro(atoms, 3.16)
+    assert np.allclose(result.first_shell.alpha, [[0.0]])
+    assert np.allclose(result.second_shell.alpha, [[0.0]])
+
+
+def test_explicit_species_order_is_respected():
+    atoms, a = _b2_binary((2, 2, 2))
+    result = warren_cowley_sro(atoms, a, species=("W", "Mo"))
+    assert result.species == ("W", "Mo")
+    assert np.allclose(result.first_shell.alpha, [[1, -1], [-1, 1]])
+
+
+def test_sro_rejects_invalid_inputs():
+    atoms, a = _b2_binary((2, 2, 2))
+    with pytest.raises(ValueError, match="not listed"):
+        warren_cowley_sro(atoms, a, species=("W",))
+    with pytest.raises(ValueError, match="absent"):
+        warren_cowley_sro(atoms, a, species=("Mo", "W", "Ta"))
+    with pytest.raises(ValueError, match="duplicate"):
+        warren_cowley_sro(atoms, a, species=("Mo", "W", "W"))
+    with pytest.raises(ValueError, match="lattice parameter"):
+        warren_cowley_sro(atoms, 0.0)
+    with pytest.raises(ValueError, match="lattice parameter"):
+        warren_cowley_sro(atoms, float("inf"))
+    with pytest.raises(ValueError, match="no atoms"):
+        warren_cowley_sro(atoms[:0], a)
+    open_cell = atoms.copy()
+    open_cell.pbc = False
+    with pytest.raises(ValueError, match="periodic"):
+        warren_cowley_sro(open_cell, a)
 
 
 def test_generated_alloy_has_exact_species_counts():

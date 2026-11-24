@@ -52,8 +52,11 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - File: `src/matsim_agents/discovery/alloys.py` (`second_neighbor_list`).
   - Reuses the A2.1 `neighbor_list` call with an outer cutoff at the midpoint of the second and third shells, then keeps pairs at or beyond the first/second midpoint.
   - Acceptance: six second neighbours per site (axis-aligned, length a) for small supercells and the 1,024-atom reference; shell disjoint from A2.1; directed pairs reciprocal.
-- [ ] A2.3 Warren-Cowley SRO descriptors
-  - Acceptance: first- and second-shell parameters for all species pairs; pair-count reciprocity; measured (not assumed) SRO for random occupations.
+- [x] A2.3 Warren-Cowley SRO descriptors
+  - File: `src/matsim_agents/discovery/alloys.py` (`warren_cowley_sro`, `SROResult`, `ShellSRO`).
+  - alpha_ij = 1 - P(j|i)/c_j from the A2.1/A2.2 neighbour lists, with c_j the actual atomic fraction. One species-indexed matrix per shell; species ordering is sorted symbols unless given explicitly.
+  - Checks: directed pair counts must be symmetric (reciprocity); absent, unlisted, or duplicate species, non-finite lattice parameter, empty or non-periodic structures raise `ValueError`.
+  - Acceptance: ordered B2 binary gives alpha = [[1,-1],[-1,1]] (first shell) and [[-1,1],[1,-1]] (second shell); six-element reference gives two 6 x 6 matrices obeying sum_j c_j alpha_ij = 0 and pair-count row sums z * N_i; random alloys report measured nonzero SRO.
 
 ## Progress log
 
@@ -65,5 +68,6 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - Not done: targeted SRO, SQS-like and local-clustering orderings (out of scope for A1; `OrderingMode` only admits `random`).
 - A2.1: added `first_neighbor_list` in `alloys.py` (ASE `neighbor_list`, cutoff between shells). `tests/test_alloys.py`: 24 passed, including 3 new first-shell tests (1x1x1, 2x2x2, 3x2x4 supercells, and the 1,024-atom reference). Ruff check and format pass.
 - A2.2: added `second_neighbor_list` in `alloys.py`. `tests/test_alloys.py`: 35 passed, including 3 new second-shell tests (1x1x1, 2x2x2, 3x2x4 supercells) and a reference-structure test for disjointness from the first shell and reciprocity. Ruff check and format pass.
-- A2.3: not started.
+- A2.3: added `warren_cowley_sro` in `alloys.py`. `tests/test_alloys.py` (45 tests) and `tests/test_e3_mlip_structure_generation.py` pass together (64 passed). Ruff check and format pass.
+- Not done: A2.4 independent analytical validation; targeted-SRO generation.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
