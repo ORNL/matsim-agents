@@ -34,8 +34,12 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
 
 * Job 5986052 (128-atom k-point test, meshes 4/6/8, 4 nodes) reported Slurm `COMPLETED`, but all
   three `pw.x` runs ended with exit 139 (segmentation fault) after printing the FFT grid and
-  before the first SCF iteration. No energies exist. The cause is undiagnosed. Each run left a
-  roughly 7 GB core file under `runs/qe-kconv-128atom/`.
+  before the first SCF iteration. No energies exist. Each run left a roughly 7 GB core file
+  under `runs/qe-kconv-128atom/`. All shared libraries of `pw.x` resolve under the job's module
+  stack (`ldd` shows none missing). A `gdb` backtrace of the `k4` core shows the fault in
+  `buiol_write_record` (QE's in-memory buffer), called from `save_buffer` in `wfcinit`. The root
+  cause is not established; no fix has been tried. The same binary and inputs need a one-node
+  reproduction before any change to the sbatch scripts or the QE input.
 * The 2x2x2 k-mesh and the 51/650 Ry cutoffs used for the 1,024-atom input are unconverged.
 * Debug QoS is not sufficient for production 1,024-atom QE.
 * `pristine_ferromagnetic` stays `INPUT_BLOCKED`; gas examples are nonmagnetic (`nspin: 1`).
