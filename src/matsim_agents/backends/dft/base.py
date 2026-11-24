@@ -54,6 +54,7 @@ class DFTJobSpec:
     work_dir: str
     extra: dict[str, str] | None = None  # backend-specific per-job overrides
     launch: ProcessLaunch | None = None  # hosts, ranks, and devices from the dft pool
+    magnetic_config: Any | None = None  # MagneticConfiguration; None keeps the NM/default path
 
     def require_launch(self) -> ProcessLaunch:
         if self.launch is None:

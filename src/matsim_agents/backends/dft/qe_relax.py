@@ -361,9 +361,12 @@ def write_pw_input(
     prefix: str = "pwscf",
     outdir: str = "./tmp",
     title: str | None = None,
+    magnetic_config=None,
 ) -> str:
     """Write a ``pw.x`` input file for ``atoms`` using ``settings``.
 
+    ``magnetic_config`` (a ``MagneticConfiguration``) switches on per-atom collinear
+    magnetic types; ``None`` keeps the historical one-type-per-element behaviour.
     Returns the absolute path of the file that was written.
     """
     settings = _fill_defaults(atoms, settings)
@@ -381,6 +384,16 @@ def write_pw_input(
 
     nat = len(atoms)
     ntyp = len(symbols_unique)
+    mtypes = None
+    if magnetic_config is not None:
+        from matsim_agents.backends.dft.qe_magnetic import (
+            build_magnetic_types,
+            reject_contradictory_settings,
+        )
+
+        reject_contradictory_settings(settings.extra_system, "extra_system")
+        mtypes = build_magnetic_types(atoms, magnetic_config, settings.pseudopotentials)
+        ntyp = mtypes.ntyp
 
     control = {
         "calculation": f"'{settings.calculation}'",
@@ -407,6 +420,8 @@ def write_pw_input(
     if settings.occupations == "smearing":
         system["smearing"] = f"'{settings.smearing}'"
         system["degauss"] = _fortran(settings.degauss_ry)
+    if mtypes is not None:
+        system.update({k: _fortran(v) for k, v in mtypes.system_entries().items()})
     system.update({k: _fortran(v) for k, v in settings.extra_system.items()})
 
     electrons = {
@@ -433,9 +448,12 @@ def write_pw_input(
         parts.append(_namelist("CELL", cell))
 
     parts.append("ATOMIC_SPECIES")
-    for sym in symbols_unique:
-        mass = _ATOMIC_MASS.get(sym, 1.0)
-        parts.append(f"  {sym}  {mass:.4f}  {settings.pseudopotentials[sym]}")
+    if mtypes is not None:
+        parts.extend(mtypes.species_lines())
+    else:
+        for sym in symbols_unique:
+            mass = _ATOMIC_MASS.get(sym, 1.0)
+            parts.append(f"  {sym}  {mass:.4f}  {settings.pseudopotentials[sym]}")
     parts.append("")
 
     parts.append("CELL_PARAMETERS angstrom")
@@ -444,8 +462,11 @@ def write_pw_input(
     parts.append("")
 
     parts.append("ATOMIC_POSITIONS angstrom")
-    for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
-        parts.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
+    if mtypes is not None:
+        parts.extend(mtypes.position_lines(atoms))
+    else:
+        for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
+            parts.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
     parts.append("")
 
     nk = settings.kpts or (1, 1, 1)

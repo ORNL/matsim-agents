@@ -8,6 +8,7 @@ merged, and one type per atom is not created unless every atom really differs.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -72,6 +73,58 @@ class QEMagneticTypes:
         for index, qe_type in enumerate(self.types, start=1):
             entries[f"starting_magnetization({index})"] = float(qe_type.starting_magnetization)
         return entries
+
+
+_MAGNETIC_KEYS = (
+    "nspin",
+    "starting_magnetization",
+    "tot_magnetization",
+    "ntyp",
+    "noncolin",
+    "lspinorb",
+    "angle1",
+    "angle2",
+)
+_KEY_RE = re.compile(r"^\s*(" + "|".join(_MAGNETIC_KEYS) + r")\s*(\(\s*\d+\s*\))?\s*=", re.I | re.M)
+
+
+def reject_contradictory_settings(extra_system: Mapping[str, object], where: str) -> None:
+    """Refuse user-supplied &SYSTEM entries that the magnetic mapping owns.
+
+    ``tot_magnetization`` is rejected as well: total magnetization is never constrained
+    silently when a magnetic configuration is used.
+    """
+    bad = sorted(key for key in extra_system if key.split("(")[0].strip().lower() in _MAGNETIC_KEYS)
+    if bad:
+        raise ValueError(
+            f"{where} sets {bad}, which the magnetic configuration controls; remove them or "
+            "drop the magnetic configuration"
+        )
+
+
+def reject_contradictory_text(text: str, where: str) -> None:
+    """Same check for a pw.in template body."""
+    bad = sorted({m.group(1).lower() for m in _KEY_RE.finditer(text)} - {"ntyp"})
+    if bad:
+        raise ValueError(
+            f"template {where} sets {bad}, which the magnetic configuration controls; "
+            "remove them from the template"
+        )
+
+
+def inject_system_entries(text: str, entries: Mapping[str, object], where: str) -> str:
+    """Insert ``entries`` into the &SYSTEM namelist of a template, before its closing ``/``."""
+    if not entries:
+        return text
+    match = re.search(r"^\s*&system\b.*?^\s*/\s*$", text, re.I | re.M | re.S)
+    if match is None:
+        raise ValueError(f"template {where} has no &SYSTEM namelist to extend")
+    from matsim_agents.backends.dft.qe_relax import _fortran  # noqa: PLC2701
+
+    lines = "\n".join(f"  {key} = {_fortran(value)}" for key, value in entries.items())
+    block = match.group(0)
+    head, _, _tail = block.rpartition("/")
+    return text[: match.start()] + head.rstrip("\n") + "\n" + lines + "\n/" + text[match.end() :]
 
 
 def _label(element: str, ordinal: int, count: int) -> str:

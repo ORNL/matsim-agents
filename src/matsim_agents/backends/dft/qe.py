@@ -98,10 +98,18 @@ class QEBackend:
                 input_path=input_path,
                 prefix="pwscf",
                 outdir="./tmp",
+                magnetic_config=spec.magnetic_config,
             )
         else:
             settings = self._settings_for(spec.atoms)
-            write_pw_input(spec.atoms, settings, input_path, prefix="pwscf", outdir="./tmp")
+            write_pw_input(
+                spec.atoms,
+                settings,
+                input_path,
+                prefix="pwscf",
+                outdir="./tmp",
+                magnetic_config=spec.magnetic_config,
+            )
 
         # Wrapper contract:
         #   <work_dir> <pw_bin> <input_file> <nodes> <ranks_per_node> <threads_per_rank>
@@ -230,8 +238,13 @@ def _write_pw_from_template(
     input_path: str,
     prefix: str,
     outdir: str,
+    magnetic_config=None,
 ) -> str:
     """Render a pw.in by appending structure-cards to a namelist template.
+
+    With ``magnetic_config`` the ``ntyp``, ``nspin`` and ``starting_magnetization`` entries,
+    ``ATOMIC_SPECIES`` and ``ATOMIC_POSITIONS`` come from the magnetic type mapping; a template
+    that already sets magnetic keys is rejected instead of silently overridden.
 
     The template file may contain any of these ``str.format`` placeholders:
     ``{nat}``, ``{ntyp}``, ``{pseudo_dir}``, ``{prefix}``, ``{outdir}``,
@@ -275,6 +288,19 @@ def _write_pw_from_template(
                 )
             pseudopotentials[sym] = matches[0]
 
+    mtypes = None
+    if magnetic_config is not None:
+        from matsim_agents.backends.dft.qe_magnetic import (
+            build_magnetic_types,
+            inject_system_entries,
+            reject_contradictory_text,
+        )
+
+        reject_contradictory_text(text, str(template_path))
+        mtypes = build_magnetic_types(atoms, magnetic_config, pseudopotentials)
+        ntyp = mtypes.ntyp
+        text = inject_system_entries(text, mtypes.system_entries(), str(template_path))
+
     fmt_kwargs = dict(
         nat=nat,
         natoms=nat,
@@ -293,17 +319,23 @@ def _write_pw_from_template(
 
     cards: list[str] = [text.rstrip(), ""]
     cards.append("ATOMIC_SPECIES")
-    for sym in symbols_unique:
-        mass = _ATOMIC_MASS.get(sym, 1.0)
-        cards.append(f"  {sym}  {mass:.4f}  {pseudopotentials[sym]}")
+    if mtypes is not None:
+        cards.extend(mtypes.species_lines())
+    else:
+        for sym in symbols_unique:
+            mass = _ATOMIC_MASS.get(sym, 1.0)
+            cards.append(f"  {sym}  {mass:.4f}  {pseudopotentials[sym]}")
     cards.append("")
     cards.append("CELL_PARAMETERS angstrom")
     for v in atoms.cell.array:
         cards.append(f"  {v[0]:18.10f} {v[1]:18.10f} {v[2]:18.10f}")
     cards.append("")
     cards.append("ATOMIC_POSITIONS angstrom")
-    for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
-        cards.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
+    if mtypes is not None:
+        cards.extend(mtypes.position_lines(atoms))
+    else:
+        for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
+            cards.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
     cards.append("")
     cards.append("K_POINTS automatic")
     cards.append(f"  {kpts[0]} {kpts[1]} {kpts[2]}  {koffset[0]} {koffset[1]} {koffset[2]}")
