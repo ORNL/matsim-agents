@@ -115,6 +115,9 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
   - A3.4b `generate_crowdion`: periodic <111> row found with minimum-image distances; the inserted atom sits between two row atoms and `n_participating` row atoms move away with a linear taper (default amplitude 0.25 of the row spacing). Participant ids, initial and final coordinates, direction, amplitudes and crowdion length are recorded.
   - Available classes: <111>, <110> and <100> dumbbells, tetrahedral, octahedral and collective <111> crowdion candidates.
   - Limitation: the crowdion pattern is a geometric starting point, not a validated or universally stable structure in the six-component alloy.
+- [x] A3.5 Frenkel-pair generation (`generate_frenkel_pair`)
+  - The atom at a lattice site moves to the BCC tetrahedral or octahedral position next to an anchor atom (reusing `generate_bcc_interstitial`). It keeps its species, index and `atom_id`; atom count and composition are unchanged. The vacancy and interstitial sites share that `atom_id`; the interstitial records its `initial_position`.
+  - The minimum-image vacancy-interstitial separation is recorded and must be at least the configurable `min_separation`; overlaps are rejected using the A3.4a distance check against the unmodified parent (conservative: the moving atom's old position still counts).
 
 ## Progress log
 
@@ -140,4 +143,5 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - CI fix: `tests/test_dependency_contract.py` expected `ase==3.26.0` after `pyproject.toml` moved to 3.29.0; the test now expects 3.29.0 (`60240c4`).
 - Not done: SQS-like and local-clustering orderings; `OrderingMode` still admits only `random`.
 - A3.1 to A3.4: `tests/test_radiation_defects.py` 71 passed, 0 failed, 0 skipped. Ruff check and format pass. A3.4b needed three test-side correction rounds (fixture size, species validated before ASE, minimum-image vectors in a test).
+- A3.5: `generate_frenkel_pair`. `tests/test_radiation_defects.py` 82 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.

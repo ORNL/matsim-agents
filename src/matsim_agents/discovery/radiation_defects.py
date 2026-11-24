@@ -705,6 +705,102 @@ def generate_crowdion(
     return defective, config
 
 
+def generate_frenkel_pair(
+    parent: Atoms,
+    parent_id: str,
+    site: int,
+    anchor: int,
+    lattice_parameter: float,
+    *,
+    site_type: str = "octahedral",
+    variant: int = 0,
+    min_separation: float | None = None,
+    min_distance: float | None = None,
+    parent_ordering_id: str | None = None,
+) -> tuple[Atoms, DefectConfiguration]:
+    """Move the atom at lattice ``site`` to the BCC interstitial site next to atom ``anchor``.
+
+    The interstitial position is the ``site_type``/``variant`` position of
+    :func:`generate_bcc_interstitial` around ``anchor``. The moved atom keeps its species, its
+    index and its ``atom_id``, so the atom count and composition are unchanged. The vacancy and
+    interstitial sites share that ``atom_id``. The minimum-image vacancy-interstitial separation
+    is recorded and must be at least ``min_separation`` (default 0). Nothing is relaxed and
+    stability is not implied.
+    """
+    if isinstance(site, bool) or not isinstance(site, int | np.integer):
+        raise ValueError(f"site must be an integer index, got {site!r}")
+    site = int(site)
+    if not 0 <= site < len(parent):
+        raise ValueError(f"site {site} is outside the {len(parent)}-atom parent")
+    min_separation = 0.0 if min_separation is None else float(min_separation)
+    if not (np.isfinite(min_separation) and min_separation >= 0):
+        raise ValueError(f"min_separation must be nonnegative and finite, got {min_separation}")
+    species = parent[site].symbol
+    inserted, insertion = generate_bcc_interstitial(
+        parent,
+        parent_id,
+        anchor,
+        species,
+        site_type,
+        lattice_parameter,
+        variant=variant,
+        min_distance=min_distance,
+    )
+    new_position = inserted.positions[-1]
+    _, separation = get_distances(new_position, parent.positions[site], cell=parent.cell, pbc=True)
+    separation = float(separation[0, 0])
+    if separation < min_separation:
+        raise ValueError(
+            f"vacancy-interstitial separation {separation:.3f} A is below {min_separation:.3f} A"
+        )
+
+    defective = parent.copy()
+    defective.set_array("atom_id", np.arange(len(parent), dtype=np.int64))
+    defective.positions[site] = new_position
+
+    spec = DefectSpec(
+        defect_type="frenkel_pair",
+        site_indices=(site,),
+        parameters={
+            "anchor": int(anchor),
+            "site_type": site_type,
+            "variant": int(variant),
+            "separation": separation,
+            "min_separation": min_separation,
+            "min_distance": float(insertion.spec.parameters["min_distance"]),
+            "lattice_parameter": float(lattice_parameter),
+        },
+    )
+    config = DefectConfiguration(
+        config_id=make_defect_config_id(parent_id, spec),
+        parent_id=parent_id,
+        parent_ordering_id=parent_ordering_id or occupation_fingerprint(parent),
+        spec=spec,
+        n_parent_atoms=len(parent),
+        n_atoms=len(defective),
+        cell=tuple(tuple(float(x) for x in row) for row in parent.cell.array),
+        sites=(
+            DefectSite(
+                role="vacancy",
+                species=species,
+                atom_id=site,
+                lattice_site=site,
+                position=tuple(float(x) for x in parent.positions[site]),
+            ),
+            DefectSite(
+                role="interstitial",
+                species=species,
+                atom_id=site,
+                position=tuple(float(x) for x in new_position),
+                initial_position=tuple(float(x) for x in parent.positions[site]),
+            ),
+        ),
+        geometry_fingerprint=geometry_fingerprint(defective),
+        validation_status="valid",
+    )
+    return defective, config
+
+
 __all__ = [
     "BCC_111_DIRECTIONS",
     "BCC_INTERSTITIAL_OFFSETS",
@@ -717,6 +813,7 @@ __all__ = [
     "generate_bcc_interstitial",
     "generate_crowdion",
     "generate_dumbbell_interstitial",
+    "generate_frenkel_pair",
     "generate_vacancy",
     "geometry_fingerprint",
     "make_defect_config_id",

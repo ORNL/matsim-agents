@@ -22,6 +22,7 @@ from matsim_agents.discovery.radiation_defects import (
     generate_bcc_interstitial,
     generate_crowdion,
     generate_dumbbell_interstitial,
+    generate_frenkel_pair,
     generate_vacancy,
     make_defect_config_id,
 )
@@ -523,3 +524,80 @@ def test_a_site_whose_row_is_not_bcc_is_rejected():
     parent.wrap()
     with pytest.raises(ValueError):
         generate_crowdion(parent, "crowd-1", 0, "W", A, n_participating=4)
+
+
+# --- A3.5 Frenkel pairs ---
+
+
+def test_frenkel_pair_moves_one_atom_and_preserves_count_composition_and_identity():
+    parent = generate_alloy(SMALL)
+    n = len(parent)
+    defective, config = generate_frenkel_pair(parent, "small-1", 5, 0, A)
+    assert len(defective) == n == config.n_atoms == config.n_parent_atoms
+    assert Counter(defective.get_chemical_symbols()) == Counter(parent.get_chemical_symbols())
+    assert defective.get_chemical_symbols() == parent.get_chemical_symbols()
+    assert defective.get_array("atom_id").tolist() == list(range(n))
+    others = [k for k in range(n) if k != 5]
+    assert np.array_equal(defective.positions[others], parent.positions[others])
+    vacancy, interstitial = config.sites
+    assert (vacancy.role, vacancy.atom_id, vacancy.lattice_site) == ("vacancy", 5, 5)
+    assert (interstitial.role, interstitial.atom_id, interstitial.lattice_site) == (
+        "interstitial",
+        5,
+        None,
+    )
+    assert vacancy.species == interstitial.species == parent[5].symbol
+    assert vacancy.position == tuple(parent.positions[5])
+    assert interstitial.initial_position == vacancy.position
+    assert interstitial.position == tuple(defective.positions[5])
+    assert DefectConfiguration.model_validate_json(config.model_dump_json()) == config
+
+
+def test_frenkel_pair_records_the_minimum_image_separation_and_is_deterministic():
+    parent = generate_alloy(SMALL)
+    defective, config = generate_frenkel_pair(
+        parent, "small-1", 5, 0, A, site_type="tetrahedral", variant=3
+    )
+    expected, _ = generate_bcc_interstitial(
+        parent, "small-1", 0, parent[5].symbol, "tetrahedral", A, variant=3
+    )
+    assert np.array_equal(defective.positions[5], expected.positions[-1])
+    _, dist = get_distances(defective.positions[5], parent.positions[5], cell=parent.cell, pbc=True)
+    assert config.spec.parameters["separation"] == pytest.approx(dist[0, 0])
+    again = generate_frenkel_pair(parent, "small-1", 5, 0, A, site_type="tetrahedral", variant=3)
+    assert again[1] == config and np.array_equal(again[0].positions, defective.positions)
+
+
+def test_frenkel_pair_enforces_the_configurable_minimum_separation():
+    parent = generate_alloy(SMALL)
+    _, config = generate_frenkel_pair(parent, "small-1", 5, 0, A)
+    separation = config.spec.parameters["separation"]
+    generate_frenkel_pair(parent, "small-1", 5, 0, A, min_separation=separation - 0.01)
+    with pytest.raises(ValueError, match="separation"):
+        generate_frenkel_pair(parent, "small-1", 5, 0, A, min_separation=separation + 0.01)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"site": 16},
+        {"site": True},
+        {"anchor": 16},
+        {"site_type": "hexahedral"},
+        {"variant": 99},
+        {"min_separation": -1.0},
+        {"min_separation": float("nan")},
+        {"lattice_parameter": 3.0},
+    ],
+)
+def test_invalid_frenkel_pairs_are_rejected(kwargs):
+    arguments = {"site": 5, "anchor": 0, "lattice_parameter": A} | kwargs
+    with pytest.raises(ValueError):
+        generate_frenkel_pair(
+            generate_alloy(SMALL),
+            "small-1",
+            arguments.pop("site"),
+            arguments.pop("anchor"),
+            arguments.pop("lattice_parameter"),
+            **arguments,
+        )
