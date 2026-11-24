@@ -208,7 +208,7 @@ def test_shared_relaxation_runner_generates_typed_config(tmp_path: Path) -> None
     _fake_cli(tmp_path)
     env = {
         **os.environ,
-        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "PATH": f"{tmp_path}:{Path(sys.executable).parent}:{os.environ['PATH']}",
         "REPO": str(ROOT),
         "RUN_DIR": str(tmp_path / "run"),
         "STRUCTURE": str(ROOT / "tests/integration/data/Si.vasp"),
@@ -234,7 +234,7 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     seeds = [ROOT / "tests/integration/data/Si.vasp", ROOT / "tests/integration/data/MgO.vasp"]
     env = {
         **os.environ,
-        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "PATH": f"{tmp_path}:{Path(sys.executable).parent}:{os.environ['PATH']}",
         "REPO": str(ROOT),
         "RUN_DIR": str(run_dir),
         "MATSIM_SEED_STRUCTURES": ":".join(map(str, seeds)),
