@@ -17,6 +17,7 @@ from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
     resources,
     ledger,
     neb,
+    magnetic,
     radiation_damage,
     benchmark,
     capabilities,
