@@ -30,6 +30,8 @@ class DefectState(BaseModel):
     parent_ordering_id: str | None = None
     defect_type: DefectType | None = None
     n_atoms: StrictInt = Field(gt=0)
+    atom_ids: tuple[StrictInt, ...] | None = None
+    species_counts: dict[str, int] | None = None
     absorbing: bool = False
     absorbing_kind: AbsorbingKind | None = None
     provenance: dict[str, str] = Field(default_factory=dict)
@@ -38,6 +40,8 @@ class DefectState(BaseModel):
     def _validate(self) -> DefectState:
         if self.absorbing != (self.absorbing_kind is not None):
             raise ValueError("absorbing_kind is required exactly when the state is absorbing")
+        if self.atom_ids is not None and len(set(self.atom_ids)) != len(self.atom_ids):
+            raise ValueError("atom_ids must be unique")
         return self
 
 

@@ -221,3 +221,4 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 ## Phases C-E (spec: `radiation-damage-phases-c-e-spec.md`)
 
 - [x] C1.1 transition-network contracts (`kinetics/contracts.py`; 6 tests). Missing evidence is `None`, never a zero barrier. A `qualified` event needs qualified NEB evidence, qualified endpoints and an explicit attempt frequency. Fixture evidence carries `synthetic=True`.
+- [x] C1.2 transition graph (`kinetics/graph.py`; 5 tests). Deterministic state and transition IDs include the parent ordering. Rejects cross-parent and cross-ordering states, duplicate edges, non-conserved atom IDs or species counts, outgoing edges from absorbing states, and missing provenance. Reverse events are looked up, never synthesised.
