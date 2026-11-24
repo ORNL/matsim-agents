@@ -98,7 +98,8 @@ the software behaves correctly on synthetic data, not that real alloys transfer.
   wired into `deployments/frontier/campaigns/qe-1024/campaign.yaml`. Five full-size SCF inputs and three
   NEB records now prepare; `pristine_ferromagnetic` stays `INPUT_BLOCKED` until a starting magnetization
   is derived from the UPF valence.
-- The default cutoffs (45 / 360 Ry) are below the UPF-header suggestions (up to 50.4 Ry for W, 645 Ry
-  density for V). No cutoff or k-point convergence test has been run, so results would not be validated.
+- The campaign cutoffs (51 / 650 Ry) are the maxima of the UPF-header suggestions (W 50.4 Ry, V 645 Ry
+  density), rounded up. The code defaults (45 / 360 Ry) are lower. No cutoff or k-point convergence test
+  has been run, so results would not be validated.
 - The debug QoS (2 h, one job) cannot run 1024-atom QE, so such jobs are `RESOURCE_BLOCKED` until a
   queue and node-hour budget are authorised.

@@ -31,8 +31,9 @@ qe:
     V: V.pbe-spnl-kjpaw_psl.1.0.0.UPF
     Hf: Hf.pbe-spn-kjpaw_psl.1.0.0.UPF
     Mo: Mo.pbe-spn-kjpaw_psl.1.0.0.UPF
-  ecutwfc_ry: 45.0
-  ecutrho_ry: 360.0
+  # Max of the UPF header suggestions (W 50.4 wfc, V 645 rho), rounded up; not convergence-tested.
+  ecutwfc_ry: 51.0
+  ecutrho_ry: 650.0
   smearing: mv
   degauss_ry: 0.02
   kpts: [1, 1, 1]
