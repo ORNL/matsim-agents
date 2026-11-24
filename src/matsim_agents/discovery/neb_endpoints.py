@@ -19,7 +19,7 @@ from math import sqrt
 
 import numpy as np
 from ase import Atoms
-from ase.geometry import find_mic, get_distances
+from ase.geometry import get_distances
 
 from matsim_agents.discovery.neb_contracts import (
     MigrationMechanism,
@@ -27,6 +27,7 @@ from matsim_agents.discovery.neb_contracts import (
     build_correspondence,
     endpoint_from_atoms,
 )
+from matsim_agents.discovery.neb_paths import minimum_image
 from matsim_agents.discovery.radiation_defects import (
     DefectConfiguration,
     DefectSite,
@@ -82,8 +83,8 @@ def _nn_distance(lattice_parameter: float) -> float:
 
 
 def _mic_vector(atoms_cell: Atoms, source: np.ndarray, target: np.ndarray) -> np.ndarray:
-    vector, _ = find_mic(
-        np.asarray(target - source, dtype=float)[None, :], atoms_cell.cell, atoms_cell.pbc
+    vector, _, _ = minimum_image(
+        np.asarray(target - source, dtype=float)[None, :], atoms_cell.cell.array
     )
     return vector[0]
 
