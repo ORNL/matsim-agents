@@ -36,7 +36,7 @@ qe:
   ecutrho_ry: 650.0
   smearing: mv
   degauss_ry: 0.02
-  kpts: [1, 1, 1]
+  kpts: [4, 4, 4]
   conv_thr_ry: 1.0e-6
   mixing_beta: 0.2
   neb_images: 5
