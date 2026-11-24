@@ -292,10 +292,40 @@ def test_task_dumps_redact_mcp_arguments_and_resource_uri_but_keep_live_values()
             f"https://host/r?apiKey={REDACTED}&Password={REDACTED}",
         ),
         ("http://[::1/r", REDACTED),
+        ("https://host/r?%74oken=v&a+pi_key=w", f"https://host/r?%74oken={REDACTED}&a+pi_key=w"),
+        ("https://host/r?api%5Fkey=v", f"https://host/r?api%5Fkey={REDACTED}"),
     ],
 )
 def test_redact_uri(uri, expected):
     assert redact_uri(uri) == expected
+
+
+def test_redact_uri_is_idempotent():
+    once = redact_uri("https://u:pw@host/r?token=t&page=2")
+    assert redact_uri(once) == once
+
+
+@pytest.mark.parametrize(
+    ("uri", "expected"),
+    [
+        ("test://notes/__matsim_redacted__", "test://notes/__matsim_redacted__"),
+        ("test://notes/_matsim_redacted_", "test://notes/_matsim_redacted_"),
+        (
+            "https://u:pw@h/_matsim_redacted__?token=t",
+            f"https://u:{REDACTED}@h/_matsim_redacted__?token={REDACTED}",
+        ),
+    ],
+)
+def test_redact_uri_leaves_stand_in_text_from_the_input_alone(uri, expected):
+    assert redact_uri(uri) == expected
+
+
+def test_restored_task_keeps_credential_free_resource_uri():
+    from matsim_agents.orchestration.state import TaskSpec
+
+    uri = "test://notes/__matsim_redacted__"
+    task = TaskSpec(kind="mcp_resource", mcp_server="a", mcp_resource_uri=uri)
+    assert TaskSpec.model_validate(task.model_dump()).mcp_resource_uri == uri
 
 
 def test_planner_catalog_scrubs_secrets_without_mutating_execution_schemas():

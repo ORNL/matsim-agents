@@ -48,6 +48,7 @@ from matsim_agents.backends.mcp.records import (
     Outcome,
     now_utc,
     redact,
+    redact_uri,
     scrub_text,
     sha256_json,
     truncate,
@@ -488,18 +489,27 @@ class MCPSessionManager:
         name = base["server"]
         if self._connected.get(name):
             self._connected[name] = False
-            self._errors[name] = scrub_text(_describe(exc), self._secrets)
+            self._errors[name] = self._scrub(_describe(exc), base)
             self._audit_event(
                 "disconnect", server=name, outcome="connection_error", error=self._errors[name]
             )
         return self._failure(base, "connection_error", _describe(exc))
+
+    def _scrub(self, text: str, base: dict) -> str:
+        """Remove configured secrets and raw or quoted forms of the request's resource URI."""
+        if uri := base.get("resource_uri"):
+            masked = redact_uri(uri)
+            for raw, safe in ((repr(uri), repr(masked)), (json.dumps(uri), json.dumps(masked))):
+                text = text.replace(raw, safe)
+            text = text.replace(uri, masked)
+        return scrub_text(text, self._secrets)
 
     def _failure(self, base: dict, outcome: Outcome, error: str) -> MCPCallRecord:
         return MCPCallRecord(
             **base,
             finished_at=now_utc(),
             outcome=outcome,
-            error=truncate(scrub_text(error, self._secrets), 2000),
+            error=truncate(self._scrub(error, base), 2000),
         )
 
     def _content(self, blocks: list[Any], *, resource: bool = False) -> list[str]:
