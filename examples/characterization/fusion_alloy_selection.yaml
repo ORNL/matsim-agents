@@ -1,0 +1,51 @@
+# SYNTHETIC end-to-end example of the multi-property selection workflow (MP1-MP9).
+# Every number below is invented to exercise the software. None is a calculation, a
+# measurement or a prediction for a real alloy, and nothing here is scientifically qualified.
+#   tests/test_fusion_alloy_synthetic_campaign.py runs this file.
+synthetic: true
+campaign_id: fusion-alloy-synthetic
+reference_alloy:            # existing 1,024-site parent (deployments/frontier/campaigns/qe-1024)
+  repeats: [8, 8, 8]
+  composition: {W: 640, Ta: 128, Cr: 64, V: 96, Hf: 32, Mo: 64}
+temperature_K: 900
+irradiation: synthetic-1dpa  # label only; set from a SPECTRA-PKA run when one exists
+
+selection:                   # matsim_agents.campaign.selection.SelectionSpec
+  objectives:
+    - {property: thermal_conductivity_total, direction: maximize, temperature_K: 900,
+       weight: 2.0, worst: 15.0, target: 60.0}
+    - {property: bulk_modulus, direction: maximize, weight: 1.0, worst: 150.0, target: 300.0}
+    - {property: irradiation_swelling, direction: minimize, temperature_K: 900,
+       weight: 2.0, worst: 0.05, target: 0.005}
+  constraints:               # limits are the user's, never defaults
+    - {property: thermal_conductivity_total, minimum: 20.0, temperature_K: 900}
+    - {property: irradiation_swelling, maximum: 0.03, temperature_K: 900}
+  seed: 7
+  n_samples: 400
+
+# value, one-sigma uncertainty, status. 'null' value = no record exists (MISSING).
+candidates:
+  A:   # strong radiation behaviour, thermal transport below the limit
+    thermal_conductivity_total: {value: 12.0, uncertainty: 1.0, status: calculated}
+    bulk_modulus: {value: 260.0, uncertainty: 3.0, status: calculated}
+    irradiation_swelling: {value: 0.006, uncertainty: 0.001, status: measured}
+  B:   # balanced; close to the thermal limit, so its decision is uncertain
+    thermal_conductivity_total: {value: 24.0, uncertainty: 4.0, status: calculated}
+    bulk_modulus: {value: 240.0, uncertainty: 4.0, status: calculated}
+    irradiation_swelling: {value: 0.015, uncertainty: 0.004, status: measured}
+  C:   # screening-level (surrogate) values, no swelling record
+    thermal_conductivity_total: {value: 48.0, uncertainty: 8.0, status: surrogate_predicted}
+    bulk_modulus: {value: 280.0, uncertainty: 15.0, status: surrogate_predicted}
+    irradiation_swelling: {value: null}
+
+acquisition:
+  budget_node_hours: {total: 1000.0, property: 200.0}
+  proposals:
+    - {calc_id: B-kappa, candidate: B, property: thermal_conductivity_total, backend: shengbte,
+       cost_node_hours: 20.0, expected_uncertainty: 0.8}
+    - {calc_id: C-kappa, candidate: C, property: thermal_conductivity_total, backend: shengbte,
+       cost_node_hours: 20.0, expected_uncertainty: 0.8}
+    - {calc_id: C-swelling, candidate: C, property: irradiation_swelling, backend: spectra_pka,
+       cost_node_hours: 15.0, expected_uncertainty: 0.004}
+  backend_blockers:
+    spectra_pka: SPECTRA-PKA is NOT_INSTALLED
