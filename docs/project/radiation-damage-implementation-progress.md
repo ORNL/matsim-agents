@@ -159,6 +159,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
   - Limitation: a linear path is only an initial guess; it is not a barrier or a mechanism. The default `min_distance` (1.0 A) and `max_step` (1.0 A) are guards, not physical criteria.
 - [x] B1.5 Pathway validation and qualification states (`neb_validation.py`; 12 tests). States: candidate, endpoint_relaxation_pending, geometry_validated, numerically_qualified, rejected. Unrelaxed endpoints never qualify; setup quality only, no physical claim.
 - [x] B1.6 Pathway serialization (`neb_serialization.py`; 10 tests). `pathway.json` metadata (no coordinates) plus ASE-readable extxyz with lossless floats; file hashes, geometry fingerprints, content-derived `pathway_id`, atomic write, tamper detection and re-validation on read.
+- [x] B2.1 QE NEB config contract (`backends/dft/qe_neb.py`; 22 tests). Explicit, frozen, hashable `QENebConfig`; no composition-derived defaults; Cr requires a recorded `magnetic_treatment`; managed keys cannot be overridden via extras. Consistency only, not physical adequacy.
 
 ## Progress log
 
@@ -200,4 +201,5 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - B1.4: `neb_images.py`. `tests/test_neb_images.py` 16 passed; B1.1-B1.4 together 54 passed, 0 failed, 0 skipped. Ruff check and format pass. No code corrections (one test line-length fix).
 - B1.5: added `neb_validation.assess_pathway` (identity, species, cell, count, continuity, overlap, endpoint-fixed, correspondence, method and provenance checks); 12 tests passed.
 - B1.6: added `write_pathway`/`read_pathway`; measured that ASE's extxyz writer keeps 8 decimals (breaks fingerprints), so frames are written with `repr` floats; 10 tests passed.
+- B2.1: added `QENebConfig` (images, path_thr in eV/Ang, schemes, manual CI images, pseudopotentials, PW settings, spin, execution); 22 tests passed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
