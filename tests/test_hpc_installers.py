@@ -423,7 +423,11 @@ def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kin
         capture_output=True,
     )
     for command in (("branch", "feature/test"), ("tag", "v-test")):
-        subprocess.run(["git", "-C", str(origin), *command], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(origin), "-c", "tag.gpgSign=false", *command],
+            check=True,
+            capture_output=True,
+        )
     revision = subprocess.check_output(
         ["git", "-C", str(origin), "rev-parse", "HEAD"], text=True
     ).strip()
