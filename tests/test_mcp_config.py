@@ -292,10 +292,17 @@ def test_task_dumps_redact_mcp_arguments_and_resource_uri_but_keep_live_values()
             f"https://host/r?apiKey={REDACTED}&Password={REDACTED}",
         ),
         ("http://[::1/r", REDACTED),
+        ("https://host/r?%74oken=v&a+pi_key=w", f"https://host/r?%74oken={REDACTED}&a+pi_key=w"),
+        ("https://host/r?api%5Fkey=v", f"https://host/r?api%5Fkey={REDACTED}"),
     ],
 )
 def test_redact_uri(uri, expected):
     assert redact_uri(uri) == expected
+
+
+def test_redact_uri_is_idempotent():
+    once = redact_uri("https://u:pw@host/r?token=t&page=2")
+    assert redact_uri(once) == once
 
 
 def test_planner_catalog_scrubs_secrets_without_mutating_execution_schemas():

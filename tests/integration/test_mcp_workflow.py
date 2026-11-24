@@ -698,6 +698,36 @@ def test_checkpoints_hold_redacted_arguments_while_the_tool_gets_live_ones(
     assert stored and all(secret.encode() not in blob for blob in stored)
 
 
+@pytest.mark.parametrize("configured", [True, False])
+def test_denied_resource_uri_credentials_stay_out_of_checkpoints_and_audit(
+    manager_factory, monkeypatch, tmp_path, configured
+):
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from matsim_agents.orchestration.objective_graph import build_graph
+
+    manager = manager_factory(_stdio("a", allowed_resources=["test://notes"]))
+    uri = "https://u:pw-live-9@h/r?%74oken=tk-live-9"
+    tasks = [TaskSpec(kind="mcp_resource", mcp_server="a", mcp_resource_uri=uri)]
+    _scripted_planner(monkeypatch, tasks)
+    saver = MemorySaver()
+    configurable = {"thread_id": f"uri-{configured}"}
+    if configured:
+        configurable["mcp_client"] = manager
+    config = {"configurable": configurable}
+    final = build_graph(checkpointer=saver).invoke(
+        MatSimState(objective="read", llm_provider="vllm"), config=config
+    )
+    record = final["mcp_results"][0]
+    assert record.outcome == "denied" and record.resource_uri == uri
+    stored = [saver.serde.dumps_typed(c.checkpoint)[1] for c in saver.list(config)]
+    assert stored
+    for secret in (b"pw-live-9", b"tk-live-9"):
+        assert all(secret not in blob for blob in stored)
+    audit = json.dumps(_audit(tmp_path))
+    assert "pw-live-9" not in audit and "tk-live-9" not in audit
+
+
 def test_restored_placeholder_arguments_are_never_sent(manager_factory, tmp_path):
     from matsim_agents.backends.mcp.tasks import execute_mcp_task
 

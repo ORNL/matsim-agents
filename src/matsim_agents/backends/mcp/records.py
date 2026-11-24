@@ -19,11 +19,13 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 REDACTED = "[REDACTED]"
+# Brackets in a netloc make urlsplit reject the URI, so parse with a bracket-free stand-in.
+_URI_PLACEHOLDER = "__matsim_redacted__"
 MAX_CONTENT_CHARS = 8000
 MAX_DESCRIPTION_CHARS = 1000
 _SENSITIVE_KEY = re.compile(
@@ -80,19 +82,21 @@ def redact(value: Any, secrets: Iterable[str] = (), *, sensitive_keys: bool = Tr
 def redact_uri(uri: str) -> str:
     """Copy ``uri`` with a userinfo password and credential-like query values replaced."""
     try:
-        parts = urlsplit(uri)
+        parts = urlsplit(uri.replace(REDACTED, _URI_PLACEHOLDER))
         password = parts.password
     except ValueError:
         return REDACTED
     netloc = parts.netloc
     if password is not None:
         user, _, host = netloc.rpartition("@")
-        netloc = f"{user.partition(':')[0]}:{REDACTED}@{host}"
+        netloc = f"{user.partition(':')[0]}:{_URI_PLACEHOLDER}@{host}"
     query = []
     for pair in parts.query.split("&") if parts.query else []:
         key = pair.partition("=")[0]
-        query.append(f"{key}={REDACTED}" if _SENSITIVE_KEY.search(key) else pair)
-    return urlunsplit(parts._replace(netloc=netloc, query="&".join(query)))
+        sensitive = _SENSITIVE_KEY.search(unquote_plus(key))
+        query.append(f"{key}={_URI_PLACEHOLDER}" if sensitive else pair)
+    redacted = urlunsplit(parts._replace(netloc=netloc, query="&".join(query)))
+    return redacted.replace(_URI_PLACEHOLDER, REDACTED)
 
 
 def truncate(text: str, limit: int) -> str:
@@ -141,9 +145,15 @@ class MCPCallRecord(BaseModel):
     structured_content: Any = None
     content_sha256: str | None = None
 
+    @field_serializer("resource_uri")
+    def _redact_resource_uri(self, value: str | None) -> str | None:
+        return redact_uri(value) if value else value
+
     @property
     def target(self) -> str:
-        return f"{self.server}/{self.tool if self.kind == 'tool' else self.resource_uri}"
+        if self.kind == "tool":
+            return f"{self.server}/{self.tool}"
+        return f"{self.server}/{redact_uri(self.resource_uri or '')}"
 
     def summary_line(self) -> str:
         if self.outcome == "success":

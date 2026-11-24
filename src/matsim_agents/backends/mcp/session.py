@@ -48,6 +48,7 @@ from matsim_agents.backends.mcp.records import (
     Outcome,
     now_utc,
     redact,
+    redact_uri,
     scrub_text,
     sha256_json,
     truncate,
@@ -440,6 +441,16 @@ class MCPSessionManager:
                 if isinstance(value := getattr(record, field), str)
             }
         )
+        if uri := record.resource_uri:
+            # Denial reasons and SDK errors can quote the raw URI.
+            masked = redact_uri(uri)
+            record = record.model_copy(
+                update={
+                    field: value.replace(uri, masked)
+                    for field in ("authorization_reason", "error")
+                    if isinstance(value := getattr(record, field), str)
+                }
+            )
         if self._audit:
             self._audit.record_call(record)
         return record
