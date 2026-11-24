@@ -134,7 +134,7 @@ def test_rejects_invalid_search_parameters(start, kwargs):
 
 
 def test_rejects_invalid_structures(start):
-    pure = generate_alloy(AlloySpec(counts={"W": 8}, repeats=(2, 2, 1)))
+    pure = generate_alloy(AlloySpec(counts={"W": 8}, repeats=(2, 2, 1), seed=0))
     with pytest.raises(ValueError):
         generate_targeted_sro(pure, A, ORDERING_TARGET, seed=0, max_attempts=10)
     open_cell = start.copy()

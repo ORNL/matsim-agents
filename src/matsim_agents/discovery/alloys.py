@@ -4,6 +4,11 @@ The generator is element-agnostic: any set of elements and integer counts is acc
 independently of the frozen E3 structure generator in ``benchmarks/e3``. A cell is a
 ``2 * nx * ny * nz`` conventional BCC supercell (1024 atoms for 8x8x8), occupied so that
 the requested composition is met exactly.
+
+Seeds are required, nonnegative integers. Each function draws from its own named stream of
+``matsim_agents.seeding``: ``generate_alloy`` uses ``(seed, "alloy-occupation")`` and
+``generate_targeted_sro`` uses ``(seed, "targeted-sro")``, so equal seeds passed to different
+functions never share draws.
 """
 
 from __future__ import annotations
@@ -61,7 +66,7 @@ class AlloySpec(BaseModel):
     repeats: tuple[int, int, int] = DEFAULT_REPEATS
     lattice_parameter: float = Field(default=DEFAULT_LATTICE_PARAMETER, gt=0, allow_inf_nan=False)
     ordering: OrderingMode = "random"
-    seed: int = Field(default=0, ge=0)
+    seed: StrictInt = Field(ge=0)
 
     @field_serializer("counts")
     def _serialize_counts(self, value: Mapping[str, int]) -> dict[str, int]:
@@ -466,7 +471,7 @@ def generate_targeted_sro(
     position = {symbol: k for k, symbol in enumerate(species)}
     index = np.array([position[symbol] for symbol in atoms.get_chemical_symbols()])
     current = initial_objective = objective(index)
-    rng = numpy_rng(seed)
+    rng = numpy_rng(seed, "targeted-sro")
     attempts = accepted = 0
     # Only strict improvements are kept, so the current state is always the best one found.
     while current > tolerance and attempts < max_attempts:
@@ -589,7 +594,7 @@ def validate_targeted_sro(
 
 def _shuffled_symbols(counts: Mapping[str, int], seed: int) -> list[str]:
     symbols = [symbol for symbol, count in counts.items() for _ in range(count)]
-    rng = numpy_rng(seed)
+    rng = numpy_rng(seed, "alloy-occupation")
     return [symbols[i] for i in rng.permutation(len(symbols))]
 
 

@@ -16,13 +16,14 @@ from matsim_agents.discovery.alloys import (
     AlloySpec,
     SROTarget,
     generate_alloy,
+    generate_targeted_sro,
     warren_cowley_sro,
 )
 
 A = 3.16
 SMALL = AlloySpec(counts={"Mo": 16, "W": 16}, repeats=(4, 2, 2), seed=0)
 TERNARY = AlloySpec(counts={"Mo": 12, "Ta": 8, "W": 12}, repeats=(4, 2, 2), seed=0)
-REFERENCE = AlloySpec(counts={"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64})
+REFERENCE = AlloySpec(counts={"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}, seed=0)
 TARGET = [SROTarget(shell=1, pair=("Mo", "W"), alpha=-0.5)]
 
 
@@ -112,7 +113,7 @@ def test_fingerprints_follow_occupation(random_ensemble):
 
 def test_exact_duplicates_are_detected_and_reported():
     # 1 Mo + 1 W on a 2-site cell has only two occupations, so 8 configurations must repeat.
-    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1))
+    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1), seed=0)
     out = generate_alloy_ensemble(tiny, n_configurations=8, mode="random", seed=0)
     assert out.n_unique <= 2
     assert out.duplicate_groups
@@ -259,7 +260,7 @@ def test_overlap_matrix_is_symmetric_with_unit_diagonal(random_ensemble):
 
 
 def test_overlap_of_duplicates_is_one_and_summary_is_serializable():
-    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1))
+    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1), seed=0)
     out = generate_alloy_ensemble(tiny, n_configurations=8, mode="random", seed=0)
     first_group = out.duplicate_groups[0]
     ids = [r.config_id for r in out.records]
@@ -291,6 +292,20 @@ def test_reference_1024_atom_random_ensemble():
     assert sro.first_shell.pair_counts.shape == (6, 6)
     assert sro.first_shell.pair_counts.sum() == 1024 * 8
     assert sro.second_shell.pair_counts.sum() == 1024 * 6
+
+
+def test_record_seeds_replay_through_the_public_generators(targeted_ensemble):
+    for record, atoms in zip(targeted_ensemble.records, targeted_ensemble.structures, strict=True):
+        start = generate_alloy(SMALL.model_copy(update={"seed": record.seed}))
+        replay = generate_targeted_sro(
+            start,
+            A,
+            TARGET,
+            seed=record.optimizer_seed,
+            tolerance=targeted_ensemble.spec.tolerance,
+            max_attempts=targeted_ensemble.spec.max_swap_attempts,
+        )
+        assert replay.atoms.get_chemical_symbols() == atoms.get_chemical_symbols()
 
 
 def test_existing_generation_is_unchanged_by_topology_reuse():

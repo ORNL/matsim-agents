@@ -85,6 +85,7 @@ def _layered(repeats):
     spec = AlloySpec(
         counts={"Mo": bcc_site_count(repeats) // 2, "W": bcc_site_count(repeats) // 2},
         repeats=repeats,
+        seed=0,
     )
     atoms = build_bcc_supercell(spec)
     coords, _ = _half_lattice_coordinates(atoms, repeats, spec.lattice_parameter)
@@ -137,7 +138,7 @@ def _random_alloy_expectation(counts):
 @pytest.mark.parametrize("counts", [{"Mo": 14, "W": 2}, {"Mo": 1, "Ta": 1, "W": 14}])
 def test_random_alloy_sro_averages_exactly_to_finite_composition_expectation(counts):
     repeats = (2, 2, 2)
-    spec = AlloySpec(counts=counts, repeats=repeats)
+    spec = AlloySpec(counts=counts, repeats=repeats, seed=0)
     atoms = build_bcc_supercell(spec)
 
     arrangements = list(_unique_arrangements(counts, len(atoms)))

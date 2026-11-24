@@ -61,8 +61,9 @@ class AlloyEnsembleSpec(BaseModel):
 class ConfigurationRecord:
     """Provenance and ordering descriptors of one configuration (no coordinates).
 
-    ``seed`` seeds the random occupation; ``optimizer_seed`` seeds the targeted-SRO search and
-    is None in random mode. ``converged``, ``objective`` and ``attempts`` are None in random mode.
+    ``seed`` is the ``AlloySpec.seed`` that ``generate_alloy`` would use for the starting
+    occupation; ``optimizer_seed`` is the ``seed`` passed to ``generate_targeted_sro``. In random
+    mode ``optimizer_seed``, ``converged``, ``objective`` and ``attempts`` are None.
     A non-converged targeted configuration is a valid outcome, not an error.
     """
 

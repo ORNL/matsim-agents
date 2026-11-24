@@ -24,7 +24,7 @@ REFERENCE_COUNTS = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
 
 
 def test_reference_spec_is_valid_and_has_1024_sites():
-    spec = AlloySpec(counts=REFERENCE_COUNTS)
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=0)
     assert spec.n_sites == 1024
     assert spec.repeats == (8, 8, 8)
     assert spec.composition["W"] == pytest.approx(0.625)
@@ -39,11 +39,11 @@ def test_reference_spec_is_valid_and_has_1024_sites():
     ],
 )
 def test_valid_small_specs_are_accepted(counts, repeats):
-    assert AlloySpec(counts=counts, repeats=repeats).n_sites == bcc_site_count(repeats)
+    assert AlloySpec(counts=counts, repeats=repeats, seed=0).n_sites == bcc_site_count(repeats)
 
 
 def test_zero_counts_are_dropped_not_rejected():
-    spec = AlloySpec(counts={"W": 2, "Mo": 0}, repeats=(1, 1, 1))
+    spec = AlloySpec(counts={"W": 2, "Mo": 0}, repeats=(1, 1, 1), seed=0)
     assert spec.counts == {"W": 2}
 
 
@@ -64,17 +64,28 @@ def test_zero_counts_are_dropped_not_rejected():
 )
 def test_invalid_specs_are_rejected(counts, repeats, message):
     with pytest.raises(ValidationError, match=message):
-        AlloySpec(counts=counts, repeats=repeats)
+        AlloySpec(counts=counts, repeats=repeats, seed=0)
+
+
+@pytest.mark.parametrize("seed", [-1, True, 1.0, "1", None])
+def test_seed_must_be_a_nonnegative_integer(seed):
+    with pytest.raises(ValidationError):
+        AlloySpec(counts={"W": 2}, repeats=(1, 1, 1), seed=seed)
+
+
+def test_seed_is_required():
+    with pytest.raises(ValidationError, match="seed"):
+        AlloySpec(counts={"W": 2}, repeats=(1, 1, 1))
 
 
 def test_spec_is_immutable():
-    spec = AlloySpec(counts={"W": 2}, repeats=(1, 1, 1))
+    spec = AlloySpec(counts={"W": 2}, repeats=(1, 1, 1), seed=0)
     with pytest.raises(ValidationError):
         spec.seed = 5
 
 
 def test_counts_mapping_cannot_be_mutated_after_validation():
-    spec = AlloySpec(counts={"W": 1, "Mo": 1}, repeats=(1, 1, 1))
+    spec = AlloySpec(counts={"W": 1, "Mo": 1}, repeats=(1, 1, 1), seed=0)
     with pytest.raises(TypeError):
         spec.counts["W"] = 3
     with pytest.raises(TypeError):
@@ -85,7 +96,7 @@ def test_counts_mapping_cannot_be_mutated_after_validation():
 @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
 def test_non_finite_lattice_parameter_is_rejected(value):
     with pytest.raises(ValidationError):
-        AlloySpec(counts={"W": 2}, repeats=(1, 1, 1), lattice_parameter=value)
+        AlloySpec(counts={"W": 2}, repeats=(1, 1, 1), lattice_parameter=value, seed=0)
 
 
 def test_alloy_spec_json_round_trips_counts_as_plain_mapping():
@@ -94,7 +105,7 @@ def test_alloy_spec_json_round_trips_counts_as_plain_mapping():
 
 
 def test_bcc_supercell_geometry_and_periodicity():
-    spec = AlloySpec(counts=REFERENCE_COUNTS)
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=0)
     atoms = build_bcc_supercell(spec)
     assert len(atoms) == 1024
     assert atoms.pbc.all()
@@ -103,7 +114,7 @@ def test_bcc_supercell_geometry_and_periodicity():
 
 
 def test_bcc_first_shell_has_eight_neighbours_per_site():
-    spec = AlloySpec(counts=REFERENCE_COUNTS)
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=0)
     atoms = generate_alloy(spec)
     first_shell = spec.lattice_parameter * np.sqrt(3) / 2
     i, _ = neighbor_list("ij", atoms, 1.1 * first_shell)
@@ -113,7 +124,7 @@ def test_bcc_first_shell_has_eight_neighbours_per_site():
 
 @pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
 def test_first_neighbor_list_gives_eight_periodic_body_diagonals_per_site(repeats):
-    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats)
+    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats, seed=0)
     atoms = build_bcc_supercell(spec)
     i, _, vectors = first_neighbor_list(atoms, spec.lattice_parameter)
     half_diagonal = spec.lattice_parameter / 2
@@ -137,7 +148,7 @@ def test_first_neighbor_list_on_reference_structure_excludes_second_shell():
 
 @pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
 def test_second_neighbor_list_gives_six_axis_aligned_neighbours_per_site(repeats):
-    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats)
+    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats, seed=0)
     atoms = build_bcc_supercell(spec)
     i, _, vectors = second_neighbor_list(atoms, spec.lattice_parameter)
     a = spec.lattice_parameter
@@ -170,6 +181,7 @@ def _b2_binary(repeats):
     spec = AlloySpec(
         counts={"Mo": bcc_site_count(repeats) // 2, "W": bcc_site_count(repeats) // 2},
         repeats=repeats,
+        seed=0,
     )
     atoms = build_bcc_supercell(spec)
     parity = np.rint(2 * atoms.positions / spec.lattice_parameter).astype(int).sum(axis=1) % 2
@@ -241,7 +253,7 @@ def test_sro_is_deterministic_for_identical_inputs():
 
 
 def test_single_species_structure_has_zero_sro():
-    atoms = build_bcc_supercell(AlloySpec(counts={"W": 16}, repeats=(2, 2, 2)))
+    atoms = build_bcc_supercell(AlloySpec(counts={"W": 16}, repeats=(2, 2, 2), seed=0))
     atoms.set_chemical_symbols(["W"] * 16)
     result = warren_cowley_sro(atoms, 3.16)
     assert np.allclose(result.first_shell.alpha, [[0.0]])
