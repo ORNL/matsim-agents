@@ -670,6 +670,75 @@ def test_objective_graph_executes_mcp_tasks_without_mlip_config(
     assert len(calls) == 3
 
 
+def test_checkpoints_hold_redacted_arguments_while_the_tool_gets_live_ones(
+    manager_factory, monkeypatch
+):
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from matsim_agents.orchestration.objective_graph import build_graph
+
+    secret = "live-token-value-123"
+    manager = manager_factory(_stdio("a", allowed_tools=["token_length"]))
+    tasks = [
+        TaskSpec(
+            kind="mcp_tool",
+            mcp_server="a",
+            mcp_tool="token_length",
+            mcp_arguments={"token": secret},
+        )
+    ]
+    _scripted_planner(monkeypatch, tasks)
+    saver = MemorySaver()
+    config = {"configurable": {"thread_id": "redact-1", "mcp_client": manager}}
+    final = build_graph(checkpointer=saver).invoke(
+        MatSimState(objective="measure", llm_provider="vllm"), config=config
+    )
+    assert final["mcp_results"][0].structured_content == {"result": len(secret)}
+    stored = [saver.serde.dumps_typed(c.checkpoint)[1] for c in saver.list(config)]
+    assert stored and all(secret.encode() not in blob for blob in stored)
+
+
+def test_restored_placeholder_arguments_are_never_sent(manager_factory, tmp_path):
+    from matsim_agents.backends.mcp.tasks import execute_mcp_task
+
+    manager = manager_factory(_stdio("a", allowed_tools=["touch"]))
+    marker = tmp_path / "marker"
+    task = TaskSpec(
+        kind="mcp_tool",
+        mcp_server="a",
+        mcp_tool="touch",
+        mcp_arguments={"path": str(marker), "token": "x"},
+    )
+    restored = TaskSpec.model_validate(task.model_dump())
+    assert restored.mcp_arguments["token"] == REDACTED
+    record = execute_mcp_task(manager, restored)
+    assert record.outcome == "invalid_arguments"
+    assert "re-plan" in record.error
+    assert not marker.exists()
+
+
+def test_cli_plan_json_redacts_mcp_arguments(monkeypatch):
+    from typer.testing import CliRunner
+
+    from matsim_agents.cli import app
+
+    tasks = [
+        TaskSpec(
+            kind="mcp_tool", mcp_server="a", mcp_tool="t", mcp_arguments={"password": "pw-live-1"}
+        ),
+        TaskSpec(
+            kind="mcp_resource", mcp_server="a", mcp_resource_uri="https://h/r?token=tk-live-2"
+        ),
+    ]
+    _scripted_planner(monkeypatch, tasks)
+    result = CliRunner().invoke(app, ["plan", "x", "--json"], env={"MATSIM_LLM_PROVIDER": "vllm"})
+    assert result.exit_code == 0, result.output
+    assert "pw-live-1" not in result.output and "tk-live-2" not in result.output
+    planned = json.loads(result.output)
+    assert planned[0]["mcp_arguments"] == {"password": REDACTED}
+    assert planned[1]["mcp_resource_uri"] == f"https://h/r?token={REDACTED}"
+
+
 def test_relax_task_still_requires_mlip_config_with_mcp_enabled(manager_factory, monkeypatch):
     from matsim_agents.orchestration.agents.executor import executor_node
 

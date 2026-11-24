@@ -27,6 +27,10 @@ def build(name: str) -> MCPServer:
     def add(a: int, b: int) -> int:
         return a + b
 
+    @server.tool(description="Report the length of a token.")
+    def token_length(token: str) -> int:
+        return len(token)
+
     @server.tool(description="Return an environment variable (or its last word) of this server.")
     def env_value(variable: str, last_word: bool = False) -> str:
         value = os.environ.get(variable, "")

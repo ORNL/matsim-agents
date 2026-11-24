@@ -43,11 +43,9 @@ from pydantic import (
 
 SERVER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-# Shorter credentials cannot be scrubbed from outputs without corrupting
-# unrelated text, so they are rejected rather than silently left unredacted.
+# Shorter credentials cannot be scrubbed without corrupting unrelated text.
 MIN_SECRET_LENGTH = 4
-# Literal env values this long are treated as possible credentials; shorter
-# literals (LOG_LEVEL: INFO, DEBUG: "1") are ordinary settings.
+# Shorter literal env values (LOG_LEVEL: INFO) are settings, not credentials.
 _LITERAL_ENV_SECRET_LENGTH = 8
 
 
@@ -153,9 +151,7 @@ class MCPServerConfig(BaseModel):
                 raise ValueError(f"server {self.name!r}: streamable_http transport requires url")
             if not re.match(r"^https?://", self.url):
                 raise ValueError(f"server {self.name!r}: url must start with http:// or https://")
-            # Parse the whole URL now: a malformed URL (e.g. "http://user:token" with
-            # no "@", read as a host and port) would otherwise reach the HTTP client,
-            # whose errors echo URL parts. These messages never include the URL.
+            # HTTP client errors echo URL parts, so reject malformed URLs here, unechoed.
             malformed = ValueError(f"server {self.name!r}: url is malformed")
             if any(char.isspace() or not char.isprintable() for char in self.url):
                 raise malformed

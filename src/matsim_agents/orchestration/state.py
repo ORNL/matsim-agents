@@ -7,9 +7,9 @@ from typing import Annotated, Any, Literal
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
-from matsim_agents.backends.mcp.records import MCPCallRecord
+from matsim_agents.backends.mcp.records import MCPCallRecord, redact, redact_uri
 from matsim_agents.backends.mlip.results import RelaxationResult
 
 
@@ -34,6 +34,15 @@ class TaskSpec(BaseModel):
     mcp_tool: str | None = None
     mcp_resource_uri: str | None = None
     mcp_arguments: dict[str, Any] = Field(default_factory=dict)
+
+    # Dumps feed checkpoints and `plan --json`; the executor reads the live fields.
+    @field_serializer("mcp_arguments")
+    def _redact_arguments(self, value: dict[str, Any]) -> dict[str, Any]:
+        return redact(value)
+
+    @field_serializer("mcp_resource_uri")
+    def _redact_resource_uri(self, value: str | None) -> str | None:
+        return redact_uri(value) if value else value
 
     @model_validator(mode="after")
     def _fields_for_kind(self) -> TaskSpec:

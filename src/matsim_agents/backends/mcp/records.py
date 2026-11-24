@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
@@ -74,6 +75,24 @@ def redact(value: Any, secrets: Iterable[str] = (), *, sensitive_keys: bool = Tr
     if isinstance(value, str):
         return scrub_text(value, secrets)
     return value
+
+
+def redact_uri(uri: str) -> str:
+    """Copy ``uri`` with a userinfo password and credential-like query values replaced."""
+    try:
+        parts = urlsplit(uri)
+        password = parts.password
+    except ValueError:
+        return REDACTED
+    netloc = parts.netloc
+    if password is not None:
+        user, _, host = netloc.rpartition("@")
+        netloc = f"{user.partition(':')[0]}:{REDACTED}@{host}"
+    query = []
+    for pair in parts.query.split("&") if parts.query else []:
+        key = pair.partition("=")[0]
+        query.append(f"{key}={REDACTED}" if _SENSITIVE_KEY.search(key) else pair)
+    return urlunsplit(parts._replace(netloc=netloc, query="&".join(query)))
 
 
 def truncate(text: str, limit: int) -> str:
@@ -149,8 +168,7 @@ class MCPAuditLog:
 
     def write(self, event: str, **fields: Any) -> None:
         record = {"timestamp_utc": now_utc(), "event": event, **fields}
-        # Arguments were key-redacted when the call record was made; here every
-        # field is scrubbed of configured credential values.
+        # Call records are key-redacted already; this scrubs configured secret values.
         scrubbed = redact(record, self._secrets, sensitive_keys=False)
         line = json.dumps(scrubbed, sort_keys=True, default=str)
         with self._lock:
