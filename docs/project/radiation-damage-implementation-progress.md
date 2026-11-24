@@ -148,6 +148,9 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - [x] B1.1 NEB data contracts (`discovery/neb_contracts.py`)
   - IMPLEMENTED and VERIFIED (synthetic fixtures). Typed records for endpoints (`generated`, `relaxed`, `numerically_qualified`, each needing the evidence the next level implies), identity-based atom correspondence, migration mechanism (always `requires_validation`), image sequence, engine-independent calculation spec, NEB result (`failed`, `incomplete`, `unconverged`, `converged_unqualified`, `qualified`) and the full transition record. Endpoint compatibility checks atom count, identity set, species per identity, parent, ordering, defect type, full periodicity and fixed cell. At least 4 images (QE).
   - Limitation: contracts only; no geometry is generated here.
+- [x] B1.2 Migration endpoint generation (`discovery/neb_endpoints.py`)
+  - IMPLEMENTED and VERIFIED on 16-atom BCC cells. `generate_vacancy_hop` (nearest-neighbour mover enters the vacancy; minimum-image displacement; `occupant_exchange` recorded from species; new vacancy at the mover's former parent site; hops chain), `generate_interstitial_migration` (explicit caller-given final positions, overlap and no-op rejected, mechanism unvalidated), `generate_frenkel_recombination` (direct return, or exchange with a vacancy neighbour; `restored` vs `exchanged` ordering is computed from parent-site species, never assumed; vacancy and interstitial `atom_id` recorded). Identities preserved, initial structure never modified, endpoints `generated` only.
+  - Limitation: candidates only. No relaxation, no saddle knowledge, no interstitial path search.
 
 ## Progress log
 
@@ -184,4 +187,5 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - A3 marked complete at the maintainer's request. Open verification items: full run of `tests/test_radiation_defect_pipeline.py` (1,024-atom cases) and the A1 to A3 regression run.
 - A3 verification gate (partial): the 12 1,024-atom integration tests each passed alone (see the A3 integration entry). The A1 to A3 regression run is still pending, so A3 is not yet marked software-verified.
 - B1.1: `neb_contracts.py`. `tests/test_neb_contracts.py` 14 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections (two test-side edits before the first run: no random generator, simpler validation call).
+- B1.2: `neb_endpoints.py`. `tests/test_neb_endpoints.py` 10 passed, 0 failed, 0 skipped. Ruff check and format pass. One correction: a test used an atom that really is a neighbour as the "far" atom; the test was fixed, not the code.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
