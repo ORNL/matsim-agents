@@ -9,7 +9,7 @@ the requested composition is met exactly.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal
@@ -223,6 +223,174 @@ def warren_cowley_sro(
         composition=composition,
         first_shell=_shell_sro(index, first_i, first_j, composition),
         second_shell=_shell_sro(index, second_i, second_j, composition),
+    )
+
+
+class SROTarget(BaseModel):
+    """Target Warren-Cowley alpha for one species pair in shell 1 or 2.
+
+    alpha_ij equals alpha_ji for a periodic lattice (pair counts are symmetric), so ``pair``
+    is unordered.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    shell: Literal[1, 2]
+    pair: tuple[str, str]
+    alpha: float = Field(allow_inf_nan=False)
+    weight: float = Field(default=1.0, gt=0, allow_inf_nan=False)
+
+
+@dataclass(frozen=True, eq=False)
+class TargetedSROResult:
+    """Outcome of ``generate_targeted_sro``: a bounded-search configuration, not an equilibrium.
+
+    ``objective`` is the weighted squared deviation of the achieved targeted alphas, and
+    ``sro`` the full measured descriptor of ``atoms``. ``converged`` only says that
+    ``objective <= tolerance``; unreachable targets leave it False with the best SRO reported.
+    """
+
+    atoms: Atoms
+    sro: SROResult
+    objective: float
+    initial_objective: float
+    attempts: int
+    accepted_swaps: int
+    seed: int
+    tolerance: float
+    converged: bool
+
+
+def _canonical_targets(
+    targets: Sequence[SROTarget], species: tuple[str, ...], composition: np.ndarray
+) -> dict[tuple[int, int, int], SROTarget]:
+    """Validate targets and merge symmetric duplicates, keyed by (shell, i, j) with i <= j."""
+    position = {symbol: k for k, symbol in enumerate(species)}
+    merged: dict[tuple[int, int, int], SROTarget] = {}
+    for target in targets:
+        missing = [symbol for symbol in target.pair if symbol not in position]
+        if missing:
+            raise ValueError(f"target species not in structure: {missing}")
+        a, b = sorted(position[symbol] for symbol in target.pair)
+        # Lower bound: pair counts cannot exceed z * min(N_a, N_b).
+        lower = 1.0 - 1.0 / max(composition[a], composition[b])
+        if not lower - 1e-12 <= target.alpha <= 1.0 + 1e-12:
+            raise ValueError(
+                f"target alpha {target.alpha} for {target.pair} is outside the attainable "
+                f"range [{lower:.6g}, 1] for this composition"
+            )
+        key = (target.shell, a, b)
+        if key in merged and abs(merged[key].alpha - target.alpha) > 1e-12:
+            raise ValueError(f"conflicting targets for shell {target.shell} pair {target.pair}")
+        merged.setdefault(key, target)
+    n = len(species)
+    for shell in (1, 2):
+        for a in range(n):
+            row = [merged.get((shell, min(a, b), max(a, b))) for b in range(n)]
+            if all(row):
+                total = sum(c * t.alpha for c, t in zip(composition, row, strict=True))
+                if abs(total) > 1e-6:
+                    raise ValueError(
+                        f"targets for shell {shell} species {species[a]} violate "
+                        f"sum_j c_j alpha_ij = 0 (got {total:.3g})"
+                    )
+    return merged
+
+
+def generate_targeted_sro(
+    atoms: Atoms,
+    lattice_parameter: float,
+    targets: Sequence[SROTarget],
+    *,
+    seed: int,
+    tolerance: float = 1e-4,
+    max_attempts: int = 20_000,
+) -> TargetedSROResult:
+    """Swap species between sites of a BCC alloy to approach target Warren-Cowley parameters.
+
+    Greedy, bounded search: each attempt swaps two sites of different species and is kept only
+    if it strictly lowers L = sum w * (alpha - alpha_target)^2 over the listed targets. Sites,
+    atom count and exact species counts never change. The search stops when L <= ``tolerance``
+    or after ``max_attempts`` swaps. A finite periodic cell only admits discrete alpha values,
+    so a target inside the attainable range may still be missed; the achieved SRO is reported
+    either way. Targets listed for (i, j) and (j, i) are the same quantity and are merged
+    (first weight kept); conflicting values, unknown species, values outside the attainable
+    range, or full rows breaking sum_j c_j alpha_ij = 0 raise ``ValueError``.
+    """
+    if not targets:
+        raise ValueError("at least one target is required")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError(f"seed must be a nonnegative integer, got {seed!r}")
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 0:
+        raise ValueError(f"max_attempts must be a nonnegative integer, got {max_attempts!r}")
+    if not (math.isfinite(tolerance) and tolerance >= 0):
+        raise ValueError(f"tolerance must be finite and nonnegative, got {tolerance}")
+
+    initial = warren_cowley_sro(atoms, lattice_parameter)
+    species = initial.species
+    if len(species) < 2:
+        raise ValueError("at least two species are required to swap")
+    n_atoms = len(atoms)
+    pairs = {
+        1: first_neighbor_list(atoms, lattice_parameter)[:2],
+        2: second_neighbor_list(atoms, lattice_parameter)[:2],
+    }
+    for shell, expected in ((1, BCC_FIRST_SHELL), (2, BCC_SECOND_SHELL)):
+        if not (np.bincount(pairs[shell][0], minlength=n_atoms) == expected).all():
+            raise ValueError(f"shell {shell} is not {expected}-fold coordinated: not a BCC lattice")
+
+    merged = _canonical_targets(targets, species, initial.composition)
+    n = len(species)
+    shells = np.array([key[0] for key in merged])
+    rows = np.array([key[1] for key in merged])
+    cols = np.array([key[2] for key in merged])
+    wanted = np.array([t.alpha for t in merged.values()])
+    weights = np.array([t.weight for t in merged.values()])
+    species_counts = np.rint(initial.composition * n_atoms)
+    coordination = {1: BCC_FIRST_SHELL, 2: BCC_SECOND_SHELL}
+    # alpha_ij = 1 - counts_ij * N / (z * N_i * N_j)
+    scale = {
+        s: n_atoms / (coordination[s] * np.outer(species_counts, species_counts)) for s in (1, 2)
+    }
+
+    def objective(index: np.ndarray) -> float:
+        alpha = {}
+        for shell, (i, j) in pairs.items():
+            counts = np.bincount(index[i] * n + index[j], minlength=n * n).reshape(n, n)
+            alpha[shell] = 1.0 - counts * scale[shell]
+        achieved = np.array([alpha[s][a, b] for s, a, b in zip(shells, rows, cols, strict=True)])
+        return float(np.sum(weights * (achieved - wanted) ** 2))
+
+    position = {symbol: k for k, symbol in enumerate(species)}
+    index = np.array([position[symbol] for symbol in atoms.get_chemical_symbols()])
+    current = initial_objective = objective(index)
+    rng = np.random.default_rng(seed)
+    attempts = accepted = 0
+    # Only strict improvements are kept, so the current state is always the best one found.
+    while current > tolerance and attempts < max_attempts:
+        attempts += 1
+        a = int(rng.integers(n_atoms))
+        b = int(rng.choice(np.flatnonzero(index != index[a])))
+        index[a], index[b] = index[b], index[a]
+        trial = objective(index)
+        if trial < current:
+            current = trial
+            accepted += 1
+        else:
+            index[a], index[b] = index[b], index[a]
+
+    result = atoms.copy()
+    result.set_chemical_symbols([species[k] for k in index])
+    return TargetedSROResult(
+        atoms=result,
+        sro=warren_cowley_sro(result, lattice_parameter, species),
+        objective=current,
+        initial_objective=initial_objective,
+        attempts=attempts,
+        accepted_swaps=accepted,
+        seed=seed,
+        tolerance=tolerance,
+        converged=current <= tolerance,
     )
 
 

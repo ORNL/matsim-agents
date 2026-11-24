@@ -62,6 +62,12 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - Reference: independent integer half-lattice grid with modular wrap, using no ASE neighbour search; pair counts and alpha must match exactly for four compositions (including the 1,024-atom reference) and three seeds.
   - Layered (001) block-of-two ordering: closed-form first-shell alpha = 0 and second-shell alpha = [[-1/3, 1/3], [1/3, -1/3]] on three cell shapes.
   - Random alloys: exhaustive average over all arrangements on a 16-site cell equals the finite-composition expectation E[alpha_ii] = (N - N_i)/((N - 1) N_i), E[alpha_ij] = -1/(N - 1) for a binary and a ternary composition. Nonzero finite-size bias is asserted to vanish only as the cell grows.
+- [x] A2.5 Targeted chemical short-range-order generation
+  - Files: `src/matsim_agents/discovery/alloys.py` (`SROTarget`, `generate_targeted_sro`, `TargetedSROResult`), `tests/test_alloys_targeted_sro.py`.
+  - Bounded greedy search: swap two sites of different species, keep only strict decreases of L = sum w (alpha - alpha_target)^2 over the explicitly targeted (shell, pair) entries. Sites and exact species counts are fixed; the input structure is not modified.
+  - Stops when L <= tolerance or after `max_attempts` swaps. Returns the structure, full measured SRO, objective, initial objective, attempts, accepted swaps, seed, tolerance, and convergence flag.
+  - Pair targets are unordered (alpha_ij = alpha_ji); duplicates are merged and conflicts rejected. Rejected: unknown species, alpha outside [1 - 1/max(c_i, c_j), 1], full target rows violating sum_j c_j alpha_ij = 0, non-BCC coordination, non-periodic or single-species structures, invalid seed, attempt limit, or tolerance.
+  - Limitation: a finite periodic cell admits only discrete alpha values, so an in-range target may be missed; the result is a bounded-search configuration, not an equilibrium state. Greedy acceptance can stall in a local minimum.
 
 ## Progress log
 
@@ -76,5 +82,6 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - A2.3: added `warren_cowley_sro` in `alloys.py`. `tests/test_alloys.py` (45 tests) and `tests/test_e3_mlip_structure_generation.py` pass together (64 passed). Ruff check and format pass.
 - A2.4: added `tests/test_alloys_sro_validation.py` (18 tests). With `tests/test_alloys.py`: 63 passed in about 18 s; the two exhaustive-average cases take about 16 s. Ruff check and format pass.
 - A2.4 fix: the exhaustive-average compositions are now `{Mo: 14, W: 2}` and `{Mo: 1, Ta: 1, W: 14}` (120 and 240 arrangements instead of 560 and 1,680). With `tests/test_alloys.py`: 63 passed in 4.2 s. Ruff check and format pass.
-- Not done: targeted-SRO generation.
+- A2.5: added `generate_targeted_sro` in `alloys.py` and `tests/test_alloys_targeted_sro.py` (21 tests). One test-only correction (a 2x2x1 cell has 8 sites, not 16). With `tests/test_alloys.py`, `tests/test_alloys_sro_validation.py` and `tests/test_e3_mlip_structure_generation.py`: 103 passed. Ruff check and format pass on the changed files.
+- Not done: SQS-like and local-clustering orderings; `OrderingMode` still admits only `random`.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
