@@ -1,0 +1,14 @@
+# Generalized BCC refractory alloy: 1,024-atom W-Ta-Cr-V-Hf-Mo reference cell.
+# Local structure generation only; no DFT, NEB, or MLIP relaxation.
+crystal_structure: bcc
+repeats: [8, 8, 8]
+lattice_parameter: 3.16
+ordering: random
+seed: 1
+counts:
+  W: 640
+  Ta: 128
+  Cr: 64
+  V: 96
+  Hf: 32
+  Mo: 64
