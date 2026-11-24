@@ -45,8 +45,20 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
   `disk_io='medium'` (job 5987031) did not crash but made no progress: it printed the first
   SCF iteration header and was cancelled by the 20 minute limit (Slurm `TIMEOUT`), with no
   converged SCF. So `disk_io='medium'` avoids the crash in this test but is not shown to
-  work; it is one variable changed, with an unproven outcome. The root cause remains
-  unestablished.
+  work; it is one variable changed, with an unproven outcome.
+* Root cause and fix of the `pw.x` segfault (software-verified on one 128-atom debug job; no
+  energies, nothing numerically validated). QE was rebuilt from scratch with the pinned
+  toolchain `cpe/24.11`, `cce/18.0.1` (Frontier's default cpe/26.03 / cce 21.0.4 does not
+  compile QE). A standalone reproducer showed that Cray `ftn` (cce 18, 19, 20) segfaults at run
+  time on an array assignment inside an OpenMP `WORKSHARE` (orphaned; a rebuilt `pw.x` with
+  `PARALLEL WORKSHARE` still crashed in the outlined region, found with a core dump taken in
+  job 5988713). `PW/src/buffers.f90` uses that construct in `buiol_write_record` and
+  `buiol_read_record`. Replacing both with an explicit-shape `PARALLEL DO` copy
+  (`buiol_copy_z`; patch in `deployments/frontier/setup/patches/qe-cce-orphaned-workshare/`,
+  applied by `build-qe-gpu-frontier.sh`) removes the crash: job 5988725 (same input, default
+  `disk_io`) passed `wfcinit` and printed SCF iteration 1, then reached the 15 minute debug
+  limit (`TIMEOUT`) with no converged SCF. No convergence or energy exists yet for the
+  128-atom case; the wavefunction start-up alone takes several minutes.
 * Slurm `COMPLETED` is not QE success. Launchers must propagate the `srun` exit code and
   check for `convergence has been achieved` and `JOB DONE`.
 * See [multiproperty-selection.md](multiproperty-selection.md) for the property, selection,

@@ -91,6 +91,8 @@ echo "=========================================="
 
 # ---- Load modules -----------------------------------------------------------
 module reset
+# Frontier's default cpe moved to 26.03 (cce 21, mpich 9.1); the runtime stack is pinned to 24.11.
+module load cpe/24.11
 module load Core/25.03
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
@@ -101,7 +103,7 @@ module load Core/25.03
 # A per-file workaround later in this script handles cce/18.0.1's ICE on
 # PW/src/gen_at_d{j,y}.f90.
 module load PrgEnv-cray
-module load cce                          # default 18.0.1 on Frontier
+module load cce/18.0.1
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
 # ROCm version is selectable via env. Default rocm/6.2.4 is the only option
 # that is ABI-compatible with Frontier's cray-mpich/8.1.31 GTL: the GTL library
@@ -391,6 +393,21 @@ if [[ -f "${QES_INIT_F}" ]] && ! grep -q 'Frontier/cce-18.0.1 workaround' "${QES
   ( cd "${SRC_DIR}" && patch -p1 --forward < "${CCE_SEGFAULT_PATCH}" )
 else
   echo "--- cce-18.0.1 segfault fix already applied (or files missing); skipping ---"
+fi
+
+# ---- Source patch: orphaned OpenMP WORKSHARE in PW/src/buffers.f90 ----------
+# cce 18-20 segfault at run time on an array assignment inside OMP WORKSHARE
+# (orphaned, and also PARALLEL WORKSHARE when the target is a pointer component
+# of a derived type). buiol_write/read_record use one, so pw.x crashed in
+# save_buffer from wfcinit. The patch replaces them with an explicit-shape
+# PARALLEL DO copy (buiol_copy_z).
+BUF_F="${SRC_DIR}/PW/src/buffers.f90"
+BUF_PATCH="${SCRIPT_DIR}/patches/qe-cce-orphaned-workshare/buffers-parallel-workshare.patch"
+if [[ -f "${BUF_F}" ]] && grep -qiE '^[[:space:]]*!\$omp[[:space:]]+workshare' "${BUF_F}"; then
+  echo "--- Patching orphaned OpenMP workshare in PW/src/buffers.f90 ---"
+  ( cd "${SRC_DIR}" && patch -p1 --forward < "${BUF_PATCH}" )
+else
+  echo "--- buffers.f90 workshare patch already applied (or not needed); skipping ---"
 fi
 
 # ---- Build ------------------------------------------------------------------
