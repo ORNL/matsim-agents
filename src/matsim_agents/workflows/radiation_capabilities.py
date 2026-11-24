@@ -113,6 +113,14 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         caveats="Running neb.x needs QE and an explicit dispatch.",
     ),
     RadiationCapability(
+        name="recovery-workflow",
+        summary="Checkpointed alloy, vacancy hop, NEB and exploratory kinetics; dry run default.",
+        entry_points=("matsim_agents.workflows.radiation_damage:run_radiation_damage",),
+        backends=("qe",),
+        tests=("tests/test_radiation_damage_workflow.py",),
+        caveats="Kinetics stay exploratory; a missing barrier blocks the stage.",
+    ),
+    RadiationCapability(
         name="transition-network",
         summary="Directed transition network with NEB evidence ingestion and validation.",
         entry_points=(

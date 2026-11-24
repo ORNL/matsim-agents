@@ -128,6 +128,11 @@ def _read_plan(directory: Path) -> NebPlan:
         raise NebWorkflowError(f"{directory / PLAN_FILE} is not a valid plan: {exc}") from exc
 
 
+def read_neb_plan(directory: str | os.PathLike) -> NebPlan:
+    """The saved plan of a prepared workflow directory."""
+    return _read_plan(Path(directory).resolve())
+
+
 def _method_id(pair: MigrationPair, config: QENebConfig, requested: str | None) -> str:
     endpoint_methods = {e.method for e in (pair.transition.initial, pair.transition.final)}
     endpoint_methods.discard(None)
@@ -431,9 +436,35 @@ def run_neb_workflow(
     )
     if plan.status != "planned" or not dispatch:
         return NebWorkflowOutcome(plan=plan)
+    return dispatch_neb_workflow(
+        plan,
+        config,
+        allow_unrelaxed_endpoints=allow_unrelaxed_endpoints,
+        launcher=launcher,
+        timeout_sec=timeout_sec,
+        env=env,
+        ledger=ledger,
+    )
+
+
+def dispatch_neb_workflow(
+    plan: NebPlan,
+    config: QENebConfig,
+    *,
+    allow_unrelaxed_endpoints: bool = False,
+    launcher=run_launcher,
+    timeout_sec: float | None = None,
+    env: Mapping[str, str] | None = None,
+    ledger: EvidenceLedger | None = None,
+) -> NebWorkflowOutcome:
+    """Run the first prepared stage of a ``planned`` workflow and ingest the output."""
+    if plan.status != "planned":
+        raise NebWorkflowError("the workflow was rejected; there is nothing to dispatch")
     stage_config = QENebConfig.model_validate(
         {**config.model_dump(mode="json"), "workdir": str(Path(plan.directory) / QE_DIR)}
     )
+    if stage_config.config_hash() != plan.config_hash:
+        raise NebWorkflowError("the configuration differs from the prepared plan")
     problems = stage_config.runtime_problems()
     if problems:
         raise NebWorkflowError("cannot dispatch: " + "; ".join(problems))
@@ -449,10 +480,14 @@ def run_neb_workflow(
 
 __all__ = [
     "NOT_ASSESSED",
+    "PLAN_FILE",
+    "RESULT_FILE",
     "NebPlan",
     "NebWorkflowError",
     "NebWorkflowOutcome",
+    "dispatch_neb_workflow",
     "ingest_neb_results",
     "prepare_neb_workflow",
+    "read_neb_plan",
     "run_neb_workflow",
 ]
