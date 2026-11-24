@@ -153,10 +153,23 @@ class MCPServerConfig(BaseModel):
                 raise ValueError(f"server {self.name!r}: streamable_http transport requires url")
             if not re.match(r"^https?://", self.url):
                 raise ValueError(f"server {self.name!r}: url must start with http:// or https://")
-            if urlsplit(self.url).username is not None:
+            # Parse the whole URL now: a malformed URL (e.g. "http://user:token" with
+            # no "@", read as a host and port) would otherwise reach the HTTP client,
+            # whose errors echo URL parts. These messages never include the URL.
+            malformed = ValueError(f"server {self.name!r}: url is malformed")
+            if any(char.isspace() or not char.isprintable() for char in self.url):
+                raise malformed
+            try:
+                parts = urlsplit(self.url)
+                parts.port  # noqa: B018 - raises ValueError for a non-numeric port
+            except ValueError:
+                raise malformed from None
+            if parts.username is not None or parts.password is not None:
                 raise ValueError(
                     f"server {self.name!r}: put credentials in headers, not in the url"
                 )
+            if not parts.hostname:
+                raise malformed
             for key, value in self.headers.items():
                 token = value.get_secret_value().split()[-1:] or [""]
                 if len(token[0]) < MIN_SECRET_LENGTH:
