@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
 from matsim_agents.discovery.radiation_defects import (
+    BCC_111_DIRECTIONS,
     BCC_INTERSTITIAL_OFFSETS,
     DUMBBELL_ORIENTATIONS,
     DefectConfiguration,
@@ -19,6 +20,7 @@ from matsim_agents.discovery.radiation_defects import (
     DefectSite,
     DefectSpec,
     generate_bcc_interstitial,
+    generate_crowdion,
     generate_dumbbell_interstitial,
     generate_vacancy,
     make_defect_config_id,
@@ -419,3 +421,105 @@ def test_a_parent_that_is_not_bcc_around_the_site_is_rejected():
     parent.positions[3] += 0.5
     with pytest.raises(ValueError, match="not BCC"):
         generate_bcc_interstitial(parent, "small-1", 3, "W", "octahedral", A)
+
+
+# --- A3.4b collective <111> crowdion ---
+
+CROWD = AlloySpec(counts={"Mo": 18, "Ta": 18, "W": 18}, repeats=(3, 3, 3), seed=2)
+STEP = A * 3**0.5 / 2
+
+
+def test_crowdion_moves_the_expected_row_atoms_collectively_and_inserts_one_atom():
+    parent = generate_alloy(CROWD)
+    n = len(parent)
+    defective, config = generate_crowdion(parent, "crowd-1", 0, "W", A, n_participating=4)
+    assert len(defective) == n + 1 == config.n_atoms
+    row = [int(i) for i in config.spec.parameters["row_atom_ids"].split(",")]
+    assert len(row) == 4 and len(set(row)) == 4 and 0 in row
+    moved = np.flatnonzero(np.abs(defective.positions[:n] - parent.positions).max(axis=1) > 1e-9)
+    assert sorted(moved) == sorted(row)
+    amp = 0.25 * STEP
+    shifts = [float(x) for x in config.spec.parameters["row_shifts"].split(",")]
+    assert shifts == pytest.approx([-amp / 2, -amp, amp, amp / 2], abs=1e-5)
+    assert config.spec.parameters["crowdion_length"] == pytest.approx(3 * STEP + amp)
+    inserted = config.sites[-1]
+    assert (inserted.role, inserted.atom_id, inserted.lattice_site) == ("interstitial", n, None)
+    assert [s.atom_id for s in config.sites[:-1]] == row
+    assert all(s.initial_position is not None for s in config.sites[:-1])
+    assert config.sites[-1].initial_position is None
+
+
+def test_crowdion_row_is_a_periodic_111_chain_and_keeps_orientation_and_identities():
+    parent = generate_alloy(CROWD)
+    n = len(parent)
+    for rotated in (False, True):
+        cell_parent = parent.copy()
+        if rotated:
+            cell_parent.rotate(30, "z", rotate_cell=True)
+        defective, config = generate_crowdion(cell_parent, "crowd-1", 3, "Ta", A)
+        row = [int(i) for i in config.spec.parameters["row_atom_ids"].split(",")]
+        axes = cell_parent.cell.array / np.linalg.norm(cell_parent.cell.array, axis=1)[:, None]
+        direction = np.array(BCC_111_DIRECTIONS["111"]) @ axes
+        direction /= np.linalg.norm(direction)
+        for a, b in zip(row[:-1], row[1:], strict=True):
+            vec, _ = get_distances(
+                cell_parent.positions[a], cell_parent.positions[b], cell=cell_parent.cell, pbc=True
+            )
+            assert np.allclose(vec[0, 0], STEP * direction, atol=1e-9)
+        assert defective.get_chemical_symbols() == [*cell_parent.get_chemical_symbols(), "Ta"]
+        assert defective.get_array("atom_id").tolist() == list(range(n + 1))
+        for a, b in zip(row[:-1], row[1:], strict=True):
+            vec, _ = get_distances(
+                defective.positions[a], defective.positions[b], cell=defective.cell, pbc=True
+            )
+            assert np.allclose(np.cross(vec[0, 0], direction), 0, atol=1e-6)
+
+
+def test_crowdion_is_deterministic_and_handles_the_periodic_boundary():
+    parent = generate_alloy(CROWD)
+    first = generate_crowdion(parent, "crowd-1", 0, "W", A, direction="-1-1-1")
+    second = generate_crowdion(parent, "crowd-1", 0, "W", A, direction="-1-1-1")
+    assert first[1] == second[1] and np.array_equal(first[0].positions, second[0].positions)
+    defective, config = first
+    scaled = defective.get_scaled_positions(wrap=False)
+    assert ((scaled >= 0) & (scaled < 1)).all()
+    row = [int(i) for i in config.spec.parameters["row_atom_ids"].split(",")]
+    assert len(set(row)) == 4
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"direction": "110"},
+        {"n_participating": 3},
+        {"n_participating": 0},
+        {"n_participating": 6},
+        {"n_participating": True},
+        {"amplitude": 0.0},
+        {"amplitude": STEP},
+        {"amplitude": float("nan")},
+        {"min_distance": 3.0},
+        {"site": 54},
+        {"species": "Xx"},
+        {"lattice_parameter": 3.0},
+    ],
+)
+def test_invalid_crowdion_parameters_are_rejected(kwargs):
+    arguments = {"site": 0, "species": "W", "lattice_parameter": A} | kwargs
+    with pytest.raises(ValueError):
+        generate_crowdion(
+            generate_alloy(CROWD),
+            "crowd-1",
+            arguments.pop("site"),
+            arguments.pop("species"),
+            arguments.pop("lattice_parameter"),
+            **arguments,
+        )
+
+
+def test_a_site_whose_row_is_not_bcc_is_rejected():
+    parent = generate_alloy(CROWD)
+    parent.positions[1] += 0.6
+    parent.wrap()
+    with pytest.raises(ValueError):
+        generate_crowdion(parent, "crowd-1", 0, "W", A, n_participating=4)

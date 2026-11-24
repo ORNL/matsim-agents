@@ -14,6 +14,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from itertools import permutations, product
+from math import lcm
 from types import MappingProxyType
 from typing import Annotated, Literal
 
@@ -126,6 +127,7 @@ class DefectSite(BaseModel):
     atom_id: StrictInt = Field(ge=0)
     lattice_site: StrictInt | None = Field(default=None, ge=0)
     position: Vec3
+    initial_position: Vec3 | None = None  # before a generator moved the atom
 
     @field_validator("species")
     @classmethod
@@ -545,7 +547,166 @@ def generate_bcc_interstitial(
     return defective, config
 
 
+# The eight <111> senses as sign triples along the cell vectors; keys such as "1-11".
+BCC_111_DIRECTIONS: Mapping[str, tuple[int, int, int]] = MappingProxyType(
+    {"".join("-1" if s < 0 else "1" for s in signs): signs for signs in product((1, -1), repeat=3)}
+)
+
+
+def generate_crowdion(
+    parent: Atoms,
+    parent_id: str,
+    site: int,
+    species: str,
+    lattice_parameter: float,
+    *,
+    direction: str = "111",
+    n_participating: int = 4,
+    amplitude: float | None = None,
+    min_distance: float | None = None,
+    parent_ordering_id: str | None = None,
+) -> tuple[Atoms, DefectConfiguration]:
+    """Insert a ``species`` atom into a <111> row and push the row atoms away from it.
+
+    The row is the chain of BCC atoms ``site + k * s`` with ``s = (a / 2) * direction`` (periodic,
+    closing after ``2 * lcm(supercell repeats)`` atoms). The new atom sits midway between rows
+    atoms ``k = 0`` (``site``) and ``k = 1``. ``n_participating`` (even) row atoms, half on each
+    side, are displaced along the row away from it by ``amplitude * (h - j + 1) / h`` for the
+    j-th atom from the insertion point (``h = n_participating / 2``), a linear taper to zero
+    beyond the participants. ``amplitude`` defaults to ``0.25 * |s|`` and must be below
+    ``0.5 * |s|``. Atoms keep their species and ids; the new atom gets ``atom_id = len(parent)``.
+    Pairs closer than ``min_distance`` (minimum image, default ``0.35 * lattice_parameter``)
+    among the moved and inserted atoms are rejected. Nothing is relaxed, and the geometry is
+    only an initial candidate: stability is not implied.
+    """
+    if not parent_id:
+        raise ValueError("parent_id must be a nonempty string")
+    if isinstance(site, bool) or not isinstance(site, int | np.integer):
+        raise ValueError(f"site must be an integer index, got {site!r}")
+    site = int(site)
+    if not 0 <= site < len(parent):
+        raise ValueError(f"site {site} is outside the {len(parent)}-atom parent")
+    _check_species(species)
+    if direction not in BCC_111_DIRECTIONS:
+        raise ValueError(
+            f"unsupported direction {direction!r}; use one of {sorted(BCC_111_DIRECTIONS)}"
+        )
+    if not (np.isfinite(lattice_parameter) and lattice_parameter > 0):
+        raise ValueError(f"lattice_parameter must be positive and finite, got {lattice_parameter}")
+    if not parent.pbc.all():
+        raise ValueError("parent must be periodic in all directions")
+    axes = _cubic_axes(parent, lattice_parameter)
+    repeats = np.rint(np.linalg.norm(parent.cell.array, axis=1) / lattice_parameter).astype(int)
+    row_length = 2 * lcm(*(int(r) for r in repeats))
+    if isinstance(n_participating, bool) or not isinstance(n_participating, int | np.integer):
+        raise ValueError(f"n_participating must be an integer, got {n_participating!r}")
+    if n_participating < 2 or n_participating % 2:
+        raise ValueError(f"n_participating must be even and >= 2, got {n_participating}")
+    if n_participating >= row_length:
+        raise ValueError(
+            f"n_participating {n_participating} must be below the periodic row length {row_length}"
+        )
+    step = 0.5 * lattice_parameter * np.array(BCC_111_DIRECTIONS[direction]) @ axes
+    step_length = float(np.linalg.norm(step))
+    unit = step / step_length
+    amplitude = 0.25 * step_length if amplitude is None else float(amplitude)
+    if not (np.isfinite(amplitude) and 0 < amplitude < 0.5 * step_length):
+        raise ValueError(f"amplitude must be in (0, {0.5 * step_length:.3f}) A, got {amplitude}")
+    min_distance = 0.35 * lattice_parameter if min_distance is None else float(min_distance)
+    if not (np.isfinite(min_distance) and min_distance > 0):
+        raise ValueError(f"min_distance must be positive and finite, got {min_distance}")
+
+    half = n_participating // 2
+    ks = np.arange(-(half - 1), half + 1)
+    targets = parent.positions[site] + ks[:, None] * step
+    _, dist = get_distances(targets, parent.positions, cell=parent.cell, pbc=True)
+    row = dist.argmin(axis=1)
+    if (dist.min(axis=1) > 0.05 * lattice_parameter).any() or len(set(row.tolist())) != len(row):
+        raise ValueError(f"no continuous <{direction}> BCC row of atoms through site {site}")
+    if row[half - 1] != site:
+        raise ValueError(f"site {site} is not on its own <{direction}> row")
+
+    shifts = np.where(ks > 0, 1.0, -1.0) * amplitude * (half - np.where(ks > 0, ks, 1 - ks) + 1)
+    shifts /= half
+    initial = parent.positions[row]
+    final_unwrapped = targets + shifts[:, None] * unit
+    midpoint = parent.positions[site] + 0.5 * step
+    moved_all = wrap_positions(np.vstack([final_unwrapped, midpoint]), parent.cell, pbc=True)
+    moved, added = moved_all[:-1], moved_all[-1]
+
+    defective = parent.copy()
+    defective.set_array("atom_id", np.arange(len(parent), dtype=np.int64))
+    defective.positions[row] = moved
+    defective.extend(Atoms(species, positions=[added]))
+    defective.arrays["atom_id"][-1] = len(parent)
+
+    changed = np.append(row, len(parent))
+    _, dist = get_distances(
+        defective.positions[changed], defective.positions, cell=defective.cell, pbc=True
+    )
+    dist[np.arange(len(changed)), changed] = np.inf
+    if dist.min() < min_distance:
+        i, j = np.unravel_index(dist.argmin(), dist.shape)
+        raise ValueError(
+            f"severe overlap: atom {changed[i]} is {dist[i, j]:.3f} A from atom {j} "
+            f"(minimum {min_distance:.3f} A)"
+        )
+
+    length = float(np.linalg.norm(final_unwrapped[-1] - final_unwrapped[0]))
+    spec = DefectSpec(
+        defect_type="interstitial",
+        site_indices=(site,),
+        species=(species,),
+        parameters={
+            "structure": "crowdion",
+            "direction": direction,
+            "n_participating": int(n_participating),
+            "amplitude": amplitude,
+            "taper": "linear",
+            "row_atom_ids": ",".join(str(int(i)) for i in row),
+            "row_shifts": ",".join(f"{x:.6f}" for x in shifts),
+            "row_length": row_length,
+            "crowdion_length": length,
+            "min_distance": min_distance,
+            "lattice_parameter": float(lattice_parameter),
+        },
+    )
+    displaced = tuple(
+        DefectSite(
+            role="displaced",
+            species=parent[int(i)].symbol,
+            atom_id=int(i),
+            lattice_site=int(i),
+            position=tuple(float(x) for x in new),
+            initial_position=tuple(float(x) for x in old),
+        )
+        for i, old, new in zip(row, initial, moved, strict=True)
+    )
+    config = DefectConfiguration(
+        config_id=make_defect_config_id(parent_id, spec),
+        parent_id=parent_id,
+        parent_ordering_id=parent_ordering_id or occupation_fingerprint(parent),
+        spec=spec,
+        n_parent_atoms=len(parent),
+        n_atoms=len(defective),
+        cell=tuple(tuple(float(x) for x in row_) for row_ in parent.cell.array),
+        sites=(
+            *displaced,
+            DefectSite(
+                role="interstitial",
+                species=species,
+                atom_id=len(parent),
+                position=tuple(float(x) for x in added),
+            ),
+        ),
+        geometry_fingerprint=geometry_fingerprint(defective),
+        validation_status="valid",
+    )
+    return defective, config
+
+
 __all__ = [
+    "BCC_111_DIRECTIONS",
     "BCC_INTERSTITIAL_OFFSETS",
     "DUMBBELL_ORIENTATIONS",
     "SITE_COUNTS",
@@ -554,6 +715,7 @@ __all__ = [
     "DefectSite",
     "DefectSpec",
     "generate_bcc_interstitial",
+    "generate_crowdion",
     "generate_dumbbell_interstitial",
     "generate_vacancy",
     "geometry_fingerprint",

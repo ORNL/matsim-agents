@@ -101,6 +101,21 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 
 Phase A2 is complete.
 
+## Phase A3: Radiation-defect generation
+
+All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with tests in `tests/test_radiation_defects.py`. Every generated structure is an unrelaxed initial candidate: nothing is relaxed, no energies are computed, and no stability is claimed.
+
+- [x] A3.1 Defect data contracts
+  - `DefectSpec`, `DefectSite`, `DefectConfiguration`, `DefectOutcome`, `make_defect_config_id`, `geometry_fingerprint`. Parent atoms keep `atom_id` = parent index; inserted atoms get ids >= `n_parent_atoms`; `DefectSite.initial_position` is optional.
+- [x] A3.2 Vacancy generation (`generate_vacancy`).
+- [x] A3.3 Dumbbell interstitials (`generate_dumbbell_interstitial`)
+  - Orientations 111, 110 and 100 taken along the cell vectors; configurable separation; minimum-image overlap rejection.
+- [x] A3.4 Additional interstitial candidates
+  - A3.4a `generate_bcc_interstitial`: tetrahedral (24 variants) and octahedral (6 variants) sites from crystallographic offsets through the cell vectors; the ideal nearest-atom shell must match or a non-BCC error is raised.
+  - A3.4b `generate_crowdion`: periodic <111> row found with minimum-image distances; the inserted atom sits between two row atoms and `n_participating` row atoms move away with a linear taper (default amplitude 0.25 of the row spacing). Participant ids, initial and final coordinates, direction, amplitudes and crowdion length are recorded.
+  - Available classes: <111>, <110> and <100> dumbbells, tetrahedral, octahedral and collective <111> crowdion candidates.
+  - Limitation: the crowdion pattern is a geometric starting point, not a validated or universally stable structure in the six-component alloy.
+
 ## Progress log
 
 - A1.1: inspection complete; no E3 change required.
@@ -124,4 +139,5 @@ Phase A2 is complete.
 - A2.8d and A2.9: three point-group tests in `tests/test_alloy_ensemble.py` and `tests/test_phase_a2_integration.py`. With the seeding-policy test: 60 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - CI fix: `tests/test_dependency_contract.py` expected `ase==3.26.0` after `pyproject.toml` moved to 3.29.0; the test now expects 3.29.0 (`60240c4`).
 - Not done: SQS-like and local-clustering orderings; `OrderingMode` still admits only `random`.
+- A3.1 to A3.4: `tests/test_radiation_defects.py` 71 passed, 0 failed, 0 skipped. Ruff check and format pass. A3.4b needed three test-side correction rounds (fixture size, species validated before ASE, minimum-image vectors in a test).
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
