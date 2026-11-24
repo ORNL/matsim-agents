@@ -136,3 +136,20 @@ SPECTRA-PKA run has been made by this repository's tests.
 * Citations to use when publishing results: J. Nucl. Mater. 467 (2015) 121-134;
   Nucl. Mater. Energy 9 (2016) 576-580; J. Nucl. Mater. 504 (2018) 101-108;
   Nucl. Sci. Eng. (2024) doi:10.1080/00295639.2024.2342506.
+* The index file name is unresolved: the upstream manual names `index_summary.dat`, while
+  reading the source suggested `<stub>.indexes`. The parser does not depend on this file for
+  the spectrum. Confirm against a real build before relying on either name.
+* SPECTRA-PKA was not installed on the development machine when this was written
+  (`spectra-pka` not on `PATH`), so no real run exists.
+
+## 14. PKA-informed ranking and the synthetic chain
+
+`matsim_agents.campaign.pka_acquisition.select_pka_informed` ranks candidate calculations by
+species-resolved PKA production, a diminishing return for repeating a species, user-supplied
+kinetic importance and uncertainty, and cost in node-hours. It is a policy, not a fitted
+model, and it has not been shown to beat random selection. It launches no jobs, and
+surviving-defect production stays `NOT_ESTABLISHED`.
+
+`tests/test_radiation_e2e_synthetic.py` chains alloy generation, transmutation, a He/H
+vacancy complex, a mock SPECTRA-PKA run, PKA sampling and the ranking. It checks composition,
+determinism and labels only.
