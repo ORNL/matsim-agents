@@ -114,6 +114,21 @@ class TransitionNetwork:
         if None not in counts and counts[0] != counts[1]:
             raise NetworkError("transition does not conserve species counts")
 
+    def replace_transition(self, event: TransitionEvent) -> None:
+        """Swap in updated evidence for an existing event; its endpoints must not change."""
+        old = self._events.get(event.transition_id)
+        if old is None:
+            raise NetworkError(f"unknown transition {event.transition_id!r}")
+        same = (old.source_id, old.target_id, old.mechanism, old.moving_atom_ids) == (
+            event.source_id,
+            event.target_id,
+            event.mechanism,
+            event.moving_atom_ids,
+        )
+        if not same:
+            raise NetworkError("replacing an event cannot change its endpoints or mechanism")
+        self._events[event.transition_id] = event
+
     def outgoing(self, sid: str) -> tuple[TransitionEvent, ...]:
         self.state(sid)
         return tuple(e for e in self.events if e.source_id == sid)
