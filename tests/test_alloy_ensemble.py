@@ -249,6 +249,37 @@ def test_invalid_targets_are_rejected_before_generation():
         )
 
 
+def test_overlap_matrix_is_symmetric_with_unit_diagonal(random_ensemble):
+    matrix = random_ensemble.overlap_matrix()
+    assert matrix.shape == (6, 6)
+    assert np.allclose(np.diag(matrix), 1.0)
+    assert np.array_equal(matrix, matrix.T)
+    a, b = random_ensemble.structures[0], random_ensemble.structures[1]
+    assert matrix[0, 1] == pytest.approx(float((a.numbers == b.numbers).mean()))
+
+
+def test_overlap_of_duplicates_is_one_and_summary_is_serializable():
+    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1))
+    out = generate_alloy_ensemble(tiny, n_configurations=8, mode="random", seed=0)
+    first_group = out.duplicate_groups[0]
+    ids = [r.config_id for r in out.records]
+    i, j = ids.index(first_group[0]), ids.index(first_group[1])
+    assert out.overlap_matrix()[i, j] == 1.0
+    assert json.loads(json.dumps(out.metadata()))["overlap"]["max"] == 1.0
+
+
+def test_random_overlap_is_consistent_with_expectation_and_single_config_has_none():
+    spec = AlloySpec(counts={"Mo": 128, "W": 128}, repeats=(8, 4, 4), seed=0)
+    out = generate_alloy_ensemble(spec, n_configurations=6, mode="random", seed=3)
+    summary = out.overlap_summary()
+    assert out.expected_random_overlap == pytest.approx(0.5)
+    # sd of one pair is about 0.03 for 256 sites; 6 sigma over 15 pairs is a safe bound.
+    assert abs(summary["mean"] - 0.5) < 0.05
+    assert 0.3 < summary["min"] <= summary["mean"] <= summary["max"] < 0.7
+    single = generate_alloy_ensemble(spec, n_configurations=1, mode="random", seed=3)
+    assert single.overlap_summary()["mean"] is None
+
+
 def test_reference_1024_atom_random_ensemble():
     out = generate_alloy_ensemble(REFERENCE, n_configurations=3, mode="random", seed=0)
     assert len(out.structures) == 3

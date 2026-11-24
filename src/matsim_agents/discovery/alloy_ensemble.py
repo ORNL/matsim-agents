@@ -121,11 +121,36 @@ class AlloyEnsemble:
         """Number of distinct exact occupations."""
         return len({record.fingerprint for record in self.records})
 
+    @property
+    def expected_random_overlap(self) -> float:
+        """E[site overlap] of two independent uniform shuffles of this composition: sum_i c_i^2."""
+        return float(sum(c * c for c in self.spec.alloy.composition.values()))
+
+    def overlap_matrix(self) -> np.ndarray:
+        """Fraction of sites with the same species for every pair of configurations.
+
+        A descriptive diagnostic only: values near ``expected_random_overlap`` are consistent
+        with, but do not prove, statistical independence. Targeted-SRO members are not expected
+        to match the random value.
+        """
+        numbers = np.stack([atoms.numbers for atoms in self.structures])
+        return np.array([(numbers == row).mean(axis=1) for row in numbers])
+
+    def overlap_summary(self) -> dict[str, float | None]:
+        """Min, mean and max overlap over distinct pairs (None for a single configuration)."""
+        matrix = self.overlap_matrix()
+        pairs = matrix[np.triu_indices(len(matrix), k=1)]
+        stats = (pairs.min(), pairs.mean(), pairs.max()) if len(pairs) else (None, None, None)
+        keys = ("min", "mean", "max")
+        summary = {k: None if v is None else float(v) for k, v in zip(keys, stats, strict=True)}
+        return summary | {"expected_random": self.expected_random_overlap}
+
     def metadata(self) -> dict[str, Any]:
         return {
             "spec": self.spec.model_dump(mode="json"),
             "n_unique": self.n_unique,
             "duplicate_groups": [list(group) for group in self.duplicate_groups],
+            "overlap": self.overlap_summary(),
             "configurations": [record.metadata() for record in self.records],
         }
 
