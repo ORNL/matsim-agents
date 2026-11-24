@@ -7,9 +7,9 @@ import pytest
 from matsim_agents.backends.dft.qe_neb_parse import (
     parse_neb_dat,
     parse_neb_output,
-    to_neb_result,
 )
 from matsim_agents.backends.dft.qe_neb_run import NebRunRecord
+from matsim_agents.workflows.neb_mapping import to_neb_result
 
 ENERGIES = [-100.0, -99.6, -99.2, -99.7, -100.1]  # saddle at image 3: 0.8 up, 0.9 back
 ERRORS = [0.0, 0.03, 0.02, 0.04, 0.0]

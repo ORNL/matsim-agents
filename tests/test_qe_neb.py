@@ -184,3 +184,10 @@ def test_runtime_problems_report_missing_files(tmp_path):
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     assert _cfg(pseudo_dir=str(tmp_path), neb_executable=str(exe)).runtime_problems() == []
+
+
+def test_min_images_matches_the_discovery_contract():
+    from matsim_agents.backends.dft import qe_neb
+    from matsim_agents.discovery import neb_contracts
+
+    assert qe_neb.MIN_IMAGES == neb_contracts.MIN_IMAGES

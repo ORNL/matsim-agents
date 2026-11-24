@@ -26,6 +26,7 @@ LAYERS: list[set[str]] = [
     {"execution", "datasets"},
     {"backends.llm", "backends.dft", "backends.mlip", "backends.mcp"},
     {"discovery", "training"},
+    {"kinetics"},
     {"active_learning", "workflows"},
     {"orchestration", "campaign"},
     {"cli"},

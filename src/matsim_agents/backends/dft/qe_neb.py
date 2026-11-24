@@ -36,7 +36,8 @@ from pydantic import (
     model_validator,
 )
 
-from matsim_agents.discovery.neb_contracts import MIN_IMAGES
+# QE neb.x needs more than three images; tests pin this to discovery.neb_contracts.MIN_IMAGES.
+MIN_IMAGES = 4
 
 OptScheme = Literal["sd", "broyden", "broyden2", "quick-min", "langevin"]
 CIScheme = Literal["no-CI", "auto", "manual"]

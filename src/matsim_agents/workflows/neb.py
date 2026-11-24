@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.backends.dft.process import run_launcher
 from matsim_agents.backends.dft.qe_neb import QENebConfig
-from matsim_agents.backends.dft.qe_neb_parse import parse_neb_output, to_neb_result
+from matsim_agents.backends.dft.qe_neb_parse import parse_neb_output
 from matsim_agents.backends.dft.qe_neb_run import RECORD_SUFFIX, NebRunRecord
 from matsim_agents.backends.dft.qe_neb_stages import (
     StageEntry,
@@ -51,6 +51,7 @@ from matsim_agents.execution.ledger import (
     hashes_of,
     software_versions,
 )
+from matsim_agents.workflows.neb_mapping import to_neb_result
 
 PLAN_FILE = "neb-workflow.json"
 RESULT_FILE = "neb-result.json"

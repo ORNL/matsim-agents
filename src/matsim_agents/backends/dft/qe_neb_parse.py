@@ -17,8 +17,8 @@ Rules kept here:
   run the interior image errors must also respect the requested threshold.
 * The barrier is ``max(E_i) - E_end`` over the *sampled* images. It is an estimate until a
   saddle is refined; it is withheld when the maximum sits at an endpoint.
-* ``to_neb_result`` never yields ``qualified``: qualification needs evidence this parser does
-  not have (relaxed endpoints, sensitivity checks), and is decided by the workflow.
+* The mapping onto ``NebResult`` (``workflows.neb_mapping.to_neb_result``) never yields
+  ``qualified``: qualification needs evidence this parser does not have.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from matsim_agents.backends.dft.qe_neb_run import NebRunRecord
-from matsim_agents.discovery.neb_contracts import MIN_IMAGES, NebResult, ResultState
 
 Outcome = Literal[
     "converged",
@@ -341,52 +340,9 @@ def parse_neb_output(
     return done("incomplete_output", **fields)
 
 
-_STATE: dict[str, ResultState] = {
-    "converged": "converged_unqualified",
-    "iteration_limit": "unconverged",
-    "electronic_failure": "failed",
-    "process_failure": "failed",
-    "invalid_numbers": "failed",
-    "incomplete_output": "incomplete",
-    "missing_images": "incomplete",
-    "inconsistent_output": "incomplete",
-}
-
-
-def to_neb_result(
-    parse: NebOutputParse,
-    *,
-    method_id: str,
-    n_images: int,
-    endpoints_qualified: bool = False,
-    provenance: dict[str, str] | None = None,
-) -> NebResult:
-    """Map a parse onto ``NebResult``; never ``qualified``, never energies for failed runs."""
-    state = _STATE[parse.outcome]
-    carries = state in ("unconverged", "converged_unqualified") and parse.has_energies
-    if carries and len(parse.energies_eV) != n_images:
-        raise ValueError(f"parse has {len(parse.energies_eV)} images, expected {n_images}")
-    meta = {"parser_outcome": parse.outcome, **(provenance or {})}
-    if parse.iterations_completed is not None:
-        meta["iterations_completed"] = str(parse.iterations_completed)
-    return NebResult(
-        state=state,
-        method_id=method_id,
-        n_images=max(n_images, MIN_IMAGES),
-        relative_energies_eV=parse.relative_energies_eV if carries else (),
-        forward_barrier_eV=parse.forward_barrier_eV if carries else None,
-        reverse_barrier_eV=parse.reverse_barrier_eV if carries else None,
-        endpoints_qualified=bool(endpoints_qualified and carries),
-        climbing_image_used=parse.climbing_image_used,
-        warnings=parse.warnings,
-        provenance=meta,
-    )
-
-
 __all__ = [
     "NebOutputParse",
     "Outcome",
     "parse_neb_dat",
     "parse_neb_output",
-    "to_neb_result",
 ]
