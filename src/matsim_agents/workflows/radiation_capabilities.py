@@ -201,6 +201,13 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         tests=("tests/test_radiation_materials.py",),
         caveats="Reads status from the matrix; W-rich, RAFM and ODS compositions need a source.",
     ),
+    RadiationCapability(
+        name="final-report",
+        summary="Evidence-grounded report: matrix, jobs, ledger, materials, unverified items.",
+        entry_points=("matsim_agents.workflows.radiation_final_report:build_final_report",),
+        tests=("tests/test_radiation_final_report.py",),
+        caveats="A completed job is not evidence; software completeness is not qualification.",
+    ),
 )
 
 
