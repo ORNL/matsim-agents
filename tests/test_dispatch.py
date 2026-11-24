@@ -39,7 +39,9 @@ class FakeScheduler:
             self.states[job] = ("PENDING", "0:0", "00:00:00")
             return sj.CommandResult(0, f"{job}\n")
         wanted = argv[argv.index("-j") + 1].split(",")
-        rows = "\n".join(f"{j}|{self.states[j][0]}|{self.states[j][1]}|{self.states[j][2]}" for j in wanted)
+        rows = "\n".join(
+            f"{j}|{self.states[j][0]}|{self.states[j][1]}|{self.states[j][2]}" for j in wanted
+        )
         return sj.CommandResult(0, rows + "\n")
 
     @property
@@ -124,7 +126,9 @@ def test_unverified_facility_refuses_to_dispatch(tmp_path):
     manifest, _ = _manifest(tmp_path, 2)
     sched = FakeScheduler()
     with pytest.raises(sj.SlurmJobError, match="not verified"):
-        dispatch(manifest, tmp_path / "j.json", FACILITIES["aurora"], _cmd, batch_size=1, runner=sched)
+        dispatch(
+            manifest, tmp_path / "j.json", FACILITIES["aurora"], _cmd, batch_size=1, runner=sched
+        )
     assert sched.argvs == []
     custom = FacilityProfile("x", "A", "debug", "batch", verified=False)
     with pytest.raises(sj.SlurmJobError):
