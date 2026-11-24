@@ -30,7 +30,7 @@ from ase import Atoms
 from ase.io import read, write
 
 from benchmarks.e4.aurora_dft.prepare_stage1 import _lattice_occupations
-from matsim_agents.active_learning.candidates import Candidate
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.active_learning.config import AcquisitionConfig
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.datasets.splits import SplitConfig, make_split
