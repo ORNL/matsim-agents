@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from ase.io import read as ase_read
@@ -15,6 +17,49 @@ from matsim_agents.campaign.acquisition import FormulaAcquisitionMetrics
 from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.seeding import python_rng
+
+TARGET_ELEMENTS: tuple[str, ...] = ("Cr", "Hf", "Mo", "Ta", "V", "W")
+NOT_YET_ESTABLISHED = "NOT_YET_ESTABLISHED"
+Origin = Literal["existing", "new"]
+AllowedUse = Literal["training", "validation", "held_out_test", "reference", "transfer_source"]
+TransferStatus = Literal["validated", "unsupported", "pending", "NOT_YET_ESTABLISHED"]
+
+
+def chemical_system(elements: Iterable[str]) -> str:
+    return "-".join(sorted(set(elements)))
+
+
+def hierarchy_subspaces(
+    elements: Iterable[str] = TARGET_ELEMENTS,
+) -> dict[int, list[tuple[str, ...]]]:
+    """Candidate chemical subspaces by component count (2..n); not an execution list."""
+    ordered = sorted(set(elements))
+    return {k: list(itertools.combinations(ordered, k)) for k in range(2, len(ordered) + 1)}
+
+
+def composition_formula(composition: dict[str, int]) -> str:
+    return "".join(f"{el}{n}" for el, n in sorted(composition.items()))
+
+
+def calculation_id(
+    structure_hash: str,
+    backend: str | None,
+    settings: dict[str, Any],
+    magnetic_initial: dict[str, Any] | None,
+) -> str:
+    """Stable ID of one calculation: same structure under different numerics or magnetism differs."""
+    payload = json.dumps(
+        {
+            "structure": structure_hash,
+            "backend": backend,
+            "settings": settings,
+            "magnetic_initial": magnetic_initial or {},
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
 class StructureCandidateRecord(BaseModel):
@@ -33,6 +78,26 @@ class StructureCandidateRecord(BaseModel):
     optimized_structure_path: str | None = None
     optimized_structure_hash: str | None = None
     relaxed_family_id: str | None = None
+    chemical_system: str | None = None
+    element_set: list[str] = Field(default_factory=list)
+    n_components: int | None = None
+    composition: dict[str, int] = Field(default_factory=dict)
+    parent_lattice: str | None = None
+    lattice_parameter_A: float | None = None
+    supercell: tuple[int, int, int] | None = None
+    atom_count: int | None = None
+    ordering: str | None = None
+    sro: dict[str, Any] = Field(default_factory=dict)
+    local_environments: dict[str, Any] = Field(default_factory=dict)
+    defect_config: str | None = None
+    origin: Origin = "new"
+    source_dataset: str | None = None
+    provenance: dict[str, str] = Field(default_factory=dict)
+    allowed_uses: list[AllowedUse] = Field(default_factory=list)
+    transferability_evidence: dict[str, TransferStatus] = Field(default_factory=dict)
+
+    def transferability(self, prop: str) -> str:
+        return self.transferability_evidence.get(prop, NOT_YET_ESTABLISHED)
 
 
 class CandidateEvaluationRecord(BaseModel):
@@ -51,12 +116,176 @@ class CandidateEvaluationRecord(BaseModel):
     predicted_formation_energy_eV_per_atom: float | None = None
     predicted_energy_above_hull_eV_per_atom: float | None = None
     failure_reason: str | None = None
+    calculation_id: str | None = None
+    dft_settings: dict[str, Any] = Field(default_factory=dict)
+    magnetic_initial: dict[str, Any] | None = None
+    magnetic_final: dict[str, Any] | None = None
+    properties: dict[str, float] = Field(default_factory=dict)
+    cost_node_hours: float | None = Field(default=None, ge=0.0)
+    origin: Origin = "new"
+    source_dataset: str | None = None
+    provenance: dict[str, str] = Field(default_factory=dict)
+
+
+class DatasetEntry(BaseModel):
+    """One structure+calculation from an external or historical dataset."""
+
+    structure_hash: str
+    composition: dict[str, int]
+    structure_path: str = ""
+    supercell: tuple[int, int, int] | None = None
+    lattice_parameter_A: float | None = None
+    parent_lattice: str | None = "bcc"
+    ordering: str | None = None
+    defect_config: str | None = None
+    sro: dict[str, Any] = Field(default_factory=dict)
+    local_environments: dict[str, Any] = Field(default_factory=dict)
+    dft_backend: str | None = None
+    dft_settings: dict[str, Any] = Field(default_factory=dict)
+    magnetic_initial: dict[str, Any] | None = None
+    magnetic_final: dict[str, Any] | None = None
+    properties: dict[str, float] = Field(default_factory=dict)
+    converged: bool = True
+    cost_node_hours: float | None = Field(default=None, ge=0.0)
+    allowed_uses: list[AllowedUse] = Field(default_factory=lambda: ["transfer_source"])
+    provenance: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _valid_composition(self) -> DatasetEntry:
+        if not self.composition or any(n <= 0 for n in self.composition.values()):
+            raise ValueError("composition needs positive atom counts")
+        return self
+
+
+class DatasetRecord(BaseModel):
+    """Element coverage of one ingested dataset, kept separate from the target hierarchy."""
+
+    name: str
+    elements: list[str]
+    target_elements_covered: list[str]
+    off_target_elements: list[str]
+    covered_subspaces: list[str]
+    n_entries: int = 0
+    n_new_calculations: int = 0
+    n_duplicate_calculations: int = 0
+    n_new_structures: int = 0
 
 
 class CandidateRegistry(BaseModel):
     candidates: dict[str, StructureCandidateRecord] = Field(default_factory=dict)
     evaluations: dict[str, CandidateEvaluationRecord] = Field(default_factory=dict)
     relaxed_families: dict[str, list[str]] = Field(default_factory=dict)
+    calculations: dict[str, CandidateEvaluationRecord] = Field(default_factory=dict)
+    datasets: dict[str, DatasetRecord] = Field(default_factory=dict)
+
+    def find_by_structure_hash(self, structure_hash: str) -> str | None:
+        for candidate_id, record in self.candidates.items():
+            if record.structure_hash == structure_hash:
+                return candidate_id
+        return None
+
+    def target_coverage(
+        self, subspaces: dict[int, list[tuple[str, ...]]] | None = None
+    ) -> dict[str, int]:
+        """Records per target subspace; a structure covers a subspace only on an exact element match."""
+        subspaces = subspaces or hierarchy_subspaces()
+        counts = {chemical_system(sub): 0 for subs in subspaces.values() for sub in subs}
+        for record in self.candidates.values():
+            key = chemical_system(record.element_set)
+            if key in counts:
+                counts[key] += 1
+        return counts
+
+
+def ingest_dataset(
+    registry: CandidateRegistry,
+    name: str,
+    entries: Iterable[DatasetEntry],
+    *,
+    target_elements: Iterable[str] = TARGET_ELEMENTS,
+    origin: Origin = "existing",
+) -> DatasetRecord:
+    """Ingest a dataset with explicit element coverage and duplicate detection.
+
+    A structure covers a hierarchy subspace only if its element set equals that subspace, so
+    off-target elements (e.g. Nb) never count as W/Cr/Hf/Mo coverage. Structures dedupe by hash;
+    a calculation dedupes only on an identical calculation ID, so changed numerics or magnetic
+    initialisation keep separate records.
+    """
+    target = set(target_elements)
+    subspace_keys = {
+        chemical_system(sub) for subs in hierarchy_subspaces(target).values() for sub in subs
+    }
+    elements: set[str] = set()
+    covered: set[str] = set()
+    n_entries = n_new_calc = n_dup = n_new_struct = 0
+    for entry in entries:
+        n_entries += 1
+        element_set = sorted(entry.composition)
+        elements.update(element_set)
+        if chemical_system(element_set) in subspace_keys:
+            covered.add(chemical_system(element_set))
+        candidate_id = registry.find_by_structure_hash(entry.structure_hash)
+        if candidate_id is None:
+            candidate_id = f"{name}:{entry.structure_hash[:16]}"
+            n_new_struct += 1
+            registry.candidates[candidate_id] = StructureCandidateRecord(
+                candidate_id=candidate_id,
+                formula=composition_formula(entry.composition),
+                structure_path=entry.structure_path,
+                structure_hash=entry.structure_hash,
+                source=name,
+                chemical_system=chemical_system(element_set),
+                element_set=element_set,
+                n_components=len(element_set),
+                composition=dict(sorted(entry.composition.items())),
+                parent_lattice=entry.parent_lattice,
+                lattice_parameter_A=entry.lattice_parameter_A,
+                supercell=entry.supercell,
+                atom_count=sum(entry.composition.values()),
+                ordering=entry.ordering,
+                sro=entry.sro,
+                local_environments=entry.local_environments,
+                defect_config=entry.defect_config,
+                origin=origin,
+                source_dataset=name,
+                provenance=entry.provenance,
+                allowed_uses=entry.allowed_uses,
+            )
+        cid = calculation_id(
+            entry.structure_hash, entry.dft_backend, entry.dft_settings, entry.magnetic_initial
+        )
+        if cid in registry.calculations:
+            n_dup += 1
+            continue
+        n_new_calc += 1
+        registry.calculations[cid] = CandidateEvaluationRecord(
+            candidate_id=candidate_id,
+            backend=entry.dft_backend,
+            converged=entry.converged,
+            calculation_id=cid,
+            dft_settings=entry.dft_settings,
+            magnetic_initial=entry.magnetic_initial,
+            magnetic_final=entry.magnetic_final,
+            properties=entry.properties,
+            cost_node_hours=entry.cost_node_hours,
+            origin=origin,
+            source_dataset=name,
+            provenance=entry.provenance,
+        )
+    record = DatasetRecord(
+        name=name,
+        elements=sorted(elements),
+        target_elements_covered=sorted(elements & target),
+        off_target_elements=sorted(elements - target),
+        covered_subspaces=sorted(covered),
+        n_entries=n_entries,
+        n_new_calculations=n_new_calc,
+        n_duplicate_calculations=n_dup,
+        n_new_structures=n_new_struct,
+    )
+    registry.datasets[name] = record
+    return record
 
 
 class CandidateSelectionPolicy(BaseModel):
