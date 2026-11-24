@@ -16,6 +16,7 @@ from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
     active_learning,
     resources,
     ledger,
+    neb,
     benchmark,
     capabilities,
     coordination,
