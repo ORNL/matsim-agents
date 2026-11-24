@@ -87,6 +87,7 @@ EvidenceKind = Literal[
     "reference_energies",
     "characterization",
     "migration_barrier",
+    "property",
     "formula_run",
     "external",
 ]

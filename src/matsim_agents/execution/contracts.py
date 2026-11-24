@@ -136,6 +136,33 @@ class CharacterizationStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+# Canonical unit of every material property; the property families are defined
+# in :mod:`matsim_agents.execution.properties`.
+PROPERTY_UNITS = {
+    "thermal_conductivity_total": "W/(m K)",
+    "thermal_conductivity_electronic": "W/(m K)",
+    "thermal_conductivity_lattice": "W/(m K)",
+    "thermal_conductivity_tensor": "W/(m K)",
+    "thermal_conductivity_degradation": "1",
+    "electrical_conductivity": "S/m",
+    "electrical_conductivity_tensor": "S/m",
+    "electrical_resistivity": "ohm m",
+    "electrical_conductivity_over_relaxation_time": "S/(m s)",
+    "electronic_scattering_rate": "1/s",
+    "elastic_stiffness_tensor": "GPa",
+    "bulk_modulus": "GPa",
+    "shear_modulus": "GPa",
+    "youngs_modulus": "GPa",
+    "poissons_ratio": "1",
+    "elastic_anisotropy": "1",
+    "elastic_stability_min_eigenvalue": "GPa",
+    "yield_strength": "MPa",
+    "fracture_toughness": "MPa m^0.5",
+    "creep_rate": "1/s",
+    "ductility_elongation": "1",
+    "irradiation_swelling": "1",
+    "embrittlement_dbtt_shift": "K",
+}
 # Canonical unit of every observable a characterization can require.
 OBSERVABLE_UNITS = {
     "relaxed_structure": "structure",
@@ -144,25 +171,21 @@ OBSERVABLE_UNITS = {
     "relative_energy_per_atom": "eV/atom",
     "formation_energy_per_atom": "eV/atom",
     "energy_above_hull": "eV/atom",
+    **PROPERTY_UNITS,
 }
 
 
 class ObservableRequirement(BaseModel):
     """An observable a characterization must produce, its unit, and its fidelity."""
 
-    name: Literal[
-        "relaxed_structure",
-        "energy_per_atom",
-        "residual_max_force",
-        "relative_energy_per_atom",
-        "formation_energy_per_atom",
-        "energy_above_hull",
-    ]
+    name: str
     unit: str
     minimum_evidence_level: EvidenceLevel = EvidenceLevel.MLIP_RELAXATION
 
     @model_validator(mode="after")
     def _canonical_unit(self) -> ObservableRequirement:
+        if self.name not in OBSERVABLE_UNITS:
+            raise ValueError(f"unknown observable {self.name!r}")
         expected = OBSERVABLE_UNITS[self.name]
         if self.unit != expected:
             raise ValueError(
@@ -232,6 +255,7 @@ __all__ = [
     "DFT_EVIDENCE",
     "EVIDENCE_RANK",
     "OBSERVABLE_UNITS",
+    "PROPERTY_UNITS",
     "ApprovalPolicy",
     "CharacterizationReport",
     "CharacterizationStatus",
