@@ -134,7 +134,7 @@ def _random_alloy_expectation(counts):
     return expected
 
 
-@pytest.mark.parametrize("counts", [{"Mo": 13, "W": 3}, {"Mo": 2, "Ta": 1, "W": 13}])
+@pytest.mark.parametrize("counts", [{"Mo": 14, "W": 2}, {"Mo": 1, "Ta": 1, "W": 14}])
 def test_random_alloy_sro_averages_exactly_to_finite_composition_expectation(counts):
     repeats = (2, 2, 2)
     spec = AlloySpec(counts=counts, repeats=repeats)

@@ -75,5 +75,6 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - A2.2: added `second_neighbor_list` in `alloys.py`. `tests/test_alloys.py`: 35 passed, including 3 new second-shell tests (1x1x1, 2x2x2, 3x2x4 supercells) and a reference-structure test for disjointness from the first shell and reciprocity. Ruff check and format pass.
 - A2.3: added `warren_cowley_sro` in `alloys.py`. `tests/test_alloys.py` (45 tests) and `tests/test_e3_mlip_structure_generation.py` pass together (64 passed). Ruff check and format pass.
 - A2.4: added `tests/test_alloys_sro_validation.py` (18 tests). With `tests/test_alloys.py`: 63 passed in about 18 s; the two exhaustive-average cases take about 16 s. Ruff check and format pass.
+- A2.4 fix: the exhaustive-average compositions are now `{Mo: 14, W: 2}` and `{Mo: 1, Ta: 1, W: 14}` (120 and 240 arrangements instead of 560 and 1,680). With `tests/test_alloys.py`: 63 passed in 4.2 s. Ruff check and format pass.
 - Not done: targeted-SRO generation.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
