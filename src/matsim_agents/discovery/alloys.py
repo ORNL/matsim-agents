@@ -149,6 +149,26 @@ def second_neighbor_list(
 
 
 @dataclass(frozen=True, eq=False)
+class BCCTopology:
+    """Directed first- and second-shell (i, j) neighbour pairs of one fixed periodic cell.
+
+    Depends only on site positions, cell and lattice parameter, so one instance can serve every
+    occupation of the same lattice. It is not re-validated against the structure it is used with.
+    """
+
+    n_atoms: int
+    first: tuple[np.ndarray, np.ndarray]
+    second: tuple[np.ndarray, np.ndarray]
+
+
+def bcc_topology(atoms: Atoms, lattice_parameter: float) -> BCCTopology:
+    """Neighbour pairs of the first two shells, computed once with ASE cell lists."""
+    first_i, first_j, _ = first_neighbor_list(atoms, lattice_parameter)
+    second_i, second_j, _ = second_neighbor_list(atoms, lattice_parameter)
+    return BCCTopology(len(atoms), (first_i, first_j), (second_i, second_j))
+
+
+@dataclass(frozen=True, eq=False)
 class ShellSRO:
     """Warren-Cowley data for one shell; matrices are indexed by ``SROResult.species``.
 
@@ -189,13 +209,18 @@ def _shell_sro(
 
 
 def warren_cowley_sro(
-    atoms: Atoms, lattice_parameter: float, species: tuple[str, ...] | None = None
+    atoms: Atoms,
+    lattice_parameter: float,
+    species: tuple[str, ...] | None = None,
+    *,
+    topology: BCCTopology | None = None,
 ) -> SROResult:
     """Measured Warren-Cowley parameters alpha_ij = 1 - P(j|i) / c_j for the first two BCC shells.
 
     c_j is the actual atomic fraction in ``atoms`` and P(j|i) the measured probability that a
     neighbour of an i atom is j, so a finite random alloy reports its nonzero sampled SRO.
-    ``species`` fixes the matrix ordering (default: sorted symbols present).
+    ``species`` fixes the matrix ordering (default: sorted symbols present). ``topology`` reuses
+    precomputed neighbour pairs of the same lattice instead of searching again.
     """
     if len(atoms) == 0:
         raise ValueError("structure has no atoms")
@@ -220,13 +245,15 @@ def warren_cowley_sro(
     composition = counts / len(atoms)
     composition.setflags(write=False)
 
-    first_i, first_j, _ = first_neighbor_list(atoms, lattice_parameter)
-    second_i, second_j, _ = second_neighbor_list(atoms, lattice_parameter)
+    if topology is None:
+        topology = bcc_topology(atoms, lattice_parameter)
+    elif topology.n_atoms != len(atoms):
+        raise ValueError(f"topology has {topology.n_atoms} atoms, structure has {len(atoms)}")
     return SROResult(
         species=order,
         composition=composition,
-        first_shell=_shell_sro(index, first_i, first_j, composition),
-        second_shell=_shell_sro(index, second_i, second_j, composition),
+        first_shell=_shell_sro(index, *topology.first, composition),
+        second_shell=_shell_sro(index, *topology.second, composition),
     )
 
 
@@ -377,6 +404,7 @@ def generate_targeted_sro(
     seed: int,
     tolerance: float = 1e-4,
     max_attempts: int = 20_000,
+    topology: BCCTopology | None = None,
 ) -> TargetedSROResult:
     """Swap species between sites of a BCC alloy to approach target Warren-Cowley parameters.
 
@@ -387,7 +415,8 @@ def generate_targeted_sro(
     so a target inside the attainable range may still be missed; the achieved SRO is reported
     either way. Targets listed for (i, j) and (j, i) are the same quantity and are merged
     (first weight kept); conflicting values, unknown species, values outside the attainable
-    range, or full rows breaking sum_j c_j alpha_ij = 0 raise ``ValueError``.
+    range, or full rows breaking sum_j c_j alpha_ij = 0 raise ``ValueError``. ``topology``
+    reuses neighbour pairs computed for the same lattice by ``bcc_topology``.
     """
     if not targets:
         raise ValueError("at least one target is required")
@@ -398,15 +427,14 @@ def generate_targeted_sro(
     if not (math.isfinite(tolerance) and tolerance >= 0):
         raise ValueError(f"tolerance must be finite and nonnegative, got {tolerance}")
 
-    initial = warren_cowley_sro(atoms, lattice_parameter)
+    initial = warren_cowley_sro(atoms, lattice_parameter, topology=topology)
     species = initial.species
     if len(species) < 2:
         raise ValueError("at least two species are required to swap")
     n_atoms = len(atoms)
-    pairs = {
-        1: first_neighbor_list(atoms, lattice_parameter)[:2],
-        2: second_neighbor_list(atoms, lattice_parameter)[:2],
-    }
+    if topology is None:
+        topology = bcc_topology(atoms, lattice_parameter)
+    pairs = {1: topology.first, 2: topology.second}
     for shell, expected in ((1, BCC_FIRST_SHELL), (2, BCC_SECOND_SHELL)):
         if not (np.bincount(pairs[shell][0], minlength=n_atoms) == expected).all():
             raise ValueError(f"shell {shell} is not {expected}-fold coordinated: not a BCC lattice")
@@ -455,7 +483,7 @@ def generate_targeted_sro(
     result.set_chemical_symbols([species[k] for k in index])
     return TargetedSROResult(
         atoms=result,
-        sro=warren_cowley_sro(result, lattice_parameter, species),
+        sro=warren_cowley_sro(result, lattice_parameter, species, topology=topology),
         objective=current,
         initial_objective=initial_objective,
         attempts=attempts,
@@ -557,11 +585,15 @@ def validate_targeted_sro(
     )
 
 
+def _shuffled_symbols(counts: Mapping[str, int], seed: int) -> list[str]:
+    symbols = [symbol for symbol, count in counts.items() for _ in range(count)]
+    rng = np.random.default_rng(seed)
+    return [symbols[i] for i in rng.permutation(len(symbols))]
+
+
 def assign_species(spec: AlloySpec) -> list[str]:
     """Species per site: exact counts, shuffled by a generator seeded from ``spec.seed``."""
-    symbols = [symbol for symbol, count in spec.counts.items() for _ in range(count)]
-    rng = np.random.default_rng(spec.seed)
-    return [symbols[i] for i in rng.permutation(len(symbols))]
+    return _shuffled_symbols(spec.counts, spec.seed)
 
 
 def generate_alloy(spec: AlloySpec) -> Atoms:
