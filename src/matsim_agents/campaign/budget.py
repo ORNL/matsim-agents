@@ -29,6 +29,7 @@ Category = Literal[
     "defect",
     "neb",
     "convergence_validation",
+    "property",
 ]
 CATEGORIES: tuple[str, ...] = (
     "lower_foundations",
@@ -38,6 +39,7 @@ CATEGORIES: tuple[str, ...] = (
     "defect",
     "neb",
     "convergence_validation",
+    "property",
 )
 VALIDATION_CATEGORIES = frozenset({"six_component_validation", "convergence_validation"})
 State = Literal["reserved", "committed", "consumed", "released"]
@@ -139,6 +141,7 @@ class BudgetLedger(BaseModel):
             "defect": 0.15,
             "neb": 0.10,
             "convergence_validation": 0.05,
+            "property": 0.0,  # property characterization is funded only by explicit allocation
         }
         pool = self.total_node_hours - self.validation_reserve
         return {k: pool * v for k, v in weights.items()}
