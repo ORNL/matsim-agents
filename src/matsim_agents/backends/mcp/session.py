@@ -40,6 +40,7 @@ from matsim_agents.backends.mcp.authorization import AuthorizationDecision, MCPA
 from matsim_agents.backends.mcp.config import MCPConfig, MCPServerConfig
 from matsim_agents.backends.mcp.records import (
     MAX_CONTENT_CHARS,
+    REDACTED,
     MCPAuditLog,
     MCPCallRecord,
     MCPResourceInfo,
@@ -56,6 +57,10 @@ _MAX_PAGES = 100
 _MAX_CONTENT_BLOCKS = 64
 _CONTENT_OMITTED = "[additional content omitted]"
 _SHUTDOWN_GRACE_S = 30.0
+_PLACEHOLDER_ARGUMENTS = (
+    f"arguments contain the {REDACTED} placeholder (e.g. restored from a checkpoint); "
+    "re-plan the task"
+)
 
 _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
 
@@ -63,8 +68,7 @@ _Op = Callable[[ClientSession], Awaitable[MCPCallRecord]]
 def _schema_errors(errors: list[Any], secrets: tuple[str, ...]) -> str:
     """Describe schema violations by location and rule, never by the offending value,
     so a credential passed in the wrong field is not echoed into records."""
-    # The rule is JSON-encoded, which escapes quotes, backslashes and (by default)
-    # non-ASCII characters, so scrub the encoded forms of each secret as well.
+    # The rule is JSON-encoded, so scrub each secret's escaped forms too.
     encoded = {json.dumps(secret, ensure_ascii=False)[1:-1] for secret in secrets}
     encoded |= {json.dumps(secret)[1:-1] for secret in secrets}
     forms = sorted(set(secrets) | encoded, key=len, reverse=True)
@@ -140,8 +144,7 @@ class MCPSessionManager:
         try:
             settled = self._ready.wait(wait)
         except BaseException:
-            # Interrupted (e.g. Ctrl-C) while servers were connecting: the caller
-            # never gets the manager, so close it here, then let the interrupt through.
+            # Interrupted (e.g. Ctrl-C): the caller never gets the manager to close.
             with contextlib.suppress(RuntimeError):
                 self.close()
             raise
@@ -229,8 +232,7 @@ class MCPSessionManager:
                 streamable_http_client(server.url, http_client=http_client)
             )
         return await stack.enter_async_context(
-            # Deadlines are applied per operation (connect_timeout_s for the
-            # handshake and discovery, call_timeout_s for each request).
+            # No session-wide deadline: each operation applies its own.
             ClientSession(
                 read,
                 write,
@@ -264,8 +266,7 @@ class MCPSessionManager:
 
         thread = threading.Thread(target=copy, name=f"matsim-mcp-{name}-stderr", daemon=True)
         thread.start()
-        # Exit order (last registered runs first): the transport stops the server,
-        # then our write end closes, then the copier sees EOF and finishes.
+        # LIFO: the server stops, then the write end closes, then the copier hits EOF.
         stack.callback(thread.join, 5.0)
         stack.callback(writer.close)
         return writer
@@ -274,8 +275,7 @@ class MCPSessionManager:
         init = await session.initialize()
         tools: dict[str, MCPToolInfo] = {}
         cursor = None
-        # A server that does not advertise tools (e.g. resources only) is valid;
-        # asking it for tools would fail the whole connection.
+        # Listing tools on a server without the capability would fail the connection.
         for _ in range(_MAX_PAGES if init.capabilities.tools is not None else 0):
             params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
             listing = await session.list_tools(params=params)
@@ -336,8 +336,7 @@ class MCPSessionManager:
         settled.set()
         while (item := await queue.get()) is not None:
             op, future = item
-            # False when the caller gave up while the request waited in the queue:
-            # it already recorded a timeout, so the request must not be sent.
+            # The caller timed out while this waited in the queue: never send it.
             if not future.set_running_or_notify_cancel():
                 continue
             try:
@@ -354,10 +353,7 @@ class MCPSessionManager:
     ) -> None:
         name = server.name
         try:
-            # connect_timeout_s bounds opening the transport, the handshake, and
-            # discovery. The scope encloses the exit stack, so a timeout unwinds
-            # everything opened so far (the SDK shields stdio process shutdown),
-            # and its deadline is lifted once the server is connected.
+            # Bounds connect + discovery; enclosing the stack lets a timeout unwind it all.
             deadline = anyio.current_time() + server.connect_timeout_s
             with anyio.CancelScope(deadline=deadline) as connect_scope:
                 async with AsyncExitStack() as stack:
@@ -469,8 +465,7 @@ class MCPSessionManager:
         except concurrent.futures.TimeoutError:
             if future.cancel():  # still queued: withdrawn, it will never be sent
                 raise
-            # Already running: its own call_timeout_s deadline ends it, so report
-            # what actually happened rather than a timeout.
+            # Already running: its call_timeout_s ends it, so report the real outcome.
             return future.result(timeout=_SHUTDOWN_GRACE_S)
 
     def _base(self, kind: str, server: str, started: str, decision: AuthorizationDecision, **kw):
@@ -489,8 +484,7 @@ class MCPSessionManager:
             return self._failure(base, "timeout", f"no result within {timeout:g} s")
         if isinstance(exc, MCPError) and exc.code != types.CONNECTION_CLOSED:
             return self._failure(base, "protocol_error", _describe(exc))
-        # The connection is gone: later requests to this server are denied, with
-        # no fallback, instead of being sent to a dead session.
+        # The connection is gone: later requests are denied, with no fallback.
         name = base["server"]
         if self._connected.get(name):
             self._connected[name] = False
@@ -567,14 +561,15 @@ class MCPSessionManager:
             return self._finish(
                 self._failure(base, "invalid_arguments", "arguments must be a JSON object")
             )
+        if REDACTED in json.dumps(arguments, default=str):
+            return self._finish(self._failure(base, "invalid_arguments", _PLACEHOLDER_ARGUMENTS))
         schema = self._tools[server][tool].input_schema
         try:
             validator_cls = jsonschema.validators.validator_for(schema)
             validator_cls.check_schema(schema)
             errors = list(validator_cls(schema, registry=Registry()).iter_errors(arguments))
         except Exception as exc:  # noqa: BLE001 - e.g. an unresolvable remote $ref
-            # The tool is not called when its schema cannot be checked; remote
-            # $refs are never fetched.
+            # Unverifiable schema: do not call the tool (remote $refs are never fetched).
             return self._finish(
                 self._failure(
                     base,

@@ -17,6 +17,7 @@ from matsim_agents.backends.mcp.records import (
     MCPResourceInfo,
     MCPToolInfo,
     redact,
+    redact_uri,
 )
 from matsim_agents.backends.mcp.tasks import execute_mcp_task, planner_catalog
 from matsim_agents.orchestration.state import TaskSpec
@@ -259,6 +260,42 @@ def test_redaction_of_keys_and_configured_secret_values():
     assert redacted["password"] == REDACTED
     assert redacted["nested"][0]["Authorization"] == REDACTED
     assert redacted["nested"][1]["author"] == "kept"
+
+
+def test_task_dumps_redact_mcp_arguments_and_resource_uri_but_keep_live_values():
+    task = TaskSpec(
+        kind="mcp_tool",
+        mcp_server="a",
+        mcp_tool="t",
+        mcp_arguments={"api_key": "k-live-value", "query": "si"},
+    )
+    assert task.model_dump()["mcp_arguments"] == {"api_key": REDACTED, "query": "si"}
+    assert "k-live-value" not in task.model_dump_json()
+    assert task.mcp_arguments["api_key"] == "k-live-value"
+
+    uri = "https://u:pw-live@host/r?token=t-live&page=2"
+    resource = TaskSpec(kind="mcp_resource", mcp_server="a", mcp_resource_uri=uri)
+    dumped = resource.model_dump()["mcp_resource_uri"]
+    assert dumped == f"https://u:{REDACTED}@host/r?token={REDACTED}&page=2"
+    assert resource.mcp_resource_uri == uri
+
+
+@pytest.mark.parametrize(
+    ("uri", "expected"),
+    [
+        ("test://notes", "test://notes"),
+        ("https://host/r?page=2", "https://host/r?page=2"),
+        ("https://user@host/r", "https://user@host/r"),
+        ("https://u:p@w@host/r", f"https://u:{REDACTED}@host/r"),
+        (
+            "https://host/r?apiKey=x&Password=y",
+            f"https://host/r?apiKey={REDACTED}&Password={REDACTED}",
+        ),
+        ("http://[::1/r", REDACTED),
+    ],
+)
+def test_redact_uri(uri, expected):
+    assert redact_uri(uri) == expected
 
 
 def test_planner_catalog_scrubs_secrets_without_mutating_execution_schemas():
