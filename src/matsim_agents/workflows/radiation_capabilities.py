@@ -174,6 +174,15 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         tests=("tests/test_radiation_neb_qualification.py",),
         caveats="Checks numbers only; no DFT has been run and nothing is promoted.",
     ),
+    RadiationCapability(
+        name="kinetic-benchmarks",
+        summary="KMC and HTST checked against exact first-passage, branching, Arrhenius values.",
+        entry_points=(
+            "matsim_agents.workflows.radiation_kinetics_qualification:run_kinetic_benchmarks",
+        ),
+        tests=("tests/test_radiation_kinetics_qualification.py",),
+        caveats="Synthetic networks; says nothing about attempt frequencies or real materials.",
+    ),
 )
 
 
