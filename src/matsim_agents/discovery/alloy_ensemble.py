@@ -170,6 +170,46 @@ def occupation_fingerprint(atoms: Atoms) -> str:
     return digest.hexdigest()
 
 
+@dataclass(frozen=True, eq=False)
+class ExactDeduplication:
+    """Result of exact-occupation deduplication; the input ensemble is not modified.
+
+    ``unique`` holds the first record of each distinct occupation in input order.
+    ``duplicate_of`` maps each later duplicate's ``config_id`` to its representative's.
+    """
+
+    unique: tuple[ConfigurationRecord, ...]
+    duplicate_of: dict[str, str]
+
+
+def find_exact_duplicates(ensemble: AlloyEnsemble) -> ExactDeduplication:
+    """Group configurations whose species sit on identical lattice sites.
+
+    Fingerprints filter candidates and each match is confirmed by comparing the occupation
+    arrays, so a hash collision cannot merge distinct occupations. Detection only: nothing is
+    removed from ``ensemble``, and symmetry-equivalent occupations are not merged.
+    """
+    representatives: dict[str, list[int]] = defaultdict(list)
+    unique: list[ConfigurationRecord] = []
+    duplicate_of: dict[str, str] = {}
+    for k, record in enumerate(ensemble.records):
+        numbers = ensemble.structures[k].numbers
+        match = next(
+            (m for m in representatives[record.fingerprint] if _same(ensemble, m, numbers)),
+            None,
+        )
+        if match is None:
+            representatives[record.fingerprint].append(k)
+            unique.append(record)
+        else:
+            duplicate_of[record.config_id] = ensemble.records[match].config_id
+    return ExactDeduplication(tuple(unique), duplicate_of)
+
+
+def _same(ensemble: AlloyEnsemble, index: int, numbers: np.ndarray) -> bool:
+    return bool(np.array_equal(ensemble.structures[index].numbers, numbers))
+
+
 def generate_alloy_ensemble(
     spec: AlloySpec,
     *,

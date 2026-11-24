@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from matsim_agents.discovery.alloy_ensemble import (
+    find_exact_duplicates,
     generate_alloy_ensemble,
     occupation_fingerprint,
 )
@@ -128,6 +129,30 @@ def test_exact_duplicates_are_detected_and_reported():
 def test_no_duplicates_reported_when_all_distinct(random_ensemble):
     assert random_ensemble.n_unique == len(random_ensemble.records)
     assert random_ensemble.duplicate_groups == ()
+
+
+def test_find_exact_duplicates_keeps_first_occurrence_and_metadata():
+    tiny = AlloySpec(counts={"Mo": 1, "W": 1}, repeats=(1, 1, 1), seed=0)
+    out = generate_alloy_ensemble(tiny, n_configurations=8, mode="random", seed=0)
+    before = json.dumps(out.metadata())
+    result = find_exact_duplicates(out)
+    ids = [r.config_id for r in out.records]
+    assert len(result.unique) == out.n_unique <= 2
+    assert len(result.unique) + len(result.duplicate_of) == len(ids)
+    assert result.unique[0] is out.records[0]
+    by_id = {r.config_id: r for r in out.records}
+    for duplicate, representative in result.duplicate_of.items():
+        assert ids.index(representative) < ids.index(duplicate)
+        assert representative in {r.config_id for r in result.unique}
+        assert by_id[duplicate].fingerprint == by_id[representative].fingerprint
+        assert by_id[duplicate].seed != by_id[representative].seed or duplicate == representative
+    assert json.dumps(out.metadata()) == before
+
+
+def test_find_exact_duplicates_keeps_distinct_occupations(random_ensemble):
+    result = find_exact_duplicates(random_ensemble)
+    assert result.unique == random_ensemble.records
+    assert result.duplicate_of == {}
 
 
 def test_sro_metadata_matches_remeasurement(random_ensemble, targeted_ensemble):
