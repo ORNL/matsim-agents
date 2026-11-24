@@ -71,7 +71,9 @@ def test_validation_split_is_disjoint_from_every_sampler():
     drawn = {s.candidate_id for s in sample_random(split.available, 30, seed=1)}
     drawn |= {s.candidate_id for s in sample_stratified(avail_strata, 30, seed=1)}
     scores = {c: 1.0 for c in split.available}
-    drawn |= {s.candidate_id for s in sample_adaptive(scores, avail_strata, 30, seed=1, round_index=0)}
+    drawn |= {
+        s.candidate_id for s in sample_adaptive(scores, avail_strata, 30, seed=1, round_index=0)
+    }
     assert not drawn & set(split.validation)
     with pytest.raises(ValueError):
         split_validation(IDS, 1.0, seed=0)
