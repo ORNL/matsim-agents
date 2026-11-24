@@ -17,6 +17,8 @@ import numpy as np
 from ase import Atoms
 from ase.geometry import get_distances
 
+from matsim_agents.discovery.radiation_defects import DefectSite
+
 AtomStatus = Literal["on_site", "off_lattice", "ambiguous", "conflict"]
 
 DEFAULT_SITE_TOLERANCE = 0.25
@@ -161,10 +163,100 @@ def assign_lattice_sites(
     )
 
 
+@dataclass(frozen=True)
+class Antisite:
+    """A relaxed atom of a different species than the parent atom at the site it occupies."""
+
+    lattice_site: int
+    atom_id: int
+    parent_species: str
+    occupant_species: str
+
+
+@dataclass(frozen=True)
+class SiteIdentification:
+    """Defect sites read from a :class:`SiteAssignment`; nothing here is forced.
+
+    ``vacancies`` and ``interstitials`` are :class:`DefectSite` records (vacancies at the parent
+    position with the parent species, interstitials at the relaxed position). ``unresolved_atoms``
+    holds ambiguous and conflicting atoms and ``uncertain_sites`` the sites they touch; neither
+    is reported as a vacancy, interstitial or antisite.
+    """
+
+    vacancies: tuple[DefectSite, ...]
+    interstitials: tuple[DefectSite, ...]
+    antisites: tuple[Antisite, ...]
+    unresolved_atoms: tuple[int, ...]
+    uncertain_sites: tuple[int, ...]
+    resolved: bool
+
+    @property
+    def final_sites(self) -> tuple[DefectSite, ...]:
+        return (*self.vacancies, *self.interstitials)
+
+
+def identify_defect_sites(
+    parent: Atoms, relaxed: Atoms, assignment: SiteAssignment
+) -> SiteIdentification:
+    """Vacancies, interstitials and antisites implied by ``assignment``.
+
+    Atom ids come from the ``atom_id`` array of ``relaxed`` when present, else the atom index.
+    A vacancy's ``atom_id`` is its site index (parent numbering). ``resolved`` is False whenever
+    any atom is ambiguous or in conflict.
+    """
+    if assignment.n_atoms != len(relaxed) or assignment.n_sites != len(parent):
+        raise ValueError("assignment does not match the given parent and relaxed structures")
+    ids = (
+        relaxed.get_array("atom_id").tolist()
+        if "atom_id" in relaxed.arrays
+        else list(range(len(relaxed)))
+    )
+    parent_symbols = parent.get_chemical_symbols()
+    symbols = relaxed.get_chemical_symbols()
+    vacancies = tuple(
+        DefectSite(
+            role="vacancy",
+            species=parent_symbols[site],
+            atom_id=site,
+            lattice_site=site,
+            position=tuple(float(x) for x in parent.positions[site]),
+        )
+        for site in assignment.vacant_sites
+    )
+    interstitials = tuple(
+        DefectSite(
+            role="interstitial",
+            species=symbols[a],
+            atom_id=int(ids[a]),
+            position=tuple(float(x) for x in relaxed.positions[a]),
+        )
+        for a in assignment.off_lattice
+    )
+    antisites = tuple(
+        Antisite(site, int(ids[a]), parent_symbols[site], symbols[a])
+        for a, site in enumerate(assignment.atom_site)
+        if site is not None
+        and assignment.status[a] == "on_site"
+        and symbols[a] != parent_symbols[site]
+    )
+    unresolved = tuple(sorted((*assignment.ambiguous, *assignment.conflicts)))
+    return SiteIdentification(
+        vacancies=vacancies,
+        interstitials=interstitials,
+        antisites=antisites,
+        unresolved_atoms=unresolved,
+        uncertain_sites=assignment.uncertain_sites,
+        resolved=assignment.resolved,
+    )
+
+
 __all__ = [
     "DEFAULT_AMBIGUITY_MARGIN",
     "DEFAULT_SITE_TOLERANCE",
+    "Antisite",
     "AtomStatus",
     "SiteAssignment",
+    "SiteIdentification",
     "assign_lattice_sites",
+    "identify_defect_sites",
 ]

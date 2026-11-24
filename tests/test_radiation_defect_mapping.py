@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.radiation_defect_mapping import assign_lattice_sites
+from matsim_agents.discovery.radiation_defect_mapping import (
+    assign_lattice_sites,
+    identify_defect_sites,
+)
 from matsim_agents.discovery.radiation_defects import (
     generate_bcc_interstitial,
     generate_frenkel_pair,
@@ -107,3 +110,63 @@ def test_mapping_is_deterministic_and_validates_inputs():
         arguments = {"lattice_parameter": A} | kwargs
         with pytest.raises(ValueError):
             assign_lattice_sites(PARENT, PARENT, arguments.pop("lattice_parameter"), **arguments)
+
+
+def _identify(relaxed, **kwargs):
+    assignment = assign_lattice_sites(PARENT, relaxed, A, **kwargs)
+    return identify_defect_sites(PARENT, relaxed, assignment)
+
+
+def test_perfect_lattice_has_no_defect_sites():
+    found = _identify(PARENT.copy())
+    assert found.resolved and found.final_sites == () and found.antisites == ()
+    assert found.unresolved_atoms == () and found.uncertain_sites == ()
+
+
+def test_vacancy_and_frenkel_pair_sites_match_the_generated_configuration():
+    defective, config = generate_vacancy(PARENT, "p", 10)
+    found = _identify(defective)
+    assert found.vacancies == config.sites and found.interstitials == ()
+    frenkel, config = generate_frenkel_pair(PARENT, "p", 5, 0, A)
+    found = _identify(frenkel)
+    (vacancy,), (interstitial,) = found.vacancies, found.interstitials
+    expected_vacancy, expected_interstitial = config.sites
+    assert vacancy == expected_vacancy
+    assert (interstitial.atom_id, interstitial.species) == (5, expected_interstitial.species)
+    assert interstitial.position == expected_interstitial.position
+    assert found.final_sites == (vacancy, interstitial)
+
+
+def test_swapped_species_are_antisites_with_no_vacancy_or_interstitial():
+    swapped = PARENT.copy()
+    i, j = 0, next(k for k, s in enumerate(PARENT.symbols) if s != PARENT.symbols[0])
+    symbols = list(PARENT.symbols)
+    symbols[i], symbols[j] = symbols[j], symbols[i]
+    swapped.set_chemical_symbols(symbols)
+    found = _identify(swapped)
+    assert found.final_sites == () and found.resolved
+    assert {(a.lattice_site, a.parent_species, a.occupant_species) for a in found.antisites} == {
+        (i, PARENT.symbols[i], PARENT.symbols[j]),
+        (j, PARENT.symbols[j], PARENT.symbols[i]),
+    }
+
+
+def test_ambiguous_and_conflicting_atoms_are_left_unresolved_not_classified():
+    moved = PARENT.copy()
+    moved.positions[0] = 0.5 * (PARENT.positions[0] + PARENT.positions[1])
+    found = _identify(moved, site_tolerance=0.5)
+    assert not found.resolved and found.unresolved_atoms == (0,)
+    assert found.uncertain_sites == (0,) and found.interstitials == ()
+    assert all(site.lattice_site != 0 for site in found.vacancies)
+    clash = PARENT.copy()
+    clash.positions[1] = PARENT.positions[0] + 0.05
+    found = _identify(clash)
+    assert not found.resolved and found.unresolved_atoms == (0, 1)
+    assert found.antisites == ()
+
+
+def test_identification_rejects_a_mismatched_assignment():
+    defective, _ = generate_vacancy(PARENT, "p", 10)
+    assignment = assign_lattice_sites(PARENT, defective, A)
+    with pytest.raises(ValueError, match="does not match"):
+        identify_defect_sites(PARENT, PARENT, assignment)

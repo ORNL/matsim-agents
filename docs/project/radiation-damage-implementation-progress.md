@@ -124,6 +124,8 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - [x] A3.7a Lattice-site assignment (`radiation_defect_mapping.assign_lattice_sites`)
   - Each relaxed atom maps to its nearest parent site by minimum-image distance. Statuses: `on_site`, `off_lattice` (nearest site beyond `site_tolerance`), `ambiguous` (second-nearest site within `ambiguity_margin`), `conflict` (several atoms claim one site; none is merged or dropped). Vacant sites exclude sites made uncertain by ambiguous atoms. Fixed-cell only; mismatched cells, non-periodic or non-finite input are rejected.
   - Limitation: geometric only; thresholds are fractions of the lattice parameter and have not been calibrated against relaxed MLIP or DFT structures.
+- [x] A3.7b Defect-site identification (`radiation_defect_mapping.identify_defect_sites`)
+  - Reads vacancies (parent position and species), interstitials (relaxed position) and species antisites from a `SiteAssignment`. Ambiguous and conflicting atoms are reported as `unresolved_atoms` with `uncertain_sites`, never as vacancy, interstitial or antisite; `resolved` is False in that case.
 
 ## Progress log
 
@@ -152,4 +154,5 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - A3.5: `generate_frenkel_pair`. `tests/test_radiation_defects.py` 82 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - A3.6: `radiation_defect_environments.py`. `tests/test_radiation_defect_environments.py` 6 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - A3.7a: `radiation_defect_mapping.py`. `tests/test_radiation_defect_mapping.py` 8 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
+- A3.7b: `identify_defect_sites`. `tests/test_radiation_defect_mapping.py` 13 passed (A3.7a and A3.7b), 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
