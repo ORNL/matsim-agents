@@ -72,7 +72,8 @@ def _build(
         assumptions=tuple(assumptions),
     )
     if config_id is None:
-        cfg = cfg.model_copy(update={"config_id": f"{structure_id}-{mode}-{cfg.fingerprint()[:10]}"})
+        short = cfg.fingerprint()[:10]
+        cfg = cfg.model_copy(update={"config_id": f"{structure_id}-{mode}-{short}"})
     return cfg
 
 
@@ -263,9 +264,7 @@ def seeded_collinear_alternatives(
         if len(out) == n:
             break
         up = set(rng.choice(magnetic, size=n_up, replace=False).tolist())
-        moments = {
-            i: (1.0 if i in up else -1.0) * float(magnitudes[sym_of[i]]) for i in magnetic
-        }
+        moments = {i: (1.0 if i in up else -1.0) * float(magnitudes[sym_of[i]]) for i in magnetic}
         cfg = custom_collinear(atoms, structure_id, moments)
         cfg = cfg.model_copy(update={"seed": seed, "generation_method": "seeded_random_collinear"})
         key = cfg.fingerprint()
