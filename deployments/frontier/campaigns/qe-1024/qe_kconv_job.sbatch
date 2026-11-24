@@ -28,11 +28,22 @@ export MPICH_GPU_SUPPORT_ENABLED=1
 
 NRANKS=$(( SLURM_JOB_NUM_NODES * 8 ))
 NPOOL="${NPOOL:-16}"
+# Slurm reports COMPLETED whatever pw.x did, so a mesh counts as successful only if srun
+# exited 0 and pw.out shows a converged SCF and JOB DONE. Any failure makes the job fail.
+failed=0
 for mesh in 4 6 8; do
   cd "${KCONV_DIR}/k${mesh}" || exit 2
   echo "[kconv] mesh ${mesh} start $(date)"
   srun -N"${SLURM_JOB_NUM_NODES}" -n"${NRANKS}" -c7 --threads-per-core=1 --cpu-bind=cores \
     --gpus-per-node=8 --gpu-bind=closest \
     "${PW_BIN}" -npool "${NPOOL}" -in pw.in > pw.out 2> pw.err
-  echo "[kconv] mesh ${mesh} exit $? $(date)"
+  rc=$?
+  if (( rc == 0 )) && grep -q 'convergence has been achieved' pw.out \
+      && grep -q 'JOB DONE' pw.out; then
+    echo "[kconv] mesh ${mesh} OK exit ${rc} $(date)"
+  else
+    echo "[kconv] mesh ${mesh} FAILED exit ${rc} (no converged SCF or no JOB DONE) $(date)" >&2
+    failed=1
+  fi
 done
+exit "${failed}"

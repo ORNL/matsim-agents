@@ -19,7 +19,11 @@ NPOOL="${NPOOL:-1}"
 grep -Eq "nat *= *10[0-9]{2}" "${CALC_DIR}/pw.in" || { echo "pw.in is not a full-size cell" >&2; exit 3; }
 
 module reset
-module load Core/25.03 PrgEnv-cray cce craype-accel-amd-gfx90a rocm/6.2.4 cray-fftw
+# pw.x was built under cpe/24.11 (cray-mpich 8.1.31, rocm 6.2.4); the default cpe pulls rocm 7.
+module load cpe/24.11
+module load Core/25.03 PrgEnv-cray cce/18.0.1 craype-accel-amd-gfx90a rocm/6.2.4 cray-fftw
+MPICH=/opt/cray/pe/mpich/8.1.31
+export LD_LIBRARY_PATH="${MPICH}/gtl/lib:${MPICH}/ofi/cray/17.0/lib:${LD_LIBRARY_PATH:-}"
 
 export OMP_NUM_THREADS=7
 export OMP_TARGET_OFFLOAD=MANDATORY
@@ -33,4 +37,5 @@ srun -N"${SLURM_JOB_NUM_NODES}" -n"${NRANKS}" -c7 --threads-per-core=1 --cpu-bin
   "${PW_BIN}" -npool "${NPOOL}" -in pw.in > pw.out
 
 grep -q 'convergence has been achieved' pw.out
+grep -q 'JOB DONE' pw.out
 grep '^!' pw.out
