@@ -728,6 +728,46 @@ def test_denied_resource_uri_credentials_stay_out_of_checkpoints_and_audit(
     assert "pw-live-9" not in audit and "tk-live-9" not in audit
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://u:pw-live-9@h/" + "a" * 3000 + "?token=tk-live-9",
+        "https://u:pw-live-9@h/r\\s?token=tk-live-9",
+        "https://u:pw-live-9@h/r'q\"?token=tk-live-9",
+    ],
+    ids=["long", "backslash", "both-quotes"],
+)
+def test_denied_resource_reason_never_quotes_uri_credentials(manager_factory, tmp_path, uri):
+    manager = manager_factory(_stdio("a", allowed_resources=["test://notes"]))
+    record = manager.read_resource("a", uri)
+    assert record.outcome == "denied"
+    manager.close()
+    text = json.dumps([record.error, record.authorization_reason, _audit(tmp_path)])
+    assert "pw-live-9" not in text and "tk-live-9" not in text
+
+
+def test_resource_connection_error_keeps_uri_credentials_out_of_disconnect_audit(
+    manager_factory, monkeypatch, tmp_path
+):
+    from mcp import ClientSession
+
+    uri = "https://u:pw-live-9@h/r'q?token=tk-live-9"
+
+    async def broken(self, requested):
+        raise ConnectionError(f"lost reading {requested!r} ({requested})")
+
+    monkeypatch.setattr(ClientSession, "read_resource", broken)
+    manager = manager_factory(_stdio("a", allowed_resources=[uri]))
+    record = manager.read_resource("a", uri)
+    assert record.outcome == "connection_error"
+    status = manager.server_status()["a"]
+    manager.close()
+    audit = _audit(tmp_path)
+    assert any(e["event"] == "disconnect" for e in audit)
+    text = json.dumps([record.error, status, audit])
+    assert "pw-live-9" not in text and "tk-live-9" not in text
+
+
 def test_restored_placeholder_arguments_are_never_sent(manager_factory, tmp_path):
     from matsim_agents.backends.mcp.tasks import execute_mcp_task
 

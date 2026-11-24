@@ -24,8 +24,6 @@ from urllib.parse import unquote_plus, urlsplit, urlunsplit
 from pydantic import BaseModel, Field, field_serializer
 
 REDACTED = "[REDACTED]"
-# Brackets in a netloc make urlsplit reject the URI, so parse with a bracket-free stand-in.
-_URI_PLACEHOLDER = "__matsim_redacted__"
 MAX_CONTENT_CHARS = 8000
 MAX_DESCRIPTION_CHARS = 1000
 _SENSITIVE_KEY = re.compile(
@@ -81,22 +79,26 @@ def redact(value: Any, secrets: Iterable[str] = (), *, sensitive_keys: bool = Tr
 
 def redact_uri(uri: str) -> str:
     """Copy ``uri`` with a userinfo password and credential-like query values replaced."""
+    # Brackets in a netloc make urlsplit reject the URI, so parse with a stand-in absent from it.
+    stand_in = "_matsim_redacted_"
+    while stand_in in uri:
+        stand_in += "_"
     try:
-        parts = urlsplit(uri.replace(REDACTED, _URI_PLACEHOLDER))
+        parts = urlsplit(uri.replace(REDACTED, stand_in))
         password = parts.password
     except ValueError:
         return REDACTED
     netloc = parts.netloc
     if password is not None:
         user, _, host = netloc.rpartition("@")
-        netloc = f"{user.partition(':')[0]}:{_URI_PLACEHOLDER}@{host}"
+        netloc = f"{user.partition(':')[0]}:{stand_in}@{host}"
     query = []
     for pair in parts.query.split("&") if parts.query else []:
         key = pair.partition("=")[0]
         sensitive = _SENSITIVE_KEY.search(unquote_plus(key))
-        query.append(f"{key}={_URI_PLACEHOLDER}" if sensitive else pair)
+        query.append(f"{key}={stand_in}" if sensitive else pair)
     redacted = urlunsplit(parts._replace(netloc=netloc, query="&".join(query)))
-    return redacted.replace(_URI_PLACEHOLDER, REDACTED)
+    return redacted.replace(stand_in, REDACTED)
 
 
 def truncate(text: str, limit: int) -> str:

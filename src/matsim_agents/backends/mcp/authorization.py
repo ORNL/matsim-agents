@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from matsim_agents.backends.mcp.config import MCPConfig
+from matsim_agents.backends.mcp.records import redact_uri
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,9 @@ class MCPAuthorizer:
         if denied:
             return denied
         if uri not in self._config.server(server).allowed_resources:
-            return _deny(f"resource {uri!r} is not in allowed_resources for server {server!r}")
+            return _deny(
+                f"resource {redact_uri(uri)!r} is not in allowed_resources for server {server!r}"
+            )
         if not connected.get(server, False):
             return _deny(f"server {server!r} is not connected; no fallback is attempted")
         return AuthorizationDecision(True, "resource is allowlisted")
