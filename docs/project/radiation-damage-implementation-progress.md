@@ -38,9 +38,20 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - [x] A1.6 Implement deterministic random occupations
   - Explicitly seeded RNG assigns species to sites while preserving composition.
   - Acceptance: same seed gives identical occupations and structure data; different seeds give distinct orderings.
-- [~] A1.7 Add regression tests
+- [x] A1.7 Add regression tests
   - Focused tests for the new generator, plus the relevant existing E3 regression tests.
   - Acceptance: new tests and relevant E3 tests pass.
+
+## Phase A2: Chemical short-range order
+
+- [x] A2.1 First-neighbor-shell identification
+  - File: `src/matsim_agents/discovery/alloys.py` (`first_neighbor_list`).
+  - Periodic directed pairs from ASE `neighbor_list` with a cutoff at the midpoint of the first and second shells; no all-pairs matrix.
+  - Acceptance: eight first neighbours per site for small supercells and the 1,024-atom reference; periodic image vectors are body diagonals of length sqrt(3)/2 a.
+- [ ] A2.2 Second-neighbor-shell identification
+  - Acceptance: six second neighbours per site; consistent with A2.1 shell labels.
+- [ ] A2.3 Warren-Cowley SRO descriptors
+  - Acceptance: first- and second-shell parameters for all species pairs; pair-count reciprocity; measured (not assumed) SRO for random occupations.
 
 ## Progress log
 
@@ -50,3 +61,6 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - A1.5: `examples/fusion_damage/` runs locally and writes 1,024 atoms with the exact reference counts.
 - Scope check: `benchmarks/`, `runs/`, and existing `src/` and `tests/` files are unchanged (git status).
 - Not done: targeted SRO, SQS-like and local-clustering orderings (out of scope for A1; `OrderingMode` only admits `random`).
+- A2.1: added `first_neighbor_list` in `alloys.py` (ASE `neighbor_list`, cutoff between shells). `tests/test_alloys.py`: 24 passed, including 3 new first-shell tests (1x1x1, 2x2x2, 3x2x4 supercells, and the 1,024-atom reference). Ruff check and format pass.
+- A2.2 and A2.3: not started.
+- PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.

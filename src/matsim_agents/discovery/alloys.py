@@ -8,12 +8,23 @@ the requested composition is met exactly.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Literal
 
 import numpy as np
 from ase import Atoms
 from ase.build import bulk
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from ase.neighborlist import neighbor_list
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 from pymatgen.core import Element
 
 CrystalStructure = Literal["bcc"]
@@ -23,6 +34,8 @@ DEFAULT_REPEATS = (8, 8, 8)
 DEFAULT_LATTICE_PARAMETER = 3.16
 BCC_FIRST_SHELL = 8
 BCC_SECOND_SHELL = 6
+BCC_FIRST_SHELL_RATIO = float(np.sqrt(3) / 2)
+BCC_SECOND_SHELL_RATIO = 1.0
 
 
 class AlloySpec(BaseModel):
@@ -35,15 +48,19 @@ class AlloySpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     crystal_structure: CrystalStructure = "bcc"
-    counts: dict[str, int] = Field(min_length=1)
+    counts: Mapping[str, StrictInt]
     repeats: tuple[int, int, int] = DEFAULT_REPEATS
-    lattice_parameter: float = Field(default=DEFAULT_LATTICE_PARAMETER, gt=0)
+    lattice_parameter: float = Field(default=DEFAULT_LATTICE_PARAMETER, gt=0, allow_inf_nan=False)
     ordering: OrderingMode = "random"
     seed: int = Field(default=0, ge=0)
 
+    @field_serializer("counts")
+    def _serialize_counts(self, value: Mapping[str, int]) -> dict[str, int]:
+        return dict(value)
+
     @field_validator("counts")
     @classmethod
-    def _validate_counts(cls, value: dict[str, int]) -> dict[str, int]:
+    def _validate_counts(cls, value: Mapping[str, int]) -> Mapping[str, int]:
         for symbol, amount in value.items():
             try:
                 Element(symbol)
@@ -54,7 +71,7 @@ class AlloySpec(BaseModel):
         nonzero = {symbol: amount for symbol, amount in value.items() if amount > 0}
         if not nonzero:
             raise ValueError("composition must contain at least one atom")
-        return dict(sorted(nonzero.items()))
+        return MappingProxyType(dict(sorted(nonzero.items())))
 
     @field_validator("repeats")
     @classmethod
@@ -101,6 +118,16 @@ def build_bcc_supercell(spec: AlloySpec) -> Atoms:
     if len(atoms) != spec.n_sites:
         raise AssertionError(f"BCC supercell has {len(atoms)} sites, expected {spec.n_sites}")
     return atoms
+
+
+def first_neighbor_list(
+    atoms: Atoms, lattice_parameter: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Periodic directed (i, j, vector) pairs within the first BCC shell, via ASE cell lists."""
+    # Midpoint of the gap between the first and second shells.
+    cutoff = 0.5 * (BCC_FIRST_SHELL_RATIO + BCC_SECOND_SHELL_RATIO) * lattice_parameter
+    i, j, vectors = neighbor_list("ijD", atoms, cutoff)
+    return i, j, vectors
 
 
 def assign_species(spec: AlloySpec) -> list[str]:

@@ -13,6 +13,7 @@ from matsim_agents.discovery.alloys import (
     assign_species,
     bcc_site_count,
     build_bcc_supercell,
+    first_neighbor_list,
     generate_alloy,
 )
 
@@ -52,6 +53,8 @@ def test_zero_counts_are_dropped_not_rejected():
         ({"W": 3}, (1, 1, 1), "sum to 3"),
         ({"W": 1, "Mo": 2}, (1, 1, 1), "sum to 3"),
         ({"W": -1, "Mo": 3}, (1, 1, 1), "nonnegative"),
+        ({"W": True, "Mo": True}, (1, 1, 1), "valid integer"),
+        ({"W": 2.0}, (1, 1, 1), "valid integer"),
         ({"Xx": 2}, (1, 1, 1), "unknown element"),
         ({"W": 2}, (0, 1, 1), "positive"),
     ],
@@ -65,6 +68,26 @@ def test_spec_is_immutable():
     spec = AlloySpec(counts={"W": 2}, repeats=(1, 1, 1))
     with pytest.raises(ValidationError):
         spec.seed = 5
+
+
+def test_counts_mapping_cannot_be_mutated_after_validation():
+    spec = AlloySpec(counts={"W": 1, "Mo": 1}, repeats=(1, 1, 1))
+    with pytest.raises(TypeError):
+        spec.counts["W"] = 3
+    with pytest.raises(TypeError):
+        del spec.counts["Mo"]
+    assert dict(spec.counts) == {"Mo": 1, "W": 1}
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_non_finite_lattice_parameter_is_rejected(value):
+    with pytest.raises(ValidationError):
+        AlloySpec(counts={"W": 2}, repeats=(1, 1, 1), lattice_parameter=value)
+
+
+def test_alloy_spec_json_round_trips_counts_as_plain_mapping():
+    spec = AlloySpec(counts={"W": 1, "Mo": 1}, repeats=(1, 1, 1), seed=4)
+    assert AlloySpec.model_validate_json(spec.model_dump_json()) == spec
 
 
 def test_bcc_supercell_geometry_and_periodicity():
@@ -83,6 +106,30 @@ def test_bcc_first_shell_has_eight_neighbours_per_site():
     i, _ = neighbor_list("ij", atoms, 1.1 * first_shell)
     coordination = np.bincount(i, minlength=len(atoms))
     assert set(coordination) == {BCC_FIRST_SHELL}
+
+
+@pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
+def test_first_neighbor_list_gives_eight_periodic_body_diagonals_per_site(repeats):
+    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats)
+    atoms = build_bcc_supercell(spec)
+    i, _, vectors = first_neighbor_list(atoms, spec.lattice_parameter)
+    half_diagonal = spec.lattice_parameter / 2
+
+    assert len(i) == BCC_FIRST_SHELL * len(atoms)
+    assert np.allclose(np.linalg.norm(vectors, axis=1), np.sqrt(3) * half_diagonal)
+    directions = np.rint(vectors / half_diagonal).astype(int)
+    expected = {(sx, sy, sz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)}
+    for site in range(len(atoms)):
+        assert {tuple(d) for d in directions[i == site]} == expected
+
+
+def test_first_neighbor_list_on_reference_structure_excludes_second_shell():
+    spec = AlloySpec(counts=REFERENCE_COUNTS, seed=5)
+    atoms = generate_alloy(spec)
+    i, _, vectors = first_neighbor_list(atoms, spec.lattice_parameter)
+    coordination = np.bincount(i, minlength=len(atoms))
+    assert set(coordination) == {BCC_FIRST_SHELL}
+    assert np.allclose(np.linalg.norm(vectors, axis=1), np.sqrt(3) * spec.lattice_parameter / 2)
 
 
 def test_generated_alloy_has_exact_species_counts():
