@@ -1,10 +1,10 @@
 """Reproducible ensembles of independent BCC alloy occupations at fixed composition.
 
-Each configuration gets its own random stream spawned from one ensemble seed with NumPy's
-``SeedSequence``. Independent seeds do not guarantee distinct or statistically uncorrelated
-occupations: exact duplicates are detected and reported (never retried), and symmetry-equivalent
-configurations are not detected here. Targeted-SRO members are bounded-search configurations,
-not thermodynamic equilibrium structures.
+Each configuration gets its own random stream derived from one ensemble seed with
+``matsim_agents.seeding.stream_seed``. Independent seeds do not guarantee distinct or
+statistically uncorrelated occupations: exact duplicates are detected and reported (never
+retried), and symmetry-equivalent configurations are not detected here. Targeted-SRO members
+are bounded-search configurations, not thermodynamic equilibrium structures.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from matsim_agents.discovery.alloys import (
     generate_targeted_sro,
     warren_cowley_sro,
 )
+from matsim_agents.seeding import stream_seed
 
 EnsembleMode = Literal["random", "targeted_sro"]
 
@@ -180,7 +181,7 @@ def generate_alloy_ensemble(
 ) -> AlloyEnsemble:
     """Generate ``n_configurations`` independently seeded occupations of one BCC lattice.
 
-    Per-configuration seeds come from ``SeedSequence(seed).spawn(n_configurations)``; the global
+    Per-configuration seeds come from ``matsim_agents.seeding.stream_seed``; the global
     NumPy state is untouched. The lattice and its neighbour shells are built once and shared.
     ``random`` mode shuffles the exact species counts. ``targeted_sro`` mode starts from such an
     occupation and runs ``generate_targeted_sro`` for at most ``max_swap_attempts`` swaps, then
@@ -202,9 +203,9 @@ def generate_alloy_ensemble(
 
     records: list[ConfigurationRecord] = []
     structures: list[Atoms] = []
-    children = np.random.SeedSequence(seed).spawn(n_configurations)
-    for k, child in enumerate(children):
-        occupation_seed, optimizer_seed = (int(word) for word in child.generate_state(2, np.uint64))
+    for k in range(n_configurations):
+        occupation_seed = stream_seed(seed, "alloy-ensemble", "occupation", k)
+        optimizer_seed = stream_seed(seed, "alloy-ensemble", "optimizer", k)
         atoms = lattice.copy()
         atoms.set_chemical_symbols(_shuffled_symbols(spec.counts, occupation_seed))
         converged = objective = attempts = None

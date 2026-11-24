@@ -30,6 +30,8 @@ from pydantic import (
 )
 from pymatgen.core import Element
 
+from matsim_agents.seeding import numpy_rng
+
 CrystalStructure = Literal["bcc"]
 OrderingMode = Literal["random"]
 SROStatus = Literal["converged", "not_converged"]
@@ -464,7 +466,7 @@ def generate_targeted_sro(
     position = {symbol: k for k, symbol in enumerate(species)}
     index = np.array([position[symbol] for symbol in atoms.get_chemical_symbols()])
     current = initial_objective = objective(index)
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     attempts = accepted = 0
     # Only strict improvements are kept, so the current state is always the best one found.
     while current > tolerance and attempts < max_attempts:
@@ -587,7 +589,7 @@ def validate_targeted_sro(
 
 def _shuffled_symbols(counts: Mapping[str, int], seed: int) -> list[str]:
     symbols = [symbol for symbol, count in counts.items() for _ in range(count)]
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed)
     return [symbols[i] for i in rng.permutation(len(symbols))]
 
 
