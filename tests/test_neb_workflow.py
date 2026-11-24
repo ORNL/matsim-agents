@@ -8,7 +8,7 @@ import pytest
 from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
 from matsim_agents.discovery.neb_endpoints import generate_vacancy_hop, vacancy_neighbors
-from matsim_agents.discovery.radiation_defects import generate_vacancy
+from matsim_agents.discovery.point_defects import generate_vacancy
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.workflows.neb import (
     NOT_ASSESSED,

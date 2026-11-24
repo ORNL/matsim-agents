@@ -11,19 +11,21 @@ from pydantic import ValidationError
 
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.radiation_defects import (
+from matsim_agents.discovery.bcc_defects import (
     BCC_111_DIRECTIONS,
     BCC_INTERSTITIAL_OFFSETS,
     DUMBBELL_ORIENTATIONS,
-    DefectConfiguration,
-    DefectOutcome,
-    DefectSite,
-    DefectSpec,
     generate_bcc_interstitial,
     generate_crowdion,
     generate_divacancy,
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
+)
+from matsim_agents.discovery.point_defects import (
+    DefectConfiguration,
+    DefectOutcome,
+    DefectSite,
+    DefectSpec,
     generate_vacancy,
     make_defect_config_id,
 )

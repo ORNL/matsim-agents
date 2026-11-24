@@ -1,13 +1,10 @@
 import pytest
 
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.radiation_defect_classification import classify_defect_outcome
-from matsim_agents.discovery.radiation_defect_energies import radiation_defect_formation_energy
-from matsim_agents.discovery.radiation_defects import (
-    generate_bcc_interstitial,
-    generate_frenkel_pair,
-    generate_vacancy,
-)
+from matsim_agents.discovery.bcc_defects import generate_bcc_interstitial, generate_frenkel_pair
+from matsim_agents.discovery.defect_classification import classify_defect_outcome
+from matsim_agents.discovery.defect_energies import classified_defect_formation_energy
+from matsim_agents.discovery.point_defects import generate_vacancy
 
 SPEC = AlloySpec(counts={"Mo": 18, "Ta": 18, "W": 18}, repeats=(3, 3, 3), seed=2)
 A = SPEC.lattice_parameter
@@ -33,7 +30,7 @@ def _energy(relaxed, config, outcome, **overrides):
         "defect_method": "mlip-x",
         "chemical_potentials": MU,
     } | overrides
-    return radiation_defect_formation_energy(PARENT, relaxed, config, outcome, **arguments)
+    return classified_defect_formation_energy(PARENT, relaxed, config, outcome, **arguments)
 
 
 def test_vacancy_energy_subtracts_the_removed_atoms_chemical_potential_at_each_vertex():

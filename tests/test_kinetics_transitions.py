@@ -4,17 +4,17 @@ import numpy as np
 import pytest
 
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
+from matsim_agents.discovery.bcc_defects import (
+    generate_dumbbell_interstitial,
+    generate_frenkel_pair,
+)
 from matsim_agents.discovery.neb_endpoints import (
     generate_frenkel_recombination,
     generate_interstitial_migration,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.radiation_defects import (
-    generate_dumbbell_interstitial,
-    generate_frenkel_pair,
-    generate_vacancy,
-)
+from matsim_agents.discovery.point_defects import generate_vacancy
 from matsim_agents.kinetics.contracts import NetworkProvenance
 from matsim_agents.kinetics.graph import NetworkError, TransitionNetwork
 from matsim_agents.kinetics.transitions import add_candidate_transition

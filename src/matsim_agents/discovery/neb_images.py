@@ -22,7 +22,7 @@ from ase.neighborlist import neighbor_list
 
 from matsim_agents.discovery.neb_contracts import MIN_IMAGES
 from matsim_agents.discovery.neb_paths import PeriodicDisplacements, periodic_displacements
-from matsim_agents.discovery.radiation_defects import geometry_fingerprint
+from matsim_agents.discovery.point_defects import geometry_fingerprint
 
 DEFAULT_MIN_DISTANCE = 1.0  # angstrom; hard-overlap guard, not a physical stability criterion
 DEFAULT_MAX_STEP = 1.0  # angstrom; largest allowed per-atom move between neighbouring images

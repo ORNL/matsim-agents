@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 from matsim_agents.discovery.neb_contracts import NebTransition
 from matsim_agents.discovery.neb_images import DEFAULT_MAX_STEP, DEFAULT_MIN_DISTANCE
 from matsim_agents.discovery.neb_validation import PathwayAssessment, assess_pathway
-from matsim_agents.discovery.radiation_defects import geometry_fingerprint
+from matsim_agents.discovery.point_defects import geometry_fingerprint
 
 SCHEMA = "matsim-neb-pathway/1"
 METADATA_FILE = "pathway.json"

@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.discovery.neb_contracts import MechanismKind
-from matsim_agents.discovery.radiation_defects import DefectType
+from matsim_agents.discovery.point_defects import DefectType
 
 Qualification = Literal["candidate", "unqualified", "qualified"]
 AbsorbingKind = Literal["recombined", "annihilated", "sink"]

@@ -30,7 +30,7 @@ def _load(config: Path):
     from matsim_agents.backends.dft.qe_neb import QENebConfig
     from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
     from matsim_agents.discovery.neb_endpoints import generate_vacancy_hop, vacancy_neighbors
-    from matsim_agents.discovery.radiation_defects import generate_vacancy
+    from matsim_agents.discovery.point_defects import generate_vacancy
 
     try:
         data = yaml.safe_load(config.read_text())

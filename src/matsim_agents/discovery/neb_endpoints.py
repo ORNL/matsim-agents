@@ -28,7 +28,7 @@ from matsim_agents.discovery.neb_contracts import (
     endpoint_from_atoms,
 )
 from matsim_agents.discovery.neb_paths import minimum_image
-from matsim_agents.discovery.radiation_defects import (
+from matsim_agents.discovery.point_defects import (
     DefectConfiguration,
     DefectSite,
     DefectSpec,

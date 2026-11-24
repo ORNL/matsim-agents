@@ -35,7 +35,7 @@ from matsim_agents.discovery.neb_endpoints import (
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.radiation_defects import generate_vacancy
+from matsim_agents.discovery.point_defects import generate_vacancy
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.kinetics.contracts import NetworkProvenance
 from matsim_agents.kinetics.ensemble import EnsembleResult, run_ensemble

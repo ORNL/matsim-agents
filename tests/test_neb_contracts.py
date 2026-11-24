@@ -16,7 +16,7 @@ from matsim_agents.discovery.neb_contracts import (
     check_endpoint_compatibility,
     endpoint_from_atoms,
 )
-from matsim_agents.discovery.radiation_defects import generate_vacancy
+from matsim_agents.discovery.point_defects import generate_vacancy
 
 SPEC = AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1)
 PARENT = generate_alloy(SPEC)

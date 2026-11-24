@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict
 from matsim_agents.discovery.neb_contracts import MIN_IMAGES, NebTransition
 from matsim_agents.discovery.neb_images import DEFAULT_MAX_STEP, DEFAULT_MIN_DISTANCE
 from matsim_agents.discovery.neb_paths import correspond_atoms, minimum_image
-from matsim_agents.discovery.radiation_defects import geometry_fingerprint
+from matsim_agents.discovery.point_defects import geometry_fingerprint
 
 PathwayState = Literal[
     "candidate",

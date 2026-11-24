@@ -1,7 +1,7 @@
 """Typed contracts for NEB transitions: endpoints, correspondence, mechanism, images and results.
 
 Records hold identities, status and provenance; coordinates stay in ASE ``Atoms`` files.
-Atoms are matched by the stable integer ``atom_id`` array (see ``radiation_defects``), never by
+Atoms are matched by the stable integer ``atom_id`` array (see ``point_defects``), never by
 array index. A *generated* endpoint is only a candidate; *relaxed* and *numerically_qualified*
 need a method identity and a converged relaxation, and a qualified endpoint needs evidence.
 These states, and the NEB result states, are deliberately distinct and are never promoted
@@ -26,7 +26,7 @@ from pydantic import (
     model_validator,
 )
 
-from matsim_agents.discovery.radiation_defects import (
+from matsim_agents.discovery.point_defects import (
     DefectConfiguration,
     DefectType,
     ParameterValue,

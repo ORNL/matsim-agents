@@ -1,4 +1,4 @@
-"""Local chemical environments of generated radiation defects (A3.6).
+"""Local chemical environments of generated point defects (A3.6).
 
 Pure geometry and bookkeeping: neighbour species and distances around vacancies (taken from the
 unrelaxed parent lattice) and around interstitial atoms (taken from the defective structure),
@@ -17,7 +17,7 @@ from ase.geometry import get_distances
 
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import first_neighbor_list, second_neighbor_list
-from matsim_agents.discovery.radiation_defects import DefectConfiguration
+from matsim_agents.discovery.point_defects import DefectConfiguration
 
 Composition = tuple[tuple[str, int], ...]
 

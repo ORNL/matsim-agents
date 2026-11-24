@@ -7,8 +7,8 @@ import math
 
 import pytest
 
+from matsim_agents.discovery.bcc_defects import generate_frenkel_pair
 from matsim_agents.discovery.neb_endpoints import generate_frenkel_recombination
-from matsim_agents.discovery.radiation_defects import generate_frenkel_pair
 from matsim_agents.kinetics.ensemble import run_ensemble
 from matsim_agents.kinetics.evidence import attach_neb_result
 from matsim_agents.kinetics.kmc import run_kmc

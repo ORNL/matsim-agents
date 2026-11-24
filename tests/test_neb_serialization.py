@@ -11,7 +11,7 @@ from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
 from matsim_agents.discovery.neb_endpoints import generate_vacancy_hop, vacancy_neighbors
 from matsim_agents.discovery.neb_images import generate_linear_images
 from matsim_agents.discovery.neb_serialization import read_pathway, write_pathway
-from matsim_agents.discovery.radiation_defects import generate_vacancy, geometry_fingerprint
+from matsim_agents.discovery.point_defects import generate_vacancy, geometry_fingerprint
 
 A = 3.16
 PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1))

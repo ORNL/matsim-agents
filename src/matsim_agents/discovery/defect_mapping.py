@@ -17,7 +17,7 @@ import numpy as np
 from ase import Atoms
 from ase.geometry import get_distances
 
-from matsim_agents.discovery.radiation_defects import DefectSite
+from matsim_agents.discovery.point_defects import DefectSite
 
 AtomStatus = Literal["on_site", "off_lattice", "ambiguous", "conflict"]
 

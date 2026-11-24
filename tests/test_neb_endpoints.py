@@ -5,17 +5,17 @@ import pytest
 from ase.geometry import get_distances
 
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
+from matsim_agents.discovery.bcc_defects import (
+    generate_dumbbell_interstitial,
+    generate_frenkel_pair,
+)
 from matsim_agents.discovery.neb_endpoints import (
     generate_frenkel_recombination,
     generate_interstitial_migration,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.radiation_defects import (
-    generate_dumbbell_interstitial,
-    generate_frenkel_pair,
-    generate_vacancy,
-)
+from matsim_agents.discovery.point_defects import generate_vacancy
 
 A = 3.16
 PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1))

@@ -1,4 +1,4 @@
-"""Formation energies of classified radiation defects (A3.10).
+"""Formation energies of classified point defects (A3.10).
 
 A thin, strict wrapper around :func:`matsim_agents.discovery.defects.defect_formation_energies`.
 The caller supplies the host and defect total energies, the method each came from, and explicit
@@ -31,7 +31,7 @@ from matsim_agents.discovery.defects import (
     defect_formation_energies,
     stoichiometry_change,
 )
-from matsim_agents.discovery.radiation_defects import (
+from matsim_agents.discovery.point_defects import (
     DefectConfiguration,
     DefectOutcome,
     geometry_fingerprint,
@@ -39,7 +39,7 @@ from matsim_agents.discovery.radiation_defects import (
 
 
 @dataclass(frozen=True)
-class RadiationDefectEnergy:
+class ClassifiedDefectEnergy:
     """Formation energy of one defect at every supplied chemical-potential vertex (eV)."""
 
     config_id: str
@@ -59,7 +59,7 @@ def _finite(name: str, value: float) -> float:
     return float(value)
 
 
-def radiation_defect_formation_energy(
+def classified_defect_formation_energy(
     parent: Atoms,
     relaxed: Atoms,
     config: DefectConfiguration,
@@ -70,7 +70,7 @@ def radiation_defect_formation_energy(
     host_method: str,
     defect_method: str,
     chemical_potentials: Mapping[str, Mapping[str, float]],
-) -> RadiationDefectEnergy:
+) -> ClassifiedDefectEnergy:
     """Formation energy of a converged, classified defect against explicit references.
 
     ``parent`` is the host supercell the energy ``host_energy_eV`` belongs to, ``relaxed`` the
@@ -121,7 +121,7 @@ def radiation_defect_formation_energy(
         defect_energy,
         {vertex: dict(mu) for vertex, mu in chemical_potentials.items()},
     )
-    return RadiationDefectEnergy(
+    return ClassifiedDefectEnergy(
         config_id=config.config_id,
         classification=outcome.classification,
         method=host_method,
@@ -134,4 +134,4 @@ def radiation_defect_formation_energy(
     )
 
 
-__all__ = ["RadiationDefectEnergy", "radiation_defect_formation_energy"]
+__all__ = ["ClassifiedDefectEnergy", "classified_defect_formation_energy"]

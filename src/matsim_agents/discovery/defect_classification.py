@@ -1,7 +1,7 @@
-"""Outcome classification of a relaxed radiation-defect structure (A3.8).
+"""Outcome classification of a relaxed point-defect structure (A3.8).
 
 Rule-based and purely geometric. The classification compares the defect sites found by
-:func:`~matsim_agents.discovery.radiation_defect_mapping.identify_defect_sites` with the sites
+:func:`~matsim_agents.discovery.defect_mapping.identify_defect_sites` with the sites
 the configuration started with. Anything that cannot be decided is ``unresolved`` with the
 reasons in ``notes``: an unconverged or unknown relaxation, a changed cell, non-finite
 coordinates, a changed atom count or composition, or ambiguous or conflicting atoms. Split
@@ -28,13 +28,13 @@ import numpy as np
 from ase import Atoms
 
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
-from matsim_agents.discovery.radiation_defect_mapping import (
+from matsim_agents.discovery.defect_mapping import (
     DEFAULT_AMBIGUITY_MARGIN,
     DEFAULT_SITE_TOLERANCE,
     assign_lattice_sites,
     identify_defect_sites,
 )
-from matsim_agents.discovery.radiation_defects import (
+from matsim_agents.discovery.point_defects import (
     DefectConfiguration,
     DefectOutcome,
     geometry_fingerprint,
