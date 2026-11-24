@@ -80,3 +80,72 @@ def test_pathway_from_another_parent_is_rejected():
     net = TransitionNetwork(NetworkProvenance(network_id="n", parent_id="other"))
     with pytest.raises(NetworkError, match="another parent"):
         add_candidate_transition(net, _hop().transition)
+
+
+@pytest.fixture
+def custom_mechanisms():
+    from matsim_agents.kinetics import transitions
+
+    names = ("dimer_glide", "one_way_jump")
+    transitions.register_mechanism("dimer_glide", reversible=True)
+    transitions.register_mechanism("one_way_jump")
+    yield names
+    for name in names:
+        transitions._MECHANISMS.pop(name, None)
+
+
+def _as(kind):
+    transition = _hop().transition
+    mechanism = transition.mechanism.model_copy(update={"kind": kind})
+    return transition.model_copy(update={"mechanism": mechanism})
+
+
+def test_builtin_mechanisms_are_registered_with_their_policy():
+    from matsim_agents.kinetics.transitions import get_mechanism, list_mechanisms
+
+    assert {"vacancy_hop", "interstitial_migration", "frenkel_recombination"} <= set(
+        list_mechanisms()
+    )
+    assert get_mechanism("vacancy_hop").reversible
+    assert get_mechanism("interstitial_migration").reversible
+    assert not get_mechanism("frenkel_recombination").reversible
+
+
+def test_custom_reversible_mechanism_generates_a_reverse_event(custom_mechanisms):
+    net = _network()
+    events = add_candidate_transition(net, _as("dimer_glide"))
+    assert [e.mechanism for e in events] == ["dimer_glide"] * 2
+    assert net.reverse_of(events[0]) == events[1]
+
+
+def test_custom_irreversible_mechanism_has_no_reverse(custom_mechanisms):
+    net = _network()
+    (event,) = add_candidate_transition(net, _as("one_way_jump"))
+    assert event.mechanism == "one_way_jump" and net.reverse_of(event) is None
+
+
+def test_custom_mechanism_round_trips_through_serialization(custom_mechanisms):
+    from matsim_agents.kinetics.contracts import TransitionEvent
+
+    (event, *_) = add_candidate_transition(_network(), _as("dimer_glide"))
+    again = TransitionEvent.model_validate_json(event.model_dump_json())
+    assert again == event and again.mechanism == "dimer_glide"
+
+
+def test_duplicate_and_invalid_registrations_are_rejected(custom_mechanisms):
+    from matsim_agents.kinetics.transitions import register_mechanism
+
+    with pytest.raises(ValueError, match="already registered"):
+        register_mechanism("dimer_glide")
+    with pytest.raises(ValueError, match="already registered"):
+        register_mechanism("vacancy_hop", reversible=True)
+    for bad in ("", "  ", " padded "):
+        with pytest.raises(ValueError, match="invalid mechanism"):
+            register_mechanism(bad)
+
+
+def test_unregistered_mechanism_is_rejected_when_building_the_graph():
+    net = _network()
+    with pytest.raises(ValueError, match="unregistered mechanism"):
+        add_candidate_transition(net, _as("teleport"))
+    assert not net.states

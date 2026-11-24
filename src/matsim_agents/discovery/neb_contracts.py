@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Literal
+from typing import Annotated, Literal
 
 import numpy as np
 from ase import Atoms
@@ -21,6 +21,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictInt,
+    StringConstraints,
     field_serializer,
     field_validator,
     model_validator,
@@ -34,9 +35,10 @@ from matsim_agents.discovery.point_defects import (
     geometry_fingerprint,
 )
 
+# Open identifier; known mechanisms are registered in matsim_agents.kinetics.transitions.
+MechanismKind = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 EndpointRole = Literal["initial", "final"]
 EndpointStatus = Literal["generated", "relaxed", "numerically_qualified"]
-MechanismKind = Literal["vacancy_hop", "interstitial_migration", "frenkel_recombination"]
 ResultState = Literal["failed", "incomplete", "unconverged", "converged_unqualified", "qualified"]
 
 # QE neb.x needs more than three images (first and last included).

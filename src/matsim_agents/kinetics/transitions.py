@@ -6,12 +6,61 @@ Barriers are never guessed: every event created here is a ``candidate`` without 
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 
 from matsim_agents.discovery.neb_contracts import NebEndpoint, NebTransition
 from matsim_agents.kinetics.contracts import DefectState, TransitionEvent
 from matsim_agents.kinetics.graph import TransitionNetwork, state_id, transition_id
 
-REVERSIBLE = frozenset({"vacancy_hop", "interstitial_migration"})
+
+@dataclass(frozen=True)
+class MechanismPolicy:
+    """Graph-building policy for a mechanism; the KMC solver never reads it."""
+
+    name: str
+    reversible: bool = False
+    absorbing_kind: str | None = None
+
+
+_MECHANISMS: dict[str, MechanismPolicy] = {}
+
+
+def register_mechanism(
+    name: str, *, reversible: bool = False, absorbing_kind: str | None = None
+) -> MechanismPolicy:
+    if not isinstance(name, str) or not name.strip() or name != name.strip():
+        raise ValueError(f"invalid mechanism identifier {name!r}")
+    if name in _MECHANISMS:
+        raise ValueError(f"mechanism {name!r} is already registered")
+    if reversible and absorbing_kind is not None:
+        raise ValueError("a reversible mechanism cannot end in an absorbing state")
+    policy = MechanismPolicy(name, reversible, absorbing_kind)
+    _MECHANISMS[name] = policy
+    return policy
+
+
+def get_mechanism(name: str) -> MechanismPolicy:
+    try:
+        return _MECHANISMS[name]
+    except KeyError:
+        raise ValueError(
+            f"unregistered mechanism {name!r}; registered: {', '.join(list_mechanisms())}"
+        ) from None
+
+
+def list_mechanisms() -> tuple[str, ...]:
+    return tuple(sorted(_MECHANISMS))
+
+
+def is_reversible(name: str) -> bool:
+    """False for unregistered names, so checks on loaded networks never raise."""
+    policy = _MECHANISMS.get(name)
+    return policy is not None and policy.reversible
+
+
+register_mechanism("vacancy_hop", reversible=True)
+register_mechanism("interstitial_migration", reversible=True)
+register_mechanism("frenkel_recombination", absorbing_kind="recombined")
 
 
 def state_from_endpoint(endpoint: NebEndpoint, *, absorbing_kind: str | None = None) -> DefectState:
@@ -64,21 +113,27 @@ def add_candidate_transition(
 ) -> tuple[TransitionEvent, ...]:
     """Add the endpoint states and a candidate event (plus its reverse where physical).
 
-    A Frenkel recombination ends in an absorbing ``recombined`` state and has no reverse.
+    The registered mechanism decides reversibility and the absorbing kind of the target.
     """
-    recombination = transition.mechanism.kind == "frenkel_recombination"
+    mechanism = get_mechanism(transition.mechanism.kind)
     source = state_from_endpoint(transition.initial)
-    target = state_from_endpoint(
-        transition.final, absorbing_kind="recombined" if recombination else None
-    )
+    target = state_from_endpoint(transition.final, absorbing_kind=mechanism.absorbing_kind)
     network.add_state(source)
     network.add_state(target)
     events = [_event(transition, source, target, reverse=False)]
-    if add_reverse and transition.mechanism.kind in REVERSIBLE:
+    if add_reverse and mechanism.reversible:
         events.append(_event(transition, target, source, reverse=True))
     for event in events:
         network.add_transition(event)
     return tuple(events)
 
 
-__all__ = ["REVERSIBLE", "add_candidate_transition", "state_from_endpoint"]
+__all__ = [
+    "MechanismPolicy",
+    "add_candidate_transition",
+    "get_mechanism",
+    "is_reversible",
+    "list_mechanisms",
+    "register_mechanism",
+    "state_from_endpoint",
+]

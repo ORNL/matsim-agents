@@ -11,7 +11,7 @@ from collections import deque
 from pydantic import BaseModel, ConfigDict
 
 from matsim_agents.kinetics.graph import TransitionNetwork
-from matsim_agents.kinetics.transitions import REVERSIBLE
+from matsim_agents.kinetics.transitions import is_reversible
 
 
 class NetworkReport(BaseModel):
@@ -61,7 +61,7 @@ def validate_network(network: TransitionNetwork, initial_state_id: str) -> Netwo
     missing_reverse = tuple(
         e.transition_id
         for e in events
-        if e.mechanism in REVERSIBLE
+        if is_reversible(e.mechanism)
         and not network.state(e.target_id).absorbing
         and network.reverse_of(e) is None
     )
