@@ -66,3 +66,11 @@ def test_run_without_install_fails_cleanly(tmp_path):
     cfg = str(_config(tmp_path, with_exe=False))
     result = runner.invoke(app, ["external", "spectra-pka", "run", "-c", cfg])
     assert result.exit_code == 1 and "not installed" in result.output
+
+
+def test_shipped_example_campaign_parses(monkeypatch):
+    from matsim_agents.integrations.external.spectra_pka.config import load_config_file
+
+    for var in ("SPECTRA_PKA_EXECUTABLE_PATH", "PKA_DATA_DIRECTORY", "NEUTRON_SPECTRUM_FILE"):
+        monkeypatch.setenv(var, "/tmp/placeholder")
+    load_config_file(Path("examples/external/spectra-pka/campaign.yaml"))

@@ -26,10 +26,38 @@ from the adapter, so another PKA source can replace it.
 
 ## 2. Installing SPECTRA-PKA yourself
 
-Follow the upstream README (a `make` build of the Fortran source) and obtain PKA matrices from
-your FISPACT-II / NJOY nuclear-data distribution. MATSIM-AGENTS never downloads, compiles or
-installs either. Point `external_tools.spectra_pka.executable` and `nuclear_data_root` at what
-you installed.
+MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data. Do it by hand,
+outside the tracked tree (`external/` is gitignored):
+
+```bash
+cd external
+git clone https://github.com/fispact/SPECTRA-PKA.git      # GPL-3.0, upstream `master`
+cd SPECTRA-PKA
+make                                                       # serial; produces ./spectra-pka
+```
+
+* Requirements: GNU make and a Fortran compiler. The Makefile uses `gfortran` with
+  `-ffree-line-length-none`. It built with `gfortran` 7.5 on Frontier (upstream commit
+  `fff9e3f`).
+* **Do not use `make -j`.** The Makefile has no module dependency ordering, so a parallel
+  build fails with `Can't open module file 'globals.mod'`. Run `make clean && make` to retry.
+* Smoke test (bundled data, no download): `cd manual/test && ../../spectra-pka ZR.in`. The last
+  line of output must be `END as expected`, and the new `ZR.indexes` should match
+  `example_results/ZR.indexes`. This checks the build only, not any campaign.
+* Production PKA matrices (NJOY/GROUPR recoil matrices, `*.asc`) are separate downloads from the
+  FISPACT-II nuclear-data page linked in the upstream README. `manual/test/example_data` holds
+  only a Zr sample.
+* The program reads `specter.input` by default, or the input file named on the command line.
+
+Then point the campaign YAML at the build:
+
+```bash
+export SPECTRA_PKA_EXECUTABLE_PATH=$PWD/spectra-pka
+export PKA_DATA_DIRECTORY=/path/to/pka-matrices
+matsim-agents external spectra-pka check -c campaign.yaml
+```
+
+`INSTALLED` from `check` means the executable starts, not that results are qualified.
 
 ## 3. Configuration
 
@@ -139,8 +167,9 @@ SPECTRA-PKA run has been made by this repository's tests.
 * The index file name is unresolved: the upstream manual names `index_summary.dat`, while
   reading the source suggested `<stub>.indexes`. The parser does not depend on this file for
   the spectrum. Confirm against a real build before relying on either name.
-* SPECTRA-PKA was not installed on the development machine when this was written
-  (`spectra-pka` not on `PATH`), so no real run exists.
+* SPECTRA-PKA was built on Frontier at `external/SPECTRA-PKA` (gitignored), and the bundled Zr
+  test ran to `END as expected`. No campaign run exists and no production PKA matrices are
+  installed.
 
 ## 14. PKA-informed ranking and the synthetic chain
 

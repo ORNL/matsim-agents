@@ -31,5 +31,5 @@ campaign:
     normalization: "n cm^-2 s^-1 per group (flux_norm_type 2)"
     norm_type: 2
   channels:
-    - {pka_file: ${PKA_DATA_DIRECTORY}/W182.asc, parent_ele: W, parent_num: 182, atom_fraction: 0.9}
-    - {pka_file: ${PKA_DATA_DIRECTORY}/Ta181.asc, parent_ele: Ta, parent_num: 181, atom_fraction: 0.1}
+    - {pka_file: "${PKA_DATA_DIRECTORY}/W182.asc", parent_ele: W, parent_num: 182, atom_fraction: 0.9}
+    - {pka_file: "${PKA_DATA_DIRECTORY}/Ta181.asc", parent_ele: Ta, parent_num: 181, atom_fraction: 0.1}
