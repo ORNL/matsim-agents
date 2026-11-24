@@ -268,3 +268,53 @@ def test_scores_are_deterministic_and_do_not_mutate_evidence():
 def test_duplicate_candidate_ids_are_rejected():
     with pytest.raises(ValueError, match="unique"):
         select(spec(), [cand("A", 1, 1), cand("A", 2, 2)])
+
+
+def test_report_shows_each_objective_and_how_they_combine():
+    from matsim_agents.campaign.selection import render_report
+
+    objectives = [
+        Objective(property=KAPPA, direction="maximize", temperature_K=T, worst=0, target=40),
+        Objective(property=BULK, direction="maximize", weight=3, worst=100, target=300),
+    ]
+    result = select(
+        spec(objectives=objectives, weighted_desirability=True),
+        [cand("A", 30, 150), cand("B", 10, 250)],
+    )
+    a = result.by_id("A")
+    rows = {r.property: r for r in a.objectives}
+    assert rows[KAPPA].value == 30 and rows[KAPPA].rank == 1 and rows[KAPPA].best_value == 30
+    assert rows[KAPPA].desirability == pytest.approx(0.75)
+    assert rows[BULK].desirability == pytest.approx(0.25) and rows[BULK].rank == 2
+    assert rows[KAPPA].weight_share == pytest.approx(0.25)
+    assert rows[BULK].weight_share == pytest.approx(0.75)
+    expected = 0.75**0.25 * 0.25**0.75
+    assert a.desirability == pytest.approx(expected)
+    assert sum(r.log_contribution for r in a.objectives) == pytest.approx(
+        __import__("math").log(expected)
+    )
+    assert sum(r.share_of_penalty for r in a.objectives) == pytest.approx(1.0)
+    assert rows[BULK].share_of_penalty > rows[KAPPA].share_of_penalty
+    text = render_report(result)
+    assert "weighted geometric mean" in text and "share 75.0%" in text
+    assert "cannot compensate" in text and KAPPA in text and "[GPa]" in text
+    assert "Constraints are hard limits" in text
+
+
+def test_report_without_weighted_score_states_no_weights_are_applied():
+    from matsim_agents.campaign.selection import render_report
+
+    result = select(spec(), [cand("A", 30, 150), cand("B", 12, 250)])
+    assert all(r.desirability is None for c in result.candidates for r in c.objectives)
+    assert "No weighted score was requested" in render_report(result)
+
+
+def test_a_failed_objective_takes_the_whole_penalty():
+    objectives = [
+        Objective(property=KAPPA, direction="maximize", temperature_K=T, worst=20, target=40),
+        Objective(property=BULK, direction="maximize", worst=100, target=300),
+    ]
+    result = select(spec(objectives=objectives, weighted_desirability=True), [cand("A", 5, 290)])
+    rows = {r.property: r for r in result.by_id("A").objectives}
+    assert result.by_id("A").desirability == 0.0 and rows[KAPPA].share_of_penalty == 1.0
+    assert rows[BULK].share_of_penalty == 0.0

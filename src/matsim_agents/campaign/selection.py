@@ -176,6 +176,27 @@ class Distribution(BaseModel):
     p95: float
 
 
+class ObjectiveScore(BaseModel):
+    """One objective of one candidate, and its part in the combined score."""
+
+    property: str
+    direction: Literal["maximize", "minimize"]
+    value: float
+    uncertainty: float
+    unit: str
+    evidence_status: PropertyStatus
+    rank: int | None = Field(None, description="1 is best among ranked candidates.")
+    best_value: float | None = None
+    declared_weight: float
+    effective_weight: float = Field(description="After the correlated-property discount.")
+    weight_share: float = Field(description="Effective weight / sum of effective weights.")
+    desirability: float | None = Field(None, description="d_k in [0, 1]; needs worst/target.")
+    log_contribution: float | None = Field(None, description="weight_share * ln(d_k).")
+    share_of_penalty: float | None = Field(
+        None, description="Fraction of ln(1/D) caused by this objective."
+    )
+
+
 class CandidateScore(BaseModel):
     candidate_id: str
     status: SelectionStatus
@@ -191,6 +212,7 @@ class CandidateScore(BaseModel):
     worst_in: list[str] = Field(default_factory=list)
     pareto_robustness: float | None = None
     desirability: float | None = None
+    objectives: list[ObjectiveScore] = Field(default_factory=list)
     desirability_distribution: Distribution | None = None
     desirability_rank: int | None = None
     rank_distribution: dict[int, float] = Field(default_factory=dict)
@@ -204,6 +226,7 @@ class SelectionResult(BaseModel):
     pareto_front: list[str]
     weight_notes: list[str] = Field(default_factory=list)
     correlation_notes: list[str] = Field(default_factory=list)
+    combination: list[str] = Field(default_factory=list)
     limitations: list[str]
     score_digest: str = ""
 
@@ -468,6 +491,8 @@ def select(spec: SelectionSpec, candidates: Sequence[CandidateEvidence]) -> Sele
         for rank, cid in enumerate(order, start=1):
             scores[cid].desirability_rank = rank
 
+    _explain_objectives(spec, candidates, scores, picked, rankable, weights)
+
     _propagate(spec, candidates, scores, picked, chosen, rankable, weights, cons_by_prop)
 
     front = [c for c in rankable if scores[c].pareto == "nondominated"]
@@ -482,11 +507,98 @@ def select(spec: SelectionSpec, candidates: Sequence[CandidateEvidence]) -> Sele
         pareto_front=front,
         weight_notes=weight_notes,
         correlation_notes=correlation_notes,
+        combination=_combination_text(spec, weights),
         limitations=limitations,
     )
     payload = json.dumps(result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
     result.score_digest = "sel-" + hashlib.sha256(payload.encode()).hexdigest()[:24]
     return result
+
+
+def _combination_text(spec: SelectionSpec, weights: np.ndarray) -> list[str]:
+    total = float(weights.sum())
+    lines = [
+        "Objectives are never added in their own units. The Pareto view compares each objective "
+        "separately: a candidate is dominated only if another is at least as good in every "
+        "objective and strictly better in one."
+    ]
+    if spec.weighted_desirability:
+        lines += [
+            "Combined score D = prod_k d_k^(w_k / sum w), the weighted geometric mean of "
+            "per-objective desirabilities d_k = clip((x_k - worst_k) / (target_k - worst_k), "
+            "0, 1).",
+            "worst_k and target_k are declared by the caller. A geometric mean means one "
+            "objective at d_k = 0 sets D = 0: a strong objective cannot compensate for a "
+            "failed one.",
+            "Weights w_k: "
+            + "; ".join(
+                f"{o.property} declared {o.weight:g}, effective {w:g}, share {w / total:.1%}"
+                for o, w in zip(spec.objectives, weights, strict=True)
+            ),
+        ]
+    else:
+        lines.append(
+            "No weighted score was requested; no worst/target bounds or weights are applied."
+        )
+    lines.append(
+        "Constraints are hard limits applied before ranking and are not traded against objectives."
+    )
+    return lines
+
+
+def _explain_objectives(spec, candidates, scores, picked, rankable, weights) -> None:
+    """Fill each candidate's per-objective breakdown (value, rank, weight, d_k, contribution)."""
+    objectives = spec.objectives
+    total = float(weights.sum())
+    bounds = spec.weighted_desirability
+    best: dict[str, float] = {}
+    rank: dict[str, dict[str, int]] = {}
+    for o in objectives:
+        values = {c: picked[c][o.property].value for c in rankable}
+        if not values:
+            continue
+        sign = 1.0 if o.direction == "maximize" else -1.0
+        ordered = sorted(values, key=lambda c: (-sign * values[c], c))
+        best[o.property] = values[ordered[0]]
+        rank[o.property] = {c: i for i, c in enumerate(ordered, start=1)}
+    for cand in candidates:
+        cid = cand.candidate_id
+        rows: list[ObjectiveScore] = []
+        for o, w in zip(objectives, weights, strict=True):
+            used = picked[cid].get(o.property)
+            if used is None:
+                continue
+            d = log_c = None
+            if bounds:
+                d = float(np.clip((used.value - o.worst) / (o.target - o.worst), 0.0, 1.0))
+                log_c = float(w / total * np.log(d)) if d > 0 else float("-inf")
+            rows.append(
+                ObjectiveScore(
+                    property=o.property,
+                    direction=o.direction,
+                    value=used.value,
+                    uncertainty=used.uncertainty,
+                    unit=PROPERTY_UNITS[o.property],
+                    evidence_status=used.status,
+                    rank=rank.get(o.property, {}).get(cid),
+                    best_value=best.get(o.property),
+                    declared_weight=o.weight,
+                    effective_weight=float(w),
+                    weight_share=float(w / total),
+                    desirability=d,
+                    log_contribution=log_c if log_c is None or np.isfinite(log_c) else None,
+                )
+            )
+        if bounds:
+            lost = [r for r in rows if r.log_contribution is not None]
+            penalty = -sum(r.log_contribution for r in lost)
+            zero = any(r.desirability == 0.0 for r in rows)
+            for r in rows:
+                if zero:
+                    r.share_of_penalty = 1.0 if r.desirability == 0.0 else 0.0
+                elif penalty > 0 and r.log_contribution is not None:
+                    r.share_of_penalty = -r.log_contribution / penalty
+        scores[cid].objectives = rows
 
 
 def _propagate(spec, candidates, scores, picked, chosen, rankable, weights, cons_by_prop) -> None:
@@ -565,6 +677,45 @@ def _propagate(spec, candidates, scores, picked, chosen, rankable, weights, cons
             scores[cid].probability_rank_1 = float(counts[0])
 
 
+def render_report(result: SelectionResult) -> str:
+    """A plain-text report: each objective per candidate, then how they were combined."""
+    out = [f"Selection report ({result.scoring_version}, {result.score_digest})", ""]
+    out += ["How the objectives are combined", "------------------------------"]
+    out += [f"- {line}" for line in result.combination]
+    out += [f"- {note}" for note in (*result.weight_notes, *result.correlation_notes)]
+    scored = result.spec.weighted_desirability
+    for c in result.candidates:
+        head = f"\nCandidate {c.candidate_id}: {c.status.value}, Pareto {c.pareto}"
+        if scored and c.desirability is not None:
+            head += f", D = {c.desirability:.4f} (rank {c.desirability_rank})"
+        out.append(head)
+        out += [f"  {r}" for r in c.reasons]
+        if c.objectives:
+            header = "  objective | value +/- unc [unit] | evidence | rank | best"
+            if scored:
+                header += " | weight share | d_k | share of penalty"
+            out.append(header)
+        for r in c.objectives:
+            row = (
+                f"  {r.property} ({r.direction}) | {r.value:.6g} +/- {r.uncertainty:.3g} "
+                f"[{r.unit}] | {r.evidence_status.value} | "
+                f"{r.rank if r.rank is not None else '-'} | "
+                f"{'-' if r.best_value is None else format(r.best_value, '.6g')}"
+            )
+            if scored:
+                share = "-" if r.share_of_penalty is None else f"{r.share_of_penalty:.1%}"
+                row += f" | {r.weight_share:.1%} | {r.desirability:.3f} | {share}"
+            out.append(row)
+        for p, why in sorted(c.missing.items()):
+            out.append(f"  {p}: not scored ({why})")
+        if c.constraint_probability is not None:
+            out.append(f"  probability all constraints hold: {c.constraint_probability:.3f}")
+        if c.pareto_robustness is not None:
+            out.append(f"  probability on the Pareto front: {c.pareto_robustness:.3f}")
+    out += ["", "Limitations", "-----------", *[f"- {x}" for x in result.limitations]]
+    return "\n".join(out)
+
+
 def correlated_pairs_in(result: SelectionResult) -> list[str]:
     """Notes naming the property pairs that were treated as correlated."""
     return list(result.correlation_notes)
@@ -577,9 +728,11 @@ __all__ = [
     "Constraint",
     "Correlation",
     "Objective",
+    "ObjectiveScore",
     "SelectionResult",
     "SelectionSpec",
     "SelectionStatus",
     "correlated_pairs_in",
+    "render_report",
     "select",
 ]
