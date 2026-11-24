@@ -223,6 +223,33 @@ def test_validation_detects_inconsistent_results(start, result):
         validate_targeted_sro(start, dataclasses.replace(result, seed=result.seed + 1), A, TARGET)
 
 
+def test_validation_detects_tampered_composition_and_conditional_probability(start, result):
+    bad_composition = dataclasses.replace(
+        result.sro, composition=result.sro.composition[::-1] * 0.9
+    )
+    with pytest.raises(ValueError, match="composition"):
+        validate_targeted_sro(start, dataclasses.replace(result, sro=bad_composition), A, TARGET)
+    shell = result.sro.first_shell
+    bad_shell = dataclasses.replace(
+        shell, conditional_probability=shell.conditional_probability + 0.01
+    )
+    bad_sro = dataclasses.replace(result.sro, first_shell=bad_shell)
+    with pytest.raises(ValueError, match="first_shell"):
+        validate_targeted_sro(start, dataclasses.replace(result, sro=bad_sro), A, TARGET)
+
+
+@pytest.mark.parametrize("seed", [2, 4, 5])
+def test_already_met_target_converges_at_zero_tolerance_on_skewed_composition(seed):
+    spec = AlloySpec(counts={"Mo": 3, "W": 13}, repeats=(2, 2, 2), seed=seed)
+    atoms = generate_alloy(spec)
+    measured = warren_cowley_sro(atoms, A).first_shell
+    assert measured.pair_counts[0, 1] == 20
+    target = [SROTarget(shell=1, pair=("Mo", "W"), alpha=float(measured.alpha[0, 1]))]
+    result = generate_targeted_sro(atoms, A, target, seed=0, tolerance=0.0, max_attempts=0)
+    assert result.objective == 0.0 and result.converged
+    assert validate_targeted_sro(atoms, result, A, target).status == "converged"
+
+
 def test_validation_detects_changed_counts_sites_and_cell(start, result):
     mutated = result.atoms.copy()
     mutated.set_chemical_symbols(["W"] * len(mutated))

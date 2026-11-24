@@ -198,18 +198,26 @@ class SROResult:
     second_shell: ShellSRO
 
 
+def _pair_counts(index: np.ndarray, i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
+    return np.bincount(index[i] * n + index[j], minlength=n * n).reshape(n, n)
+
+
+def _conditional_and_alpha(
+    counts: np.ndarray, composition: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    conditional = counts / counts.sum(axis=1)[:, None]
+    return conditional, 1.0 - conditional / composition[None, :]
+
+
 def _shell_sro(
     index: np.ndarray, i: np.ndarray, j: np.ndarray, composition: np.ndarray
 ) -> ShellSRO:
-    n = len(composition)
-    counts = np.bincount(index[i] * n + index[j], minlength=n * n).reshape(n, n)
+    counts = _pair_counts(index, i, j, len(composition))
     if not np.array_equal(counts, counts.T):
         raise ValueError("directed pair counts are not reciprocal; neighbour list is inconsistent")
-    neighbours = counts.sum(axis=1)
-    if (neighbours == 0).any():
+    if (counts.sum(axis=1) == 0).any():
         raise ValueError("a species has no neighbours in this shell")
-    conditional = counts / neighbours[:, None]
-    alpha = 1.0 - conditional / composition[None, :]
+    conditional, alpha = _conditional_and_alpha(counts, composition)
     for array in (counts, conditional, alpha):
         array.setflags(write=False)
     return ShellSRO(counts, conditional, alpha)
@@ -403,6 +411,13 @@ def _canonical_targets(
     return merged
 
 
+def _target_objective(
+    alpha: Mapping[int, np.ndarray], merged: Mapping[tuple[int, int, int], SROTarget]
+) -> float:
+    """Single objective arithmetic for the optimizer and the validator."""
+    return sum(t.weight * float(alpha[s][a, b] - t.alpha) ** 2 for (s, a, b), t in merged.items())
+
+
 def generate_targeted_sro(
     atoms: Atoms,
     lattice_parameter: float,
@@ -448,25 +463,14 @@ def generate_targeted_sro(
 
     merged = _canonical_targets(targets, species, initial.composition)
     n = len(species)
-    shells = np.array([key[0] for key in merged])
-    rows = np.array([key[1] for key in merged])
-    cols = np.array([key[2] for key in merged])
-    wanted = np.array([t.alpha for t in merged.values()])
-    weights = np.array([t.weight for t in merged.values()])
-    species_counts = np.rint(initial.composition * n_atoms)
-    coordination = {1: BCC_FIRST_SHELL, 2: BCC_SECOND_SHELL}
-    # alpha_ij = 1 - counts_ij * N / (z * N_i * N_j)
-    scale = {
-        s: n_atoms / (coordination[s] * np.outer(species_counts, species_counts)) for s in (1, 2)
-    }
+    composition = initial.composition
 
     def objective(index: np.ndarray) -> float:
-        alpha = {}
-        for shell, (i, j) in pairs.items():
-            counts = np.bincount(index[i] * n + index[j], minlength=n * n).reshape(n, n)
-            alpha[shell] = 1.0 - counts * scale[shell]
-        achieved = np.array([alpha[s][a, b] for s, a, b in zip(shells, rows, cols, strict=True)])
-        return float(np.sum(weights * (achieved - wanted) ** 2))
+        alpha = {
+            shell: _conditional_and_alpha(_pair_counts(index, i, j, n), composition)[1]
+            for shell, (i, j) in pairs.items()
+        }
+        return _target_objective(alpha, merged)
 
     position = {symbol: k for k, symbol in enumerate(species)}
     index = np.array([position[symbol] for symbol in atoms.get_chemical_symbols()])
@@ -530,10 +534,18 @@ def validate_targeted_sro(
         raise ValueError("periodic cell changed")
 
     measured = warren_cowley_sro(final, lattice_parameter, result.sro.species)
+    if not np.allclose(result.sro.composition, measured.composition, rtol=0.0, atol=atol):
+        raise ValueError("reported composition does not match the returned structure")
     for name in ("first_shell", "second_shell"):
         reported, fresh = getattr(result.sro, name), getattr(measured, name)
         if not (
             np.array_equal(reported.pair_counts, fresh.pair_counts)
+            and np.allclose(
+                reported.conditional_probability,
+                fresh.conditional_probability,
+                rtol=0.0,
+                atol=atol,
+            )
             and np.allclose(reported.alpha, fresh.alpha, rtol=0.0, atol=atol)
         ):
             raise ValueError(f"reported {name} SRO does not match the returned structure")
@@ -552,21 +564,17 @@ def validate_targeted_sro(
                 weight=target.weight,
             )
         )
-    objective = sum(c.weight * c.deviation**2 for c in comparisons)
+    objective = _target_objective(
+        {1: measured.first_shell.alpha, 2: measured.second_shell.alpha}, merged
+    )
     if not math.isclose(objective, result.objective, rel_tol=1e-9, abs_tol=atol):
         raise ValueError(f"reported objective {result.objective} != recomputed {objective}")
     if (objective <= result.tolerance) != result.converged:
         raise ValueError("convergence flag disagrees with the recomputed objective")
 
     initial_measured = warren_cowley_sro(initial, lattice_parameter, measured.species)
-    initial_objective = sum(
-        t.weight
-        * (
-            (initial_measured.first_shell if s == 1 else initial_measured.second_shell).alpha[a, b]
-            - t.alpha
-        )
-        ** 2
-        for (s, a, b), t in merged.items()
+    initial_objective = _target_objective(
+        {1: initial_measured.first_shell.alpha, 2: initial_measured.second_shell.alpha}, merged
     )
     if not math.isclose(initial_objective, result.initial_objective, rel_tol=1e-9, abs_tol=atol):
         raise ValueError("reported initial objective does not match the start structure")
