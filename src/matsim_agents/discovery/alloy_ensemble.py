@@ -10,13 +10,16 @@ are bounded-search configurations, not thermodynamic equilibrium structures.
 from __future__ import annotations
 
 import hashlib
+import itertools
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Literal
 
 import numpy as np
 from ase import Atoms
+from ase.build import bulk
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.discovery.alloys import (
@@ -208,6 +211,393 @@ def find_exact_duplicates(ensemble: AlloyEnsemble) -> ExactDeduplication:
 
 def _same(ensemble: AlloyEnsemble, index: int, numbers: np.ndarray) -> bool:
     return bool(np.array_equal(ensemble.structures[index].numbers, numbers))
+
+
+@dataclass(frozen=True, eq=False)
+class TranslationDeduplication:
+    """Deduplication under exact identity and periodic translations of the parent lattice.
+
+    ``unique`` keeps the earliest member of every class. ``exact_duplicate_of`` and
+    ``translation_equivalent_to`` map later configuration IDs to their representative's ID:
+    the first when the occupation is identical to the representative's, the second when it is
+    the representative's occupation shifted by a lattice translation. Point-group operations are
+    not considered, so rotated or reflected copies remain unique here.
+    """
+
+    unique: tuple[ConfigurationRecord, ...]
+    exact_duplicate_of: dict[str, str]
+    translation_equivalent_to: dict[str, str]
+
+
+@lru_cache(maxsize=8)
+def _translation_permutations(
+    repeats: tuple[int, int, int], lattice_parameter: float
+) -> np.ndarray:
+    """Site permutations of all BCC supercell translations, shape (n_sites, n_sites).
+
+    Sites are addressed on the integer grid of half lattice parameters (all-even corner sites,
+    all-odd body-centre sites), in ``build_bcc_supercell`` order. Translating by the vector to any
+    site, including the body-centre vector (a/2, a/2, a/2) that swaps the two sublattices, gives
+    one row; ``numbers[perms[t]]`` is the occupation shifted by t. No distances are computed.
+    """
+    unit = bulk("W", crystalstructure="bcc", a=lattice_parameter, cubic=True)
+    grid = np.rint(unit.repeat(repeats).positions / (lattice_parameter / 2)).astype(np.int64)
+    shape = 2 * np.array(repeats)
+    lookup = np.full(tuple(shape), -1, dtype=np.int32)
+    lookup[tuple(grid.T)] = np.arange(len(grid), dtype=np.int32)
+    perms = np.empty((len(grid), len(grid)), dtype=np.int32)
+    for t, shift in enumerate(grid):
+        perms[t] = lookup[tuple(((grid + shift) % shape).T)]
+    if perms.min() < 0:
+        raise AssertionError("a BCC translation left the site lattice")
+    perms.setflags(write=False)
+    return perms
+
+
+def find_translation_equivalents(ensemble: AlloyEnsemble) -> TranslationDeduplication:
+    """Group configurations that are identical or related by a periodic lattice translation.
+
+    Every structure must sit on the ideal BCC supercell of ``ensemble.spec.alloy`` (same cell and
+    site positions), otherwise ``ValueError`` is raised. An occupation's canonical form is the
+    smallest of its translated copies; translations form a group, so equal canonical forms mean
+    equivalence exactly. SRO matrices are never used. Nothing in ``ensemble`` is modified.
+    """
+    alloy = ensemble.spec.alloy
+    _require_parent_lattice(ensemble)
+    exact = find_exact_duplicates(ensemble)
+    index = {record.config_id: k for k, record in enumerate(ensemble.records)}
+    perms = _translation_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
+    representatives: dict[bytes, ConfigurationRecord] = {}
+    final: dict[str, str] = {}
+    for record in exact.unique:
+        numbers = ensemble.structures[index[record.config_id]].numbers.astype(np.uint8)
+        key = min(row.tobytes() for row in numbers[perms])
+        final[record.config_id] = representatives.setdefault(key, record).config_id
+    kept = {record.config_id for record in representatives.values()}
+    # A duplicate of a configuration that was itself folded into another class is not identical
+    # to the final representative, so it is reported as translation-equivalent.
+    exact_of = {d: r for d, r in exact.duplicate_of.items() if r in kept}
+    translated = {
+        record.config_id: final[exact.duplicate_of.get(record.config_id, record.config_id)]
+        for record in ensemble.records
+        if record.config_id not in kept and record.config_id not in exact_of
+    }
+    return TranslationDeduplication(tuple(representatives.values()), exact_of, translated)
+
+
+def _require_parent_lattice(ensemble: AlloyEnsemble) -> None:
+    lattice = build_bcc_supercell(ensemble.spec.alloy)
+    for record, atoms in zip(ensemble.records, ensemble.structures, strict=True):
+        if (
+            len(atoms) != len(lattice)
+            or not atoms.pbc.all()
+            or not np.allclose(atoms.cell.array, lattice.cell.array)
+            or not np.allclose(atoms.positions, lattice.positions)
+        ):
+            raise ValueError(f"{record.config_id} is not on the parent BCC supercell")
+
+
+@lru_cache(maxsize=8)
+def _point_permutations(repeats: tuple[int, int, int], lattice_parameter: float) -> np.ndarray:
+    """Site permutations of the cubic point operations that preserve the supercell.
+
+    The BCC point group is the 48 signed axis permutations (m-3m). Each is applied about the
+    origin atom and kept only if it maps the periodic box onto itself: axes may be exchanged only
+    when their repeat counts are equal, while sign flips (reflections, inversion) are always
+    valid. Combined with all translations this is the full symmetry group of the periodic cell.
+    Shape (n_operations, n_sites); row 0 is the identity.
+    """
+    unit = bulk("W", crystalstructure="bcc", a=lattice_parameter, cubic=True)
+    grid = np.rint(unit.repeat(repeats).positions / (lattice_parameter / 2)).astype(np.int64)
+    shape = 2 * np.array(repeats)
+    lookup = np.full(tuple(shape), -1, dtype=np.int32)
+    lookup[tuple(grid.T)] = np.arange(len(grid), dtype=np.int32)
+    rows = []
+    for axes in itertools.permutations(range(3)):
+        if tuple(shape[list(axes)]) != tuple(shape):
+            continue
+        for signs in itertools.product((1, -1), repeat=3):
+            moved = (grid[:, list(axes)] * np.array(signs)) % shape
+            rows.append(lookup[tuple(moved.T)])
+    perms = np.stack(rows)
+    if perms.min() < 0:
+        raise AssertionError("a point operation left the site lattice")
+    perms.setflags(write=False)
+    return perms
+
+
+@dataclass(frozen=True, eq=False)
+class SymmetryDeduplication:
+    """Deduplication under the space-group operations of the undecorated periodic BCC supercell.
+
+    Operations are the periodic translations (including the body-centre shift) combined with the
+    cubic point operations that preserve the supercell, so a noncubic cell has fewer than 48.
+    ``unique`` keeps the earliest member of every class. The three maps send later configuration
+    IDs to their representative's ID and are mutually exclusive: ``exact_duplicate_of`` for an
+    identical occupation, ``translation_equivalent_to`` for a pure translation of it, and
+    ``point_group_equivalent_to`` when a rotation or reflection (with or without translation) is
+    needed. Chemical species are never permuted.
+    """
+
+    unique: tuple[ConfigurationRecord, ...]
+    exact_duplicate_of: dict[str, str]
+    translation_equivalent_to: dict[str, str]
+    point_group_equivalent_to: dict[str, str]
+    n_point_operations: int
+    status: Literal["complete", "incomplete"]
+    unchecked: tuple[str, ...]
+    n_canonicalized: int
+
+
+def _lexmin(rows: np.ndarray) -> np.ndarray:
+    """Lexicographically smallest row, narrowing the candidates one column at a time."""
+    for column in range(rows.shape[1]):
+        values = rows[:, column]
+        rows = rows[values == values.min()]
+        if len(rows) == 1:
+            break
+    return rows[0]
+
+
+def _pair_signature(record: ConfigurationRecord) -> tuple[Any, ...]:
+    """Integer shell pair counts: invariant under every lattice symmetry, so a filter only."""
+    sro = record.sro
+    return (
+        sro.species,
+        sro.first_shell.pair_counts.tobytes(),
+        sro.second_shell.pair_counts.tobytes(),
+    )
+
+
+def find_symmetry_equivalents(
+    ensemble: AlloyEnsemble, *, max_canonicalizations: int = 256
+) -> SymmetryDeduplication:
+    """Group configurations related by translations, rotations or reflections of the parent.
+
+    Structures must sit on the ideal BCC supercell of ``ensemble.spec.alloy`` or ``ValueError`` is
+    raised. The group is complete for that periodic cell: all lattice translations modulo the
+    supercell times every cubic point operation that preserves it.
+
+    Exact duplicates are removed first. Configurations whose integer first- and second-shell pair
+    counts differ cannot be equivalent and are never compared; equal counts only nominate
+    candidates. Each candidate is reduced to the smallest of its images under the whole group
+    (about ``n_point_operations * n_sites**2`` byte lookups), and equal forms mean equivalence
+    exactly. At most ``max_canonicalizations`` candidates are reduced; any others are kept as
+    unique, listed in ``unchecked`` and the status is ``"incomplete"``. SRO values are never used
+    to establish equivalence and nothing in ``ensemble`` is modified.
+    """
+    if max_canonicalizations < 0:
+        raise ValueError("max_canonicalizations must be nonnegative")
+    alloy = ensemble.spec.alloy
+    _require_parent_lattice(ensemble)
+    exact = find_exact_duplicates(ensemble)
+    index = {record.config_id: k for k, record in enumerate(ensemble.records)}
+    shifts = _translation_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
+    points = _point_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
+
+    candidates: dict[tuple[Any, ...], list[ConfigurationRecord]] = defaultdict(list)
+    for record in exact.unique:
+        candidates[_pair_signature(record)].append(record)
+
+    representatives: list[ConfigurationRecord] = []
+    final: dict[str, str] = {}
+    related: dict[str, str] = {}
+    unchecked: list[str] = []
+    n_canonicalized = 0
+    for group in candidates.values():
+        classes: dict[bytes, ConfigurationRecord] = {}
+        translation_keys: dict[str, bytes] = {}
+        for record in group:
+            cid = record.config_id
+            if len(group) == 1 or n_canonicalized >= max_canonicalizations:
+                if len(group) > 1:
+                    unchecked.append(cid)
+                representatives.append(record)
+                final[cid] = cid
+                continue
+            n_canonicalized += 1
+            numbers = ensemble.structures[index[cid]].numbers.astype(np.uint8)
+            # Row 0 of ``points`` is the identity, so forms[0] is the translation-only form.
+            forms = [_lexmin(numbers[p][shifts]).tobytes() for p in points]
+            translation_keys[cid] = forms[0]
+            representative = classes.setdefault(min(forms), record)
+            final[cid] = representative.config_id
+            if representative is record:
+                representatives.append(record)
+            else:
+                same = forms[0] == translation_keys[representative.config_id]
+                related[cid] = "translation" if same else "point_group"
+    representatives.sort(key=lambda record: index[record.config_id])
+
+    kept = {record.config_id for record in representatives}
+    exact_of: dict[str, str] = {}
+    translation: dict[str, str] = {}
+    point_group: dict[str, str] = {}
+    for record in ensemble.records:
+        cid = record.config_id
+        if cid in kept:
+            continue
+        source = exact.duplicate_of.get(cid, cid)
+        if source == cid:
+            kind = related[cid]
+        elif source in kept:
+            kind = "exact"
+        else:
+            kind = related[source]
+        target = {"exact": exact_of, "translation": translation, "point_group": point_group}[kind]
+        target[cid] = final[source]
+    return SymmetryDeduplication(
+        unique=tuple(representatives),
+        exact_duplicate_of=exact_of,
+        translation_equivalent_to=translation,
+        point_group_equivalent_to=point_group,
+        n_point_operations=len(points),
+        status="incomplete" if unchecked else "complete",
+        unchecked=tuple(unchecked),
+        n_canonicalized=n_canonicalized,
+    )
+
+
+@dataclass(frozen=True, eq=False)
+class CrossCellDeduplication:
+    """Equivalence of decorated BCC crystals that may be given in different supercells.
+
+    ``unique`` lists representative IDs in input order and ``equivalent_to`` maps every other ID
+    to its representative. IDs in ``unchecked`` ran out of comparison budget and are kept as
+    unique, in which case ``status`` is ``"incomplete"``.
+    """
+
+    unique: tuple[str, ...]
+    equivalent_to: dict[str, str]
+    status: Literal["complete", "incomplete"]
+    unchecked: tuple[str, ...]
+    n_comparisons: int
+
+
+@dataclass(frozen=True, eq=False)
+class _PeriodicSites:
+    cell: np.ndarray
+    grid: np.ndarray
+    adjugate: np.ndarray
+    volume: int
+    codes: np.ndarray
+    order: np.ndarray
+    numbers: np.ndarray
+
+
+def _encode(keys: np.ndarray, volume: int) -> np.ndarray:
+    return (keys[..., 0] * volume + keys[..., 1]) * volume + keys[..., 2]
+
+
+def _on_bcc_lattice(points: np.ndarray) -> bool:
+    parity = points % 2
+    return bool((parity == parity[:, :1]).all())
+
+
+def _bcc_sites(config_id: str, atoms: Atoms, lattice_parameter: float) -> _PeriodicSites:
+    """Integer description of a periodic BCC structure in units of a/2, origin on site 0.
+
+    Sites are reduced modulo the cell exactly via the integer adjugate of the cell matrix.
+    """
+    half = lattice_parameter / 2
+    scaled_cell = atoms.cell.array / half
+    scaled = (atoms.positions - atoms.positions[0]) / half
+    cell = np.rint(scaled_cell).astype(np.int64)
+    grid = np.rint(scaled).astype(np.int64)
+    det = round(float(np.linalg.det(cell)))
+    if not (
+        atoms.pbc.all()
+        and np.allclose(scaled_cell, cell, atol=1e-4)
+        and np.allclose(scaled, grid, atol=1e-4)
+        and _on_bcc_lattice(cell)
+        and _on_bcc_lattice(grid)
+        and abs(det) == 4 * len(atoms)
+    ):
+        raise ValueError(f"{config_id} is not a periodic BCC supercell with a={lattice_parameter}")
+    adjugate = np.rint(np.linalg.inv(cell) * det).astype(np.int64) * np.sign(det)
+    volume = abs(det)
+    codes = _encode((grid @ adjugate) % volume, volume)
+    order = np.argsort(codes)
+    if np.unique(codes).size != len(codes):
+        raise ValueError(f"{config_id} has two atoms on the same periodic site")
+    return _PeriodicSites(cell, grid, adjugate, volume, codes[order], order, atoms.numbers.copy())
+
+
+@lru_cache(maxsize=1)
+def _cubic_operations() -> np.ndarray:
+    """The 48 signed permutation matrices of m-3m; index 0 is the identity."""
+    eye = np.eye(3, dtype=np.int64)
+    ops = [
+        eye[list(axes)] * np.array(signs)[:, None]
+        for axes in itertools.permutations(range(3))
+        for signs in itertools.product((1, -1), repeat=3)
+    ]
+    return np.stack(ops)
+
+
+def _maps_onto(a: _PeriodicSites, b: _PeriodicSites) -> bool:
+    """True if some cubic operation plus lattice translation carries crystal ``a`` onto ``b``."""
+    shifts = b.grid @ b.adjugate
+    for rotation in _cubic_operations():
+        # Equal volumes, so the rotated lattice of ``a`` lying in that of ``b`` means equality.
+        if ((a.cell @ rotation.T @ b.adjugate) % b.volume).any():
+            continue
+        base = a.grid @ rotation.T @ b.adjugate
+        codes = _encode((base[None] + shifts[:, None]) % b.volume, b.volume)
+        images = b.numbers[b.order[np.searchsorted(b.codes, codes)]]
+        if (images == a.numbers).all(axis=1).any():
+            return True
+    return False
+
+
+def find_cross_cell_equivalents(
+    structures: Mapping[str, Atoms], lattice_parameter: float, *, max_comparisons: int = 1024
+) -> CrossCellDeduplication:
+    """Group decorated BCC crystals that are the same infinite crystal, whatever cell describes it.
+
+    Each structure may use any integer BCC supercell (non-orthogonal included), any site order and
+    any origin, but its cubic axes must be aligned with the Cartesian axes. Two crystals are
+    equivalent if a cubic point operation and a translation map one lattice and occupation onto
+    the other. Pairs with different site counts or compositions are never compared; each other
+    pair costs one comparison of at most ``48 * n_sites**2`` lookups. When ``max_comparisons`` is
+    reached the remaining structures are kept as unique and listed in ``unchecked``.
+    """
+    if max_comparisons < 0:
+        raise ValueError("max_comparisons must be nonnegative")
+    sites = {cid: _bcc_sites(cid, atoms, lattice_parameter) for cid, atoms in structures.items()}
+    representatives: list[str] = []
+    equivalent_to: dict[str, str] = {}
+    unchecked: list[str] = []
+    n_comparisons = 0
+    for cid, site in sites.items():
+        composition = np.sort(site.numbers)
+        match, skipped = None, False
+        for rep in representatives:
+            other = sites[rep]
+            if other.numbers.size != site.numbers.size or not np.array_equal(
+                np.sort(other.numbers), composition
+            ):
+                continue
+            if n_comparisons >= max_comparisons:
+                skipped = True
+                break
+            n_comparisons += 1
+            if _maps_onto(site, other):
+                match = rep
+                break
+        if match is not None:
+            equivalent_to[cid] = match
+        else:
+            representatives.append(cid)
+            if skipped:
+                unchecked.append(cid)
+    return CrossCellDeduplication(
+        unique=tuple(representatives),
+        equivalent_to=equivalent_to,
+        status="incomplete" if unchecked else "complete",
+        unchecked=tuple(unchecked),
+        n_comparisons=n_comparisons,
+    )
 
 
 @dataclass(frozen=True, eq=False)

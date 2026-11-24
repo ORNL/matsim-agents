@@ -11,8 +11,12 @@ import pytest
 
 from matsim_agents.discovery.alloy_ensemble import (
     AlloyEnsemble,
+    _point_permutations,
     ensemble_sro_statistics,
+    find_cross_cell_equivalents,
     find_exact_duplicates,
+    find_symmetry_equivalents,
+    find_translation_equivalents,
     generate_alloy_ensemble,
     occupation_fingerprint,
 )
@@ -157,6 +161,228 @@ def test_find_exact_duplicates_keeps_distinct_occupations(random_ensemble):
     result = find_exact_duplicates(random_ensemble)
     assert result.unique == random_ensemble.records
     assert result.duplicate_of == {}
+
+
+def _translated_ensemble(base, *, shifts, extra=()):
+    """Ensemble from one occupation shifted by integer half-lattice-parameter vectors."""
+    atoms = base.structures[0]
+    half = SMALL.lattice_parameter / 2
+    grid = np.rint(atoms.positions / half).astype(int)
+    shape = 2 * np.array(SMALL.repeats)
+    lookup = {tuple(g): s for s, g in enumerate(grid)}
+    structures = []
+    for shift in shifts:
+        moved = np.array([lookup[tuple((g + shift) % shape)] for g in grid])
+        copy = atoms.copy()
+        copy.set_chemical_symbols(np.array(atoms.get_chemical_symbols())[moved])
+        structures.append(copy)
+    structures.extend(extra)
+    records = tuple(
+        replace(
+            base.records[0],
+            config_id=f"t-{k}",
+            fingerprint=occupation_fingerprint(s),
+        )
+        for k, s in enumerate(structures)
+    )
+    return AlloyEnsemble(base.spec, records, tuple(structures), ())
+
+
+def test_translated_occupations_are_equivalent_but_not_exact(random_ensemble):
+    ensemble = _translated_ensemble(random_ensemble, shifts=[(0, 0, 0), (2, 0, 0), (0, 4, 2)])
+    result = find_translation_equivalents(ensemble)
+    assert [r.config_id for r in result.unique] == ["t-0"]
+    assert result.translation_equivalent_to == {"t-1": "t-0", "t-2": "t-0"}
+    assert result.exact_duplicate_of == {}
+
+
+def test_translation_does_not_merge_different_occupations(random_ensemble):
+    other = random_ensemble.structures[1]
+    assert Counter(other.get_chemical_symbols()) == Counter(SMALL.counts)
+    ensemble = _translated_ensemble(random_ensemble, shifts=[(0, 0, 0)], extra=[other])
+    # A repeated occupation is exact; the different arrangement stays separate.
+    result = find_translation_equivalents(ensemble)
+    assert [r.config_id for r in result.unique] == ["t-0", "t-1"]
+    assert result.translation_equivalent_to == {}
+
+
+def test_body_centre_translation_swaps_sublattices(random_ensemble):
+    ensemble = _translated_ensemble(random_ensemble, shifts=[(0, 0, 0), (1, 1, 1)])
+    base, shifted = ensemble.structures
+    corner = np.all(np.rint(base.positions / (SMALL.lattice_parameter / 2)) % 2 == 0, axis=1)
+    assert not np.array_equal(base.numbers[corner], shifted.numbers[corner])
+    result = find_translation_equivalents(ensemble)
+    assert result.translation_equivalent_to == {"t-1": "t-0"}
+
+
+def _transformed_ensemble(base, transforms, extra=()):
+    """Ensemble from one occupation moved by maps on half-lattice-parameter grid coordinates."""
+    atoms = base.structures[0]
+    grid = np.rint(atoms.positions / (SMALL.lattice_parameter / 2)).astype(int)
+    shape = 2 * np.array(SMALL.repeats)
+    lookup = {tuple(g): s for s, g in enumerate(grid)}
+    symbols = np.array(atoms.get_chemical_symbols())
+    structures = []
+    for transform in transforms:
+        moved = np.array([lookup[tuple(transform(g) % shape)] for g in grid])
+        copy = atoms.copy()
+        copy.set_chemical_symbols(symbols[moved])
+        structures.append(copy)
+    structures.extend(extra)
+    records = tuple(
+        replace(base.records[0], config_id=f"s-{k}", fingerprint=occupation_fingerprint(s))
+        for k, s in enumerate(structures)
+    )
+    return AlloyEnsemble(base.spec, records, tuple(structures), ())
+
+
+def test_reflection_and_rotation_are_symmetry_equivalent_but_not_translations(random_ensemble):
+    identity = lambda g: g  # noqa: E731
+    mirror_x = lambda g: g * np.array([-1, 1, 1])  # noqa: E731
+    swap_yz = lambda g: g[[0, 2, 1]]  # noqa: E731
+    # 90-degree rotation about x; valid because SMALL has equal y and z repeats.
+    rotate_x = lambda g: np.array([g[0], -g[2], g[1]])  # noqa: E731
+    ensemble = _transformed_ensemble(random_ensemble, [identity, mirror_x, swap_yz, rotate_x])
+    assert find_translation_equivalents(ensemble).translation_equivalent_to == {}
+    result = find_symmetry_equivalents(ensemble)
+    assert [r.config_id for r in result.unique] == ["s-0"]
+    assert result.point_group_equivalent_to == {"s-1": "s-0", "s-2": "s-0", "s-3": "s-0"}
+    assert result.exact_duplicate_of == {} and result.translation_equivalent_to == {}
+
+
+def test_symmetry_keeps_translations_and_exact_duplicates_distinct(random_ensemble):
+    shift = lambda g: g + np.array([1, 1, 1])  # noqa: E731
+    identity = lambda g: g  # noqa: E731
+    ensemble = _transformed_ensemble(random_ensemble, [identity, identity, shift])
+    result = find_symmetry_equivalents(ensemble)
+    assert result.exact_duplicate_of == {"s-1": "s-0"}
+    assert result.translation_equivalent_to == {"s-2": "s-0"}
+    assert result.point_group_equivalent_to == {}
+
+
+def test_symmetry_does_not_merge_different_occupations(random_ensemble):
+    other = random_ensemble.structures[1]
+    ensemble = _transformed_ensemble(random_ensemble, [lambda g: g], extra=[other])
+    result = find_symmetry_equivalents(ensemble)
+    assert [r.config_id for r in result.unique] == ["s-0", "s-1"]
+    assert not (
+        result.exact_duplicate_of
+        or result.translation_equivalent_to
+        or result.point_group_equivalent_to
+    )
+
+
+def test_symmetry_check_reports_incomplete_when_budget_is_exhausted(random_ensemble):
+    identity = lambda g: g  # noqa: E731
+    mirror_x = lambda g: g * np.array([-1, 1, 1])  # noqa: E731
+    ensemble = _transformed_ensemble(random_ensemble, [identity, mirror_x])
+    full = find_symmetry_equivalents(ensemble)
+    assert full.status == "complete" and full.unchecked == ()
+    assert full.n_canonicalized == 2
+    limited = find_symmetry_equivalents(ensemble, max_canonicalizations=1)
+    assert limited.status == "incomplete"
+    assert limited.unchecked == ("s-1",)
+    assert [r.config_id for r in limited.unique] == ["s-0", "s-1"]
+    assert limited.point_group_equivalent_to == {}
+    with pytest.raises(ValueError, match="nonnegative"):
+        find_symmetry_equivalents(ensemble, max_canonicalizations=-1)
+
+
+def test_distinct_pair_counts_skip_canonicalization(random_ensemble):
+    result = find_symmetry_equivalents(random_ensemble, max_canonicalizations=0)
+    signature = {
+        r.config_id: (
+            r.sro.first_shell.pair_counts.tobytes(),
+            r.sro.second_shell.pair_counts.tobytes(),
+        )
+        for r in random_ensemble.records
+    }
+    shared = Counter(signature.values())
+    expected = tuple(cid for cid, sig in signature.items() if shared[sig] > 1)
+    assert result.n_canonicalized == 0
+    assert result.unchecked == expected
+    assert result.status == ("incomplete" if expected else "complete")
+    assert len(result.unique) == len(random_ensemble.records)
+
+
+def test_symmetry_check_on_1024_atom_cell():
+    ensemble = generate_alloy_ensemble(REFERENCE, n_configurations=2, mode="random", seed=3)
+    grid = np.rint(ensemble.structures[0].positions / (REFERENCE.lattice_parameter / 2))
+    lookup = {tuple(g): s for s, g in enumerate(grid.astype(int))}
+    shape = 2 * np.array(REFERENCE.repeats)
+    # Rotate by 90 degrees about z and shift by the body-centre vector.
+    moved = [lookup[tuple((np.array([-g[1], g[0], g[2]]) + 1) % shape)] for g in grid.astype(int)]
+    rotated = ensemble.structures[0].copy()
+    rotated.numbers = ensemble.structures[0].numbers[moved]
+    records = (
+        *ensemble.records,
+        replace(
+            ensemble.records[0], config_id="rotated", fingerprint=occupation_fingerprint(rotated)
+        ),
+    )
+    # Pair counts are symmetry invariant, so the stored SRO of record 0 stays valid.
+    extended = AlloyEnsemble(ensemble.spec, records, (*ensemble.structures, rotated), ())
+    result = find_symmetry_equivalents(extended)
+    assert _point_permutations(REFERENCE.repeats, REFERENCE.lattice_parameter).shape == (48, 1024)
+    assert result.status == "complete"
+    assert result.point_group_equivalent_to == {"rotated": "random-0000"}
+    assert [r.config_id for r in result.unique] == ["random-0000", "random-0001"]
+
+
+def test_point_operations_respect_the_supercell_shape():
+    a = SMALL.lattice_parameter
+    assert len(_point_permutations((2, 2, 2), a)) == 48
+    assert len(_point_permutations((4, 2, 2), a)) == 16
+    assert len(_point_permutations((4, 2, 1), a)) == 8
+    for repeats in [(4, 2, 2), (3, 3, 2)]:
+        perms = _point_permutations(repeats, a)
+        assert np.array_equal(perms[0], np.arange(2 * np.prod(repeats)))
+        assert all(sorted(row) == list(range(perms.shape[1])) for row in perms)
+
+
+def _recast(atoms, *, cell_rows, shift=(0, 0, 0), rotate=None, order=np.flip):
+    """Same crystal in another cell basis, translated, optionally rotated and reordered."""
+    out = atoms.copy()
+    out.set_cell(np.array(cell_rows) @ atoms.cell.array, scale_atoms=False)
+    out.positions += np.array(shift) * A / 2
+    if rotate is not None:
+        out.rotate(rotate, "z", rotate_cell=True)
+    out.wrap()
+    return out[order(np.arange(len(out)))]
+
+
+def test_cross_cell_equivalence_ignores_cell_choice_origin_order_and_rotation(random_ensemble):
+    base, other = random_ensemble.structures[:2]
+    shear = [[1, 0, 0], [1, 1, 0], [0, 1, 1]]
+    structures = {
+        "base": base,
+        "sheared": _recast(base, cell_rows=shear, shift=(1, 1, 1)),
+        "rotated": _recast(base, cell_rows=shear, shift=(2, 0, 2), rotate=90),
+        "other": _recast(other, cell_rows=shear),
+    }
+    result = find_cross_cell_equivalents(structures, A)
+    assert result.status == "complete" and result.unchecked == ()
+    assert result.unique == ("base", "other")
+    assert result.equivalent_to == {"sheared": "base", "rotated": "base"}
+
+
+def test_cross_cell_skips_different_compositions_and_respects_budget(random_ensemble):
+    base, other = random_ensemble.structures[:2]
+    changed = base.copy()
+    changed.numbers[0] = 74 if changed.numbers[0] != 74 else 42
+    result = find_cross_cell_equivalents({"base": base, "changed": changed}, A)
+    assert result.unique == ("base", "changed") and result.n_comparisons == 0
+    limited = find_cross_cell_equivalents({"base": base, "other": other}, A, max_comparisons=0)
+    assert limited.status == "incomplete" and limited.unchecked == ("other",)
+    with pytest.raises(ValueError, match="nonnegative"):
+        find_cross_cell_equivalents({"base": base}, A, max_comparisons=-1)
+
+
+def test_cross_cell_rejects_structures_off_the_bcc_lattice(random_ensemble):
+    moved = random_ensemble.structures[0].copy()
+    moved.positions[1] += 0.3
+    with pytest.raises(ValueError, match="not a periodic BCC supercell"):
+        find_cross_cell_equivalents({"moved": moved}, A)
 
 
 def _with_alpha(record, first, second):
