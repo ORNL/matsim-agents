@@ -18,6 +18,7 @@ from typing import Annotated, Literal
 
 import numpy as np
 from ase import Atoms
+from ase.geometry import get_distances, wrap_positions
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -274,12 +275,150 @@ def generate_vacancy(
     return defective, config
 
 
+# Dumbbell axis in units of the unit vectors along the three cell vectors.
+DUMBBELL_ORIENTATIONS: Mapping[str, tuple[int, int, int]] = MappingProxyType(
+    {"111": (1, 1, 1), "110": (1, 1, 0), "100": (1, 0, 0)}
+)
+_AXIS_TOL = 1e-6
+
+
+def _cubic_axes(parent: Atoms, lattice_parameter: float) -> np.ndarray:
+    """Unit vectors of the conventional cubic axes: the cell vectors of a BCC supercell."""
+    cell = parent.cell.array
+    lengths = np.linalg.norm(cell, axis=1)
+    axes = cell / lengths[:, None]
+    multiples = lengths / lattice_parameter
+    if (
+        not np.allclose(axes @ axes.T, np.eye(3), atol=_AXIS_TOL)
+        or not np.allclose(multiples, np.rint(multiples), atol=_AXIS_TOL)
+        or (np.rint(multiples) < 1).any()
+    ):
+        raise ValueError(
+            f"cell is not an orthogonal supercell of a cubic lattice with a={lattice_parameter}"
+        )
+    return axes
+
+
+def generate_dumbbell_interstitial(
+    parent: Atoms,
+    parent_id: str,
+    site: int,
+    species: str,
+    orientation: str,
+    lattice_parameter: float,
+    *,
+    separation: float | None = None,
+    min_distance: float | None = None,
+    parent_ordering_id: str | None = None,
+) -> tuple[Atoms, DefectConfiguration]:
+    """Split the lattice atom at ``site`` into a dumbbell with an incoming ``species`` atom.
+
+    The two atoms are centred on the original site and separated by ``separation`` (angstrom,
+    default ``0.5 * lattice_parameter``) along ``orientation`` (``"111"``, ``"110"`` or
+    ``"100"``), taken relative to the cell vectors so a rotated cell rotates the dumbbell. The
+    original atom moves to ``-separation / 2`` along the axis and keeps its parent index and
+    ``atom_id``; the incoming atom is appended with ``atom_id = len(parent)`` at
+    ``+separation / 2``. Nothing is relaxed, and the result is only an initial candidate: its
+    stability is not implied. Any pair closer than ``min_distance`` (minimum image, default
+    ``0.35 * lattice_parameter``) is rejected as a severe overlap.
+    """
+    if not parent_id:
+        raise ValueError("parent_id must be a nonempty string")
+    if isinstance(site, bool) or not isinstance(site, int | np.integer):
+        raise ValueError(f"site must be an integer index, got {site!r}")
+    site = int(site)
+    if not 0 <= site < len(parent):
+        raise ValueError(f"site {site} is outside the {len(parent)}-atom parent")
+    if orientation not in DUMBBELL_ORIENTATIONS:
+        raise ValueError(
+            f"unsupported orientation {orientation!r}; use one of {sorted(DUMBBELL_ORIENTATIONS)}"
+        )
+    if not (np.isfinite(lattice_parameter) and lattice_parameter > 0):
+        raise ValueError(f"lattice_parameter must be positive and finite, got {lattice_parameter}")
+    separation = 0.5 * lattice_parameter if separation is None else float(separation)
+    min_distance = 0.35 * lattice_parameter if min_distance is None else float(min_distance)
+    if not (np.isfinite(separation) and separation > 0):
+        raise ValueError(f"separation must be positive and finite, got {separation}")
+    if not (np.isfinite(min_distance) and min_distance > 0):
+        raise ValueError(f"min_distance must be positive and finite, got {min_distance}")
+    if not parent.pbc.all():
+        raise ValueError("parent must be periodic in all directions")
+
+    spec = DefectSpec(
+        defect_type="interstitial",
+        site_indices=(site,),
+        species=(species,),
+        parameters={
+            "orientation": orientation,
+            "separation": separation,
+            "min_distance": min_distance,
+            "lattice_parameter": float(lattice_parameter),
+        },
+    )
+    axes = _cubic_axes(parent, lattice_parameter)
+    direction = np.array(DUMBBELL_ORIENTATIONS[orientation]) @ axes
+    direction /= np.linalg.norm(direction)
+    centre = parent.positions[site]
+    moved, added = wrap_positions(
+        np.array([centre - 0.5 * separation * direction, centre + 0.5 * separation * direction]),
+        parent.cell,
+        pbc=True,
+    )
+
+    defective = parent.copy()
+    defective.set_array("atom_id", np.arange(len(parent), dtype=np.int64))
+    defective.positions[site] = moved
+    defective.extend(Atoms(species, positions=[added]))
+    defective.arrays["atom_id"][-1] = len(parent)
+
+    for k in (site, len(parent)):
+        _, dist = get_distances(
+            defective.positions[k], defective.positions, cell=defective.cell, pbc=True
+        )
+        dist[0, k] = np.inf
+        if dist.min() < min_distance:
+            raise ValueError(
+                f"severe overlap: atom {k} is {dist.min():.3f} A from another atom "
+                f"(minimum {min_distance:.3f} A)"
+            )
+
+    config = DefectConfiguration(
+        config_id=make_defect_config_id(parent_id, spec),
+        parent_id=parent_id,
+        parent_ordering_id=parent_ordering_id or occupation_fingerprint(parent),
+        spec=spec,
+        n_parent_atoms=len(parent),
+        n_atoms=len(defective),
+        cell=tuple(tuple(float(x) for x in row) for row in parent.cell.array),
+        sites=(
+            DefectSite(
+                role="displaced",
+                species=parent[site].symbol,
+                atom_id=site,
+                lattice_site=site,
+                position=tuple(float(x) for x in moved),
+            ),
+            DefectSite(
+                role="interstitial",
+                species=species,
+                atom_id=len(parent),
+                position=tuple(float(x) for x in added),
+            ),
+        ),
+        geometry_fingerprint=geometry_fingerprint(defective),
+        validation_status="valid",
+    )
+    return defective, config
+
+
 __all__ = [
+    "DUMBBELL_ORIENTATIONS",
     "SITE_COUNTS",
     "DefectConfiguration",
     "DefectOutcome",
     "DefectSite",
     "DefectSpec",
+    "generate_dumbbell_interstitial",
     "generate_vacancy",
     "geometry_fingerprint",
     "make_defect_config_id",
