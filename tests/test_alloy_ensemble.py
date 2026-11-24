@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from dataclasses import replace
 
 import numpy as np
 import pytest
 
 from matsim_agents.discovery.alloy_ensemble import (
+    AlloyEnsemble,
+    ensemble_sro_statistics,
     find_exact_duplicates,
     generate_alloy_ensemble,
     occupation_fingerprint,
 )
 from matsim_agents.discovery.alloys import (
     AlloySpec,
+    ShellSRO,
     SROTarget,
     generate_alloy,
     generate_targeted_sro,
@@ -153,6 +157,61 @@ def test_find_exact_duplicates_keeps_distinct_occupations(random_ensemble):
     result = find_exact_duplicates(random_ensemble)
     assert result.unique == random_ensemble.records
     assert result.duplicate_of == {}
+
+
+def _with_alpha(record, first, second):
+    shell = lambda alpha: ShellSRO(  # noqa: E731
+        record.sro.first_shell.pair_counts, record.sro.first_shell.conditional_probability, alpha
+    )
+    sro = replace(
+        record.sro,
+        first_shell=shell(np.array(first, dtype=float)),
+        second_shell=shell(np.array(second, dtype=float)),
+    )
+    return replace(record, sro=sro)
+
+
+def _known_ensemble(random_ensemble, indices, alphas):
+    records = tuple(
+        _with_alpha(random_ensemble.records[i], *alpha)
+        for i, alpha in zip(indices, alphas, strict=True)
+    )
+    structures = tuple(random_ensemble.structures[i] for i in indices)
+    return AlloyEnsemble(random_ensemble.spec, records, structures, ())
+
+
+def test_sro_statistics_match_hand_computed_mean_and_sample_std(random_ensemble):
+    a = ([[0.1, -0.1], [-0.1, 0.1]], [[0.0, 0.2], [0.2, 0.0]])
+    b = ([[0.3, -0.3], [-0.3, 0.3]], [[0.4, 0.0], [0.0, 0.4]])
+    stats = ensemble_sro_statistics(_known_ensemble(random_ensemble, [0, 1], [a, b]))
+    assert stats.species == ("Mo", "W")
+    assert stats.n_unique == 2
+    assert np.allclose(stats.first_shell_mean, [[0.2, -0.2], [-0.2, 0.2]])
+    assert np.allclose(stats.second_shell_mean, [[0.2, 0.1], [0.1, 0.2]])
+    # Two samples: s = |x1 - x2| / sqrt(2).
+    assert np.allclose(stats.first_shell_std, np.full((2, 2), 0.2 / np.sqrt(2)))
+    assert np.allclose(stats.second_shell_std, [[0.4, 0.2], [0.2, 0.4]] / np.sqrt(2))
+
+
+def test_sro_statistics_exclude_duplicates(random_ensemble):
+    a = ([[0.1, 0.0], [0.0, 0.1]], [[0.0, 0.0], [0.0, 0.0]])
+    b = ([[0.3, 0.0], [0.0, 0.3]], [[0.2, 0.0], [0.0, 0.2]])
+    # Indices 0, 0, 1: the second entry repeats occupation 0 with a different SRO payload.
+    ensemble = _known_ensemble(random_ensemble, [0, 0, 1], [a, ([[9.0] * 2] * 2, a[1]), b])
+    stats = ensemble_sro_statistics(ensemble)
+    assert stats.n_unique == 2
+    assert np.allclose(stats.first_shell_mean, [[0.2, 0.0], [0.0, 0.2]])
+
+
+def test_sro_statistics_single_configuration_has_undefined_std(random_ensemble):
+    single = AlloyEnsemble(
+        random_ensemble.spec, random_ensemble.records[:1], random_ensemble.structures[:1], ()
+    )
+    stats = ensemble_sro_statistics(single)
+    assert stats.n_unique == 1
+    assert stats.first_shell_std is None
+    assert stats.second_shell_std is None
+    assert np.allclose(stats.first_shell_mean, random_ensemble.records[0].sro.first_shell.alpha)
 
 
 def test_sro_metadata_matches_remeasurement(random_ensemble, targeted_ensemble):

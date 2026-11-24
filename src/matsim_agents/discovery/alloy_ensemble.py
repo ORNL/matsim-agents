@@ -210,6 +210,46 @@ def _same(ensemble: AlloyEnsemble, index: int, numbers: np.ndarray) -> bool:
     return bool(np.array_equal(ensemble.structures[index].numbers, numbers))
 
 
+@dataclass(frozen=True, eq=False)
+class EnsembleSROStatistics:
+    """Mean and sample standard deviation of alpha over the unique configurations.
+
+    Matrices are indexed by ``species`` (rows and columns). ``*_std`` is None when fewer than two
+    configurations are included, because the sample deviation is undefined there.
+    """
+
+    species: tuple[str, ...]
+    n_unique: int
+    first_shell_mean: np.ndarray
+    first_shell_std: np.ndarray | None
+    second_shell_mean: np.ndarray
+    second_shell_std: np.ndarray | None
+
+
+def ensemble_sro_statistics(ensemble: AlloyEnsemble) -> EnsembleSROStatistics:
+    """Per-pair mean and sample (M - 1) standard deviation of the stored SRO matrices.
+
+    Only the first occurrence of each exact occupation is included; the stored
+    ``ConfigurationRecord.sro`` is used, so no neighbour search is repeated. Variance across
+    configurations does not establish convergence or statistical independence.
+    """
+    unique = find_exact_duplicates(ensemble).unique
+    species = unique[0].sro.species
+    if any(record.sro.species != species for record in unique):
+        raise ValueError("configurations use different species orderings")
+
+    def summarize(shell: str) -> tuple[np.ndarray, np.ndarray | None]:
+        alpha = np.stack([getattr(record.sro, shell).alpha for record in unique])
+        std = alpha.std(axis=0, ddof=1) if len(unique) > 1 else None
+        return alpha.mean(axis=0), std
+
+    first_mean, first_std = summarize("first_shell")
+    second_mean, second_std = summarize("second_shell")
+    return EnsembleSROStatistics(
+        species, len(unique), first_mean, first_std, second_mean, second_std
+    )
+
+
 def generate_alloy_ensemble(
     spec: AlloySpec,
     *,
