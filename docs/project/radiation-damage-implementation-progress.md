@@ -217,3 +217,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - B2.7: added the `neb` CLI group and example config; 7 tests plus `test_cli_usability.py` passed (37 total with `test_neb_workflow.py`). Ruff clean. No corrections needed.
 - B2.8: added integration tests; one fixture correction (no `ingest` before a stage exists) and a Frenkel case turned into a rejection test. Not run: A1-A3 regression suites, invariant audit, 1,024-atom NEB, any real QE/DFT/MLIP/HPC run.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
+
+## Phases C-E (spec: `radiation-damage-phases-c-e-spec.md`)
+
+- [x] C1.1 transition-network contracts (`kinetics/contracts.py`; 6 tests). Missing evidence is `None`, never a zero barrier. A `qualified` event needs qualified NEB evidence, qualified endpoints and an explicit attempt frequency. Fixture evidence carries `synthetic=True`.
