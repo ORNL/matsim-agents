@@ -2,9 +2,9 @@
 
 import pytest
 
+from matsim_agents.kinetics.benchmarks import chain_network
 from matsim_agents.kinetics.ensemble import run_ensemble
-from matsim_agents.workflows.radiation_kinetics_qualification import chain_network
-from matsim_agents.workflows.radiation_scalability import (
+from matsim_agents.workflows.scalability import (
     check_reproducibility,
     digest,
     environment_record,

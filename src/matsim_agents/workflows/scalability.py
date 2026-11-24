@@ -1,7 +1,7 @@
 """Toy-scale cost measurements, seeded reproducibility and an environment record (E5).
 
 Everything here is CPU-only and tiny. The scaling workload is the synthetic KMC chain from
-``radiation_kinetics_qualification``, sized in *states*, not atoms, so the result says how
+``kinetics.benchmarks``, sized in *states*, not atoms, so the result says how
 this kinetic engine's cost grows and nothing about DFT, MLIP or large-cell cost. Timing and
 memory are measured, never assumed; they vary run to run, so no pass/fail threshold is set on
 them. ``supports`` therefore stays empty for scaling: a human decides what the numbers allow.
@@ -28,11 +28,11 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.kinetics.ensemble import run_ensemble
-from matsim_agents.workflows.radiation_kinetics_qualification import (
+from matsim_agents.kinetics.benchmarks import (
     TEMPERATURE_K,
     chain_network,
 )
+from matsim_agents.kinetics.ensemble import run_ensemble
 
 LOCK_FILE_NAMES = ("uv.lock", "poetry.lock", "requirements.lock", "conda-lock.yml")
 TRACKED_PACKAGES = ("numpy", "pydantic", "scipy", "torch", "ase")

@@ -2,7 +2,7 @@
 
 import pytest
 
-from matsim_agents.workflows.radiation_kinetics_qualification import (
+from matsim_agents.kinetics.benchmarks import (
     check_arrhenius,
     check_branching,
     check_first_passage,

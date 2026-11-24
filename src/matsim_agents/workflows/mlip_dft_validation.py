@@ -1,8 +1,11 @@
 """MLIP validation protocol: compare predictions with a DFT reference set.
 
+This is the statistical gate on paired arrays. To compute those arrays from a model and an
+extended-XYZ test set, see ``matsim_agents.active_learning.evaluate``.
+
 This module computes error statistics and a pass/fail/insufficient verdict. It runs no model and
 no DFT; callers supply paired arrays. A verdict never promotes anything by itself: the written
-report is an artifact that ``radiation_qualification.record_evidence`` can cite.
+report is an artifact that ``qualification_matrix.record_evidence`` can cite.
 
 Rules:
 

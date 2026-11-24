@@ -1,8 +1,8 @@
-"""E1: qualification matrix. Artifacts are synthetic stand-in files."""
+"""Qualification matrix. Artifacts are synthetic stand-in files."""
 
 import pytest
 
-from matsim_agents.workflows.radiation_qualification import (
+from matsim_agents.workflows.qualification_matrix import (
     QualificationError,
     QualificationMatrix,
     QualificationStatus,
@@ -139,3 +139,22 @@ def test_matrices_are_immutable_values(tmp_path):
     base = QualificationMatrix()
     record_evidence(base, ROW, "relaxed-endpoints", _artifact(tmp_path), summary="s", measured=True)
     assert base.row(ROW).evidence == ()
+
+
+def test_custom_rows_use_the_same_rules(tmp_path):
+    from matsim_agents.workflows.qualification_matrix import Criterion, Row
+
+    rows = (
+        Row(
+            row_id="r",
+            dimension="d",
+            title="t",
+            criteria=(Criterion(criterion_id="c", description="x"),),
+        ),
+    )
+    matrix = load_matrix(tmp_path / "none.json", rows=rows)
+    assert [r.row_id for r in matrix.rows] == ["r"]
+    with pytest.raises(QualificationError):
+        promote(matrix, "r", QualificationStatus.QUALIFIED)
+    matrix = record_evidence(matrix, "r", "c", _artifact(tmp_path), summary="s", measured=True)
+    assert promote(matrix, "r", QualificationStatus.QUALIFIED).row("r").status == "qualified"

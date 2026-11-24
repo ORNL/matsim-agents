@@ -22,7 +22,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from matsim_agents.workflows.radiation_qualification import (
+from matsim_agents.workflows.qualification_matrix import (
     QualificationMatrix,
     QualificationStatus,
 )

@@ -1,4 +1,7 @@
-"""Qualification matrix for the radiation-damage capabilities.
+"""Evidence-gated qualification matrix.
+
+The mechanism is generic: pass any ``rows`` to ``QualificationMatrix``. With no rows it uses
+``radiation_damage_rows()``, the row set for the radiation-damage capabilities.
 
 Software completeness and scientific qualification are separate. A row starts at
 ``not_assessed`` and moves only through ``record_evidence`` and ``promote``:
@@ -105,7 +108,7 @@ def _material(row_id: str, title: str) -> Row:
     )
 
 
-def default_rows() -> tuple[Row, ...]:
+def radiation_damage_rows() -> tuple[Row, ...]:
     return (
         _row(
             "mlip-validation",
@@ -158,7 +161,7 @@ class QualificationMatrix(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     schema_id: str = Field(default=MATRIX_SCHEMA, alias="schema")
-    rows: tuple[Row, ...] = Field(default_factory=default_rows)
+    rows: tuple[Row, ...] = Field(default_factory=radiation_damage_rows)
 
     def row(self, row_id: str) -> Row:
         for row in self.rows:
@@ -271,11 +274,13 @@ def save_matrix(matrix: QualificationMatrix, path: str | os.PathLike) -> None:
         raise
 
 
-def load_matrix(path: str | os.PathLike) -> QualificationMatrix:
-    """The saved matrix, or a fresh one if the file does not exist."""
+def load_matrix(
+    path: str | os.PathLike, rows: tuple[Row, ...] | None = None
+) -> QualificationMatrix:
+    """The saved matrix, or a fresh one (with ``rows`` if given) if the file does not exist."""
     target = Path(path)
     if not target.exists():
-        return QualificationMatrix()
+        return QualificationMatrix() if rows is None else QualificationMatrix(rows=rows)
     return QualificationMatrix.model_validate_json(target.read_text())
 
 
@@ -287,10 +292,10 @@ __all__ = [
     "QualificationMatrix",
     "QualificationStatus",
     "Row",
-    "default_rows",
     "demote",
     "load_matrix",
     "promote",
+    "radiation_damage_rows",
     "record_evidence",
     "save_matrix",
     "sha256_file",

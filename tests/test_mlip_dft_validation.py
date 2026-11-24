@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from matsim_agents.seeding import numpy_rng
-from matsim_agents.workflows.radiation_mlip_validation import (
+from matsim_agents.workflows.mlip_dft_validation import (
     ValidationThresholds,
     evaluate_validation,
     write_validation_report,

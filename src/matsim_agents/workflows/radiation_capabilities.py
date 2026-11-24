@@ -130,8 +130,8 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="qualification-matrix",
         summary="Evidence-gated qualification status per capability and material.",
-        entry_points=("matsim_agents.workflows.radiation_qualification:promote",),
-        tests=("tests/test_radiation_qualification.py",),
+        entry_points=("matsim_agents.workflows.qualification_matrix:promote",),
+        tests=("tests/test_qualification_matrix.py",),
         caveats="A fresh matrix has nothing qualified; promotion needs measured evidence.",
     ),
     RadiationCapability(
@@ -160,38 +160,36 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="mlip-validation-protocol",
         summary="Held-out MLIP error metrics with bootstrap CIs and evidence-gated verdicts.",
-        entry_points=("matsim_agents.workflows.radiation_mlip_validation:evaluate_validation",),
-        tests=("tests/test_radiation_mlip_validation.py",),
+        entry_points=("matsim_agents.workflows.mlip_dft_validation:evaluate_validation",),
+        tests=("tests/test_mlip_dft_validation.py",),
         caveats="Synthetic arrays only so far; no real MLIP has been validated.",
     ),
     RadiationCapability(
         name="neb-qualification-checks",
         summary="Cutoff and k-point convergence, endpoint, climbing-image and saddle checks.",
         entry_points=(
-            "matsim_agents.workflows.radiation_neb_qualification:check_barrier_series",
-            "matsim_agents.workflows.radiation_neb_qualification:check_neb_run",
+            "matsim_agents.workflows.neb_convergence:check_barrier_series",
+            "matsim_agents.workflows.neb_convergence:check_neb_run",
         ),
-        tests=("tests/test_radiation_neb_qualification.py",),
+        tests=("tests/test_neb_convergence.py",),
         caveats="Checks numbers only; no DFT has been run and nothing is promoted.",
     ),
     RadiationCapability(
         name="kinetic-benchmarks",
         summary="KMC and HTST checked against exact first-passage, branching, Arrhenius values.",
-        entry_points=(
-            "matsim_agents.workflows.radiation_kinetics_qualification:run_kinetic_benchmarks",
-        ),
-        tests=("tests/test_radiation_kinetics_qualification.py",),
+        entry_points=("matsim_agents.kinetics.benchmarks:run_kinetic_benchmarks",),
+        tests=("tests/test_kinetics_benchmarks.py",),
         caveats="Synthetic networks; says nothing about attempt frequencies or real materials.",
     ),
     RadiationCapability(
         name="scalability-reproducibility",
         summary="Toy KMC cost scaling, bitwise seeded reproducibility, environment record.",
         entry_points=(
-            "matsim_agents.workflows.radiation_scalability:measure_scaling",
-            "matsim_agents.workflows.radiation_scalability:check_reproducibility",
-            "matsim_agents.workflows.radiation_scalability:environment_record",
+            "matsim_agents.workflows.scalability:measure_scaling",
+            "matsim_agents.workflows.scalability:check_reproducibility",
+            "matsim_agents.workflows.scalability:environment_record",
         ),
-        tests=("tests/test_radiation_scalability.py",),
+        tests=("tests/test_scalability.py",),
         caveats="CPU toy chain only; the repository has no lock file, so nothing is pinned.",
     ),
     RadiationCapability(

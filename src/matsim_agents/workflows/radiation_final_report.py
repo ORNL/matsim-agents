@@ -24,11 +24,11 @@ from typing import Any
 
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.execution.slurm_jobs import JobEntry, summarize
-from matsim_agents.workflows.radiation_materials import MaterialReadiness
-from matsim_agents.workflows.radiation_qualification import (
+from matsim_agents.workflows.qualification_matrix import (
     QualificationMatrix,
     QualificationStatus,
 )
+from matsim_agents.workflows.radiation_materials import MaterialReadiness
 
 FINAL_REPORT_SCHEMA = "matsim-radiation-final-report/1"
 STANDING_STATEMENTS = (

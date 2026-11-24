@@ -2,6 +2,14 @@
 
 import pytest
 
+from matsim_agents.workflows.qualification_matrix import (
+    QualificationError,
+    QualificationMatrix,
+    QualificationStatus,
+    demote,
+    promote,
+    record_evidence,
+)
 from matsim_agents.workflows.radiation_materials import (
     ATOMIC_WEIGHT,
     MaterialError,
@@ -11,14 +19,6 @@ from matsim_agents.workflows.radiation_materials import (
     default_material_specs,
     to_atomic_fractions,
     to_weight_fractions,
-)
-from matsim_agents.workflows.radiation_qualification import (
-    QualificationError,
-    QualificationMatrix,
-    QualificationStatus,
-    demote,
-    promote,
-    record_evidence,
 )
 
 

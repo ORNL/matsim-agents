@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from matsim_agents.workflows.radiation_neb_qualification import (
+from matsim_agents.workflows.neb_convergence import (
     NebInputs,
     check_barrier_series,
     check_neb_run,

@@ -1,7 +1,7 @@
 """Convergence checks that gate DFT/NEB qualification.
 
 Pure functions over numbers a caller already has. They run no DFT and promote nothing: a
-passing check is an input to ``radiation_qualification``, which still needs a hashed artifact.
+passing check is an input to ``qualification_matrix``, which still needs a hashed artifact.
 
 Rules:
 

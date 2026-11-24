@@ -11,7 +11,7 @@ Software verification only; no DFT, MLIP, NEB, VASP or HPC execution. Do not cla
   (`radiation-damage: <what> (B<n>.<m>)`), push, continue. On push failure keep the commit and record `PUSH_PENDING`.
 - Blocked after two corrections: record the blocker, mark `BLOCKED`, skip dependents, continue independent tasks.
 - Never disable, weaken or delete a test to get a pass. Never fabricate results.
-- Reuse `discovery/defects.py`, `discovery/radiation_defects.py`, `backends/dft/qe.py`, `qe_relax.py`, `process.py`,
+- Reuse `discovery/defects.py`, `discovery/point_defects.py`, `discovery/bcc_defects.py`, `backends/dft/qe.py`, `qe_relax.py`, `process.py`,
   existing ledgers, artifact directories and CLI conventions. No second DFT execution framework.
 - New modules (where appropriate): `discovery/neb_paths.py`, `backends/dft/qe_neb.py`.
 - Final report: table `Task | Status | Tests | Commit`, final branch and hash, counts (passed, failed, skipped, not run),

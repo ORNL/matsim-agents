@@ -4,6 +4,12 @@ import json
 
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.execution.slurm_jobs import JobEntry, JobSpec
+from matsim_agents.workflows.qualification_matrix import (
+    QualificationMatrix,
+    QualificationStatus,
+    promote,
+    record_evidence,
+)
 from matsim_agents.workflows.radiation_damage import run_radiation_damage
 from matsim_agents.workflows.radiation_final_report import (
     FINAL_REPORT_SCHEMA,
@@ -13,12 +19,6 @@ from matsim_agents.workflows.radiation_final_report import (
     write_final_report,
 )
 from matsim_agents.workflows.radiation_materials import assess_all
-from matsim_agents.workflows.radiation_qualification import (
-    QualificationMatrix,
-    QualificationStatus,
-    promote,
-    record_evidence,
-)
 from tests.test_neb_workflow import _fake
 from tests.test_radiation_damage_workflow import _config
 
