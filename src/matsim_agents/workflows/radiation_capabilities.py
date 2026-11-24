@@ -157,6 +157,23 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         tests=("tests/test_kinetics_kmc.py", "tests/test_kinetics_ensemble.py"),
         caveats="Outcomes are conditional on the supplied network.",
     ),
+    RadiationCapability(
+        name="mlip-validation-protocol",
+        summary="Held-out MLIP error metrics with bootstrap CIs and evidence-gated verdicts.",
+        entry_points=("matsim_agents.workflows.radiation_mlip_validation:evaluate_validation",),
+        tests=("tests/test_radiation_mlip_validation.py",),
+        caveats="Synthetic arrays only so far; no real MLIP has been validated.",
+    ),
+    RadiationCapability(
+        name="neb-qualification-checks",
+        summary="Cutoff and k-point convergence, endpoint, climbing-image and saddle checks.",
+        entry_points=(
+            "matsim_agents.workflows.radiation_neb_qualification:check_barrier_series",
+            "matsim_agents.workflows.radiation_neb_qualification:check_neb_run",
+        ),
+        tests=("tests/test_radiation_neb_qualification.py",),
+        caveats="Checks numbers only; no DFT has been run and nothing is promoted.",
+    ),
 )
 
 
