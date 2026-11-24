@@ -64,13 +64,18 @@ register_mechanism("frenkel_recombination", absorbing_kind="recombined")
 
 
 def state_from_endpoint(endpoint: NebEndpoint, *, absorbing_kind: str | None = None) -> DefectState:
-    """Identity comes from the parent context and structure id, never from a fingerprint match."""
+    """Identity is the defect configuration, shared by every endpoint role of the same state.
+
+    Endpoints without a configuration fall back to their geometry fingerprint; the path-specific
+    ``structure_id`` label is deliberately excluded so consecutive hops connect.
+    """
+    label = "" if endpoint.defect_config_id is not None else endpoint.geometry_fingerprint
     return DefectState(
         state_id=state_id(
             endpoint.parent_id,
             endpoint.parent_ordering_id,
             endpoint.defect_config_id,
-            endpoint.structure_id,
+            label,
         ),
         config_id=endpoint.defect_config_id,
         parent_id=endpoint.parent_id,
@@ -81,11 +86,7 @@ def state_from_endpoint(endpoint: NebEndpoint, *, absorbing_kind: str | None = N
         species_counts=dict(sorted(Counter(endpoint.species).items())),
         absorbing=absorbing_kind is not None,
         absorbing_kind=absorbing_kind,
-        provenance={
-            "structure_id": endpoint.structure_id,
-            "geometry_fingerprint": endpoint.geometry_fingerprint,
-            "endpoint_status": endpoint.status,
-        },
+        provenance={"geometry_fingerprint": endpoint.geometry_fingerprint},
     )
 
 

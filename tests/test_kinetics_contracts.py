@@ -18,6 +18,7 @@ def _evidence(**over):
         "forward_barrier_eV": 0.8,
         "reverse_barrier_eV": 0.9,
         "endpoints_qualified": True,
+        "climbing_image_used": True,
         "n_images": 6,
         "synthetic": True,
     }
@@ -105,3 +106,9 @@ def test_rate_record_validates_temperature_and_rate():
             rate_per_s=float("inf"),
             qualification="candidate",
         )
+
+
+@pytest.mark.parametrize("state", ["failed", "incomplete"])
+def test_unqualified_event_rejects_failed_or_incomplete_evidence(state):
+    with pytest.raises(ValidationError, match="no barrier evidence"):
+        _event(evidence=_evidence(neb_state=state), qualification="unqualified")

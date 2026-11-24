@@ -116,7 +116,7 @@ def attach_neb_result(
         )
 
     updated: list[TransitionEvent] = []
-    for direction, event in events.items():
+    for direction, event in sorted(events.items(), key=lambda kv: kv[0] != "forward"):
         pair = (forward, reverse) if direction == "forward" else (reverse, forward)
         new = event.model_copy(
             update={

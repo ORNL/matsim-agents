@@ -91,13 +91,13 @@ def run_kmc(
         if current.absorbing:
             termination = "absorbed"
             break
+        if n >= max_events:
+            termination = "max_events"
+            break
         rows = channels(state)
         total = math.fsum(r for _, _, r in rows)
         if total <= 0.0:
             termination = "stuck"
-            break
-        if n >= max_events:
-            termination = "max_events"
             break
         dt = -math.log1p(-rng.random()) / total
         if now + dt > horizon_s:

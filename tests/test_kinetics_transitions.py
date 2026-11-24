@@ -149,3 +149,17 @@ def test_unregistered_mechanism_is_rejected_when_building_the_graph():
     with pytest.raises(ValueError, match="unregistered mechanism"):
         add_candidate_transition(net, _as("teleport"))
     assert not net.states
+
+
+def test_consecutive_vacancy_hops_share_the_intermediate_state():
+    first = _hop()
+    initial, config = generate_vacancy(PARENT, "p", 0)
+    second_initial = first.final
+    second_config = first.final_config
+    mover = vacancy_neighbors(second_initial, second_config, A)[0]
+    second = generate_vacancy_hop(second_initial, second_config, PARENT, mover, A)
+    net = _network()
+    (f1, _) = add_candidate_transition(net, first.transition)
+    (f2, _) = add_candidate_transition(net, second.transition)
+    assert f1.target_id == f2.source_id
+    assert net.outgoing(f1.target_id)

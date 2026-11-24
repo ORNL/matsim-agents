@@ -95,6 +95,8 @@ class TransitionEvent(BaseModel):
             raise ValueError("a candidate has no evidence; use 'unqualified' or 'qualified'")
         if self.qualification != "candidate" and self.evidence is None:
             raise ValueError(f"a {self.qualification} transition needs barrier evidence")
+        if self.evidence is not None and self.evidence.neb_state in ("failed", "incomplete"):
+            raise ValueError(f"a {self.evidence.neb_state} NEB run provides no barrier evidence")
         if self.qualification == "qualified":
             ev = self.evidence
             if ev is None or ev.neb_state != "qualified" or not ev.endpoints_qualified:

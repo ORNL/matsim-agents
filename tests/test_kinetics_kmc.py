@@ -129,3 +129,14 @@ def test_qualified_policy_refuses_unqualified_network_and_bad_arguments():
         _run(net, a, horizon_s=0.0)
     with pytest.raises(ValueError):
         _run(net, a, max_events=0)
+
+
+def test_event_cap_is_checked_before_rates_of_the_next_state():
+    net = TransitionNetwork(PROV)
+    a, b, c = _state("a"), _state("b"), _state("c")
+    for s in (a, b, c):
+        net.add_state(s)
+    _edge(net, a, b, 1.0)
+    net.add_transition(_event(b, c, atoms=(4,), mechanism="vacancy_hop", qualification="candidate"))
+    traj = _run(net, a, max_events=1)
+    assert traj.termination == "max_events" and traj.n_events == 1

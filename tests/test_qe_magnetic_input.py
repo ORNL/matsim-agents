@@ -157,3 +157,11 @@ def test_template_with_magnetic_keys_is_rejected(tmp_path):
     body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40\n  nspin = 2")
     with pytest.raises(ValueError, match="controls"):
         _render(tmp_path, atoms, cfg, body)
+
+
+def test_template_with_inline_ntyp_is_updated(tmp_path):
+    atoms = _atoms()
+    body = TEMPLATE.replace("  nat = {nat}\n  ntyp = {ntyp}\n", "  nat = {nat}, ntyp = 1\n")
+    text = _render(tmp_path, atoms, _polar(gen.bcc_afm(atoms, "s", A, {"Fe": 2.0})), body)
+    system = text.split("&SYSTEM")[1].split("&ELECTRONS")[0]
+    assert re.search(r"ntyp\s*=\s*2\b", system) and not re.search(r"ntyp\s*=\s*1\b", system)

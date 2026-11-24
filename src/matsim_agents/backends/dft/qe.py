@@ -300,7 +300,7 @@ def _write_pw_from_template(
         reject_contradictory_text(text, str(template_path))
         mtypes = build_magnetic_types(atoms, magnetic_config, pseudopotentials)
         ntyp = mtypes.ntyp
-        text = re.sub(r"(?im)^(\s*ntyp\s*=\s*)\d+", rf"\g<1>{ntyp}", text)
+        text = re.sub(r"(?i)(?<![\w(])(ntyp\s*=\s*)\d+", rf"\g<1>{ntyp}", text)
         text = inject_system_entries(text, mtypes.system_entries(), str(template_path))
 
     fmt_kwargs = dict(
