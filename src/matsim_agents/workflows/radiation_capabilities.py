@@ -121,6 +121,13 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         caveats="Kinetics stay exploratory; a missing barrier blocks the stage.",
     ),
     RadiationCapability(
+        name="hypothesis-revision",
+        summary="Rule-based ledger hypothesis revisions with budgets and optional LLM text.",
+        entry_points=("matsim_agents.workflows.radiation_hypothesis:revise_hypothesis",),
+        tests=("tests/test_radiation_hypothesis.py",),
+        caveats="Supported or contradicted is unreachable without a qualified barrier.",
+    ),
+    RadiationCapability(
         name="transition-network",
         summary="Directed transition network with NEB evidence ingestion and validation.",
         entry_points=(
