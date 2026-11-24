@@ -132,6 +132,9 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
   - Limitation: a geometric label for one structure, not evidence of stability or of DFT/MLIP qualification; tested on synthetic fixtures only.
 - [x] A3.9 Divacancy generation (`generate_divacancy`)
   - Removes two sites, chosen as an explicit `partner` or as the `variant`-th first- or second-shell neighbour (A2 neighbour lists, ordered by index). Records removed species, the minimum-image separation and the shell it falls in (0 for neither). Sites are stored in index order, so swapping the two sites gives the same configuration. Invalid or ambiguous requests raise `ValueError`.
+- [x] A3.10 Defect-energy interface (`radiation_defect_energies.radiation_defect_formation_energy`)
+  - Thin wrapper over the existing `discovery.defects.defect_formation_energies` (E_f = E_defect - E_host - sum dn_i mu_i). Chemical potentials are supplied explicitly per vertex. Rejected with `ValueError`: unconverged or unknown relaxation, `unresolved` or `recombined_restored` outcomes, an outcome from another configuration or structure, differing host/defect methods, missing or non-finite potentials or energies, and a composition that does not match the configuration. Reports min/max over vertices and whether the defect conserves stoichiometry (vertex-independent).
+  - Limitation: tested with synthetic numeric fixtures only. Neutral defects only; magnetism is unhandled (`defects` limitation texts are attached). The numbers carry no DFT/MLIP qualification and no hull-derived reference is computed here.
 
 ## Progress log
 
@@ -163,4 +166,5 @@ All generators live in `src/matsim_agents/discovery/radiation_defects.py`, with 
 - A3.7b: `identify_defect_sites`. `tests/test_radiation_defect_mapping.py` 13 passed (A3.7a and A3.7b), 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - A3.8: `radiation_defect_classification.py`. `tests/test_radiation_defect_classification.py` 11 passed, 0 failed, 0 skipped. Ruff check and format pass. One debugging correction round (expected composition for relocated interstitials; split defects reported as unresolved).
 - A3.9: `generate_divacancy`. `tests/test_radiation_defects.py` 99 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections beyond one test-helper fix before the first run.
+- A3.10: `radiation_defect_energies.py`. `tests/test_radiation_defect_energies.py` 7 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
