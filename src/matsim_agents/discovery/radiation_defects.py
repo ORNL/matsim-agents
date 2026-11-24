@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from itertools import permutations, product
 from types import MappingProxyType
 from typing import Annotated, Literal
 
@@ -411,13 +412,148 @@ def generate_dumbbell_interstitial(
     return defective, config
 
 
+# Offsets from a BCC lattice atom in units of the lattice parameter along the cell vectors.
+_OCTAHEDRAL_OFFSETS = tuple(
+    sorted(
+        tuple(sign * 0.5 if k == axis else 0.0 for k in range(3))
+        for axis in range(3)
+        for sign in (-1, 1)
+    )
+)
+_TETRAHEDRAL_OFFSETS = tuple(
+    sorted(
+        {
+            perm
+            for signs in product((-1, 1), repeat=2)
+            for perm in permutations((signs[0] * 0.5, signs[1] * 0.25, 0.0))
+        }
+    )
+)
+BCC_INTERSTITIAL_OFFSETS: Mapping[str, tuple[tuple[float, float, float], ...]] = MappingProxyType(
+    {"tetrahedral": _TETRAHEDRAL_OFFSETS, "octahedral": _OCTAHEDRAL_OFFSETS}
+)
+# Ideal distances (in lattice parameters) from the site to its nearest lattice atoms.
+_SITE_SHELLS = MappingProxyType(
+    {
+        "tetrahedral": (5**0.5 / 4,) * 4,
+        "octahedral": (0.5, 0.5, *(0.5**0.5,) * 4),
+    }
+)
+_SHELL_TOL = 0.02
+
+
+def generate_bcc_interstitial(
+    parent: Atoms,
+    parent_id: str,
+    site: int,
+    species: str,
+    site_type: str,
+    lattice_parameter: float,
+    *,
+    variant: int = 0,
+    min_distance: float | None = None,
+    parent_ordering_id: str | None = None,
+) -> tuple[Atoms, DefectConfiguration]:
+    """Insert one ``species`` atom at a BCC tetrahedral or octahedral site next to ``site``.
+
+    The ideal position is the lattice atom ``site`` plus ``BCC_INTERSTITIAL_OFFSETS[site_type]
+    [variant]`` (crystallographic offsets scaled by ``lattice_parameter`` along the cell vectors,
+    wrapped periodically). Existing atoms are untouched and the new atom gets
+    ``atom_id = len(parent)``. The position must have the ideal nearest-neighbour shell of the
+    site type in the parent, otherwise the parent is not BCC there and an error is raised. Pairs
+    closer than ``min_distance`` (minimum image, default ``0.35 * lattice_parameter``) are
+    rejected. Nothing is relaxed and stability is not implied.
+    """
+    if not parent_id:
+        raise ValueError("parent_id must be a nonempty string")
+    if isinstance(site, bool) or not isinstance(site, int | np.integer):
+        raise ValueError(f"site must be an integer index, got {site!r}")
+    site = int(site)
+    if not 0 <= site < len(parent):
+        raise ValueError(f"site {site} is outside the {len(parent)}-atom parent")
+    if site_type not in BCC_INTERSTITIAL_OFFSETS:
+        raise ValueError(
+            f"unsupported site_type {site_type!r}; use one of {sorted(BCC_INTERSTITIAL_OFFSETS)}"
+        )
+    offsets = BCC_INTERSTITIAL_OFFSETS[site_type]
+    if isinstance(variant, bool) or not isinstance(variant, int | np.integer):
+        raise ValueError(f"variant must be an integer, got {variant!r}")
+    if not 0 <= variant < len(offsets):
+        raise ValueError(f"variant {variant} is outside 0..{len(offsets) - 1} for {site_type}")
+    if not (np.isfinite(lattice_parameter) and lattice_parameter > 0):
+        raise ValueError(f"lattice_parameter must be positive and finite, got {lattice_parameter}")
+    min_distance = 0.35 * lattice_parameter if min_distance is None else float(min_distance)
+    if not (np.isfinite(min_distance) and min_distance > 0):
+        raise ValueError(f"min_distance must be positive and finite, got {min_distance}")
+    if not parent.pbc.all():
+        raise ValueError("parent must be periodic in all directions")
+
+    spec = DefectSpec(
+        defect_type="interstitial",
+        site_indices=(site,),
+        species=(species,),
+        parameters={
+            "site_type": site_type,
+            "variant": int(variant),
+            "min_distance": min_distance,
+            "lattice_parameter": float(lattice_parameter),
+        },
+    )
+    axes = _cubic_axes(parent, lattice_parameter)
+    offset = np.array(offsets[variant]) * lattice_parameter @ axes
+    (position,) = wrap_positions((parent.positions[site] + offset)[None], parent.cell, pbc=True)
+
+    _, dist = get_distances(position, parent.positions, cell=parent.cell, pbc=True)
+    shell = np.array(_SITE_SHELLS[site_type]) * lattice_parameter
+    nearest = np.sort(dist[0])[: len(shell)]
+    if not np.allclose(nearest, shell, atol=_SHELL_TOL * lattice_parameter):
+        raise ValueError(
+            f"parent is not BCC with a={lattice_parameter} around site {site}: the {site_type} "
+            f"position has nearest-atom distances {np.round(nearest, 3).tolist()} A, "
+            f"expected {np.round(shell, 3).tolist()} A"
+        )
+    if dist.min() < min_distance:
+        raise ValueError(
+            f"severe overlap: inserted atom is {dist.min():.3f} A from an atom "
+            f"(minimum {min_distance:.3f} A)"
+        )
+
+    defective = parent.copy()
+    defective.set_array("atom_id", np.arange(len(parent), dtype=np.int64))
+    defective.extend(Atoms(species, positions=[position]))
+    defective.arrays["atom_id"][-1] = len(parent)
+
+    config = DefectConfiguration(
+        config_id=make_defect_config_id(parent_id, spec),
+        parent_id=parent_id,
+        parent_ordering_id=parent_ordering_id or occupation_fingerprint(parent),
+        spec=spec,
+        n_parent_atoms=len(parent),
+        n_atoms=len(defective),
+        cell=tuple(tuple(float(x) for x in row) for row in parent.cell.array),
+        sites=(
+            DefectSite(
+                role="interstitial",
+                species=species,
+                atom_id=len(parent),
+                position=tuple(float(x) for x in position),
+            ),
+        ),
+        geometry_fingerprint=geometry_fingerprint(defective),
+        validation_status="valid",
+    )
+    return defective, config
+
+
 __all__ = [
+    "BCC_INTERSTITIAL_OFFSETS",
     "DUMBBELL_ORIENTATIONS",
     "SITE_COUNTS",
     "DefectConfiguration",
     "DefectOutcome",
     "DefectSite",
     "DefectSpec",
+    "generate_bcc_interstitial",
     "generate_dumbbell_interstitial",
     "generate_vacancy",
     "geometry_fingerprint",

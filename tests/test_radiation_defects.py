@@ -12,11 +12,13 @@ from pydantic import ValidationError
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
 from matsim_agents.discovery.radiation_defects import (
+    BCC_INTERSTITIAL_OFFSETS,
     DUMBBELL_ORIENTATIONS,
     DefectConfiguration,
     DefectOutcome,
     DefectSite,
     DefectSpec,
+    generate_bcc_interstitial,
     generate_dumbbell_interstitial,
     generate_vacancy,
     make_defect_config_id,
@@ -306,3 +308,114 @@ def test_invalid_or_overlapping_dumbbells_are_rejected(kwargs):
             arguments.pop("lattice_parameter"),
             **arguments,
         )
+
+
+# --- A3.4a tetrahedral and octahedral interstitials ---
+
+
+def _site_shell(atoms, position, n):
+    _, dist = get_distances(position, atoms.positions[:-1], cell=atoms.cell, pbc=True)
+    return np.sort(dist[0])[:n] / A
+
+
+def test_tetrahedral_candidate_has_the_ideal_bcc_position_and_shell():
+    parent = generate_alloy(SMALL)
+    defective, config = generate_bcc_interstitial(parent, "small-1", 0, "Ta", "tetrahedral", A)
+    # Variant 0 is the offset (-1/2, -1/4, 0) a from the origin atom, wrapped into the 2a cell.
+    assert BCC_INTERSTITIAL_OFFSETS["tetrahedral"][0] == (-0.5, -0.25, 0.0)
+    assert np.allclose(defective.positions[-1], np.array([1.5, 1.75, 0.0]) * A)
+    assert np.allclose(_site_shell(defective, defective.positions[-1], 4), 5**0.5 / 4)
+    assert config.spec.parameters["site_type"] == "tetrahedral"
+    assert config.sites[0].position == tuple(defective.positions[-1])
+
+
+def test_octahedral_candidate_has_the_ideal_bcc_position_and_shell():
+    parent = generate_alloy(SMALL)
+    defective, config = generate_bcc_interstitial(parent, "small-1", 0, "W", "octahedral", A)
+    assert BCC_INTERSTITIAL_OFFSETS["octahedral"][0] == (-0.5, 0.0, 0.0)
+    assert np.allclose(defective.positions[-1], np.array([1.5, 0.0, 0.0]) * A)
+    assert np.allclose(
+        _site_shell(defective, defective.positions[-1], 6), [0.5, 0.5, *[0.5**0.5] * 4]
+    )
+
+
+@pytest.mark.parametrize("site_type", ["tetrahedral", "octahedral"])
+@pytest.mark.parametrize("rotated", [False, True], ids=["axis-aligned", "rotated-cell"])
+def test_every_variant_is_a_valid_site_and_parent_atoms_are_untouched(site_type, rotated):
+    parent = generate_alloy(SMALL)
+    if rotated:
+        parent.rotate(30, "z", rotate_cell=True)
+    n = len(parent)
+    for variant in range(len(BCC_INTERSTITIAL_OFFSETS[site_type])):
+        defective, config = generate_bcc_interstitial(
+            parent, "small-1", 7, "V", site_type, A, variant=variant
+        )
+        assert len(defective) == n + 1 == config.n_atoms
+        assert defective.get_chemical_symbols() == [*parent.get_chemical_symbols(), "V"]
+        assert np.array_equal(defective.positions[:n], parent.positions)
+        assert defective.get_array("atom_id").tolist() == list(range(n + 1))
+        inserted = config.sites[0]
+        assert (inserted.role, inserted.atom_id, inserted.lattice_site) == ("interstitial", n, None)
+        assert config.n_parent_atoms == n and config.parent_id == "small-1"
+        assert DefectConfiguration.model_validate_json(config.model_dump_json()) == config
+    assert (
+        generate_bcc_interstitial(parent, "small-1", 7, "V", site_type, A, variant=0)[1]
+        == (generate_bcc_interstitial(parent, "small-1", 7, "V", site_type, A, variant=0)[1])
+    )
+
+
+def test_interstitial_near_the_cell_boundary_wraps_into_the_cell():
+    parent = generate_alloy(SMALL)
+    defective, _ = generate_bcc_interstitial(parent, "small-1", 0, "W", "octahedral", A, variant=0)
+    scaled = defective.get_scaled_positions(wrap=False)[-1]
+    assert ((scaled >= 0) & (scaled < 1)).all()
+    assert np.allclose(defective.positions[-1], [1.5 * A, 0, 0])
+    shell = _site_shell(defective, defective.positions[-1], 6)
+    assert np.allclose(shell, [0.5, 0.5, *[0.5**0.5] * 4])
+
+
+def test_a_1024_atom_parent_gives_a_1025_atom_candidate():
+    parent = generate_alloy(
+        AlloySpec(counts={"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}, seed=3)
+    )
+    defective, config = generate_bcc_interstitial(
+        parent, "hea-1024", 100, "W", "tetrahedral", A, variant=5
+    )
+    assert len(parent) == 1024 and len(defective) == config.n_atoms == 1025
+
+
+def test_invalid_site_type_variant_site_and_overlap_are_rejected():
+    parent = generate_alloy(SMALL)
+
+    def build(**kwargs):
+        arguments = {"site": 3, "species": "W", "site_type": "tetrahedral", "a": A} | kwargs
+        return generate_bcc_interstitial(
+            parent,
+            "small-1",
+            arguments.pop("site"),
+            arguments.pop("species"),
+            arguments.pop("site_type"),
+            arguments.pop("a"),
+            **arguments,
+        )
+
+    for bad in (
+        {"site_type": "hexahedral"},
+        {"species": "Xx"},
+        {"site": 16},
+        {"site": True},
+        {"variant": 24},
+        {"variant": -1},
+        {"min_distance": 0.0},
+        {"min_distance": 2.5},
+        {"a": 3.0},
+    ):
+        with pytest.raises(ValueError):
+            build(**bad)
+
+
+def test_a_parent_that_is_not_bcc_around_the_site_is_rejected():
+    parent = generate_alloy(SMALL)
+    parent.positions[3] += 0.5
+    with pytest.raises(ValueError, match="not BCC"):
+        generate_bcc_interstitial(parent, "small-1", 3, "W", "octahedral", A)
