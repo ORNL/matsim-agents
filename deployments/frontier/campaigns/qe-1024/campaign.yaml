@@ -23,7 +23,7 @@ defects:
   divacancy_shell: 1
 qe:
   # pslibrary 1.0.0 PBE PAW, downloaded 2026-11-24; checksums in SHA256SUMS next to the files.
-  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudo_dir: ${MATSIM_PSEUDO_DIR}
   pseudopotentials:
     W: W.pbe-spn-kjpaw_psl.1.0.0.UPF
     Ta: Ta.pbe-spn-kjpaw_psl.1.0.0.UPF

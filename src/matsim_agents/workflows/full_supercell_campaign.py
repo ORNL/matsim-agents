@@ -18,7 +18,7 @@ import numpy as np
 import yaml
 from ase import Atoms
 from ase.io import write as ase_write
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
@@ -102,6 +102,12 @@ class QEControls(BaseModel):
     conv_thr_ry: float = 1.0e-6
     mixing_beta: float = 0.2
     neb_images: StrictInt = 5
+
+    @field_validator("pseudo_dir")
+    @classmethod
+    def _expand_env(cls, value: str) -> str:
+        # An unset variable stays literal, so the missing-pseudopotential gate blocks the inputs.
+        return os.path.expandvars(value)
 
 
 class SlurmBudget(BaseModel):

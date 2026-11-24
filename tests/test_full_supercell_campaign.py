@@ -124,7 +124,13 @@ def test_full_size_inputs_and_manifest(cfg, tmp_path):
     pseudo.mkdir()
     for el in cfg.parent_supercell.composition:
         (pseudo / f"{el}.pbe.UPF").write_text("dummy, input-writer test only\n")
-    ready = cfg.model_copy(update={"qe": cfg.qe.model_copy(update={"pseudo_dir": str(pseudo)})})
+    qe = cfg.qe.model_copy(
+        update={
+            "pseudo_dir": str(pseudo),
+            "pseudopotentials": {el: f"{el}.pbe.UPF" for el in cfg.parent_supercell.composition},
+        }
+    )
+    ready = cfg.model_copy(update={"qe": qe})
     entries = fsc.prepare_campaign(ready, tmp_path / "run", git_revision="abc")
     by_id = {e["calc_id"]: e for e in entries}
     assert by_id["pristine_nonmagnetic"]["qe_atoms"] == 1024
