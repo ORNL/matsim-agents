@@ -194,6 +194,13 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         tests=("tests/test_radiation_scalability.py",),
         caveats="CPU toy chain only; the repository has no lock file, so nothing is pinned.",
     ),
+    RadiationCapability(
+        name="material-readiness",
+        summary="Per-material composition, wt% to at% conversion, scope limits, missing evidence.",
+        entry_points=("matsim_agents.workflows.radiation_materials:assess_all",),
+        tests=("tests/test_radiation_materials.py",),
+        caveats="Reads status from the matrix; W-rich, RAFM and ODS compositions need a source.",
+    ),
 )
 
 
