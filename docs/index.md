@@ -23,6 +23,7 @@ the framework.
 - [Choosing a scientific workflow](guide/workflows.md)
 - [Run a workflow or E3 campaign](workflows/run-campaigns.md)
 - [Scientific workflow contracts](scientific-workflows.md)
+- [Hierarchical transfer campaign (W-Ta-Cr-V-Hf-Mo)](hierarchical-transfer-campaign.md)
 - [Characterization contracts](characterization.md)
 - [Scientific hypothesis debate](scientific-debate.md)
 - [Hypothesis-driven discovery chat](guide/discovery-chat.md)
