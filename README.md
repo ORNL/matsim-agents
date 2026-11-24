@@ -279,6 +279,7 @@ matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypot
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
 matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
 matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
+matsim-agents radiation-damage run|status|report|capabilities ...  # vacancy-hop recovery, exploratory and unqualified; dry run unless --dispatch
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
