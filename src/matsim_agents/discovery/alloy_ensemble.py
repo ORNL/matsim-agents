@@ -535,6 +535,51 @@ def _cubic_operations() -> np.ndarray:
     return np.stack(ops)
 
 
+def _align_cubic_axes(config_id: str, atoms: Atoms, lattice_parameter: float) -> Atoms:
+    """Copy of ``atoms`` rigidly rotated so its cubic axes lie along x, y and z.
+
+    The axes are read from the second-shell vectors (length ``a``, along the cube edges) of atom 0.
+    """
+    from ase.neighborlist import neighbor_list
+
+    first, vectors = neighbor_list("iD", atoms, 1.05 * lattice_parameter)
+    vectors = vectors[first == 0]
+    edges = vectors[np.isclose(np.linalg.norm(vectors, axis=1), lattice_parameter, rtol=1e-3)]
+    if len(edges) != 6:
+        raise ValueError(f"{config_id} is not a periodic BCC supercell with a={lattice_parameter}")
+    u = edges[0] / lattice_parameter
+    v = next((e / lattice_parameter for e in edges if abs(e @ u) < 1e-3 * lattice_parameter), None)
+    if v is None:
+        raise ValueError(f"{config_id} is not a periodic BCC supercell with a={lattice_parameter}")
+    rotation = np.array([u, v, np.cross(u, v)])
+    aligned = atoms.copy()
+    aligned.set_cell(atoms.cell.array @ rotation.T, scale_atoms=False)
+    aligned.positions = atoms.positions @ rotation.T
+    return aligned
+
+
+_SHELL_OFFSETS = (
+    np.array(list(itertools.product((1, -1), repeat=3)), dtype=np.int64),
+    np.array([s * row for row in np.eye(3, dtype=np.int64) for s in (2, -2)]),
+)
+
+
+def _environment_signature(site: _PeriodicSites) -> bytes:
+    """Multiset of (species, first-shell and second-shell neighbour counts) over all sites.
+
+    Invariant under every translation and cubic point operation, so unequal signatures rule out
+    equivalence; equal signatures only nominate a pair for the exact comparison.
+    """
+    species, kind = np.unique(site.numbers, return_inverse=True)
+    columns = [kind[:, None]]
+    for offsets in _SHELL_OFFSETS:
+        keys = ((site.grid[:, None] + offsets[None]) @ site.adjugate) % site.volume
+        neighbours = kind[site.order[np.searchsorted(site.codes, _encode(keys, site.volume))]]
+        columns.append((neighbours[..., None] == np.arange(len(species))).sum(axis=1))
+    rows, counts = np.unique(np.hstack(columns), axis=0, return_counts=True)
+    return species.tobytes() + rows.astype(np.int32).tobytes() + counts.astype(np.int32).tobytes()
+
+
 def _maps_onto(a: _PeriodicSites, b: _PeriodicSites) -> bool:
     """True if some cubic operation plus lattice translation carries crystal ``a`` onto ``b``."""
     shifts = b.grid @ b.adjugate
@@ -555,29 +600,32 @@ def find_cross_cell_equivalents(
 ) -> CrossCellDeduplication:
     """Group decorated BCC crystals that are the same infinite crystal, whatever cell describes it.
 
-    Each structure may use any integer BCC supercell (non-orthogonal included), any site order and
-    any origin, but its cubic axes must be aligned with the Cartesian axes. Two crystals are
-    equivalent if a cubic point operation and a translation map one lattice and occupation onto
-    the other. Pairs with different site counts or compositions are never compared; each other
-    pair costs one comparison of at most ``48 * n_sites**2`` lookups. When ``max_comparisons`` is
-    reached the remaining structures are kept as unique and listed in ``unchecked``.
+    Each structure may use any integer BCC supercell (non-orthogonal included), any site order,
+    any origin and any rigid orientation. Two crystals are equivalent if a cubic point operation
+    and a translation map one lattice and occupation onto the other.
+
+    Every structure gets a symmetry-invariant local-environment signature in O(n_sites) and is
+    compared only with representatives sharing it, so distinct configurations cost no pairwise
+    work. Each remaining comparison is exact and costs at most ``48 * n_sites**2`` lookups. When
+    ``max_comparisons`` is reached the remaining structures are kept as unique and listed in
+    ``unchecked``.
     """
     if max_comparisons < 0:
         raise ValueError("max_comparisons must be nonnegative")
-    sites = {cid: _bcc_sites(cid, atoms, lattice_parameter) for cid, atoms in structures.items()}
+    sites = {
+        cid: _bcc_sites(cid, _align_cubic_axes(cid, atoms, lattice_parameter), lattice_parameter)
+        for cid, atoms in structures.items()
+    }
+    buckets: dict[bytes, list[str]] = defaultdict(list)
     representatives: list[str] = []
     equivalent_to: dict[str, str] = {}
     unchecked: list[str] = []
     n_comparisons = 0
     for cid, site in sites.items():
-        composition = np.sort(site.numbers)
+        bucket = buckets[_environment_signature(site)]
         match, skipped = None, False
-        for rep in representatives:
+        for rep in bucket:
             other = sites[rep]
-            if other.numbers.size != site.numbers.size or not np.array_equal(
-                np.sort(other.numbers), composition
-            ):
-                continue
             if n_comparisons >= max_comparisons:
                 skipped = True
                 break
@@ -589,6 +637,7 @@ def find_cross_cell_equivalents(
             equivalent_to[cid] = match
         else:
             representatives.append(cid)
+            bucket.append(cid)
             if skipped:
                 unchecked.append(cid)
     return CrossCellDeduplication(

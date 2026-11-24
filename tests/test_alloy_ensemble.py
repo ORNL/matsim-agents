@@ -372,10 +372,36 @@ def test_cross_cell_skips_different_compositions_and_respects_budget(random_ense
     changed.numbers[0] = 74 if changed.numbers[0] != 74 else 42
     result = find_cross_cell_equivalents({"base": base, "changed": changed}, A)
     assert result.unique == ("base", "changed") and result.n_comparisons == 0
-    limited = find_cross_cell_equivalents({"base": base, "other": other}, A, max_comparisons=0)
-    assert limited.status == "incomplete" and limited.unchecked == ("other",)
+    copy = _recast(base, cell_rows=np.eye(3, dtype=int), shift=(1, 1, 1))
+    limited = find_cross_cell_equivalents({"base": base, "copy": copy}, A, max_comparisons=0)
+    assert limited.status == "incomplete" and limited.unchecked == ("copy",)
     with pytest.raises(ValueError, match="nonnegative"):
         find_cross_cell_equivalents({"base": base}, A, max_comparisons=-1)
+
+
+def test_cross_cell_recognises_arbitrarily_oriented_crystals(random_ensemble):
+    base = random_ensemble.structures[0]
+    tilted = _recast(base, cell_rows=[[1, 0, 0], [1, 1, 0], [0, 1, 1]], shift=(1, 1, 1))
+    tilted.rotate(37.0, (1, 2, 3), rotate_cell=True)
+    result = find_cross_cell_equivalents({"base": base, "tilted": tilted}, A)
+    assert result.equivalent_to == {"tilted": "base"} and result.status == "complete"
+
+
+def test_cross_cell_compares_only_configurations_with_equal_environments(random_ensemble):
+    structures = {
+        r.config_id: s
+        for r, s in zip(random_ensemble.records, random_ensemble.structures, strict=True)
+    }
+    distinct = find_cross_cell_equivalents(structures, A, max_comparisons=0)
+    assert distinct.status == "complete" and distinct.n_comparisons == 0
+    copies = {
+        f"copy-{k}": _recast(s, cell_rows=np.eye(3, dtype=int), shift=(k, 0, 0))
+        for k, s in enumerate(structures.values())
+    }
+    result = find_cross_cell_equivalents(structures | copies, A)
+    assert result.n_comparisons == len(copies)
+    assert result.unique == tuple(structures)
+    assert result.equivalent_to == dict(zip(copies, structures, strict=True))
 
 
 def test_cross_cell_rejects_structures_off_the_bcc_lattice(random_ensemble):
