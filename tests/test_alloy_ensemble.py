@@ -272,6 +272,79 @@ def test_symmetry_does_not_merge_different_occupations(random_ensemble):
     )
 
 
+CUBIC = AlloySpec(counts={"Mo": 8, "Ta": 4, "W": 4}, repeats=(2, 2, 2), seed=0)
+
+
+def _cubic_copies(transforms, seed=21):
+    """First configuration of a cubic-cell ensemble mapped by grid transforms, plus the original."""
+    base = generate_alloy_ensemble(CUBIC, n_configurations=2, mode="random", seed=seed)
+    grid = np.rint(base.structures[0].positions / (CUBIC.lattice_parameter / 2)).astype(int)
+    lookup = {tuple(g): s for s, g in enumerate(grid)}
+    structures = [base.structures[0]]
+    for transform in transforms:
+        copy = base.structures[0].copy()
+        copy.numbers = base.structures[0].numbers[[lookup[tuple(transform(g) % 4)] for g in grid]]
+        structures.append(copy)
+    records = (base.records[0],) + tuple(
+        replace(base.records[0], config_id=f"c-{k}", fingerprint=occupation_fingerprint(s))
+        for k, s in enumerate(structures[1:], start=1)
+    )
+    return base, AlloyEnsemble(base.spec, records, tuple(structures), ())
+
+
+def test_a28d_rotated_configurations_are_equivalent_on_a_cubic_cell():
+    rotations = [
+        lambda g: np.array([g[0], -g[2], g[1]]),  # 90 deg about x
+        lambda g: np.array([-g[0], -g[1], g[2]]),  # 180 deg about z
+        lambda g: g[[1, 2, 0]],  # 120 deg about [111]
+    ]
+    base, ensemble = _cubic_copies(rotations)
+    result = find_symmetry_equivalents(ensemble)
+    assert result.n_point_operations == 48 and result.status == "complete"
+    assert result.unique == (base.records[0],)
+    assert result.point_group_equivalent_to == {"c-1": base.records[0].config_id} | {
+        "c-2": base.records[0].config_id,
+        "c-3": base.records[0].config_id,
+    }
+
+
+def test_a28d_reflected_configurations_are_equivalent_on_a_cubic_cell():
+    reflections = [
+        lambda g: g * np.array([1, -1, 1]),  # mirror y
+        lambda g: -g,  # inversion
+        lambda g: g[[1, 0, 2]],  # mirror x = y
+    ]
+    base, ensemble = _cubic_copies(reflections)
+    result = find_symmetry_equivalents(ensemble)
+    assert result.status == "complete" and result.unique == (base.records[0],)
+    assert set(result.point_group_equivalent_to) == {"c-1", "c-2", "c-3"}
+    assert result.exact_duplicate_of == {} and result.translation_equivalent_to == {}
+
+
+def test_a28d_chemically_distinct_configurations_are_not_merged():
+    base, _ = _cubic_copies([])
+    swapped = base.structures[0].copy()
+    mo, ta = np.flatnonzero(swapped.numbers == 42)[0], np.flatnonzero(swapped.numbers == 73)[0]
+    swapped.numbers[[mo, ta]] = swapped.numbers[[ta, mo]]
+    relabelled = base.structures[0].copy()
+    relabelled.numbers = np.where(
+        relabelled.numbers == 73, 74, np.where(relabelled.numbers == 74, 73, relabelled.numbers)
+    )
+    structures = (base.structures[0], swapped, relabelled)
+    records = tuple(
+        replace(base.records[0], config_id=f"d-{k}", fingerprint=occupation_fingerprint(s))
+        for k, s in enumerate(structures)
+    )
+    result = find_symmetry_equivalents(AlloyEnsemble(base.spec, records, structures, ()))
+    assert result.status == "complete"
+    assert [r.config_id for r in result.unique] == ["d-0", "d-1", "d-2"]
+    assert not (
+        result.exact_duplicate_of
+        or result.translation_equivalent_to
+        or result.point_group_equivalent_to
+    )
+
+
 def test_symmetry_check_reports_incomplete_when_budget_is_exhausted(random_ensemble):
     identity = lambda g: g  # noqa: E731
     mirror_x = lambda g: g * np.array([-1, 1, 1])  # noqa: E731

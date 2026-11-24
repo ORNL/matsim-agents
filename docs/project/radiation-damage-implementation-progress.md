@@ -90,6 +90,16 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - Cross-cell `find_cross_cell_equivalents`: crystals in any integer BCC supercell (non-orthogonal included), with any site order, origin or rigid orientation. Each structure is rotated onto the cubic axes from its second-shell vectors and reduced exactly with the integer adjugate of its cell. A symmetry-invariant local-environment signature (species with first- and second-shell neighbour counts per site, O(n_sites)) buckets structures, so only signature matches are compared; distinct configurations cost no pairwise work. Each comparison is exact (at most 48 n_sites^2 lookups) and bounded by `max_comparisons` (default 1,024) with the same `unchecked`/`incomplete` reporting.
   - Acceptance: translated, mirrored and rotated copies are merged while different occupations stay distinct; the 1,024-atom reference has 48 point operations and a rotated plus body-centre-shifted copy is detected in about 0.3 s; sheared, shifted, reordered and arbitrarily tilted copies are matched across cells; six distinct random configurations need zero comparisons.
   - Limitations: chemical species are never permuted; equivalence requires the same lattice parameter and an undistorted lattice (tolerance 1e-4 in units of a/2); a nominated pair still costs up to 48 n_sites^2 lookups.
+- [x] A2.8d BCC point-group symmetry equivalence
+  - No new code: `find_symmetry_equivalents` (A2.8c) already combines the cached translation permutations with cached site permutations of the 48 signed coordinate permutations, keeps only those valid for the actual supercell, keeps the first configuration as representative, preserves exact and translation classifications, and reports `status`/`unchecked` when its budget stops the check.
+  - Acceptance (`tests/test_alloy_ensemble.py`, cubic 2x2x2 Mo8Ta4W4 cell): 90-degree, 180-degree and 120-degree [111] rotations are merged (48 operations, status complete); a mirror, inversion and the x = y mirror are merged; a Mo-Ta site swap and a Ta/W relabelling stay distinct.
+  - Scope: ideal BCC supercells only; distorted geometries are not supported.
+- [x] A2.9 Phase A2 integration test
+  - File: `tests/test_phase_a2_integration.py` (2 tests).
+  - Small Mo12Ta8W12 cell: A1 generation with exact composition; first- and second-shell SRO; targeted-SRO optimization lowers the objective and the reported alpha matches re-measurement; a four-member random ensemble is deduplicated (exact and symmetry, status complete); ensemble SRO mean and sample standard deviation match an independent recomputation from re-measured alphas; the whole workflow repeats identically with the same seeds.
+  - 1,024-atom W640Ta128Cr64V96Hf32Mo64 reference: exact atom count and composition, eight first and six second neighbours per atom, two finite 6 x 6 SRO matrices, deterministic structure and SRO. No targeted optimization or symmetry search at this size.
+
+Phase A2 is complete.
 
 ## Progress log
 
@@ -111,6 +121,7 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 - A2.7: added `alloy_ensemble.py` and `tests/test_alloy_ensemble.py` (30 tests); topology reuse added to `alloys.py`. Alloy, ensemble and E3 tests together: 151 passed, 0 failed, 0 skipped. Structural tests: 59 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - A2.7 follow-up: added the pairwise occupation-overlap diagnostic and 3 tests (`tests/test_alloy_ensemble.py`: 33 passed, 0 failed, 0 skipped). Ruff check and format pass.
 - A2.8: exact duplicates (`e3841b8`), SRO statistics (`8ac8d70`), translation, point-group and cross-cell equivalence (`d287ae1`, `ed060d8`). `tests/test_alloy_ensemble.py` with the seeding-policy test: 55 passed, 0 failed, 0 skipped. Ruff check and format pass.
+- A2.8d and A2.9: three point-group tests in `tests/test_alloy_ensemble.py` and `tests/test_phase_a2_integration.py`. With the seeding-policy test: 60 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
 - CI fix: `tests/test_dependency_contract.py` expected `ase==3.26.0` after `pyproject.toml` moved to 3.29.0; the test now expects 3.29.0 (`60240c4`).
 - Not done: SQS-like and local-clustering orderings; `OrderingMode` still admits only `random`.
 - PR #77 Copilot review (A1 code): fixed in `alloys.py`. `counts` is a read-only mapping and serializes to plain JSON; `lattice_parameter` rejects non-finite values; counts must be strict integers (booleans and floats rejected). Regression tests added. `tests/test_alloys.py`: 31 passed. Ruff check and format pass.
