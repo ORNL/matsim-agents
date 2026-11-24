@@ -1,4 +1,4 @@
-"""Candidate elementary transitions from B migration pathways (C1.3).
+"""Candidate elementary transitions from NEB migration pathways.
 
 Barriers are never guessed: every event created here is a ``candidate`` without evidence.
 """

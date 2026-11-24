@@ -1,4 +1,4 @@
-"""D6: end-to-end radiation-damage flow. All energies and NEB outputs are synthetic fixtures
+"""End-to-end radiation-damage flow. All energies and NEB outputs are synthetic fixtures
 produced by the fake launcher; nothing here is a scientific result."""
 
 import json

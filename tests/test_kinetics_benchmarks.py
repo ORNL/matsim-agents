@@ -1,4 +1,4 @@
-"""E4: kinetic-model analytical benchmarks (synthetic networks)."""
+"""Kinetic-model analytical benchmarks (synthetic networks)."""
 
 import pytest
 

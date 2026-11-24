@@ -1,4 +1,4 @@
-"""C1.4: NEB evidence ingestion (synthetic results; no calculation)."""
+"""NEB evidence ingestion (synthetic results; no calculation)."""
 
 import pytest
 

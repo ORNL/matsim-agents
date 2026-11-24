@@ -1,4 +1,4 @@
-"""C1.5: network completeness report (synthetic fixtures)."""
+"""Network completeness report (synthetic fixtures)."""
 
 from matsim_agents.kinetics.evidence import attach_neb_result
 from matsim_agents.kinetics.transitions import add_candidate_transition

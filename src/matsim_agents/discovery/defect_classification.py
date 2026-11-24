@@ -1,4 +1,4 @@
-"""Outcome classification of a relaxed point-defect structure (A3.8).
+"""Outcome classification of a relaxed point-defect structure.
 
 Rule-based and purely geometric. The classification compares the defect sites found by
 :func:`~matsim_agents.discovery.defect_mapping.identify_defect_sites` with the sites

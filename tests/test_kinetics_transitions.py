@@ -1,4 +1,4 @@
-"""C1.3: candidate transitions from B pathways (no barrier is invented)."""
+"""Candidate transitions from B pathways (no barrier is invented)."""
 
 import numpy as np
 import pytest

@@ -1,4 +1,4 @@
-"""Local chemical environments of generated point defects (A3.6).
+"""Local chemical environments of generated point defects.
 
 Pure geometry and bookkeeping: neighbour species and distances around vacancies (taken from the
 unrelaxed parent lattice) and around interstitial atoms (taken from the defective structure),

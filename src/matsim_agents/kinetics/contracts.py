@@ -1,4 +1,4 @@
-"""Typed records for defect transition networks (C1.1).
+"""Typed records for defect transition networks.
 
 Missing evidence is ``None``; a zero barrier is a measured value and is never a default.
 """

@@ -1,4 +1,4 @@
-"""Parameter uncertainty and sensitivity of KMC outcomes (C2.4).
+"""Parameter uncertainty and sensitivity of KMC outcomes.
 
 A saddle-energy shift is applied to a pathway (an event and its reverse together), which keeps
 ``E_f - E_r`` consistent. Barrier errors share a common component with correlation ``rho``,

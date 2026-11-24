@@ -1,4 +1,4 @@
-"""C1.2: transition graph (synthetic states)."""
+"""Transition graph (synthetic states)."""
 
 import pytest
 

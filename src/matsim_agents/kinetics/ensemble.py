@@ -1,4 +1,4 @@
-"""KMC ensembles: independent streams, first passage, censoring, outcome probabilities (C2.3)."""
+"""KMC ensembles: independent streams, first passage, censoring, outcome probabilities."""
 
 from __future__ import annotations
 

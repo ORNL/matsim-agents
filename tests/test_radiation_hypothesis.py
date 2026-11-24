@@ -1,4 +1,4 @@
-"""D3: deterministic hypothesis revision. Energies are synthetic fixtures."""
+"""Deterministic hypothesis revision. Energies are synthetic fixtures."""
 
 import pytest
 

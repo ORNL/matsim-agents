@@ -1,4 +1,4 @@
-"""Geometric mapping of relaxed atoms onto parent lattice sites (A3.7a).
+"""Geometric mapping of relaxed atoms onto parent lattice sites.
 
 Each atom of a (relaxed) structure is assigned to its nearest parent lattice site by
 minimum-image distance. The mapping never forces an assignment: an atom far from every site is

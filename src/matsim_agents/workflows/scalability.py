@@ -1,4 +1,4 @@
-"""Toy-scale cost measurements, seeded reproducibility and an environment record (E5).
+"""Toy-scale cost measurements, seeded reproducibility and an environment record.
 
 Everything here is CPU-only and tiny. The scaling workload is the synthetic KMC chain from
 ``kinetics.benchmarks``, sized in *states*, not atoms, so the result says how

@@ -1,4 +1,4 @@
-"""Formation energies of classified point defects (A3.10).
+"""Formation energies of classified point defects.
 
 A thin, strict wrapper around :func:`matsim_agents.discovery.defects.defect_formation_energies`.
 The caller supplies the host and defect total energies, the method each came from, and explicit

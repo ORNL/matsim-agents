@@ -1,4 +1,4 @@
-"""B1.1: NEB contracts (synthetic structures; no calculations)."""
+"""NEB contracts (synthetic structures; no calculations)."""
 
 import numpy as np
 import pytest

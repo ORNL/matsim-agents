@@ -1,4 +1,4 @@
-"""Gillespie continuous-time kinetic Monte Carlo on a transition network (C2.2).
+"""Gillespie continuous-time kinetic Monte Carlo on a transition network.
 
 Direct method: waiting time ``dt = -ln(u1)/R``, event chosen by ``u2 * R`` over the cumulative
 rates. A state with no outgoing events or zero total rate is *stuck*; reaching the horizon or

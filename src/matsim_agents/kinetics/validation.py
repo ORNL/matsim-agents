@@ -1,4 +1,4 @@
-"""Network completeness report (C1.5).
+"""Network completeness report.
 
 Structural integrity is already enforced by ``TransitionNetwork``; this module reports what
 is still missing for kinetics: barrier evidence, attempt frequencies, reachability, dead ends.

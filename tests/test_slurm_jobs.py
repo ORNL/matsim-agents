@@ -1,4 +1,4 @@
-"""D4: non-blocking Slurm integration. A fake runner stands in for the scheduler."""
+"""Non-blocking Slurm integration. A fake runner stands in for the scheduler."""
 
 import pytest
 

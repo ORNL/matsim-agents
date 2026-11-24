@@ -1,4 +1,4 @@
-"""B2.8: Phase B integration on small cells with a fake launcher (no QE, no DFT)."""
+"""Phase B integration on small cells with a fake launcher (no QE, no DFT)."""
 
 from pathlib import Path
 

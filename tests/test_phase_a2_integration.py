@@ -1,4 +1,4 @@
-"""A2.9: end-to-end Phase A2 chemical-ordering workflow on small cells and a 1,024-atom check."""
+"""End-to-end Phase A2 chemical-ordering workflow on small cells and a 1,024-atom check."""
 
 from __future__ import annotations
 

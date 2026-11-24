@@ -1,4 +1,4 @@
-"""B1.3: identity-based correspondence and periodic displacements (small synthetic cells)."""
+"""Identity-based correspondence and periodic displacements (small synthetic cells)."""
 
 from itertools import product
 

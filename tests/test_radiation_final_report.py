@@ -1,4 +1,4 @@
-"""E7: final report from the matrix, job manifest and ledger (synthetic evidence only)."""
+"""Final report from the matrix, job manifest and ledger (synthetic evidence only)."""
 
 import json
 

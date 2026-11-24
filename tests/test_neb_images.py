@@ -1,4 +1,4 @@
-"""B1.4: linear periodic image generation (small cells)."""
+"""Linear periodic image generation (small cells)."""
 
 import numpy as np
 import pytest

@@ -1,1 +1,1 @@
-"""Defect transition networks and kinetics (Phase C)."""
+"""Defect transition networks, transition-state-theory rates and kinetic Monte Carlo."""

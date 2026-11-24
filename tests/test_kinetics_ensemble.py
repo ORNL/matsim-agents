@@ -1,4 +1,4 @@
-"""C2.3: KMC ensembles (synthetic networks)."""
+"""KMC ensembles (synthetic networks)."""
 
 import math
 

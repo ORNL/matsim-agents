@@ -1,4 +1,4 @@
-"""B1.6: pathway serialization round trips (small cells)."""
+"""Pathway serialization round trips (small cells)."""
 
 import json
 

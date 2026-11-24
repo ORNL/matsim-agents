@@ -1,4 +1,4 @@
-"""B2.1: QE NEB configuration contract."""
+"""QE NEB configuration contract."""
 
 import pytest
 from ase import Atoms

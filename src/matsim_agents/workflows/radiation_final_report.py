@@ -1,4 +1,4 @@
-"""Evidence-grounded campaign report built from the matrix, job manifest and ledger (E7).
+"""Evidence-grounded campaign report built from the matrix, job manifest and ledger.
 
 Every number comes from an input object; nothing is estimated here. The report keeps
 *software completeness* (what exists and is tested) apart from *scientific qualification*

@@ -1,4 +1,4 @@
-"""C2.2: Gillespie KMC against analytic results (synthetic networks)."""
+"""Gillespie KMC against analytic results (synthetic networks)."""
 
 import pytest
 

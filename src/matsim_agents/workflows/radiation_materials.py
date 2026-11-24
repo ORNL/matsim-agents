@@ -1,4 +1,4 @@
-"""Per-material readiness records tied to the qualification matrix (E6).
+"""Per-material readiness records tied to the qualification matrix.
 
 A record states what is fixed (composition and its source), what the current workflow cannot
 represent, and what the matrix still lacks. It never raises a status: ``qualified`` is read

@@ -1,4 +1,4 @@
-"""E3: DFT/NEB convergence checks. Numbers are synthetic; no calculation is run."""
+"""DFT/NEB convergence checks. Numbers are synthetic; no calculation is run."""
 
 import math
 

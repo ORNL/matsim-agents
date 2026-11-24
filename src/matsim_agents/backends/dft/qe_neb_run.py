@@ -3,7 +3,7 @@
 The command is always ``<launcher> neb.x [-nimage N] [-npool N] [extra] -inp <input>``; ``neb.x``
 does not read standard input. This module only launches and records. A zero exit code is *not*
 convergence: the record's ``status`` says whether the process ran and how it ended, and
-``convergence_assessed`` is always false here. Deciding convergence is the parser's job (B2.4).
+``convergence_assessed`` is always false here. Deciding convergence is the parser's job.
 
 ``run_launcher`` merges stderr into stdout, so the single log file holds both streams; the
 record states this instead of pretending to hold a separate stderr capture. An existing log is

@@ -1,4 +1,4 @@
-"""B2.2: neb.x input writer (structure-aware checks plus one golden fixture)."""
+"""Neb.x input writer (structure-aware checks plus one golden fixture)."""
 
 import hashlib
 import re

@@ -1,4 +1,4 @@
-"""Directed graph of defect states and elementary transitions (C1.2)."""
+"""Directed graph of defect states and elementary transitions."""
 
 from __future__ import annotations
 

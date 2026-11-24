@@ -1,4 +1,4 @@
-"""C2.5: B pathways -> network -> evidence -> rates -> KMC, with analytic checks.
+"""B pathways -> network -> evidence -> rates -> KMC, with analytic checks.
 
 Every energy here is a synthetic fixture; nothing is a calculated barrier.
 """

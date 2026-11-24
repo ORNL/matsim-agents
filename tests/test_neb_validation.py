@@ -1,4 +1,4 @@
-"""B1.5: pathway validation and qualification states (small cells)."""
+"""Pathway validation and qualification states (small cells)."""
 
 import numpy as np
 import pytest

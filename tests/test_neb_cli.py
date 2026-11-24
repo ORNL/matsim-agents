@@ -1,4 +1,4 @@
-"""B2.7: NEB CLI registration, dry run, and error paths (no QE needed)."""
+"""NEB CLI registration, dry run, and error paths (no QE needed)."""
 
 import copy
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""B1.2: migration endpoint generation on small BCC cells (no calculations)."""
+"""Migration endpoint generation on small BCC cells (no calculations)."""
 
 import numpy as np
 import pytest

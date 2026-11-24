@@ -1,4 +1,4 @@
-"""Analytical benchmarks for the kinetic model (E4).
+"""Analytical benchmarks for the kinetic model.
 
 The KMC engine is run on tiny synthetic networks whose exact answers are known, and the
 estimates are compared with those answers using a statistical tolerance:

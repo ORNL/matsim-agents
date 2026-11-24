@@ -1,4 +1,4 @@
-"""C1.1: transition-network records (synthetic evidence only)."""
+"""Transition-network records (synthetic evidence only)."""
 
 import pytest
 from pydantic import ValidationError

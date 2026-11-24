@@ -1,4 +1,4 @@
-"""D5: radiation-damage CLI and report. Energies and results are synthetic fixtures."""
+"""Radiation-damage CLI and report. Energies and results are synthetic fixtures."""
 
 import json
 

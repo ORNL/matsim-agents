@@ -1,4 +1,4 @@
-"""E2: MLIP validation protocol. All data are synthetic arrays; nothing here validates a model."""
+"""MLIP validation protocol. All data are synthetic arrays; nothing here validates a model."""
 
 import json
 

@@ -1,4 +1,4 @@
-"""B2.3: neb.x execution with mock executables (no QE needed)."""
+"""Neb.x execution with mock executables (no QE needed)."""
 
 import hashlib
 import json

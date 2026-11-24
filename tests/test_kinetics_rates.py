@@ -1,4 +1,4 @@
-"""C2.1: HTST rates (synthetic fixtures)."""
+"""HTST rates (synthetic fixtures)."""
 
 import math
 

@@ -1,4 +1,4 @@
-"""Attach B2 NEB results to transition events (C1.4)."""
+"""Attach nudged-elastic-band barrier results to transition events."""
 
 from __future__ import annotations
 

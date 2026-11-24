@@ -1,4 +1,4 @@
-"""E6: material readiness records (synthetic evidence only where evidence is needed)."""
+"""Material readiness records (synthetic evidence only where evidence is needed)."""
 
 import pytest
 

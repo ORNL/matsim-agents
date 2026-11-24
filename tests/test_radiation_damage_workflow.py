@@ -1,4 +1,4 @@
-"""D2: end-to-end workflow with a fake launcher. Energies are synthetic fixtures."""
+"""End-to-end workflow with a fake launcher. Energies are synthetic fixtures."""
 
 import json
 import math

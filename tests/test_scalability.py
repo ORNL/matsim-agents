@@ -1,4 +1,4 @@
-"""E5: toy-scale scaling, seeded reproducibility and environment record."""
+"""Toy-scale scaling, seeded reproducibility and environment record."""
 
 import pytest
 

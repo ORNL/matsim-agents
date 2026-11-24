@@ -1,4 +1,4 @@
-"""Harmonic transition-state-theory rates (C2.1).
+"""Harmonic transition-state-theory rates.
 
 ``rate = g * nu * exp(-Ea / (kB * T))``. The attempt frequency ``nu`` is never defaulted
 silently: it comes from the event or from an explicit, recorded fallback. An event without

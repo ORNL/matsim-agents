@@ -1,4 +1,4 @@
-"""A3.1: defect data contracts."""
+"""Defect data contracts."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""B2.5: staged neb.x runs and explicit restarts, with a fake launcher (no QE needed)."""
+"""Staged neb.x runs and explicit restarts, with a fake launcher (no QE needed)."""
 
 import hashlib
 import json

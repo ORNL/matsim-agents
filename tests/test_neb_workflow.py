@@ -1,4 +1,4 @@
-"""B2.6: NEB workflow integration with a fake launcher (no QE needed)."""
+"""NEB workflow integration with a fake launcher (no QE needed)."""
 
 import json
 from pathlib import Path

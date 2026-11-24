@@ -1,4 +1,4 @@
-"""C2.4: uncertainty and sensitivity (synthetic networks)."""
+"""Uncertainty and sensitivity (synthetic networks)."""
 
 import pytest
 

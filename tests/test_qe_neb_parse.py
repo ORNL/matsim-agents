@@ -1,4 +1,4 @@
-"""B2.4: neb.x output parsing on synthetic fixtures built from the QE print formats."""
+"""Neb.x output parsing on synthetic fixtures built from the QE print formats."""
 
 import math
 from pathlib import Path
