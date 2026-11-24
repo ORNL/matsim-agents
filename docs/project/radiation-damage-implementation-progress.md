@@ -254,3 +254,7 @@ Removed task codes from module and test docstrings. Mapping kept here: A3.x defe
 ## M0.4 backend-neutral NEB
 
 DEFERRED - awaiting second NEB backend requirement.
+
+## Magnetic ordering and scalable exploration (M1-M19)
+
+See docs/project/magnetic-scalable-exploration.md and the status table in docs/project/magnetic-ordering-implementation-spec.md. Software implemented and tested through M19; no real Slurm job, GPU test or DFT comparison was run; nothing is scientifically qualified.

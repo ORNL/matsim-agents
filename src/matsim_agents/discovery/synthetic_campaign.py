@@ -18,12 +18,12 @@ from ase import Atoms
 from ase.build import bulk
 
 from matsim_agents.discovery.candidates import CandidateManifest, CandidateRecord
-from matsim_agents.discovery.sampling import sample_random
 from matsim_agents.discovery.surrogate import (
     LabeledExample,
     StratumMeanSurrogate,
     select_for_labeling,
 )
+from matsim_agents.discovery.sampling import sample_random
 
 Evaluator = Callable[[CandidateRecord, Atoms], dict]
 
