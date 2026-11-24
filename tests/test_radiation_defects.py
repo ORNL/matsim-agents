@@ -21,6 +21,7 @@ from matsim_agents.discovery.radiation_defects import (
     DefectSpec,
     generate_bcc_interstitial,
     generate_crowdion,
+    generate_divacancy,
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
     generate_vacancy,
@@ -601,3 +602,102 @@ def test_invalid_frenkel_pairs_are_rejected(kwargs):
             arguments.pop("lattice_parameter"),
             **arguments,
         )
+
+
+# --- A3.9 Divacancies ---
+
+
+def test_first_and_second_neighbour_divacancies_remove_the_selected_pair():
+    parent = generate_alloy(CROWD)
+    n = len(parent)
+    for shell, ratio in ((1, 3**0.5 / 2), (2, 1.0)):
+        defective, config = generate_divacancy(parent, "d", 4, shell=shell, lattice_parameter=A)
+        low, high = config.spec.site_indices
+        assert 4 in (low, high) and low < high
+        assert len(defective) == n - 2 == config.n_atoms
+        assert config.spec.parameters["shell"] == shell
+        assert config.spec.parameters["separation"] == pytest.approx(ratio * A)
+        assert [s.role for s in config.sites] == ["vacancy", "vacancy"]
+        assert [s.lattice_site for s in config.sites] == [low, high]
+        kept = [k for k in range(n) if k not in (low, high)]
+        assert defective.get_array("atom_id").tolist() == kept
+        assert np.array_equal(defective.positions, parent.positions[kept])
+        removed = ",".join(parent[k].symbol for k in (low, high))
+        assert config.spec.parameters["removed_species"] == removed
+        assert config.spec.parameters["selection"] == "shell"
+        assert DefectConfiguration.model_validate_json(config.model_dump_json()) == config
+
+
+def test_shell_variants_enumerate_distinct_neighbours_and_are_deterministic():
+    parent = generate_alloy(CROWD)
+    partners = set()
+    for variant in range(8):
+        _, config = generate_divacancy(
+            parent, "d", 4, shell=1, variant=variant, lattice_parameter=A
+        )
+        partners.add(next(k for k in config.spec.site_indices if k != 4))
+    assert len(partners) == 8
+    again = generate_divacancy(parent, "d", 4, shell=2, variant=3, lattice_parameter=A)
+    assert (
+        again[1] == generate_divacancy(parent, "d", 4, shell=2, variant=3, lattice_parameter=A)[1]
+    )
+    with pytest.raises(ValueError, match="variant"):
+        generate_divacancy(parent, "d", 4, shell=1, variant=8, lattice_parameter=A)
+    with pytest.raises(ValueError, match="variant"):
+        generate_divacancy(parent, "d", 4, shell=2, variant=6, lattice_parameter=A)
+
+
+def test_explicit_divacancy_records_the_periodic_separation_and_shell():
+    parent = generate_alloy(CROWD)
+    corner = int(np.argmin(np.linalg.norm(parent.positions, axis=1)))
+    far = int(np.argmax(parent.positions[:, 0] + parent.positions[:, 1] + parent.positions[:, 2]))
+    _, config = generate_divacancy(parent, "d", far, partner=corner)
+    expected = get_distances(
+        parent.positions[far], parent.positions[corner], cell=parent.cell, pbc=True
+    )[1][0, 0]
+    assert config.spec.parameters["separation"] == pytest.approx(expected)
+    assert config.spec.parameters["shell"] == 0
+    assert config.spec.parameters["selection"] == "explicit"
+    first_neighbour = next(
+        k
+        for k in range(1, len(parent))
+        if np.linalg.norm(_mic(parent, 0, k)) == pytest.approx(A * 3**0.5 / 2)
+    )
+    _, config = generate_divacancy(parent, "d", 0, partner=first_neighbour, lattice_parameter=A)
+    assert config.spec.parameters["shell"] == 1
+    swapped = generate_divacancy(parent, "d", first_neighbour, partner=0, lattice_parameter=A)
+    assert swapped[1] == config
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"partner": 1, "shell": 1},
+        {"partner": 4},
+        {"partner": 999},
+        {"partner": True},
+        {"partner": 1.5},
+        {"shell": 3},
+        {"shell": 1, "lattice_parameter": None},
+        {"shell": 1, "variant": -1},
+        {"shell": 1, "lattice_parameter": 0.0},
+        {"shell": 1, "lattice_parameter": float("nan")},
+        {"partner": 1, "variant": True},
+        {"partner": 1, "lattice_parameter": 1.0, "shell": None, "variant": 0.5},
+    ],
+)
+def test_invalid_divacancy_requests_are_rejected(kwargs):
+    arguments = {"lattice_parameter": A} | kwargs
+    with pytest.raises(ValueError):
+        generate_divacancy(generate_alloy(CROWD), "d", 4, **arguments)
+
+
+def test_divacancy_rejects_a_non_periodic_parent_and_empty_parent_id():
+    parent = generate_alloy(CROWD)
+    open_cell = parent.copy()
+    open_cell.pbc = False
+    with pytest.raises(ValueError, match="periodic"):
+        generate_divacancy(open_cell, "d", 4, shell=1, lattice_parameter=A)
+    with pytest.raises(ValueError, match="parent_id"):
+        generate_divacancy(parent, "", 4, shell=1, lattice_parameter=A)

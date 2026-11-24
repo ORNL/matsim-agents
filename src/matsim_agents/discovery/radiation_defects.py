@@ -34,6 +34,7 @@ from pydantic import (
 from pymatgen.core import Element
 
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
+from matsim_agents.discovery.alloys import first_neighbor_list, second_neighbor_list
 
 DefectType = Literal["vacancy", "interstitial", "frenkel_pair", "divacancy"]
 SiteRole = Literal["vacancy", "interstitial", "displaced"]
@@ -801,6 +802,114 @@ def generate_frenkel_pair(
     return defective, config
 
 
+def _site_index(parent: Atoms, site: object, name: str) -> int:
+    if isinstance(site, bool) or not isinstance(site, int | np.integer):
+        raise ValueError(f"{name} must be an integer index, got {site!r}")
+    if not 0 <= int(site) < len(parent):
+        raise ValueError(f"{name} {site} is outside the {len(parent)}-atom parent")
+    return int(site)
+
+
+def generate_divacancy(
+    parent: Atoms,
+    parent_id: str,
+    site: int,
+    *,
+    partner: int | None = None,
+    shell: int | None = None,
+    variant: int = 0,
+    lattice_parameter: float | None = None,
+    parent_ordering_id: str | None = None,
+) -> tuple[Atoms, DefectConfiguration]:
+    """Remove two atoms: ``site`` and either an explicit ``partner`` or a neighbour by ``shell``.
+
+    Give exactly one of ``partner`` (explicit site) or ``shell`` (1 or 2: the ``variant``-th
+    neighbour of ``site`` in that BCC shell, ordered by index; needs ``lattice_parameter``).
+    The minimum-image separation, the shell it falls in (0 when it is neither shell, or when
+    ``lattice_parameter`` is not given) and both removed species are recorded. The two sites
+    are stored in increasing index order. The parent is not modified and nothing is relaxed.
+    """
+    if not parent_id:
+        raise ValueError("parent_id must be a nonempty string")
+    if not parent.pbc.all():
+        raise ValueError("divacancy generation requires a fully periodic parent")
+    if (partner is None) == (shell is None):
+        raise ValueError("give exactly one of partner and shell")
+    if isinstance(variant, bool) or not isinstance(variant, int | np.integer) or variant < 0:
+        raise ValueError(f"variant must be a nonnegative integer, got {variant!r}")
+    if lattice_parameter is not None and not (
+        np.isfinite(lattice_parameter) and lattice_parameter > 0
+    ):
+        raise ValueError(f"lattice_parameter must be positive and finite, got {lattice_parameter}")
+    first = _site_index(parent, site, "site")
+    if shell is not None:
+        if isinstance(shell, bool) or shell not in (1, 2):
+            raise ValueError(f"shell must be 1 or 2, got {shell!r}")
+        if lattice_parameter is None:
+            raise ValueError("lattice_parameter is required to select a neighbour shell")
+        listing = first_neighbor_list if shell == 1 else second_neighbor_list
+        i, j, _ = listing(parent, lattice_parameter)
+        candidates = sorted({int(k) for k in j[i == first]})
+        if variant >= len(candidates):
+            raise ValueError(f"variant {variant} exceeds the {len(candidates)} shell-{shell} sites")
+        second = candidates[int(variant)]
+    else:
+        second = _site_index(parent, partner, "partner")
+    if first == second:
+        raise ValueError("the two vacancy sites must be distinct")
+
+    _, separation = get_distances(
+        parent.positions[first], parent.positions[second], cell=parent.cell, pbc=True
+    )
+    separation = float(separation[0, 0])
+    found_shell = 0
+    if lattice_parameter is not None:
+        ratio = separation / lattice_parameter
+        for number, target in ((1, 3**0.5 / 2), (2, 1.0)):
+            if abs(ratio - target) < 1e-3:
+                found_shell = number
+    if shell is not None and found_shell != shell:
+        raise ValueError(f"selected pair is not a shell-{shell} pair (separation {separation:.3f})")
+    low, high = sorted((first, second))
+    parameters: dict[str, ParameterValue] = {
+        "selection": "explicit" if shell is None else "shell",
+        "shell": found_shell,
+        "separation": separation,
+        "removed_species": ",".join(parent[k].symbol for k in (low, high)),
+    }
+    if shell is not None:
+        parameters["variant"] = int(variant)
+    if lattice_parameter is not None:
+        parameters["lattice_parameter"] = float(lattice_parameter)
+    spec = DefectSpec(defect_type="divacancy", site_indices=(low, high), parameters=parameters)
+
+    defective = parent.copy()
+    defective.set_array("atom_id", np.arange(len(parent), dtype=np.int64))
+    del defective[[low, high]]
+    config = DefectConfiguration(
+        config_id=make_defect_config_id(parent_id, spec),
+        parent_id=parent_id,
+        parent_ordering_id=parent_ordering_id or occupation_fingerprint(parent),
+        spec=spec,
+        n_parent_atoms=len(parent),
+        n_atoms=len(defective),
+        cell=tuple(tuple(float(x) for x in row) for row in parent.cell.array),
+        sites=tuple(
+            DefectSite(
+                role="vacancy",
+                species=parent[k].symbol,
+                atom_id=k,
+                lattice_site=k,
+                position=tuple(float(x) for x in parent.positions[k]),
+            )
+            for k in (low, high)
+        ),
+        geometry_fingerprint=geometry_fingerprint(defective),
+        validation_status="valid",
+    )
+    return defective, config
+
+
 __all__ = [
     "BCC_111_DIRECTIONS",
     "BCC_INTERSTITIAL_OFFSETS",
@@ -812,6 +921,7 @@ __all__ = [
     "DefectSpec",
     "generate_bcc_interstitial",
     "generate_crowdion",
+    "generate_divacancy",
     "generate_dumbbell_interstitial",
     "generate_frenkel_pair",
     "generate_vacancy",
