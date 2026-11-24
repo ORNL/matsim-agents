@@ -40,6 +40,17 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
   `buiol_write_record` (QE's in-memory buffer), called from `save_buffer` in `wfcinit`. The root
   cause is not established; no fix has been tried. The same binary and inputs need a one-node
   reproduction before any change to the sbatch scripts or the QE input.
+* Reproduction on one node (128 atoms, 8 ranks, 36 k-points, `disk_io` default): job 5986978
+  also exited 139 in `buiol_write_record` under `save_buffer` in `wfcinit`. The same input with
+  `disk_io='medium'` (job 5987031) did not crash but made no progress: it printed the first
+  SCF iteration header and was cancelled by the 20 minute limit (Slurm `TIMEOUT`), with no
+  converged SCF. So `disk_io='medium'` avoids the crash in this test but is not shown to
+  work; it is one variable changed, with an unproven outcome. The root cause remains
+  unestablished.
+* Slurm `COMPLETED` is not QE success. Launchers must propagate the `srun` exit code and
+  check for `convergence has been achieved` and `JOB DONE`.
+* See [multiproperty-selection.md](multiproperty-selection.md) for the property, selection,
+  and acquisition workflow. All of it is software-verified only.
 * The 2x2x2 k-mesh and the 51/650 Ry cutoffs used for the 1,024-atom input are unconverged.
 * Debug QoS is not sufficient for production 1,024-atom QE.
 * `pristine_ferromagnetic` stays `INPUT_BLOCKED`; gas examples are nonmagnetic (`nspin: 1`).

@@ -27,6 +27,7 @@ the framework.
 - [External SPECTRA-PKA interface](external/spectra-pka.md)
 - [Hierarchical transfer campaign (W-Ta-Cr-V-Hf-Mo)](hierarchical-transfer-campaign.md)
 - [Characterization contracts](characterization.md)
+- [Multi-property characterization, selection, and hypothesis revision](multiproperty-selection.md)
 - [Scientific hypothesis debate](scientific-debate.md)
 - [Hypothesis-driven discovery chat](guide/discovery-chat.md)
 - [Active learning (MLIP and DFT)](guide/active-learning.md)
