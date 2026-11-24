@@ -6,7 +6,7 @@ calculation. No magnetic treatment is assumed: ``nspin`` and ``starting_magnetiz
 stated, and a structure containing Cr additionally needs a recorded ``magnetic_treatment``.
 
 Units: ``path_thr_ev_ang`` is the NEB path convergence threshold in eV/Angstrom (the unit used
-by ``neb.x``); ``prefix.dat`` residuals are in eV/Bohr and are handled in the parser (B2.4).
+by ``neb.x``); ``prefix.dat`` residuals are also in eV/Angstrom (QE ``path_base.f90``).
 
 This module checks consistency, not physical adequacy. A valid config says nothing about whether
 cutoffs, k-points or pseudopotentials are converged for the material.

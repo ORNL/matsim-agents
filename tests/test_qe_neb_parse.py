@@ -1,6 +1,7 @@
 """B2.4: neb.x output parsing on synthetic fixtures built from the QE print formats."""
 
 import math
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from matsim_agents.backends.dft.qe_neb_parse import (
 from matsim_agents.backends.dft.qe_neb_run import NebRunRecord
 from matsim_agents.workflows.neb_mapping import to_neb_result
 
+ROOT = Path(__file__).resolve().parents[1]
 ENERGIES = [-100.0, -99.6, -99.2, -99.7, -100.1]  # saddle at image 3: 0.8 up, 0.9 back
 ERRORS = [0.0, 0.03, 0.02, 0.04, 0.0]
 
@@ -277,3 +279,23 @@ def test_to_neb_result_image_count_mismatch_raises():
 def test_parsed_numbers_are_finite():
     parse = parse_neb_output(_converged_text())
     assert all(math.isfinite(v) for v in parse.energies_eV + parse.errors_eV_per_A)
+
+
+def test_prefix_dat_error_column_is_ev_per_angstrom_and_is_not_rescaled(tmp_path):
+    dat = tmp_path / "p.dat"
+    dat.write_text("".join(f"0.0 0.0 {x}\n" for x in ERRORS))
+    assert parse_neb_dat(dat)[2] == pytest.approx(ERRORS)
+    # A spurious eV/Bohr to eV/Angstrom factor (1/0.529177) would push 0.04 above 0.05.
+    parse = parse_neb_output(
+        _converged_text(), path_thr_ev_ang=0.05, dat_path=dat, record=_record("exited_zero", 0)
+    )
+    assert parse.outcome == "converged"
+    assert parse.max_interior_error_eV_per_A == pytest.approx(max(ERRORS))
+
+
+def test_qe_source_writes_neb_error_in_ev_per_angstrom():
+    source = ROOT / "external/quantum-espresso/src/NEB/src/path_base.f90"
+    if not source.is_file():
+        pytest.skip("QE source is not checked out")
+    text = " ".join(source.read_text().split())
+    assert "error(i) = MAXVAL( ABS( grad(:,i) ) ) / bohr_radius_angs * autoev" in text
