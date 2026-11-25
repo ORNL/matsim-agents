@@ -128,3 +128,33 @@ def test_standalone_md_sampling_runs_without_active_learning(tmp_path, monkeypat
     assert result["n_candidates"] > 0
     assert (tmp_path / "md-run" / "candidates.extxyz").is_file()
     assert saved["candidates"][0]["sampling_method"] == "md"
+
+
+def test_standalone_md_candidates_receive_ensemble_uncertainty():
+    from matsim_agents.workflows.active_learning.candidates import Candidate
+    from matsim_agents.workflows.active_learning.config import AcquisitionConfig
+    from matsim_agents.workflows.active_learning.standalone_sampling import _score_md_candidates
+
+    class Offset(EMT):
+        def __init__(self, shift):
+            super().__init__()
+            self.shift = shift
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=None):
+            super().calculate(atoms, properties, system_changes or [])
+            self.results["forces"] = self.results["forces"] + self.shift
+
+    atoms = Atoms("Cu2", positions=[[0, 0, 0], [2.5, 0, 0]], cell=[8, 8, 8], pbc=True)
+    md = Candidate(candidate_id="md-1", atoms=atoms)
+    neb = Candidate(candidate_id="neb-1", atoms=atoms, sampling_method="neb", uncertainty=0.5)
+
+    _score_md_candidates(
+        [md, neb],
+        AcquisitionConfig(strategy="ensemble"),
+        None,
+        [Offset(0.0), Offset(0.2)],
+        7,
+    )
+
+    assert md.uncertainty is not None and md.uncertainty > 0
+    assert neb.uncertainty == 0.5

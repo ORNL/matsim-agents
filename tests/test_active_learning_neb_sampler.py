@@ -585,3 +585,22 @@ def test_sampling_configuration_rejects_duplicate_effective_neb_transition_ids(t
     )
     with pytest.raises(ValueError, match="unique effective transition IDs"):
         SamplingConfig(strategies=[strategy, strategy])
+
+
+def test_endpoint_constraints_are_compared_by_atom_identity_not_index():
+    from matsim_agents.workflows.active_learning.neb_sampler import (
+        _validate_endpoint_settings_match,
+    )
+
+    initial = Atoms("Cu2", positions=[[0, 0, 0], [1, 1, 1]])
+    initial.set_array("atom_id", np.array([0, 1]))
+    initial.set_constraint(FixAtoms(indices=[0]))
+    # Same atoms in the opposite order: atom 0 sits at index 1 and stays fixed.
+    final = Atoms("Cu2", positions=[[1, 1, 1], [0, 0, 0]])
+    final.set_array("atom_id", np.array([1, 0]))
+    final.set_constraint(FixAtoms(indices=[1]))
+    _validate_endpoint_settings_match(initial, final)
+
+    final.set_constraint(FixAtoms(indices=[0]))
+    with pytest.raises(ValueError, match="constraints differ"):
+        _validate_endpoint_settings_match(initial, final)

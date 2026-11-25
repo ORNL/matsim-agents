@@ -22,6 +22,7 @@ from matsim_agents.workflows.active_learning.config import (
 from matsim_agents.workflows.active_learning.loop import (
     IterationState,
     _apply_neb_escalation,
+    _completed_dft_neb_count,
     _write_neb_kinetics,
 )
 
@@ -178,3 +179,129 @@ def test_accepted_mlip_barrier_is_written_as_exploratory_kinetics_evidence(tmp_p
     assert {event["qualification"] for event in saved["events"]} == {"unqualified"}
     assert all(rate["qualification"] == "unqualified" for rate in saved["rates"])
     assert saved["report"]["ready_for_exploratory_kmc"]
+
+
+def _escalation_policy():
+    return NebEscalationConfig(
+        policy="always_dft_neb",
+        max_pathway_uncertainty_eV=0.2,
+        max_dft_neb_runs=2,
+        dft_neb=_qe_neb_config(),
+    )
+
+
+def test_constrained_pathway_is_rejected_before_a_dft_run_is_reserved(tmp_path, monkeypatch):
+    from ase.constraints import FixAtoms
+
+    import matsim_agents.workflows.neb as neb_workflow
+
+    monkeypatch.setattr(neb_workflow, "run_neb_workflow", lambda *a, **k: pytest.fail("ran"))
+    outcome = _pathway(None)
+    outcome.images[1].set_constraint(FixAtoms(indices=[0]))
+    root = tmp_path / "run"
+    iteration_dir = root / "iteration_0000"
+    iteration_dir.mkdir(parents=True)
+    state = IterationState(iteration=0)
+
+    with pytest.raises(ValueError, match="constrained images"):
+        _apply_neb_escalation(
+            _escalation_policy(), outcome, iteration_dir, iteration_dir / "neb", state, 0
+        )
+
+    assert state.n_dft_neb_runs == 0
+    assert _completed_dft_neb_count(root) == 0
+
+
+def test_dft_neb_reservation_survives_deletion_of_the_iteration_directory(tmp_path, monkeypatch):
+    import shutil
+
+    import matsim_agents.workflows.neb as neb_workflow
+
+    def interrupted(*args, **kwargs):
+        raise RuntimeError("allocation ended")
+
+    monkeypatch.setattr(neb_workflow, "run_neb_workflow", interrupted)
+    root = tmp_path / "run"
+    iteration_dir = root / "iteration_0000"
+    iteration_dir.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="allocation ended"):
+        _apply_neb_escalation(
+            _escalation_policy(),
+            _pathway(None),
+            iteration_dir,
+            iteration_dir / "neb",
+            IterationState(iteration=0),
+            0,
+        )
+    shutil.rmtree(iteration_dir)  # what _scan_resume does to an unfinished iteration
+
+    assert _completed_dft_neb_count(root) == 1
+
+
+def test_escalation_passes_optimized_images_endpoints_and_dft_environment(tmp_path, monkeypatch):
+    import matsim_agents.workflows.neb as neb_workflow
+
+    calls = []
+
+    def fake_run(pair, config, directory, **kwargs):
+        calls.append((pair, kwargs))
+        return SimpleNamespace(
+            plan=SimpleNamespace(status="planned", reasons=(), directory=str(directory)),
+            result=NebResult(
+                state="converged_unqualified",
+                method_id="qe-neb",
+                n_images=4,
+                forward_barrier_eV=0.5,
+                reverse_barrier_eV=0.4,
+                provenance={"transition_id": "transition-1"},
+            ),
+        )
+
+    monkeypatch.setattr(neb_workflow, "run_neb_workflow", fake_run)
+    outcome = _pathway(None)
+    relaxed = outcome.images[0].copy()
+    relaxed.positions[0, 2] += 0.05
+    outcome.initial = relaxed
+    root = tmp_path / "run"
+    iteration_dir = root / "iteration_0000"
+    iteration_dir.mkdir(parents=True)
+
+    record, _ = _apply_neb_escalation(
+        _escalation_policy(),
+        outcome,
+        iteration_dir,
+        iteration_dir / "neb",
+        IterationState(iteration=0),
+        0,
+        env={"MATSIM_TEST": "1"},
+    )
+
+    pair, kwargs = calls[0]
+    assert kwargs["env"] == {"MATSIM_TEST": "1"}
+    assert kwargs["images"] == tuple(outcome.images)
+    assert np.allclose(pair.initial.positions, relaxed.positions)
+    assert record["dft_start_path"] == "mlip_optimized"
+
+
+def test_kinetics_evidence_describes_the_calculation_that_produced_the_result(tmp_path):
+    from matsim_agents.science.neb.contracts import NebCalculationSpec
+
+    outcome = _pathway(0.1)
+    transition = outcome.transition.model_copy(
+        update={
+            "calculation": NebCalculationSpec(n_images=7, engine="quantum_espresso", method_id="qe")
+        }
+    )
+    target = _write_neb_kinetics(
+        SimpleNamespace(
+            kinetics=NebKineticsConfig(attempt_frequency_hz=1.0e13, temperature_K=600.0)
+        ),
+        transition,
+        outcome.result,
+        tmp_path,
+    )
+    saved = json.loads(target.read_text())
+
+    assert saved["declared_calculation"]["method_id"] == "qe"
+    assert saved["neb_result"]["method_id"] == "mlip-neb"

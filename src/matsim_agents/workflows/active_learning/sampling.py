@@ -134,7 +134,7 @@ def sample_strategies(
                         )
                     ),
                     iteration=iteration,
-                    model_id=mlip_config.model_reference,
+                    model_id=mlip_config.model_identifier(),
                     enable_mc_dropout=enable_dropout,
                     uncertainty_mode=uncertainty_mode,
                     dropout_passes=0 if acquisition is None else acquisition.mc_dropout_passes,
@@ -165,7 +165,7 @@ def sample_strategies(
                     primary_calculator,
                     directory,
                     iteration=iteration,
-                    model_id=mlip_config.model_reference,
+                    model_id=mlip_config.model_identifier(),
                     mlip_config=mlip_config,
                     uncertainty_calculators=ensemble_calculators,
                     uncertainty_mode=uncertainty_mode,

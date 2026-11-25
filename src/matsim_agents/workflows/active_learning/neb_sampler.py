@@ -15,6 +15,7 @@ from ase.io import write as ase_write
 
 from matsim_agents.science.defects.point_defects import geometry_fingerprint
 from matsim_agents.science.neb.contracts import (
+    MLIP_ENDPOINT_PREFIX,
     NebEndpoint,
     NebResult,
     NebTransition,
@@ -40,6 +41,10 @@ class NebSamplingOutcome:
     images: tuple[Atoms, ...]
     pathway_uncertainty_eV: float | None = None
     transition: NebTransition | None = None
+    # The validated (or relaxed) endpoint structures the pathway was built from;
+    # the first and last images are reordered and unwrapped, so they can differ.
+    initial: Atoms | None = None
+    final: Atoms | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +69,8 @@ class NebSamplingWorkerResult:
     images: tuple[Atoms, ...]
     pathway_uncertainty_eV: float | None
     transition_json: str | None
+    initial: Atoms | None = None
+    final: Atoms | None = None
 
 
 class _UncertaintyLimitReached(Exception):
@@ -156,28 +163,39 @@ def _validate_transition_endpoints(transition: NebTransition, initial: Atoms, fi
             raise ValueError(f"{endpoint.role} endpoint cell differs from typed transition")
 
 
-def _endpoint_settings(atoms: Atoms) -> tuple[str, dict[int, tuple[float, ...]]]:
-    constraints = []
+def _constraint_signature(atoms: Atoms) -> str:
+    """Constraints keyed by stable atom identity, not by (reorderable) ASE index."""
+    from ase.constraints import FixAtoms, FixCartesian
+
+    atom_ids = [int(atom_id) for atom_id in atoms.get_array("atom_id")]
+    fixed_atoms: set[int] = set()
+    fixed_axes: dict[int, tuple[bool, bool, bool]] = {}
     for constraint in atoms.constraints:
-        serializer = getattr(constraint, "todict", None)
-        if not callable(serializer):
+        if isinstance(constraint, FixAtoms):
+            fixed_atoms.update(atom_ids[int(index)] for index in constraint.index)
+        elif isinstance(constraint, FixCartesian):
+            mask = tuple(bool(value) for value in np.asarray(constraint.mask).reshape(-1)[:3])
+            for index in np.atleast_1d(constraint.index):
+                atom_id = atom_ids[int(index)]
+                previous = fixed_axes.get(atom_id, (False, False, False))
+                fixed_axes[atom_id] = tuple(a or b for a, b in zip(previous, mask, strict=True))
+        else:
             raise ValueError(
                 f"NEB endpoint constraint {type(constraint).__name__} cannot be validated"
             )
-        constraints.append(serializer())
-
-    def json_value(value):
-        if isinstance(value, np.ndarray):
-            return value.tolist()
-        if isinstance(value, np.generic):
-            return value.item()
-        raise TypeError(f"unsupported constraint value {type(value).__name__}")
-
-    constraint_signature = json.dumps(
-        constraints, sort_keys=True, allow_nan=False, default=json_value
+    return json.dumps(
+        {
+            "fix_atoms": sorted(fixed_atoms),
+            "fix_cartesian": {str(key): list(value) for key, value in sorted(fixed_axes.items())},
+        },
+        sort_keys=True,
     )
+
+
+def _endpoint_settings(atoms: Atoms) -> tuple[str, dict[int, tuple[float, ...]]]:
     if "atom_id" not in atoms.arrays:
         raise ValueError("NEB endpoint magnetic validation requires stable atom_id arrays")
+    constraint_signature = _constraint_signature(atoms)
     moments = np.asarray(atoms.get_initial_magnetic_moments(), dtype=float)
     if moments.shape not in ((len(atoms),), (len(atoms), 3)) or not np.isfinite(moments).all():
         raise ValueError("NEB endpoint has malformed or non-finite initial magnetic moments")
@@ -246,7 +264,7 @@ def _validate_relaxed_endpoint_provenance(
 ) -> None:
     if transition is None or relax_endpoints:
         return
-    expected_method = f"mlip:{model_id or 'unspecified'}"
+    expected_method = f"{MLIP_ENDPOINT_PREFIX}{model_id or 'unspecified'}"
     for endpoint in (transition.initial, transition.final):
         if endpoint.status != "generated" and endpoint.method != expected_method:
             raise ValueError(
@@ -275,7 +293,7 @@ def _transition_for_images(
             pbc=tuple(bool(value) for value in atoms.pbc),
             status="relaxed",
             relaxation_converged=True,
-            method=f"mlip:{model_id or 'unspecified'}",
+            method=f"{MLIP_ENDPOINT_PREFIX}{model_id or 'unspecified'}",
             qualification_evidence=(),
         )
         return NebEndpoint.model_validate(data)
@@ -646,6 +664,8 @@ def sample_neb_candidates(
             None if barrier_uncertainty is None else barrier_uncertainty.pathway_eV
         ),
         transition=transition,
+        initial=initial.copy(),
+        final=final.copy(),
     )
 
 
@@ -686,6 +706,8 @@ def _sample_neb_task(task: NebSamplingTask) -> NebSamplingWorkerResult:
         transition_json=(
             None if outcome.transition is None else outcome.transition.model_dump_json()
         ),
+        initial=outcome.initial,
+        final=outcome.final,
     )
 
 
@@ -714,6 +736,8 @@ def sample_neb_candidates_parallel(tasks: list[NebSamplingTask], pool) -> list[N
                     if worker_result.transition_json is None
                     else NebTransition.model_validate_json(worker_result.transition_json)
                 ),
+                initial=worker_result.initial,
+                final=worker_result.final,
             )
         )
     return outcomes

@@ -43,6 +43,8 @@ ResultState = Literal["failed", "incomplete", "unconverged", "converged_unqualif
 
 # QE neb.x needs more than three images (first and last included).
 MIN_IMAGES = 4
+# Endpoint method labels written by the active-learning NEB sampler: ``mlip:<model id>``.
+MLIP_ENDPOINT_PREFIX = "mlip:"
 CELL_TOLERANCE = 1e-6
 
 
@@ -394,6 +396,7 @@ class NebTransition(BaseModel):
 __all__ = [
     "AtomCorrespondence",
     "MIN_IMAGES",
+    "MLIP_ENDPOINT_PREFIX",
     "MigrationMechanism",
     "NebCalculationSpec",
     "NebEndpoint",

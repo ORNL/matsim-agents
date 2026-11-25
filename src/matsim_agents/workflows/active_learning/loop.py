@@ -29,9 +29,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -1069,16 +1070,37 @@ def _sampling_strategies(cfg: ALConfig) -> list[SamplingStrategy]:
     return [MDSamplingStrategy(method="md", parameters=cfg.md)]
 
 
+_DFT_NEB_RESERVATIONS = "dft_neb_reservations.jsonl"
+
+
 def _completed_dft_neb_count(root: Path) -> int:
-    """Count reserved full DFT NEB runs so the configured cap survives resume."""
-    completed = 0
+    """Count reserved full DFT NEB runs so the configured cap survives resume.
+
+    Reservations live in a root-level ledger because ``_scan_resume`` deletes an
+    interrupted iteration directory, and a reserved QE run may already have cost
+    its allocation. Iteration states are counted too, for runs from before the ledger.
+    """
+    from_states = 0
     for path in root.glob("iteration_*/state.json"):
         state = json.loads(path.read_text(encoding="utf-8"))
         count = state.get("n_dft_neb_runs", 0)
         if not isinstance(count, int) or count < 0:
             raise ValueError(f"Invalid n_dft_neb_runs in {path}")
-        completed += count
-    return completed
+        from_states += count
+    ledger = root / _DFT_NEB_RESERVATIONS
+    reserved = 0
+    if ledger.exists():
+        reserved = sum(1 for line in ledger.read_text(encoding="utf-8").splitlines() if line)
+    return max(from_states, reserved)
+
+
+def _reserve_dft_neb(root: Path, iteration: int, transition_id: str) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    entry = json.dumps({"iteration": iteration, "transition_id": transition_id}, sort_keys=True)
+    with (root / _DFT_NEB_RESERVATIONS).open("a", encoding="utf-8") as handle:
+        handle.write(entry + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _apply_neb_escalation(
@@ -1088,6 +1110,7 @@ def _apply_neb_escalation(
     pathway_directory: Path,
     state: IterationState,
     completed_dft_neb: int,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     result = outcome.result
     uncertainty = result.pathway_uncertainty_eV
@@ -1120,7 +1143,15 @@ def _apply_neb_escalation(
         raise ValueError("full DFT NEB escalation requires typed transition metadata")
     if policy.dft_neb is None:
         raise ValueError("full DFT NEB escalation has no QE NEB configuration")
+    if any(len(image.constraints) for image in outcome.images):
+        # The QE NEB input carries no ASE constraints; running it would relax atoms the
+        # surrogate pathway held fixed. Refuse before spending any of the DFT budget.
+        raise ValueError(
+            f"transition {transition.transition_id!r} has constrained images; full DFT NEB "
+            "escalation does not preserve ASE constraints"
+        )
 
+    _reserve_dft_neb(iteration_dir.parent, state.iteration, transition.transition_id)
     state.n_dft_neb_runs += 1
     record["decision"] = "dispatching_dft_neb"
     state.neb_pathways.append(record)
@@ -1129,18 +1160,28 @@ def _apply_neb_escalation(
     from matsim_agents.science.neb.endpoints import MigrationPair
     from matsim_agents.workflows.neb import run_neb_workflow
 
+    # The optimized MLIP path and the endpoints it was actually built from (relaxed or
+    # reordered), not the transition's generated endpoints or a fresh linear guess.
+    initial = getattr(outcome, "initial", None) or outcome.images[0]
+    final = getattr(outcome, "final", None) or outcome.images[-1]
     pair = MigrationPair(
-        initial=outcome.images[0].copy(),
-        final=outcome.images[-1].copy(),
+        initial=initial.copy(),
+        final=final.copy(),
         transition=transition,
         final_config=None,
     )
+    start_images = tuple(outcome.images) if len(outcome.images) == policy.dft_neb.n_images else None
     dft_outcome = run_neb_workflow(
         pair,
         policy.dft_neb,
         pathway_directory / f"{transition.transition_id}-dft-neb",
         dispatch=True,
         allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
+        env=env,
+        images=start_images,
+    )
+    record["dft_start_path"] = (
+        "mlip_optimized" if start_images is not None else "linear_regenerated"
     )
     if dft_outcome.plan.status != "planned" or dft_outcome.result is None:
         raise RuntimeError(
@@ -1152,6 +1193,50 @@ def _apply_neb_escalation(
     if dft_outcome.result.state not in ("converged_unqualified", "qualified"):
         record["decision"] = "dft_neb_unconverged"
     return record, True
+
+
+def _escalate_neb_pathways(
+    cfg: ALConfig,
+    pathways,
+    it_dir: Path,
+    root: Path,
+    state: IterationState,
+    completed_dft_neb: int,
+    placement: Placement,
+) -> int:
+    """Apply the escalation policy and kinetics output to each sampled NEB pathway."""
+    env = placement.pool("dft").launches[0].environment() if cfg.escalation is not None else None
+    for pathway in pathways:
+        outcome = pathway.outcome
+        pathway_record, dft_neb_dispatched = _apply_neb_escalation(
+            cfg.escalation,
+            outcome,
+            it_dir,
+            pathway.directory,
+            state,
+            completed_dft_neb,
+            env=env,
+        )
+        if pathway.parameters.kinetics is not None:
+            kinetics_result = None
+            if pathway_record["decision"] == "accepted_mlip":
+                kinetics_result = outcome.result
+            elif pathway_record["decision"] == "dft_neb_complete":
+                kinetics_result = NebResult.model_validate(pathway_record["dft_result"])
+            if kinetics_result is not None:
+                kinetics_artifact = _write_neb_kinetics(
+                    pathway.parameters,
+                    outcome.transition,
+                    kinetics_result,
+                    pathway.directory / str(pathway_record["transition_id"]),
+                )
+                pathway_record["kinetics_artifact"] = str(kinetics_artifact)
+        if dft_neb_dispatched:
+            completed_dft_neb += 1
+            state.neb_pathways[-1] = pathway_record
+        else:
+            state.neb_pathways.append(pathway_record)
+    return completed_dft_neb
 
 
 def _write_neb_kinetics(
@@ -1180,9 +1265,30 @@ def _write_neb_kinetics(
         )
     )
     events = add_candidate_transition(network, transition)
+    declared = transition.calculation
+    evidence_transition = transition
+    if declared is not None and (
+        declared.method_id != result.method_id or declared.n_images != result.n_images
+    ):
+        # The accepted result came from another calculation than the one declared (an MLIP
+        # NEB, or a QE escalation of the same transition); describe the one that ran.
+        from matsim_agents.science.neb.contracts import NebCalculationSpec
+
+        evidence_transition = transition.model_copy(
+            update={
+                "calculation": NebCalculationSpec(
+                    n_images=result.n_images,
+                    engine=(
+                        "mlip" if result.provenance.get("backend") == "mlip" else declared.engine
+                    ),
+                    method_id=result.method_id,
+                    ci_scheme=declared.ci_scheme,
+                )
+            }
+        )
     attach_neb_result(
         network,
-        transition,
+        evidence_transition,
         result,
         attempt_frequency_hz=kinetics.attempt_frequency_hz,
         prefactor_note=kinetics.prefactor_note,
@@ -1201,6 +1307,7 @@ def _write_neb_kinetics(
         "rates": rates,
         "report": report.model_dump(mode="json"),
         "neb_result": result.model_dump(mode="json"),
+        "declared_calculation": (None if declared is None else declared.model_dump(mode="json")),
     }
     target.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return target
@@ -1245,6 +1352,7 @@ def _run_iterations(
 
             # --- 2. Generate candidates with the configured numerical methods -
             t0 = time.time()
+            neb_pathways: list = []
             if candidate_sampler is not None:
                 candidates = candidate_sampler(cfg, i, it_dir)
             else:
@@ -1264,40 +1372,17 @@ def _run_iterations(
                     md_sampler=sample_md_candidates,
                 )
                 candidates = batch.candidates
-                for pathway in batch.neb_pathways:
-                    outcome = pathway.outcome
-                    pathway_record, dft_neb_dispatched = _apply_neb_escalation(
-                        cfg.escalation,
-                        outcome,
-                        it_dir,
-                        pathway.directory,
-                        state,
-                        completed_dft_neb,
-                    )
-                    if pathway.parameters.kinetics is not None:
-                        kinetics_result = None
-                        if pathway_record["decision"] == "accepted_mlip":
-                            kinetics_result = outcome.result
-                        elif pathway_record["decision"] == "dft_neb_complete":
-                            kinetics_result = NebResult.model_validate(pathway_record["dft_result"])
-                        if kinetics_result is not None:
-                            kinetics_artifact = _write_neb_kinetics(
-                                pathway.parameters,
-                                outcome.transition,
-                                kinetics_result,
-                                pathway.directory / str(pathway_record["transition_id"]),
-                            )
-                            pathway_record["kinetics_artifact"] = str(kinetics_artifact)
-                    if dft_neb_dispatched:
-                        completed_dft_neb += 1
-                        state.neb_pathways[-1] = pathway_record
-                    else:
-                        state.neb_pathways.append(pathway_record)
+                neb_pathways = batch.neb_pathways
             state.n_candidates = len(candidates)
             state.timings_sec["sampling"] = time.time() - t0
             log.info("Iter %d: produced %d candidates", i, len(candidates))
 
             if not candidates:
+                del primary_calc, ensemble_calcs
+                models.after_scoring()
+                completed_dft_neb = _escalate_neb_pathways(
+                    cfg, neb_pathways, it_dir, root, state, completed_dft_neb, placement
+                )
                 state.notes = "No candidates produced; ending loop."
                 state.status = "complete"
                 _write_state(it_dir, state)
@@ -1323,6 +1408,12 @@ def _run_iterations(
             # memory before DFT and training, unless they use other devices.
             del primary_calc, ensemble_calcs
             models.after_scoring()
+
+            # Full DFT NEB escalation can run for a long time on the DFT devices, so it
+            # starts only once the surrogate has released its memory.
+            completed_dft_neb = _escalate_neb_pathways(
+                cfg, neb_pathways, it_dir, root, state, completed_dft_neb, placement
+            )
 
             # --- 4. DFT labelling (VASP or QE) --------------------------------
             results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)

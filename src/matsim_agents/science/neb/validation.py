@@ -25,7 +25,7 @@ from ase.neighborlist import neighbor_list
 from pydantic import BaseModel, ConfigDict
 
 from matsim_agents.science.defects.point_defects import geometry_fingerprint
-from matsim_agents.science.neb.contracts import MIN_IMAGES, NebTransition
+from matsim_agents.science.neb.contracts import MIN_IMAGES, MLIP_ENDPOINT_PREFIX, NebTransition
 from matsim_agents.science.neb.images import DEFAULT_MAX_STEP, DEFAULT_MIN_DISTANCE
 from matsim_agents.science.neb.paths import correspond_atoms, minimum_image
 
@@ -202,7 +202,10 @@ def assess_pathway(
         if len(methods) > 1:
             raise ValueError(f"endpoints use different methods: {sorted(methods)}")
         calc = transition.calculation
-        if calc is not None and methods and methods != {calc.method_id}:
+        surrogate_endpoints = calc is not None and all(
+            method.startswith(MLIP_ENDPOINT_PREFIX) for method in methods
+        )
+        if calc is not None and methods and methods != {calc.method_id} and not surrogate_endpoints:
             raise ValueError(f"calculation method {calc.method_id!r} differs from the endpoints'")
         return ""
 
