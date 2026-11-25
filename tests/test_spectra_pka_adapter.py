@@ -507,7 +507,19 @@ def test_second_identical_run_hits_the_cache(tmp_path, mock_exe, campaign):
     assert first.status == "STRUCTURALLY_VALID" and first.outcome is not None
     second = adapter.run(cfg, campaign, execute=True)
     assert second.status == "STRUCTURALLY_VALID"
-    assert second.outcome is None and "cache hit" in second.message
+    assert second.cached and "cache hit" in second.message
+    assert not first.cached
+
+
+def test_cache_hit_keeps_the_original_execution_evidence(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    first = adapter.run(cfg, campaign, execute=True)
+    second = adapter.run(cfg, campaign, execute=True)
+    assert second.cached
+    assert second.outcome == first.outcome.__class__.from_dict(first.outcome.as_dict())
+    assert second.spectrum.provenance.execution == first.spectrum.provenance.execution
+    assert second.spectrum.provenance.execution["end_marker_seen"] is True
+    assert not any("end marker" in w.lower() for w in second.validation.warnings)
 
 
 def test_changed_input_or_no_cache_re_executes(tmp_path, mock_exe, campaign):
@@ -535,17 +547,57 @@ def test_tampered_cached_output_is_not_a_cache_hit(tmp_path, mock_exe, campaign)
     out = adapter.run_directory(cfg, campaign) / f"{campaign.results_stub}.out"
     out.write_text(out.read_text() + "\n")
     again = adapter.run(cfg, campaign, execute=True)
-    assert again.outcome is not None and "cache hit" not in again.message
+    assert not again.cached and "cache hit" not in again.message
 
 
-def test_rerun_removes_artifacts_of_the_previous_run(tmp_path, mock_exe, campaign):
+def test_rerun_archives_the_previous_run_instead_of_deleting_it(tmp_path, mock_exe, campaign):
     cfg = make_config(tmp_path, mock_exe)
     adapter.run(cfg, campaign, execute=True)
     run_dir = adapter.run_directory(cfg, campaign)
-    stale = run_dir / f"{campaign.results_stub}.log"
+    stub = campaign.results_stub
+    first_out = (run_dir / f"{stub}.out").read_bytes()
+    stale = run_dir / f"{stub}.log"
     stale.write_text("stale\n")
     adapter.run(cfg, campaign, execute=True, use_cache=False)
     assert not stale.exists() or stale.read_text() != "stale\n"
+    archived = list((run_dir / adapter.ARCHIVE_DIR).glob("*"))
+    assert len(archived) == 1
+    assert (archived[0] / f"{stub}.out").read_bytes() == first_out
+    assert (archived[0] / f"{stub}.log").read_text() == "stale\n"
+    assert (archived[0] / "run_record.json").is_file()
+    assert (archived[0] / f"{stub}.input.snapshot").is_file()
+
+
+def test_archive_survives_a_failing_replacement_run(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    adapter.run(cfg, campaign, execute=True)
+    run_dir = adapter.run_directory(cfg, campaign)
+    original = (run_dir / f"{campaign.results_stub}.out").read_bytes()
+    failing = tmp_path / "fail"
+    failing.write_text(
+        f"#!{sys.executable}\nimport sys\nif sys.argv[1].startswith('matsim_agents_probe'):\n"
+        "    print('error opening parameter input file')\nelse:\n    sys.exit(3)\n"
+    )
+    failing.chmod(0o755)
+    bad_cfg = make_config(tmp_path, failing)
+    result = adapter.run(bad_cfg, campaign, execute=True, use_cache=False)
+    assert result.status == "EXECUTION_FAILED"
+    kept = [p for p in (run_dir / adapter.ARCHIVE_DIR).rglob(f"{campaign.results_stub}.out")]
+    assert [p.read_bytes() for p in kept] == [original]
+
+
+def test_unresolved_derived_campaign_is_refused_by_the_adapter(tmp_path, mock_exe, campaign):
+    data = campaign.model_dump()
+    data.update(channels=(), derive_channels=True)
+    derived = CampaignSpec(**data)
+    cfg = make_config(tmp_path, mock_exe)
+    avail = availability.check_availability(cfg, derived, invoke=False)
+    coverage = next(c for c in avail.checks if c.name == "data_coverage")
+    assert coverage.ok is False and "unresolved" in coverage.detail
+    assert avail.status is Status.INPUTS_MISSING
+    with pytest.raises(adapter.AdapterError, match="unresolved"):
+        adapter.prepare(cfg, derived)
+    assert not adapter.run_directory(cfg, derived).exists()
 
 
 def test_global_ratios_carry_the_whole_material_fraction(tmp_path):

@@ -143,8 +143,15 @@ matsim-agents external spectra-pka import  -c campaign.yaml            # parse e
 
 `run --execute` is cached for local runs. The key is the SHA-256 of the executable, the input
 text, every staged data file and the output stub. A matching, structurally valid previous run is
-parsed again and not re-executed (the message says `cache hit`). A failed run never leaves a
-cache record.
+parsed again and not re-executed (the message says `cache hit` and `cached` is true). The
+cache record stores the original execution outcome, so a hit keeps the exit code, end marker
+and wall time of the process that wrote the bytes. A failed run never leaves a cache record.
+
+Raw outputs are never deleted. Before a fresh execution, the previous `.out`, `.indexes`,
+`.log`, input snapshot, stdout/stderr, run record and cache record are moved to
+`archive/<utc stamp>/` in the scenario directory. A campaign that still has
+`derive_channels` set (not loaded through `load_config_file`) is refused, because it has no
+channels to check or stage.
 
 `run` stages inputs and stops unless `--execute` is given. With `execution.mode: slurm` the
 job is submitted once through `execution/slurm_jobs.py` (1 node, no GPU, idempotent by spec

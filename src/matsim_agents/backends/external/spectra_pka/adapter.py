@@ -7,7 +7,9 @@ number is produced unless the external program produced it.
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from matsim_agents.backends.external.spectra_pka.availability import (
@@ -32,6 +34,8 @@ from matsim_agents.backends.external.spectra_pka.parser import (
 )
 from matsim_agents.backends.external.spectra_pka.runner import (
     RUN_RECORD,
+    STDERR_NAME,
+    STDOUT_NAME,
     RunOutcome,
     run_local,
     submit_slurm,
@@ -50,6 +54,7 @@ from matsim_agents.science.irradiation.contracts import (
 
 SOURCE_NAME = "SPECTRA-PKA (external)"
 CACHE_RECORD = "result_cache.json"
+ARCHIVE_DIR = "archive"
 
 
 class AdapterError(RuntimeError):
@@ -75,6 +80,8 @@ class RunResult:
     validation: ValidationReport | None = None
     spectrum: PKASpectrum | None = None
     message: str = ""
+    # True when no process was launched; ``outcome`` is then that of the run that made the bytes.
+    cached: bool = False
 
 
 def scenario_from_campaign(campaign: CampaignSpec) -> IrradiationScenario:
@@ -175,21 +182,36 @@ def _output_hashes(run_dir: Path, results_stub: str) -> dict[str, str]:
     return {name: sha256_file(run_dir / name) for name in names if (run_dir / name).is_file()}
 
 
-def _cache_hit(run_dir: Path, key: str, results_stub: str) -> bool:
+def _cache_hit(run_dir: Path, key: str, results_stub: str) -> RunOutcome | None:
+    """The outcome of the run that produced the cached bytes, or None when there is no hit."""
     record = run_dir / CACHE_RECORD
     if not (record.is_file() and (run_dir / f"{results_stub}.out").is_file()):
-        return False
+        return None
     try:
         data = json.loads(record.read_text())
-    except ValueError:
-        return False
-    # Structure alone cannot show that the preserved bytes came from the cached execution.
-    return data.get("key") == key and data.get("outputs") == _output_hashes(run_dir, results_stub)
+        # Structure alone cannot show that the preserved bytes came from the cached execution.
+        if data.get("key") != key or data.get("outputs") != _output_hashes(run_dir, results_stub):
+            return None
+        return RunOutcome.from_dict(data["outcome"])
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
-def _clear_previous_outputs(run_dir: Path, results_stub: str) -> None:
-    for suffix in (".out", ".indexes", ".log"):
-        (run_dir / f"{results_stub}{suffix}").unlink(missing_ok=True)
+def _archive_previous_run(run_dir: Path, results_stub: str) -> Path | None:
+    """Move the previous run's artifacts aside so none is collected as new and none is lost."""
+    names = [
+        f"{results_stub}{suffix}" for suffix in (".out", ".indexes", ".log", ".input.snapshot")
+    ]
+    names += [STDOUT_NAME, STDERR_NAME, RUN_RECORD, CACHE_RECORD]
+    present = [n for n in names if (run_dir / n).exists()]
+    if not present:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    target = run_dir / ARCHIVE_DIR / stamp
+    target.mkdir(parents=True)
+    for name in present:
+        shutil.move(str(run_dir / name), str(target / name))
+    return target
 
 
 def run(
@@ -203,7 +225,8 @@ def run(
     """Stage inputs, then execute only if ``execute`` is true. Default is a dry run.
 
     A local run whose cache key matches a previous structurally valid run is not repeated:
-    the preserved raw output is parsed again instead.
+    the preserved raw output is parsed again instead, with the original execution outcome.
+    Artifacts of an earlier run are moved to ``archive/<utc stamp>/``, never deleted.
     """
     prepared = prepare(config, campaign)
     if not execute:
@@ -228,7 +251,8 @@ def run(
             status, prepared.run_dir, prepared.command, outcome, message=outcome.stderr_tail
         )
     key = cache_key(prepared.availability, prepared.staged, campaign.results_stub)
-    if use_cache and _cache_hit(prepared.run_dir, key, campaign.results_stub):
+    original = _cache_hit(prepared.run_dir, key, campaign.results_stub) if use_cache else None
+    if original is not None:
         hit = collect(
             config,
             campaign,
@@ -236,6 +260,7 @@ def run(
             availability=prepared.availability,
             staged_hashes=prepared.staged.data_sha256,
             input_sha256=prepared.staged.input_sha256,
+            outcome=original,
         )
         if hit.status == "STRUCTURALLY_VALID":
             return RunResult(
@@ -246,10 +271,10 @@ def run(
                 hit.validation,
                 hit.spectrum,
                 message=f"cache hit {key[:12]}; not re-executed",
+                cached=True,
             )
-    (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
     # Only artifacts of this invocation may be collected and cached.
-    _clear_previous_outputs(prepared.run_dir, campaign.results_stub)
+    _archive_previous_run(prepared.run_dir, campaign.results_stub)
     # a real probe before a real run
     availability = check_availability(config, campaign, invoke=True)
     if availability.status is Status.EXECUTION_FAILED:
@@ -260,6 +285,9 @@ def run(
         prepared.run_dir,
         campaign.results_stub,
         config.execution.timeout_seconds,
+    )
+    shutil.copyfile(
+        prepared.run_dir / INPUT_NAME, prepared.run_dir / f"{campaign.results_stub}.input.snapshot"
     )
     if not outcome.process_succeeded:
         return RunResult(
@@ -281,10 +309,8 @@ def run(
     if result.status == "STRUCTURALLY_VALID":
         outputs = _output_hashes(prepared.run_dir, campaign.results_stub)
         (prepared.run_dir / CACHE_RECORD).write_text(
-            json.dumps({"key": key, "outputs": outputs}) + "\n"
+            json.dumps({"key": key, "outputs": outputs, "outcome": outcome.as_dict()}) + "\n"
         )
-    else:
-        (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
     return result
 
 

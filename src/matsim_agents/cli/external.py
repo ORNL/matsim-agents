@@ -103,6 +103,7 @@ def run(
                 "run_dir": str(result.run_dir),
                 "command": list(result.command),
                 "message": result.message,
+                "cached": result.cached,
                 "numerical_validation": "NOT_VALIDATED",
             },
             indent=2,
