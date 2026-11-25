@@ -96,11 +96,29 @@ class ChannelSpec(_Strict):
 class FluxSpec(_Strict):
     """The neutron spectrum. Its normalisation is declared by the user, never inferred."""
 
-    file: Path
+    # Exactly one source: a native SPECTRA-PKA flux file, or a CSV/JSON group spectrum.
+    file: Path | None = None
+    spectrum_file: Path | None = None
+    energy_units: Literal["eV", "keV", "MeV"] = "eV"
+    flux_units: Literal["n/cm2/s", "n/m2/s"] = "n/cm2/s"
+    value_kind: Literal["integrated", "per_energy", "per_lethargy"] = "integrated"
+    absolute: bool = True
     identity: str = Field(min_length=1)
     normalization: str = Field(min_length=1)
     norm_type: Literal[1, 2, 3] = 2
     rescale_value: float | None = Field(default=None, gt=0.0)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> FluxSpec:
+        if (self.file is None) == (self.spectrum_file is None):
+            raise ValueError("give exactly one of flux.file and flux.spectrum_file")
+        return self
+
+    @property
+    def source_path(self) -> Path:
+        path = self.file or self.spectrum_file
+        assert path is not None
+        return path
 
 
 class OptionsSpec(_Strict):
@@ -244,7 +262,10 @@ def load_config_file(path: str | Path) -> ConfigFile:
         campaign = campaign.model_copy(
             update={
                 "flux": campaign.flux.model_copy(
-                    update={"file": _absolute(campaign.flux.file, base)}
+                    update={
+                        "file": _absolute(campaign.flux.file, base),
+                        "spectrum_file": _absolute(campaign.flux.spectrum_file, base),
+                    }
                 ),
                 "channels": tuple(
                     ch.model_copy(update={"pka_file": _absolute(ch.pka_file, base)})

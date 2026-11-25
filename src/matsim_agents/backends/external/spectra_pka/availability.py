@@ -193,7 +193,7 @@ def _data_checks(config: SpectraPKAConfig, campaign: CampaignSpec | None) -> lis
             else "missing PKA files for " + "; ".join(missing),
         )
     )
-    flux = campaign.flux.file
+    flux = campaign.flux.source_path
     checks.append(
         Check(
             "spectrum_input",

@@ -91,6 +91,15 @@ unzip -p "$C/pkas.zip" TENDL2017data-n-pka.tar.bz2 \
 export PKA_DATA_DIRECTORY=$PWD/njoy_results-n-tendl2017-jc/pka
 ```
 
+The same extraction is available as a command. `--library` must name one member exactly (with or
+without `-pka`, case-insensitive), for example `TENDL2023n`, `TENDL2019-n` or `TENDL2017data-n`.
+Extraction is verified against the manifest, so a modified or missing file is extracted again:
+
+```bash
+matsim-agents external spectra-pka fetch-data --dest data --library TENDL2023n \
+  --elements W,Ta --archive "$C/pkas.zip"
+```
+
 The neutron spectrum is always supplied by the user. The upstream `manual/test/fluxes_specter.dat`
 (709-group PWR spectrum) is suitable for build checks only.
 
@@ -109,6 +118,16 @@ matsim-agents external spectra-pka check -c campaign.yaml
 See `examples/external/spectra-pka/campaign.yaml`. All paths there are placeholders. Relative
 paths resolve against the YAML file's directory; `${VAR}` is expanded.
 
+The neutron flux is given by exactly one of two keys under `flux`:
+
+- `file`: a native SPECTRA-PKA flux file, linked into the run directory unchanged.
+- `spectrum_file`: a CSV `e_low,e_high,flux`, written as a native itype-2 file (MeV, `ksail -2`).
+  Declare `energy_units` (eV, keV, MeV), `flux_units`, `value_kind` (integrated, per_energy,
+  per_lethargy) and `absolute`. A line spectrum, or a shape-only spectrum with an absolute
+  normalisation type, is rejected. SPECTRA-PKA collapses the flux onto the library grid itself.
+
+The run record keeps the SHA-256 of the source spectrum and of the generated `flux.dat`.
+
 ## 4. Commands
 
 ```bash
@@ -119,6 +138,11 @@ matsim-agents external spectra-pka run     -c campaign.yaml --execute  # real ru
 matsim-agents external spectra-pka status  -c campaign.yaml
 matsim-agents external spectra-pka import  -c campaign.yaml            # parse existing output
 ```
+
+`run --execute` is cached for local runs. The key is the SHA-256 of the executable, the input
+text, every staged data file and the output stub. A matching, structurally valid previous run is
+parsed again and not re-executed (the message says `cache hit`). A failed run never leaves a
+cache record.
 
 `run` stages inputs and stops unless `--execute` is given. With `execution.mode: slurm` the
 job is submitted once through `execution/slurm_jobs.py` (1 node, no GPU, idempotent by spec

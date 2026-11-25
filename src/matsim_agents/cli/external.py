@@ -112,6 +112,19 @@ def run(
         raise typer.Exit(code=1)
 
 
+@spka_app.command(
+    "fetch-data",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    help="Extract needed PKA matrices from pkas.zip. Arguments: see data_fetch --help.",
+)
+def fetch_data(ctx: typer.Context) -> None:
+    from matsim_agents.backends.external.spectra_pka import data_fetch
+
+    code = data_fetch.main(list(ctx.args))
+    if code:
+        raise typer.Exit(code=code)
+
+
 @spka_app.command("status")
 def status(config: Path = CONFIG_OPTION) -> None:
     """Show the state of a staged or finished run."""

@@ -40,6 +40,7 @@ from matsim_agents.backends.external.spectra_pka.validation import (
     ValidationReport,
     validate_output,
 )
+from matsim_agents.core.hashing import sha256_json
 from matsim_agents.science.irradiation.contracts import (
     IrradiationScenario,
     PKASourceProvenance,
@@ -48,6 +49,7 @@ from matsim_agents.science.irradiation.contracts import (
 )
 
 SOURCE_NAME = "SPECTRA-PKA (external)"
+CACHE_RECORD = "result_cache.json"
 
 
 class AdapterError(RuntimeError):
@@ -156,14 +158,41 @@ def collect(
     return RunResult(report.status.value, run_dir, command, outcome, report, spectrum, message="")
 
 
+def cache_key(availability: Availability, staged: StagedInputs, results_stub: str) -> str:
+    """Identity of a result: executable, input text, every staged data file, output stub."""
+    return sha256_json(
+        {
+            "executable_sha256": availability.executable_sha256,
+            "input_sha256": staged.input_sha256,
+            "data_sha256": staged.data_sha256,
+            "results_stub": results_stub,
+        }
+    )
+
+
+def _cache_hit(run_dir: Path, key: str, results_stub: str) -> bool:
+    record = run_dir / CACHE_RECORD
+    if not (record.is_file() and (run_dir / f"{results_stub}.out").is_file()):
+        return False
+    try:
+        return json.loads(record.read_text()).get("key") == key
+    except ValueError:
+        return False
+
+
 def run(
     config: SpectraPKAConfig,
     campaign: CampaignSpec,
     *,
     execute: bool = False,
     slurm_manifest: Path | None = None,
+    use_cache: bool = True,
 ) -> RunResult:
-    """Stage inputs, then execute only if ``execute`` is true. Default is a dry run."""
+    """Stage inputs, then execute only if ``execute`` is true. Default is a dry run.
+
+    A local run whose cache key matches a previous structurally valid run is not repeated:
+    the preserved raw output is parsed again instead.
+    """
     prepared = prepare(config, campaign)
     if not execute:
         return RunResult(
@@ -186,6 +215,27 @@ def run(
         return RunResult(
             status, prepared.run_dir, prepared.command, outcome, message=outcome.stderr_tail
         )
+    key = cache_key(prepared.availability, prepared.staged, campaign.results_stub)
+    if use_cache and _cache_hit(prepared.run_dir, key, campaign.results_stub):
+        hit = collect(
+            config,
+            campaign,
+            prepared.run_dir,
+            availability=prepared.availability,
+            staged_hashes=prepared.staged.data_sha256,
+            input_sha256=prepared.staged.input_sha256,
+        )
+        if hit.status == "STRUCTURALLY_VALID":
+            return RunResult(
+                hit.status,
+                hit.run_dir,
+                hit.command,
+                hit.outcome,
+                hit.validation,
+                hit.spectrum,
+                message=f"cache hit {key[:12]}; not re-executed",
+            )
+    (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
     # a real probe before a real run
     availability = check_availability(config, campaign, invoke=True)
     if availability.status is Status.EXECUTION_FAILED:
@@ -205,7 +255,7 @@ def run(
             outcome,
             message=outcome.stderr_tail or outcome.stdout_tail[-500:],
         )
-    return collect(
+    result = collect(
         config,
         campaign,
         prepared.run_dir,
@@ -214,6 +264,11 @@ def run(
         input_sha256=prepared.staged.input_sha256,
         outcome=outcome,
     )
+    if result.status == "STRUCTURALLY_VALID":
+        (prepared.run_dir / CACHE_RECORD).write_text(json.dumps({"key": key}) + "\n")
+    else:
+        (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
+    return result
 
 
 def status(config: SpectraPKAConfig, campaign: CampaignSpec) -> dict:

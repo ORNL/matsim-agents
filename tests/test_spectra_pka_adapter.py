@@ -499,3 +499,31 @@ def test_no_shell_true_in_package():
     root = Path(adapter.__file__).parent
     for p in root.glob("*.py"):
         assert "shell=True" not in p.read_text()
+
+
+def test_second_identical_run_hits_the_cache(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    first = adapter.run(cfg, campaign, execute=True)
+    assert first.status == "STRUCTURALLY_VALID" and first.outcome is not None
+    second = adapter.run(cfg, campaign, execute=True)
+    assert second.status == "STRUCTURALLY_VALID"
+    assert second.outcome is None and "cache hit" in second.message
+
+
+def test_changed_input_or_no_cache_re_executes(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    adapter.run(cfg, campaign, execute=True)
+    assert adapter.run(cfg, campaign, execute=True, use_cache=False).outcome is not None
+    changed = campaign.model_copy(
+        update={"options": campaign.options.model_copy(update={"max_global_recoils": 7})}
+    )
+    assert adapter.run(cfg, changed, execute=True).outcome is not None
+
+
+def test_failed_run_leaves_no_cache_record(tmp_path, campaign):
+    exe = write_mock_executable(
+        tmp_path / "bad", out="### index 0 #####\n#INPUT SPECTRUM\n 1 2 3\n"
+    )
+    cfg = make_config(tmp_path, exe)
+    adapter.run(cfg, campaign, execute=True)
+    assert not (adapter.run_directory(cfg, campaign) / adapter.CACHE_RECORD).exists()
