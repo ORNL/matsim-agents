@@ -726,7 +726,21 @@ def finetune_hydragnn_newhead(
             "energy_convention": "dft:declared_elemental_formation_energy",
         },
     )
-    save_hydragnn_energy_convention(output_dir, ckpt_out)
+    save_hydragnn_energy_convention(
+        output_dir,
+        ckpt_out,
+        inference_metadata={
+            "finetune": {
+                "backend": "hydragnn",
+                "protocol": f"newhead-finetune-{strategy}",
+                "head_init": "pretrained" if head_index is not None else "random",
+                "pretrained_heads": (
+                    [GFM_HEAD_DATASETS[head_index]] if head_index is not None else []
+                ),
+                "freeze_mode": freeze_mode,
+            }
+        },
+    )
     report.write(output_dir / "cost.json")
     log.info(
         "New-head fine-tune complete [%s] -> %s (%.1fs, %.4f GPU-h)",

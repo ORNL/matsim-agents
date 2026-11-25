@@ -597,6 +597,16 @@ def finetune_uma(
         base_model=base_model,
     )
     alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    alignment.finetune = {
+        "backend": "uma",
+        "base_model": base_model,
+        "task_name": task_name,
+        "protocol": "conservative-head-finetune",
+        "pretrained_heads": [f"{task_name}_energy", f"{task_name}_forces"],
+        "head_output": "denormalized_element_referenced",
+        "lora": bool(lora),
+        "freeze_backbone": bool(freeze_backbone),
+    }
     energies = [alignment.aligned_energy(atoms, _reference_energy(atoms)) for atoms in frames]
 
     if not run:

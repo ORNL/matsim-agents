@@ -500,6 +500,14 @@ def finetune_mace(
         base_model=base_model,
     )
     alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    alignment.finetune = {
+        "backend": "mace",
+        "family": family,
+        "base_model": base_model,
+        "protocol": "mace_run_train-lora" if lora else "mace_run_train",
+        "e0s": "foundation",
+        "lora": bool(lora),
+    }
     energies = [alignment.aligned_energy(a, _reference_energy(a)) for a in train_atoms]
     foundation = _resolve_foundation_model_file(base_model, base, work_dir=work_dir)
     train_xyz, val_xyz, n_train, n_val, with_stress = _write_xyz_splits(

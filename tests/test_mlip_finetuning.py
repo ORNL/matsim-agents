@@ -317,6 +317,10 @@ def test_fine_tuning_writes_its_alignment(tmp_path, references):
     record = json.loads(path.read_text())
     assert record["convention"] == "dft_formation_on_model_elemental_scale"
     assert record["source_dataset_sha256"] == "abc"
+    assert record["finetune"] is None
+    alignment.finetune = {"backend": "uma", "head_output": "denormalized_element_referenced"}
+    alignment.write(tmp_path)
+    assert recorded_alignment(tmp_path)[0].finetune == alignment.finetune
 
 
 def test_alignment_is_found_for_fairchem_nested_checkpoints(tmp_path, references):

@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from ase import Atoms
 from pydantic import BaseModel, Field
@@ -51,6 +51,9 @@ class EnergyAlignment(BaseModel):
         "file they were inherited from."
     )
     source_dataset_sha256: str | None = None
+    finetune: dict[str, Any] | None = Field(
+        default=None, description="Protocol of the fine-tune that wrote this alignment."
+    )
 
     def offset_eV(self, symbols: Iterable[str]) -> float:
         total = 0.0
