@@ -3,7 +3,7 @@
 #
 # At launch, the LLM (vLLM/Ollama/HF/etc.) is asked to expand the natural-
 # language `prompt` below into a list of chemical formulas. Each formula is
-# turned into prototype crystal seeds via matsim_agents.discovery and used as
+# turned into prototype crystal seeds via matsim_agents.science.structures and used as
 # the starting set for the HydraGNN-driven MD sampler.
 #
 # The list of compositions returned by the LLM is persisted under
