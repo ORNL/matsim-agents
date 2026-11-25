@@ -2,12 +2,12 @@ import json
 
 import pytest
 
+from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
 from matsim_agents.fusion import synthetic
 from matsim_agents.fusion.policy import builtin_policy
 from matsim_agents.fusion.revision import build_packet, parse_draft, revise_fusion_hypothesis
 from matsim_agents.fusion.scoring import score_candidates
-from matsim_agents.workflows.radiation_hypothesis import RevisionBudget, RevisionBudgetError
 
 POLICY = builtin_policy("fusion_pfc_initial_v1")
 

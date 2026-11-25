@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from matsim_agents.core.revision import MAX_RATIONALE_CHARS, RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
     EvidenceOutcome,
@@ -28,32 +29,10 @@ from matsim_agents.execution.ledger import (
 from matsim_agents.workflows.radiation_damage import RadiationDamageConfig, RadiationDamageRun
 
 RationaleWriter = Callable[[str], str]
-MAX_RATIONALE_CHARS = 2000
-
-
-class RevisionBudgetError(RuntimeError):
-    """The revision budget is spent."""
 
 
 class RevisionGateError(RuntimeError):
     """The inputs fail a deterministic gate."""
-
-
-@dataclass
-class RevisionBudget:
-    """Bounds on revisions per hypothesis and on optional LLM calls."""
-
-    max_revisions: int = 5
-    max_llm_calls: int = 0
-    llm_calls_used: int = 0
-
-    def __post_init__(self) -> None:
-        if self.max_revisions < 1 or self.max_llm_calls < 0 or self.llm_calls_used < 0:
-            raise ValueError("budgets must be positive integers (LLM calls may be zero)")
-
-    @property
-    def llm_calls_left(self) -> int:
-        return max(self.max_llm_calls - self.llm_calls_used, 0)
 
 
 @dataclass(frozen=True)

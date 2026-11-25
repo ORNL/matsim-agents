@@ -456,7 +456,7 @@ def _evaluate(
 
 def _dataset_method_check(dataset_path: Path, reference_manifest: Path):
     """Verify the dataset's DFT method against the references; return the checker."""
-    from matsim_agents.datasets.energy_references import (
+    from matsim_agents.core.energy_references import (
         load_elemental_reference_manifest,
         validate_dataset_reference_method,
     )

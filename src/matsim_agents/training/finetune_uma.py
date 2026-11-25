@@ -55,13 +55,13 @@ from ase import Atoms
 from ase.io import read as ase_read
 
 from matsim_agents.backends.mlip.config import UMAConfig, UMATask
-from matsim_agents.core.hashing import sha256_file
-from matsim_agents.core.seeding import numpy_rng, seed_process
-from matsim_agents.datasets.energy_alignment import energy_alignment
-from matsim_agents.datasets.energy_references import (
+from matsim_agents.core.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
 )
+from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.seeding import numpy_rng, seed_process
+from matsim_agents.datasets.energy_alignment import energy_alignment
 from matsim_agents.datasets.governance import load_training_manifest, reject_formation_frames
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 

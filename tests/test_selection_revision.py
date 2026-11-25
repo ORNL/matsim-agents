@@ -16,9 +16,9 @@ from matsim_agents.campaign.selection_revision import (
     revise_selection_hypothesis,
     validate_draft,
 )
+from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisRecord, HypothesisStatus
 from matsim_agents.execution.properties import PropertyConditions, PropertyStatus
-from matsim_agents.workflows.radiation_hypothesis import RevisionBudget, RevisionBudgetError
 from tests.test_selection import BULK, KAPPA, T, ev
 
 SWELL = "irradiation_swelling"  # lower is better

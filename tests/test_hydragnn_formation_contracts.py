@@ -20,7 +20,7 @@ from matsim_agents.active_learning.trainer import retrain_hydragnn
 from matsim_agents.active_learning.training_references import resolve_training_references
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-from matsim_agents.datasets.energy_references import predict_elemental_references
+from matsim_agents.core.energy_references import predict_elemental_references
 from matsim_agents.datasets.formation_training import (
     prepare_hydragnn_training_frames,
     save_hydragnn_energy_convention,

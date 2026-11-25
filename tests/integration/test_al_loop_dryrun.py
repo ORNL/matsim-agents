@@ -1052,7 +1052,7 @@ def test_fraction_holdout_real_evaluation_and_resume(
 
     import matsim_agents.active_learning.loop as loop_mod
     import matsim_agents.backends.mlip.calculator as calculator_mod
-    from matsim_agents.datasets.energy_references import validate_dataset_reference_method
+    from matsim_agents.core.energy_references import validate_dataset_reference_method
 
     class ConstantCalculator(Calculator):
         implemented_properties = ["energy", "forces"]

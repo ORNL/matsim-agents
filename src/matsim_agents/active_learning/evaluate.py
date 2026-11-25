@@ -46,12 +46,12 @@ from ase.io import read as ase_read
 
 from matsim_agents.active_learning.config import ALConfig, TrainerConfig
 from matsim_agents.backends.mlip.config import MLIPConfig
-from matsim_agents.core.seeding import numpy_rng, stream_seed
-from matsim_agents.datasets.energy_references import (
+from matsim_agents.core.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
     validate_dataset_reference_method,
 )
+from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.datasets.governance import structure_identity
 
 log = logging.getLogger(__name__)

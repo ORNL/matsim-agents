@@ -43,6 +43,11 @@ from matsim_agents.campaign.selection_revision import (
     _rounds_to,
     append_property_evidence,
 )
+from matsim_agents.core.revision import (
+    MAX_RATIONALE_CHARS,
+    RevisionBudget,
+    RevisionBudgetError,
+)
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisRecord, HypothesisStatus
 from matsim_agents.execution.properties import PropertyEvidence
 from matsim_agents.fusion.objectives import objective
@@ -54,11 +59,6 @@ from matsim_agents.fusion.scoring import (
     RankingStatus,
     ScoringResult,
     evidence_key,
-)
-from matsim_agents.workflows.radiation_hypothesis import (
-    MAX_RATIONALE_CHARS,
-    RevisionBudget,
-    RevisionBudgetError,
 )
 
 PACKET_VERSION = "fusion-pfc-packet-v1"

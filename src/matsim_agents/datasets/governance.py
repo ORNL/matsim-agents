@@ -11,14 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.core.energy_conventions import FORMATION_ENERGY_REFERENCE, native_total_energy
 from matsim_agents.core.hashing import sha256_file
-
-FORMATION_ENERGY_REFERENCE = "dft:declared_elemental_formation_energy"
-
-
-def native_total_energy(backend: str) -> str:
-    """The ``energy_reference`` of raw DFT total energies from ``backend``."""
-    return f"{backend}:native_total_energy"
 
 
 class DatasetValidationSummary(BaseModel):
@@ -217,11 +211,9 @@ def write_dataset_manifest(
 
 
 __all__ = [
-    "FORMATION_ENERGY_REFERENCE",
     "DatasetManifest",
     "DatasetValidationSummary",
     "load_training_manifest",
-    "native_total_energy",
     "reject_formation_frames",
     "structure_identity",
     "validate_labelled_frames",

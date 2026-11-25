@@ -402,7 +402,7 @@ def test_mace_cli_takes_the_elemental_references(tmp_path, references, dataset_m
 def test_finetune_training_inputs_are_gated(
     tmp_path, references, dataset_method_sidecar, defect, error
 ):
-    from matsim_agents.datasets.governance import FORMATION_ENERGY_REFERENCE
+    from matsim_agents.core.energy_conventions import FORMATION_ENERGY_REFERENCE
     from matsim_agents.training.finetune_uma import _load_training_frames
 
     path = tmp_path / "labels.extxyz"

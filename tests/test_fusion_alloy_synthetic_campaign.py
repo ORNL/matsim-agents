@@ -30,6 +30,7 @@ from matsim_agents.campaign.selection import (
 )
 from matsim_agents.campaign.selection_revision import revise_selection_hypothesis
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.revision import RevisionBudget
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
 from matsim_agents.execution.properties import (
     PropertyConditions,
@@ -38,7 +39,6 @@ from matsim_agents.execution.properties import (
     PropertyStatus,
 )
 from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
-from matsim_agents.workflows.radiation_hypothesis import RevisionBudget
 
 CONFIG = Path(__file__).parents[1] / "examples/characterization/fusion_alloy_selection.yaml"
 NEEDS_T = {"thermal_conductivity_total", "irradiation_swelling"}

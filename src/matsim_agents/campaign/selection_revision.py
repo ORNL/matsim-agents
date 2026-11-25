@@ -35,6 +35,11 @@ from matsim_agents.campaign.selection import (
     SelectionResult,
     SelectionStatus,
 )
+from matsim_agents.core.revision import (
+    MAX_RATIONALE_CHARS,
+    RevisionBudget,
+    RevisionBudgetError,
+)
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
     EvidenceRecord,
@@ -45,11 +50,6 @@ from matsim_agents.execution.properties import (
     PropertyEvidence,
     PropertyStatus,
     to_ledger_record,
-)
-from matsim_agents.workflows.radiation_hypothesis import (
-    MAX_RATIONALE_CHARS,
-    RevisionBudget,
-    RevisionBudgetError,
 )
 
 PACKET_VERSION = "selection-packet-v1"

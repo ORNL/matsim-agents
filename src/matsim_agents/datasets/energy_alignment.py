@@ -26,7 +26,7 @@ from typing import Any, Literal
 from ase import Atoms
 from pydantic import BaseModel, Field
 
-from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
+from matsim_agents.core.energy_references import load_elemental_reference_manifest
 
 ENERGY_ALIGNMENT_FILE = "energy-alignment.json"
 ALIGNMENT_CONVENTION = "dft_formation_on_model_elemental_scale"

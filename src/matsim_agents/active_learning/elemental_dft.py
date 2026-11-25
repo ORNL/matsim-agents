@@ -26,8 +26,8 @@ from matsim_agents.active_learning.dft_protocol import (
 )
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.core.energy_references import load_elemental_reference_manifest
 from matsim_agents.core.hashing import sha256_file
-from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.placement import ProcessLaunch, ResourcePlan
 

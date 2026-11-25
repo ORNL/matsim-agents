@@ -187,6 +187,7 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.active_learning.candidates",
         "matsim_agents.discovery.seeds",
         "matsim_agents.discovery.selection",
+        "matsim_agents.datasets.energy_references",
         "matsim_agents.discovery.composition",
         "matsim_agents.execution.contracts",
         "matsim_agents.execution.launchers",
