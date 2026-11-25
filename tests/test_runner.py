@@ -94,9 +94,19 @@ def test_unknown_file_is_refused(tmp_path) -> None:
         runner.validate(stray)
 
 
-def test_incomplete_example_config_is_recorded_not_raised(tmp_path) -> None:
+def test_unset_example_inputs_are_recorded_as_blocked(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("ELEMENTAL_REFERENCE_MANIFEST", raising=False)
     source = REPO / "examples/paper_cases/al_hea_fcc_cantor.yaml"
     _, record = runner.run(source, runs_dir=tmp_path)
+    assert record.state == "blocked"
+    assert any("ELEMENTAL_REFERENCE_MANIFEST" in blocker for blocker in record.blockers)
+    assert runner.exit_code(record) == 3
+
+
+def test_invalid_config_is_recorded_as_failed(tmp_path) -> None:
+    source = tmp_path / "al.yaml"
+    source.write_text("random_seed: 1\nmd: 3\nacquisition: {}\n")
+    _, record = runner.run(source, runs_dir=tmp_path / "runs")
     assert record.state == "failed"
     assert "invalid or incomplete configuration" in (record.failure_reason or "")
     assert runner.exit_code(record) == 1
@@ -218,15 +228,55 @@ EXAMPLES = sorted((REPO / "examples").rglob("*.y*ml"))
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: str(p.relative_to(REPO)))
 def test_every_example_validates_or_names_what_is_missing(path, monkeypatch) -> None:
-    for name in ("MODEL_ROOT", "PROJ_ROOT", "MACE_CHECKPOINT"):
+    for name in ("MODEL_ROOT", "PROJ_ROOT", "RUNS_ROOT", "MACE_CHECKPOINT", "PW_BIN"):
         monkeypatch.delenv(name, raising=False)
     try:
         kind, preflight = runner.validate(path)
-    except ValueError as exc:  # unrunnable inputs and unset user inputs; never a traceback
-        assert str(exc)
+    except runner.UnrunnableInput:
         return
     assert kind in runner.HANDLERS
     assert isinstance(preflight.blockers, list)
+
+
+def test_unset_variables_are_blockers_not_invalid_configs(tmp_path, monkeypatch) -> None:
+    from matsim_agents.execution.variables import unset_variables
+
+    for name in ("MODEL_ROOT", "MACE_CHECKPOINT", "ELEMENTAL_REFERENCE_MANIFEST", "PROJ_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    for relative, names in {
+        "debate/equal-independent-plan-servers.yaml": {"MODEL_ROOT"},
+        "active_learning/e3_qe_mace.yaml": {"MACE_CHECKPOINT"},
+        "paper_cases/al_zn_formate.yaml": {"ELEMENTAL_REFERENCE_MANIFEST"},
+    }.items():
+        path = REPO / "examples" / relative
+        _, preflight = runner.validate(path)
+        assert names <= set(unset_variables(yaml.safe_load(path.read_text())))
+        for name in names:
+            assert any(name in blocker for blocker in preflight.blockers), (relative, name)
+    monkeypatch.setenv("MACE_CHECKPOINT", str(tmp_path / "mace.model"))
+    document = yaml.safe_load((REPO / "examples/active_learning/e3_qe_mace.yaml").read_text())
+    assert "MACE_CHECKPOINT" not in unset_variables(document)
+
+    run_dir, record = runner.run(
+        REPO / "examples/debate/equal-independent-plan-servers.yaml", runs_dir=tmp_path / "runs"
+    )
+    assert record.state == "blocked" and runner.exit_code(record) == 3
+    assert any("MODEL_ROOT" in blocker for blocker in record.blockers)
+
+
+def test_unset_variable_hints_defaults_and_vars() -> None:
+    from matsim_agents.execution.variables import unset_variables
+
+    document = {
+        "vars": {"HOME_DIR": "${HOME_DIR:-/data}", "NEEDED": "${NEEDED:?export NEEDED}", "X": "1"},
+        "a": ["${HOME_DIR}/a", "${X}", "${NEEDED}", "${ONLY_DEFAULT:-1}", "${PLAIN}"],
+    }
+    assert unset_variables(document) == {"NEEDED": "export NEEDED", "PLAIN": ""}
+
+
+def test_missing_stability_reference_file_is_a_blocker() -> None:
+    _, preflight = runner.validate(REPO / "examples/characterization/thermodynamic_stability.yaml")
+    assert any("reference_energies" in blocker for blocker in preflight.blockers)
 
 
 def test_investigation_examples_are_blocked_without_a_model(monkeypatch) -> None:

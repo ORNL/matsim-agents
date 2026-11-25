@@ -16,6 +16,7 @@ import yaml
 
 from matsim_agents.execution.capabilities import check, get_capability
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.execution.variables import unset_variables
 from matsim_agents.workflows.run_records import (
     RunRecord,
     RunState,
@@ -212,9 +213,21 @@ def _llm_check_execute(path: Path, run: ScientificRunDirectory, options: RunOpti
 
 
 def _characterize_preflight(path: Path, options: RunOptions) -> Preflight:
+    from pydantic import ValidationError
+
     from matsim_agents.workflows.characterization import load_contract
 
-    contract = load_contract(path)
+    try:
+        contract = load_contract(path)
+    except ValidationError as error:
+        # A user-supplied reference file that is absent is a blocker; any other error is invalid.
+        if all("needs a reference_energies file" in item["msg"] for item in error.errors()):
+            reference = load_yaml(path).get("reference_energies")
+            return Preflight(
+                {"contract_id": load_yaml(path).get("contract_id")},
+                [f"reference_energies file {reference} does not exist; supply it (see docs)"],
+            )
+        raise
     return Preflight({"contract_id": contract.contract_id, "recipe": contract.recipe})
 
 
@@ -620,10 +633,25 @@ def _handler(kind: str, path: Path) -> Handler:
     return HANDLERS[kind]
 
 
+def _preflight(handler: Handler, target: Path, options: RunOptions) -> Preflight:
+    """Run a preflight; a config that cannot load for unset ${VAR}s is blocked, not invalid."""
+    try:
+        return handler.preflight(target, options)
+    except ValueError:
+        missing = unset_variables(load_yaml(target))
+        if not missing:
+            raise
+        blockers = [
+            f"environment variable {name} is not set" + (f": {hint}" if hint else "")
+            for name, hint in missing.items()
+        ]
+        return Preflight({}, blockers)
+
+
 def validate(path: str | Path, options: RunOptions | None = None) -> tuple[str, Preflight]:
     """Validate statically and report blockers; no side effects. Raises on invalid input."""
     kind, target = _resolve(Path(path))
-    return kind, _handler(kind, target).preflight(target, options or RunOptions())
+    return kind, _preflight(_handler(kind, target), target, options or RunOptions())
 
 
 def run(
@@ -635,7 +663,7 @@ def run(
     handler = _handler(kind, target)
     options = options or RunOptions()
     try:
-        pre = handler.preflight(target, options)
+        pre = _preflight(handler, target, options)
     except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
         run_dir, record = start_run(runs_dir, kind=kind, source=source)
         record.state = "failed"
