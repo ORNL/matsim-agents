@@ -200,3 +200,38 @@ import vllm.entrypoints.openai.api_server  # or whatever import is suspected
 ```
 
 This is how the `tvm_ffi` hang was originally diagnosed (May 6, 2026).
+
+## Running torch tests on a login node
+
+Torch tests need two environment changes on a Frontier login node.
+
+**1. Use ROCm 7.2 libraries.** The default login environment resolves
+`/opt/rocm-6.2.4/lib/libamd_smi.so`, and `import torch` fails with
+`undefined symbol: amdsmi_free_name_value_pairs`. Use the ROCm 7.2 paths:
+
+```bash
+env -u LD_LIBRARY_PATH ROCM_PATH=/opt/rocm-7.2.0 HIP_LIB_PATH=/opt/rocm-7.2.0/lib \
+  XALT_EXECUTABLE_TRACKING=no PYTHONNOUSERSITE=1 PYTHONPATH=src:. \
+  .venv/bin/python -m pytest -q tests/test_mlip_finetuning.py
+```
+
+**2. Disable XALT tracking (`XALT_EXECUTABLE_TRACKING=no`).**
+
+- **Symptom:** a process that imported torch prints
+  `Segmentation fault (core dumped)` and exits with code 139. This happens
+  after pytest has already reported its results, so every test can pass and
+  the run still fails.
+- **Cause:** Frontier sets `LD_PRELOAD=/sw/frontier/xalt/main/lib64/libxalt_init.so`.
+  At process exit, XALT's exit hook crashes in `strlen` inside
+  `__XALT_transmit_xalt_1_5` while sending its usage record. The backtrace has
+  no torch or matsim-agents frames.
+- **How it was confirmed (Nov 24, 2026):**
+  - `python -c "import torch"` crashes the same way.
+  - `os._exit(0)` skips the exit handlers and avoids the crash.
+  - `gdb -batch -ex run -ex bt` shows the XALT frames.
+  - With `XALT_EXECUTABLE_TRACKING=no`, the same tests exit 0 with no core
+    dump.
+- **Effect of the workaround:** it only stops XALT from recording that run's
+  usage; Python and torch behave the same.
+
+Delete any `core` file left by an earlier crash; it must not be committed.
