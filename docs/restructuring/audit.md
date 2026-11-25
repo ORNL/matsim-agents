@@ -96,7 +96,7 @@ the enforced architecture itself is campaign-shaped.
 | Budget / accounting | 6+ | `execution/budget` |
 | Campaign/workflow state | 4 | `workflows/state` |
 | `sbatch` script construction/submission | `execution/slurm_jobs`, `gas_qe_campaign:379`, `hierarchy_campaign:674`, SPECTRA-PKA runner | `execution/schedulers/slurm` |
-| Process-group kill | `backends/dft/process`, `workflow_runner` | `execution/process` |
+| Process-group kill | `backends/dft/process`, former `workflow_runner` | `execution/process` |
 | Dispatch pools | `backends/dft/runner`, `backends/mlip/pool`, `execution/deadline_worker` | `execution/pool` |
 | Atomic-mass tables | 4 copies in QE modules | `ase.data` via `core/units` |
 | eV/Å → Ry/bohr | literal in `relaxation.py:362` vs `ase.units` elsewhere | `core/units` (re-record known answers) |

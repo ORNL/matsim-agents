@@ -245,9 +245,9 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | Script | Purpose |
 |---|---|
 | `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + the selected MLIP (`MLIP_CONFIG`, default HydraGNN; FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
-| `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents relax` contract through the shared deployment runner. |
+| `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents run` (relax config) contract through the shared deployment runner. |
 | `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
-| `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
+| `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents run` (llm-check config) stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
 | `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
 | `job-all-local-model-debate-perlmutter.sh` | Starts the seven Perlmutter-compatible local catalog models in one 15-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2, Devstral-2, and Mistral-Large-3 are excluded for the compatibility reasons below. |

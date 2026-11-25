@@ -132,7 +132,7 @@ The repository now exposes several connected workflows. This README documents
 the AL kernel itself (`matsim-agents al run`), while the other entry points
 can feed into it:
 
-- `matsim-agents run`: core planner -> executor -> uq_gate -> analyst graph,
+- `matsim-agents objective`: core planner -> executor -> uq_gate -> analyst graph,
   with optional run-path AL handoff on low-confidence relaxations.
 - `matsim-agents chat`: interactive discovery REPL; can optionally escalate to
   AL when UQ is high (`--trigger-al-handoff`, `--al-config`).
@@ -148,7 +148,7 @@ disagreement, and labels them with single-point (frozen-ion) DFT.
 
 ```mermaid
 flowchart LR
-  R[matsim-agents run] --> RU[uq_gate]
+  R[matsim-agents objective] --> RU[uq_gate]
   C[matsim-agents chat] --> CU[chat UQ policy]
   RU -->|triggered| AL[matsim-agents al run]
   CU -->|triggered| AL
@@ -242,7 +242,7 @@ Run the agent graph and let it trigger this AL path when UQ policy thresholds
 are met:
 
 ```bash
-matsim-agents run "Find stable phases of Li2MnO3" \
+matsim-agents objective "Find stable phases of Li2MnO3" \
   --trigger-al-handoff \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
@@ -263,14 +263,14 @@ matsim-agents al run examples/active_learning/al_config.example.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 3) Agent graph with UQ-triggered handoff (dry run)
-matsim-agents run "Find stable phases of Li2MnO3" \
+matsim-agents objective "Find stable phases of Li2MnO3" \
   --trigger-al-handoff \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
 # 4) Run path with UQ-triggered AL handoff planning
-matsim-agents run \
+matsim-agents objective \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --trigger-al-handoff \

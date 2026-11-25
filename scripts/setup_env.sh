@@ -299,7 +299,7 @@ Activate (workstation):
 
 Quick start:
     matsim-agents --help
-    matsim-agents run "Relax structures/foo.vasp" \\
+    matsim-agents objective "Relax structures/foo.vasp" \\
         --mlip-config examples/mlip/uma-s-1p1-omat.yaml \\
         --llm-provider ollama
 ------------------------------------------------------------

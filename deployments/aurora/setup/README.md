@@ -141,7 +141,7 @@ Submit with your allocation (`qsub -A <project> ...`); none embed an account.
 | `jobs/submit-active-learning-paper-cases.sh` | Submit the paper-case job for every case |
 | `jobs/job-al-dft-scaling-aurora.sh` | One DFT strong-scaling point; node count from `PBS_NODEFILE` |
 | `jobs/submit-al-dft-scaling-sweep.sh` | Submit the scaling sweep over `NODES` x `REPS` |
-| `jobs/job-llm-check-aurora.sh` | Live vLLM server + six-stage `matsim-agents llm-check` qualification |
+| `jobs/job-llm-check-aurora.sh` | Live vLLM server + six-stage `matsim-agents run` (llm-check config) qualification |
 | `jobs/job-sequential-benchmark-aurora.sh` | Per-model vLLM benchmark with merged leaderboard and plot |
 | `launchers/launch-test-all-models-aurora.sh` | Submit the single-node vLLM smoke test once per local model |
 | `launchers/launch-test-singlenode-resume-aurora.sh` | Resume the single-node sweep for a subset (`RESUME_MODELS`) |

@@ -159,7 +159,7 @@ jobs:
       - name: Dry-run every application
         run: |
           for app in examples/*/application.yaml; do
-            matsim-agents application check "$app"
+            matsim-agents validate "$app"
           done
 
   # ── Gate job: single required status check for branch protection ─────────────

@@ -1,6 +1,6 @@
 # Rank MgO polymorphs by MLIP energy per atom. This answers "which of these
 # structures is lowest in energy", never "is MgO thermodynamically stable".
-#   matsim-agents characterize examples/characterization/energy_ranking.yaml
+#   matsim-agents run examples/characterization/energy_ranking.yaml
 contract_id: mgo-polymorph-ranking
 objective: Which MgO polymorph, rocksalt or zincblende, is lower in energy?
 formula: MgO

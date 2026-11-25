@@ -170,7 +170,7 @@ Implemented on branch `refactor/framework-architecture` (PR #80):
 - Applications: `examples/fusion_bcc_1024` (pinned 1,024-site
   W640Ta128Cr64V96Hf32Mo64, 8×8×8 BCC), `examples/cantor_fcc_256` (FCC,
   hierarchy workflow), `examples/perovskite_oxides` (prototype search).
-  `matsim-agents application check FILE` dry-runs each; CI runs all three.
+  `matsim-agents validate FILE` dry-runs each; CI runs all three.
 - Transmutation host/products, radiation species and HydraGNN paths come
   from configuration.
 - Enforcement: `tests/test_package_boundaries.py`, `tests/test_applications.py`,
@@ -180,14 +180,14 @@ Known blockers and deviations:
 
 - Alloy generation (`AlloySpec`, `build_supercell`) handles sc, bcc, fcc,
   hcp, diamond and custom unit cells, conventional or primitive, with diagonal
-  or full integer supercell matrices. `application check` builds every target
+  or full integer supercell matrices. `validate` builds every target
   parent, including the Cantor 4x4x4 FCC cell (256 sites). The
   full-supercell defect workflow and `find_cross_cell_equivalents` are still
   bcc-only, because they use bcc interstitial and cubic-axis geometry.
 - `examples/perovskite_oxides/run.py` generates candidates only; relaxation
   and hull ranking need an MLIP and are not run in CI.
-- Acceptance criterion 3 is met through `matsim-agents application check`,
-  not `matsim-agents run FILE`; `run` stays the free-form objective command.
+- Acceptance criterion 3 is met: `matsim-agents run FILE` executes any
+  config; the free-form objective path is `matsim-agents objective "TEXT"`.
 - Criterion 5 (single implementations) is not audited exhaustively;
   duplicates found during the move were merged.
 - `research/paper/e1/d-questions.v1.json` still names

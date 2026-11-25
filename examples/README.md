@@ -19,11 +19,16 @@ constants of its own. `tests/test_package_boundaries.py` enforces this.
 | `workflow_config` | Path, relative to the application file, of the workflow config. |
 | `parameters` | Application-specific values passed to the workflow, such as transmutation host and products. |
 
-Check any application against its workflow without computing anything:
+Check any application against its workflow without computing anything, then run it:
 
 ```bash
-matsim-agents application check examples/fusion_bcc_1024/application.yaml
+matsim-agents validate examples/fusion_bcc_1024/application.yaml
+matsim-agents run examples/fusion_bcc_1024/application.yaml
 ```
+
+A run that lacks a backend, credential, approval or resource is recorded as
+`blocked` (exit 3) with the reasons; `matsim-agents status` and `evidence` inspect
+saved runs.
 
 ```python
 from matsim_agents.core.application import load_application
@@ -37,7 +42,7 @@ config_path = app.resolve(app.workflow_config)
 | Application | Paradigm | How to run it |
 | --- | --- | --- |
 | [fusion_bcc_1024](fusion_bcc_1024/application.yaml) | Fixed 1,024-site BCC W640Ta128Cr64V96Hf32Mo64 supercell, (8,8,8) repeats, with transmutation and gas. | `matsim_agents.workflows.full_supercell_campaign.FullSupercellCampaign` with [campaign.yaml](fusion_bcc_1024/campaign.yaml). `tests/test_applications.py` pins the target. |
-| [cantor_fcc_256](cantor_fcc_256/application.yaml) | Non-BCC (4x4x4 FCC CoCrFeMnNi, 256 sites) hierarchical transfer campaign; `application check` builds the FCC parent. | `matsim_agents.workflows.hierarchy.engine` with [campaign.yaml](cantor_fcc_256/campaign.yaml); see [hierarchical-transfer-campaign.md](../docs/hierarchical-transfer-campaign.md). |
+| [cantor_fcc_256](cantor_fcc_256/application.yaml) | Non-BCC (4x4x4 FCC CoCrFeMnNi, 256 sites) hierarchical transfer campaign; `validate` builds the exact-count FCC parent. | `matsim_agents.workflows.hierarchy.engine` with [campaign.yaml](cantor_fcc_256/campaign.yaml); see [hierarchical-transfer-campaign.md](../docs/hierarchical-transfer-campaign.md). |
 | [perovskite_oxides](perovskite_oxides/application.yaml) | Composition-driven perovskite prototype search. | `python examples/perovskite_oxides/run.py -o perovskite-candidates` generates prototype candidates; relaxation needs an MLIP config. |
 
 The other directories hold configs and scripts for single framework features:

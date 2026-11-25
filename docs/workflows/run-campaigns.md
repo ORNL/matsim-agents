@@ -13,35 +13,31 @@ Choose a task first:
 ## The common interface
 
 ```bash
-matsim-agents workflow list
-matsim-agents workflow init explore ./search.yaml
-# Edit the native config identified by config: in search.yaml.
-matsim-agents workflow check ./search.yaml
-matsim-agents workflow run ./search.yaml
-# Use the invocation directory printed by run, not the native scientific directory.
-matsim-agents workflow status WORKFLOW_RUN_DIRECTORY
-matsim-agents workflow summary WORKFLOW_RUN_DIRECTORY
-matsim-agents workflow resume WORKFLOW_RUN_DIRECTORY --native-run SCIENTIFIC_RUN_DIRECTORY
+matsim-agents config init explore ./search.yaml   # annotated starter config
+# Edit search.yaml.
+matsim-agents validate ./search.yaml              # no compute; exit 2 if invalid
+matsim-agents plan ./search.yaml                  # what `run` would do and what blocks it
+matsim-agents run ./search.yaml --runs-dir runs   # execute and record
+matsim-agents status                              # list recorded runs
+matsim-agents evidence RUN_ID                     # state, summary, blockers, native directory
+matsim-agents resume RUN_ID                       # continue, or retry once blockers clear
 ```
 
-`init`, `status`, and `summary` do not calculate. `check` validates configuration,
-native CLI arguments, and the relevant existing native configuration model.
-It does **not** qualify authentication, model/device ABI, live services, or
-scheduler readiness.
+The config's top-level keys select the workflow (`application`, `explore`, `al`,
+`neb`, `relax`, `characterize`, `debate`, `llm-check`, `alloy-spec`, external
+interfaces). `validate` checks configuration and the relevant native config model
+without calculating. It does **not** qualify authentication, model/device ABI,
+live services, or scheduler readiness; those appear as blockers in `plan` and
+`run`.
 
-`run` delegates to the existing native workflow. It streams native output to
-the console and retains it in an invocation log. Interactive chat retains stdin.
-An invocation has its own configuration, status, JSON summary, and Markdown
-report; the native workflow continues to own scientific results and checkpoints.
-Two processes cannot execute the same invocation concurrently.
+`run` calls the native workflow in-process. Every invocation, including blocked
+and failed ones, leaves `run-record.json` and `report.md` in a new directory under
+`--runs-dir`; the native workflow continues to own scientific results and
+checkpoints. Exit status: 0 finished, 1 failed or interrupted, 2 invalid input,
+3 blocked on a missing backend, credential, approval or resource.
 
-Relative `config` and `output_root` paths are resolved against the
-wrapper YAML. Paths inside a native config retain **that workflow's** existing
-semantics. The `arguments` list is passed literally without a shell; argument
-paths retain the current working directory's semantics. Use absolute paths when
-moving a wrapper between directories. Native execution records its working
-directory and reuses it on resume, preserving those relative paths. Do not put credentials in configs or
-arguments: invocation evidence records them.
+Relative paths inside a config keep that workflow's existing semantics. Do not
+put credentials in configs: run records keep the resolved summary.
 
 ### Scientific hypothesis revision records
 
@@ -73,39 +69,27 @@ do not revisit scientific claims do not receive artificial LLM assessments.
 Single-shot model checks and independent benchmark responses are not an
 evolving hypothesis trajectory.
 
-## Advanced workflow catalog
+## Config kinds
 
-All entries expose `check`, `run`, `status`, and `summary` through the same
-wrapper. `resume` is capability-based: a command is available, but rejects
-workflows without a safe native restart contract instead of silently replaying.
+| Kind | Native workflow | Resume |
+| --- | --- | --- |
+| `application` | Application runner (structure build, relaxation, campaign) | Blocked runs retry |
+| `explore` | Bounded MLIP exploration | Checkpointed (`resume RUN_ID`) |
+| `relax` | Provenance-tracked relaxation | Unsupported |
+| `characterize` | Characterization contract | Native step journal |
+| `debate` | Scientific debate | Unsupported |
+| `llm-check` | LLM deployment qualification | Unsupported |
+| `al` | Active-learning loop | Native loop with `loop.resume: true` |
+| `neb` | QE NEB preparation and dispatch | Unsupported |
+| `alloy-spec` | Structure generation | Unsupported |
+| `external` | Optional external-software interfaces | Unsupported |
 
-| Workflow | Native command | Wrapper input | Native resume |
-| --- | --- | --- | --- |
-| `explore` | `explore run` | `config` | Version-2 scientific directory via `--native-run` |
-| `relax` | `relax` | `config` | Unsupported |
-| `characterize` | `characterize` | `config` | Same contract and native step journal |
-| `debate` | `debate` | `config` | Unsupported |
-| `llm-check` | `llm-check` | `config` | Unsupported |
-| `al` | `al run` | `config` | Native loop with `loop.resume: true` |
-| `objective` | `run` | Objective/options in `arguments` | Unsupported |
-| `plan` | `plan` | Objective/options in `arguments` | Unsupported |
-| `chat` | `chat` | Options in `arguments` | Native session via `--native-run` |
-| `known-answers` | `benchmark known-answers` | Options in `arguments` | Unsupported |
-| `agent-eval` | `benchmark agent-eval` | `config` | Unsupported |
+`resume` rejects kinds without a safe restart contract instead of replaying.
+A natural-language goal uses `matsim-agents objective "TEXT"` and records a run of
+kind `objective` the same way.
 
 Native approvals, backend selection, evidence policies, and compute budgets
-remain in their existing native config/options.
-
-For example, an objective wrapper is:
-
-```yaml
-workflow: objective
-arguments:
-  - "Find a candidate Nb oxide structure"
-  - --mlip-config
-  - examples/mlip/mace-mp-medium.yaml
-output_root: ./workflow-records
-```
+remain in their existing config.
 
 Use native `--help` to choose options. Backend/service/scheduler utilities
 (`capabilities`, `resources`, `inventory`, `ledger`, `coordination`) are operational

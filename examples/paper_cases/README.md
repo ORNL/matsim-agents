@@ -26,7 +26,7 @@ to, not instead of, the held-out compound split. See the
 
 These paper cases can be executed through three complementary entry points:
 
-- Core graph (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
+- Core graph (`matsim-agents objective`): planner -> executor -> uq_gate -> analyst,
   with optional run-path AL handoff when UQ thresholds are crossed.
 - Active learning (`matsim-agents al run al_<case>.yaml`): iterative
   discovery -> UQ/acquisition -> DFT labeling -> retraining loop.
@@ -37,7 +37,7 @@ escalating to AL when configured UQ thresholds are crossed.
 
 ```mermaid
 flowchart LR
-  RG[matsim-agents run] --> RU[uq_gate]
+  RG[matsim-agents objective] --> RU[uq_gate]
   CH[matsim-agents chat] --> CQ[chat UQ policy]
   RU -->|triggered| AL[matsim-agents al run al_case.yaml]
   CQ -->|triggered| AL
@@ -119,7 +119,7 @@ matsim-agents al run examples/paper_cases/al_lifepo4.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
 # 5) agent-graph discovery -> optional AL handoff:
-matsim-agents run "Find stable phases of LiFePO4" \
+matsim-agents objective "Find stable phases of LiFePO4" \
   --trigger-al-handoff \
   --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
@@ -161,14 +161,14 @@ matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
 # 2) Agent graph with optional AL handoff planning
-matsim-agents run "Find stable phases of LiFePO4" \
+matsim-agents objective "Find stable phases of LiFePO4" \
   --trigger-al-handoff \
   --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 
 # 3) Core run path with UQ-triggered AL handoff planning
-matsim-agents run \
+matsim-agents objective \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
   --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --trigger-al-handoff \

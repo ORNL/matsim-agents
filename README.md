@@ -14,7 +14,7 @@ agentic loop. The user states a research objective in natural language;
 agents plan, run MLIP-driven simulations, score chemical and
 dynamical stability, and report the findings. By default, chat asks before
 each exploration (`--auto-confirm` skips the prompt). Explicit approvals gate
-DFT in `matsim-agents relax`, elemental-reference DFT,
+DFT through `matsim-agents run relax.yaml`, elemental-reference DFT,
 and model promotion; active-learning DFT labeling runs without a separate
 approval once `al run` is started.
 
@@ -89,7 +89,7 @@ matsim-agents doctor
 |---|---|
 | `mace`, `uma`, `hydragnn` | MLIP backends. HydraGNN itself and its compiled PyTorch Geometric extensions are installed separately (below). |
 | `ollama`, `vllm`, `openai`, `anthropic`, `huggingface`, `mag`, `copilot` | LLM providers; see [LLM backends](docs/guide/llm-backends.md). |
-| `mcp` | Client for external MCP servers used by `matsim-agents run --mcp-config`. |
+| `mcp` | Client for external MCP servers used by `matsim-agents objective --mcp-config`. |
 | `dev` | Test, lint, and type-check tools. |
 
 MACE, UMA, and HydraGNN require mutually incompatible `e3nn` versions, so
@@ -180,7 +180,7 @@ resolve are listed in the [configuration reference](docs/guide/configuration.md#
 ### 1. Run the agent graph end-to-end
 
 ```bash
-matsim-agents run \
+matsim-agents objective \
   "Relax examples/characterization/structures/MgO-rocksalt.vasp and report the final energy." \
   --mlip-config mlip.yaml \
   --llm-provider ollama --llm-model qwen2.5:14b
@@ -221,7 +221,7 @@ you> Now suggest a Sb-substituted variant.
 ### 3. Discovery with UQ-triggered active-learning handoff
 
 ```bash
-matsim-agents run "Find stable phases of Li2MnO3" \
+matsim-agents objective "Find stable phases of Li2MnO3" \
   --trigger-al-handoff \
   --mlip-config mlip.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
@@ -258,35 +258,27 @@ matsim-agents config init KIND OUTPUT.yaml # copy an annotated starter config; n
 matsim-agents config schema KIND [-o FILE] # JSON Schema for editor validation and completion
 matsim-agents tools list                   # training, dataset, and benchmark tools in the package
 matsim-agents tools run NAME [ARGS...]     # run a tool; its own --help lists its options
-matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
-matsim-agents plan    OBJECTIVE             # show the planner's task list
+matsim-agents validate FILE                # check any config without running it (exit 2 if invalid)
+matsim-agents plan     FILE                # show what `run` would do and what blocks it
+matsim-agents run      FILE [--runs-dir D] # execute any config; blocked runs exit 3 with reasons
+matsim-agents resume   RUN_ID              # continue an interrupted run or retry a blocked one
+matsim-agents status   [RUN_ID]            # one run's state, or list recorded runs
+matsim-agents evidence RUN_ID              # a run's record, summary, blockers and native directory
+matsim-agents objective "TEXT" [options]   # planner -> executor -> uq_gate -> analyst (--plan-only)
 matsim-agents chat    [options]             # interactive discovery REPL
-matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
-matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MLIP phase search
 matsim-agents explore run CONFIG.yaml      # generate, select, relax, and rank MLIP-only batches
 matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reasons, and errors
 matsim-agents explore status RUN_DIRECTORY # last saved checkpoint progress; no scheduler query
 matsim-agents explore resume RUN_DIRECTORY # resume checkpointed exploration (one or more rounds)
-matsim-agents workflow list                # advanced workflows and native restart capabilities
-matsim-agents workflow init PRESET OUTPUT.yaml # annotated exploration/debate presets; no execution
-matsim-agents workflow check CONFIG.yaml   # validate wrapper/native config without scientific execution
-matsim-agents workflow plan CONFIG.yaml    # validate and show the exact command without execution
-matsim-agents workflow run CONFIG.yaml [--dry-run] # preview or invoke the native workflow
-matsim-agents workflow status RUN_DIRECTORY # last saved invocation status, not scheduler liveness
-matsim-agents workflow summary RUN_DIRECTORY # human report and links to native evidence
-matsim-agents workflow resume RUN_DIRECTORY [--native-run DIR] # native restart where supported
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
 matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
 matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
 matsim-agents external spectra-pka check|prepare|run|status|import ...  # optional interface to externally installed SPECTRA-PKA; dry run by default
-matsim-agents application check examples/<app>/application.yaml  # dry-run an application against its workflow
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
-matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
-matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
 matsim-agents coordination init|add|claim|heartbeat|complete|fail ...  # manage tasks; see docs/hpc-task-coordination.md
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts

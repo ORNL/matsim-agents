@@ -25,22 +25,22 @@ Preserve final-ranking hash coverage and scientific resume identity checks.
 
 ## Common interface, not another numerical engine
 
-The common `workflow` commands delegate to the native implementations:
+The common `validate`, `plan`, `run` and `resume` commands delegate to the
+native implementations:
 
-- [Catalog/configuration](../../src/matsim_agents/cli/workflow_catalog.py):
-  typed E3 settings, validated wrapper inputs, native command and restart capability.
-- [CLI dispatch](../../src/matsim_agents/cli/workflows.py): no-compute checks,
-  explicit gates, native command construction, invocation locks and recovery.
-- [Process execution](../../src/matsim_agents/execution/workflow_runner.py):
-  live output, retained logs, interactive stdin, local child-group cleanup.
-- [Invocation persistence/report](../../src/matsim_agents/execution/workflow_record.py):
-  saved process state and human explanation, not scientific convergence.
+- [Runner](../../src/matsim_agents/workflows/runner.py): kind detection, one
+  `Handler` per config kind (no-compute preflight, execute, optional resume),
+  blocker reporting for missing backends, credentials, approvals and resources.
+- [Run records](../../src/matsim_agents/workflows/run_records.py): saved run
+  state and human explanation, not scientific convergence.
+- [CLI commands](../../src/matsim_agents/cli/runs.py): thin wrappers over the
+  runner; exit 0 finished, 1 failed, 2 invalid input, 3 blocked.
 - [Atomic run storage](../../src/matsim_agents/execution/run_directory.py):
   shared JSON/text artifact writes.
 
-For a new advanced workflow, add a catalog adapter pointing to its existing
-native CLI, validate its native config without computation, and declare restart
-support only if its native engine has a safe persistence contract. Do not implement
+For a new advanced workflow, register a `Handler` for its config kind whose
+preflight validates the native config without computation, and set `resume` only
+if its native engine has a safe persistence contract. Do not implement
 “resume” as blind replay. Keep scientific output and checkpoint handling native.
 If the workflow needs a distinct typed preset, validate its parameters rather
 than adding an unrestricted shell command.

@@ -1,8 +1,8 @@
 # E3 benchmark operations
 
 E3 is an application of the framework, not a framework workflow. It runs
-through `python -m benchmarks.e3.production`; the `matsim-agents workflow`
-interface does not register E3 presets. See the [E3 protocol](README.md).
+through `python -m benchmarks.e3.production`; the `matsim-agents run`
+command does not accept E3 presets. See the [E3 protocol](README.md).
 
 ## E3-MLIP: current three-round benchmark
 

@@ -83,8 +83,8 @@ Branch-weight uncertainty is produced only by fused HydraGNN inference.
 ## `run`: planner, executor, and analyst
 
 ```bash
-matsim-agents plan "Relax examples/characterization/structures/MgO-rocksalt.vasp"
-matsim-agents run "Relax examples/characterization/structures/MgO-rocksalt.vasp" \
+matsim-agents objective --plan-only "Relax examples/characterization/structures/MgO-rocksalt.vasp"
+matsim-agents objective "Relax examples/characterization/structures/MgO-rocksalt.vasp" \
   --mlip-config mlip.yaml
 ```
 

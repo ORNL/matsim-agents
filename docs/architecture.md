@@ -64,14 +64,14 @@ workflow retains its own contracts and is not invoked by this config-driven API.
 
 ## Common advanced-workflow interface
 
-The [workflow catalog](../src/matsim_agents/cli/workflow_catalog.py) separates
-wrapper configuration and native capabilities from
-[CLI dispatch](../src/matsim_agents/cli/workflows.py). It delegates execution to
-the existing native workflows, not a second scientific engine.
-[Process execution](../src/matsim_agents/execution/workflow_runner.py) owns
-streaming and local child cleanup;
-[invocation records](../src/matsim_agents/execution/workflow_record.py) own
-saved process state and readable reports using atomic run-directory storage.
+[`workflows.runner`](../src/matsim_agents/workflows/runner.py) is the one entry
+point for config-driven runs: it detects a config's kind, preflights it without
+compute (`validate`), executes it (`run`) and continues it (`resume`). It calls
+the native workflows in-process, not a second scientific engine.
+[`workflows.run_records`](../src/matsim_agents/workflows/run_records.py) persists
+every invocation, including blocked and failed ones, as `run-record.json` plus a
+readable `report.md` using atomic run-directory storage. The CLI commands in
+[`cli/runs.py`](../src/matsim_agents/cli/runs.py) are thin wrappers over this API.
 Scientific checkpoints/results remain owned by their native engines.
 
 User-facing guides separate [running tasks](workflows/run-campaigns.md),

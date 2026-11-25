@@ -43,7 +43,7 @@ def test_cli_help_does_not_load_langgraph_or_print_warnings():
 def test_root_help_and_version_are_available_without_a_command():
     runner = CliRunner()
     help_text = _help_text()
-    assert "workflow list" in help_text
+    assert "validate" in help_text and "objective" in help_text
     assert "--debug" in help_text
 
     version_result = runner.invoke(app, ["--version"])
@@ -103,31 +103,25 @@ def test_doctor_required_backend_failure_is_explicit(monkeypatch):
 def test_unhandled_configuration_error_is_friendly(tmp_path):
     invalid = tmp_path / "invalid.yaml"
     invalid.write_text("{}\n")
-    result = CliRunner().invoke(app, ["relax", str(invalid)])
+    result = CliRunner().invoke(app, ["run", str(invalid)])
     assert result.exit_code == 2
     assert "Error:" in result.output
     assert "--debug" in result.output
     assert "Traceback" not in result.output
 
-    debug_result = CliRunner().invoke(app, ["--debug", "relax", str(invalid)])
+    debug_result = CliRunner().invoke(app, ["--debug", "run", str(invalid)])
     assert debug_result.exit_code != 0
     assert debug_result.exception is not None
 
 
-class _AnyConfig:
-    @staticmethod
-    def model_validate(raw):
-        return raw
-
-
 def test_validation_errors_list_one_line_per_field(tmp_path):
     invalid = tmp_path / "relax.yaml"
-    invalid.write_text("mode: bogus\nmax_steps: -1\n")
-    result = CliRunner().invoke(app, ["relax", str(invalid)])
+    invalid.write_text("mode: bogus\nstructure_path: 5\nmax_steps: -1\n")
+    result = CliRunner().invoke(app, ["validate", str(invalid)])
     assert result.exit_code == 2
     assert "invalid ScientificRelaxationConfig (3 problem(s)):" in result.output
     assert "  mode: Input should be 'mlip', 'dft' or 'mlip-dft'" in result.output
-    assert "  structure_path: Field required" in result.output
+    assert "  structure_path: Input should be a valid string" in result.output
     assert "  max_steps: Input should be greater than or equal to 1" in result.output
 
 
@@ -143,7 +137,7 @@ def test_config_init_copies_templates_without_overwriting(tmp_path):
     target = tmp_path / "relax.yaml"
     created = runner.invoke(app, ["config", "init", "relax", str(target)])
     assert created.exit_code == 0, created.output
-    assert "matsim-agents relax" in created.output
+    assert "matsim-agents run" in created.output
     assert target.read_text() == (REPO / CONFIG_KINDS["relax"][1]).read_text()
     again = runner.invoke(app, ["config", "init", "relax", str(target)])
     assert again.exit_code != 0
@@ -165,7 +159,25 @@ def test_config_schema_exports_every_kind(tmp_path):
     assert json.loads(written.read_text())["title"] == "ScientificRelaxationConfig"
 
 
-def test_relax_prints_a_summary_and_json_on_request(monkeypatch, tmp_path):
+_STRUCTURE = Path(__file__).resolve().parents[1] / "examples/characterization/structures"
+
+
+def _run_with(monkeypatch, tmp_path, text, module, entry, result):
+    from matsim_agents.workflows import runner
+
+    monkeypatch.setattr(module, entry, lambda cfg: result)
+    monkeypatch.setattr(runner, "backend_blockers", lambda names: [])
+    config = tmp_path / "config.yaml"
+    config.write_text(text)
+    args = ["run", str(config), "--runs-dir", str(tmp_path / "runs")]
+    invoked = CliRunner().invoke(app, args)
+    run_id = next(iter((tmp_path / "runs").iterdir())).name
+    shown = CliRunner().invoke(app, ["evidence", run_id, "--runs-dir", str(tmp_path / "runs")])
+    assert shown.exit_code == 0, shown.output
+    return invoked, json.loads(shown.output)
+
+
+def test_relax_run_records_a_summary_and_evidence(monkeypatch, tmp_path):
     from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
     from matsim_agents.workflows import relaxation
     from matsim_agents.workflows.relaxation import (
@@ -193,21 +205,19 @@ def test_relax_prints_a_summary_and_json_on_request(monkeypatch, tmp_path):
         ],
         final_structure_path="out.cif",
     )
-    monkeypatch.setattr(relaxation, "ScientificRelaxationConfig", _AnyConfig)
-    monkeypatch.setattr(relaxation, "run_relaxation", lambda cfg: result)
-    config = tmp_path / "relax.yaml"
-    config.write_text("{}\n")
-    runner = CliRunner()
-    readable = runner.invoke(app, ["relax", str(config)])
-    assert readable.exit_code == 0, readable.output
-    assert "Relaxation complete (mlip)" in readable.output
-    assert "mlip [mace]: converged, E=-12.5 eV" in readable.output
-    assert "Final structure: out.cif" in readable.output
-    as_json = runner.invoke(app, ["relax", str(config), "--json"])
-    assert json.loads(as_json.output)["final_structure_path"] == "out.cif"
+    text = (
+        f"mode: mlip\nstructure_path: {_STRUCTURE / 'MgO-rocksalt.vasp'}\nmlip:\n  backend: mace\n"
+    )
+    invoked, record = _run_with(monkeypatch, tmp_path, text, relaxation, "run_relaxation", result)
+    assert invoked.exit_code == 0, invoked.output
+    assert "complete" in invoked.output
+    assert record["state"] == "complete"
+    assert record["native_run_directory"] == str(tmp_path / "run")
+    assert record["summary"]["final_structure_path"] == "out.cif"
+    assert record["summary"]["stages"] == [{"stage": "mlip", "converged": True, "energy_eV": -12.5}]
 
 
-def test_llm_check_summary_reports_failed_stages(monkeypatch, tmp_path):
+def test_llm_check_run_reports_failed_stages(monkeypatch, tmp_path):
     from matsim_agents.core.contracts import WorkflowStatus
     from matsim_agents.workflows import llm_check
     from matsim_agents.workflows.llm_check import LLMCheckResult
@@ -221,18 +231,15 @@ def test_llm_check_summary_reports_failed_stages(monkeypatch, tmp_path):
         stages={"server": True, "chat": False},
         failure_reason="chat timed out",
     )
-    monkeypatch.setattr(llm_check, "LLMCheckConfig", _AnyConfig)
-    monkeypatch.setattr(llm_check, "run_llm_check", lambda cfg: result)
-    config = tmp_path / "check.yaml"
-    config.write_text("{}\n")
-    readable = CliRunner().invoke(app, ["llm-check", str(config)])
-    assert readable.exit_code == 1
-    assert "LLM check failed: vllm qwen" in readable.output
-    assert "chat: failed" in readable.output
-    assert "Failure: chat timed out" in readable.output
+    text = "provider: vllm\nmodel: qwen\n"
+    invoked, record = _run_with(monkeypatch, tmp_path, text, llm_check, "run_llm_check", result)
+    assert invoked.exit_code == 1
+    assert "Failed: chat timed out" in invoked.output
+    assert record["state"] == "failed"
+    assert record["summary"]["stages"] == {"server": True, "chat": False}
 
 
-def test_debate_summary_points_to_the_transcript(monkeypatch, tmp_path):
+def test_debate_run_points_to_the_native_run(monkeypatch, tmp_path):
     from matsim_agents.core.contracts import WorkflowStatus
     from matsim_agents.workflows import debate
     from matsim_agents.workflows.debate import ScientificDebateResult
@@ -249,14 +256,18 @@ def test_debate_summary_points_to_the_transcript(monkeypatch, tmp_path):
         transcript_path=str(tmp_path / "run" / "transcript.md"),
         contributions_path=str(tmp_path / "run" / "contributions.jsonl"),
     )
-    monkeypatch.setattr(debate, "ScientificDebateConfig", _AnyConfig)
-    monkeypatch.setattr(debate, "run_scientific_debate", lambda cfg: result)
-    config = tmp_path / "debate.yaml"
-    config.write_text("{}\n")
-    readable = CliRunner().invoke(app, ["debate", str(config)])
-    assert readable.exit_code == 0, readable.output
-    assert "Debate complete: 2 round(s)" in readable.output
-    assert "transcript.md" in readable.output
+    text = (
+        "hypothesis: NbTaO5 is stable\nrounds: 2\n"
+        "participants:\n"
+        "  - {name: a, provider: vllm, model: m-a, base_url: 'http://a:8000/v1'}\n"
+        "  - {name: b, provider: vllm, model: m-b, base_url: 'http://b:8000/v1'}\n"
+    )
+    invoked, record = _run_with(
+        monkeypatch, tmp_path, text, debate, "run_scientific_debate", result
+    )
+    assert invoked.exit_code == 0, invoked.output
+    assert "Native run:" in invoked.output
+    assert record["summary"]["rounds_completed"] == 2
 
 
 def test_every_registered_tool_module_has_a_main():
