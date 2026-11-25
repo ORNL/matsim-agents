@@ -1,10 +1,12 @@
 #!/bin/bash
-# Build SPECTRA-PKA (serial Fortran, GPL-3.0) on a Frontier login node and run the upstream smoke test.
+# Build SPECTRA-PKA (serial Fortran, GPL-3.0) on a login node and run the upstream smoke test.
+# Validated on Frontier only; on Perlmutter or Aurora load a GNU Fortran compiler first.
 #
-# Usage:   bash deployments/frontier/setup/build-spectra-pka-frontier.sh
+# Usage:   bash deployments/common/setup/build-spectra-pka.sh
 # Env:     SPECTRA_PKA_DIR     checkout/build directory (default: <repo>/external/SPECTRA-PKA)
 #          SPECTRA_PKA_COMMIT  upstream commit to build (default: the one validated on Frontier)
 #          SPECTRA_PKA_FC      Fortran compiler (default: gfortran; validated with gfortran 7.5)
+#          SPECTRA_PKA_SMOKE_DIR  scratch directory for the smoke test
 #          SPECTRA_PKA_ALLOW_OTHER_COMMIT=1  build a checkout that is not at SPECTRA_PKA_COMMIT
 # Needs internet for the clone, so run it on a login node. No scheduler allocation is required.
 
@@ -44,7 +46,7 @@ EXE="${SRC}/spectra-pka"
 [[ -x "${EXE}" ]] || { echo "build produced no executable" >&2; exit 1; }
 
 # Smoke test on the bundled Zr data in a scratch copy; it checks the build, not any campaign.
-WORK="${SPECTRA_PKA_SMOKE_DIR:-${REPO}/.hpc-build/frontier/spectra-pka-smoke}"
+WORK="${SPECTRA_PKA_SMOKE_DIR:-${REPO}/.hpc-build/spectra-pka-smoke}"
 rm -rf "${WORK}"
 mkdir -p "${WORK}"
 TEST="${SRC}/manual/test"

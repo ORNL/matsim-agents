@@ -131,13 +131,13 @@ MATSIM_FRONTIER_VENV=/path/to/env source deployments/frontier/setup/setup_matsim
 MATSIM_FRONTIER_ROCM_VERSION=7.2 source deployments/frontier/setup/setup_matsim_frontier.sh
 ```
 
-### build-spectra-pka-frontier.sh
+### ../../common/setup/build-spectra-pka.sh
 Clones SPECTRA-PKA at the commit validated on Frontier, builds it serially (the Makefile does
 not support `make -j`), runs the bundled Zr smoke test in a scratch directory and writes a build
 record (commit, compiler, SHA-256). Run it on a login node; no allocation is needed.
 
 ```bash
-bash deployments/frontier/setup/build-spectra-pka-frontier.sh
+bash deployments/common/setup/build-spectra-pka.sh
 export SPECTRA_PKA_EXECUTABLE_PATH="$PWD/external/SPECTRA-PKA/spectra-pka"
 ```
 

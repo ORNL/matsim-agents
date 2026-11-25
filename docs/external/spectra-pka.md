@@ -27,11 +27,12 @@ from the adapter, so another PKA source can replace it.
 ## 2. Installing SPECTRA-PKA yourself
 
 MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data from Python. Build
-it outside the tracked tree (`external/` is gitignored). The compile step is facility-specific
-and lives under `deployments/<facility>/setup/`; Frontier has
-`deployments/frontier/setup/build-spectra-pka-frontier.sh` (clone, pinned commit, serial build,
-smoke test, build record). Other facilities need their own script there. Data retrieval is
-described in [spectra-pka-data.md](spectra-pka-data.md). Manual equivalent:
+it outside the tracked tree (`external/` is gitignored). The serial gfortran build is
+facility-neutral: `deployments/common/setup/build-spectra-pka.sh` (clone, pinned commit, serial
+build, smoke test, build record). It was validated on Frontier only; on Perlmutter or Aurora
+load a GNU Fortran compiler first (for example the `PrgEnv-gnu` stack) and run it on a login
+node. Data retrieval is described in [spectra-pka-data.md](spectra-pka-data.md). Manual
+equivalent:
 
 ```bash
 cd external

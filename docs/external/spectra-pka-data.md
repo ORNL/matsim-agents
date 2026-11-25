@@ -102,7 +102,8 @@ Point `external_tools.spectra_pka.nuclear_data_root` at `$DATA/TENDL2023n-pka` (
 Workflow when MATSIM-AGENTS is deployed for a damage study:
 
 1. **Build SPECTRA-PKA** once per facility with the script under `deployments/<facility>/setup/`
-   (Frontier: `build-spectra-pka-frontier.sh`; see [spectra-pka.md](spectra-pka.md), section 2).
+   (`deployments/common/setup/build-spectra-pka.sh`, validated on Frontier only; see
+   [spectra-pka.md](spectra-pka.md), section 2).
 2. **Fetch the matrices** the composition needs, on a login node. Isotopes come from the
    composition, so the same command serves any alloy:
 
