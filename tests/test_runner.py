@@ -92,3 +92,34 @@ def test_unknown_file_is_refused(tmp_path) -> None:
     stray.write_text("alpha: 1\n")
     with pytest.raises(runner.UnrunnableInput, match="not a recognized"):
         runner.validate(stray)
+
+
+def test_incomplete_example_config_is_recorded_not_raised(tmp_path) -> None:
+    source = REPO / "examples/paper_cases/al_hea_fcc_cantor.yaml"
+    _, record = runner.run(source, runs_dir=tmp_path)
+    assert record.state == "failed"
+    assert "invalid or incomplete configuration" in (record.failure_reason or "")
+    assert runner.exit_code(record) == 1
+
+
+def test_neb_example_runs_as_dry_run(tmp_path) -> None:
+    source = REPO / "examples/radiation_damage/neb_vacancy_hop.example.yaml"
+    directory, record = runner.run(source, runs_dir=tmp_path)
+    assert record.state == "complete"
+    assert record.summary["dry_run"] is True
+    assert (directory / "neb").is_dir()
+
+
+def test_external_campaign_dry_run_does_not_execute(tmp_path) -> None:
+    source = REPO / "examples/external/spectra-pka/campaign.yaml"
+    _, record = runner.run(source, runs_dir=tmp_path)
+    assert record.state in {"complete", "failed"}
+    assert record.summary.get("numerical_validation", "NOT_VALIDATED") == "NOT_VALIDATED"
+
+
+def test_external_execution_is_blocked_when_the_tool_is_missing(tmp_path) -> None:
+    source = REPO / "examples/external/spectra-pka/campaign.yaml"
+    options = runner.RunOptions(dispatch=True)
+    _, record = runner.run(source, runs_dir=tmp_path, options=options)
+    assert record.state == "blocked"
+    assert any("SPECTRA-PKA" in item for item in record.blockers)

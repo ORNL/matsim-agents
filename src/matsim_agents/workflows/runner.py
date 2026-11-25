@@ -6,6 +6,7 @@ that calls the native workflow. The CLI and agents are thin callers of this modu
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,16 @@ class UnrunnableInput(ValueError):
     """The file is an auxiliary input (policy, model config, manifest), not a run request."""
 
 
+@dataclass(frozen=True)
+class RunOptions:
+    """Caller decisions that a config file must not make for itself."""
+
+    mlip_config: Path | None = None
+    allow_template: bool = False
+    dispatch: bool = False
+    approved_by: str | None = None
+
+
 @dataclass
 class Preflight:
     summary: dict[str, Any]
@@ -45,8 +56,8 @@ class Outcome:
 
 @dataclass(frozen=True)
 class Handler:
-    preflight: Callable[[Path], Preflight]
-    execute: Callable[[Path, ScientificRunDirectory], Outcome]
+    preflight: Callable[[Path, RunOptions], Preflight]
+    execute: Callable[[Path, ScientificRunDirectory, RunOptions], Outcome]
     resume: Callable[[RunRecord], Outcome] | None = None
 
 
@@ -120,7 +131,7 @@ def relaxation_blockers(cfg) -> list[str]:
     return blockers
 
 
-def _relax_preflight(path: Path) -> Preflight:
+def _relax_preflight(path: Path, options: RunOptions) -> Preflight:
     cfg = _relax_config(path)
     return Preflight(
         {"mode": cfg.mode.value, "structure_path": cfg.structure_path},
@@ -128,7 +139,7 @@ def _relax_preflight(path: Path) -> Preflight:
     )
 
 
-def _relax_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _relax_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from matsim_agents.workflows.relaxation import run_relaxation
 
     result = run_relaxation(_relax_config(path))
@@ -150,7 +161,7 @@ def _relax_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
 # --- debate and LLM check ---------------------------------------------------------------
 
 
-def _debate_preflight(path: Path) -> Preflight:
+def _debate_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.debate import ScientificDebateConfig
 
     cfg = ScientificDebateConfig.model_validate(load_workflow_config(path))
@@ -160,7 +171,7 @@ def _debate_preflight(path: Path) -> Preflight:
     )
 
 
-def _debate_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _debate_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from matsim_agents.workflows.debate import ScientificDebateConfig, run_scientific_debate
 
     result = run_scientific_debate(
@@ -173,7 +184,7 @@ def _debate_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
     )
 
 
-def _llm_check_preflight(path: Path) -> Preflight:
+def _llm_check_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.llm_check import LLMCheckConfig
 
     cfg = LLMCheckConfig.model_validate(load_workflow_config(path))
@@ -182,7 +193,7 @@ def _llm_check_preflight(path: Path) -> Preflight:
     )
 
 
-def _llm_check_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _llm_check_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
 
     result = run_llm_check(LLMCheckConfig.model_validate(load_workflow_config(path)))
@@ -197,14 +208,14 @@ def _llm_check_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
 # --- characterization -------------------------------------------------------------------
 
 
-def _characterize_preflight(path: Path) -> Preflight:
+def _characterize_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.characterization import load_contract
 
     contract = load_contract(path)
     return Preflight({"contract_id": contract.contract_id, "recipe": contract.recipe})
 
 
-def _characterize_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _characterize_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from matsim_agents.workflows.characterization import load_contract, run_characterization
 
     report = run_characterization(load_contract(path))
@@ -220,7 +231,7 @@ def _characterize_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
 # --- exploration ------------------------------------------------------------------------
 
 
-def _explore_preflight(path: Path) -> Preflight:
+def _explore_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.exploration import api
 
     cfg = api.load_exploration_config(path)
@@ -237,7 +248,7 @@ def _explore_outcome(summary) -> Outcome:
     )
 
 
-def _explore_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _explore_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from matsim_agents.workflows.exploration import api
 
     return _explore_outcome(api.run_exploration(api.load_exploration_config(path)))
@@ -254,7 +265,7 @@ def _explore_resume(record: RunRecord) -> Outcome:
 # --- structure generation ---------------------------------------------------------------
 
 
-def _alloy_preflight(path: Path) -> Preflight:
+def _alloy_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.science.structures.alloys import AlloySpec
 
     spec = AlloySpec.model_validate(load_yaml(path))
@@ -263,7 +274,7 @@ def _alloy_preflight(path: Path) -> Preflight:
     )
 
 
-def _alloy_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
+def _alloy_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
     from ase.io import write
 
     from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
@@ -279,9 +290,164 @@ def _alloy_execute(path: Path, run: ScientificRunDirectory) -> Outcome:
     )
 
 
+# --- active learning --------------------------------------------------------------------
+
+TEMPLATE_ENV = "MATSIM_ALLOW_TEMPLATE_CONFIG"
+REPO = Path(__file__).resolve().parents[3]
+
+
+def _mlip_override(options: RunOptions):
+    if options.mlip_config is None:
+        return None
+    from matsim_agents.backends.mlip.config import load_mlip_config
+
+    return load_mlip_config(options.mlip_config)
+
+
+def _al_preflight(path: Path, options: RunOptions) -> Preflight:
+    from matsim_agents.workflows.active_learning import ALConfig
+    from matsim_agents.workflows.active_learning.campaign_init import is_repo_template
+
+    cfg = ALConfig.from_yaml(path, mlip=_mlip_override(options))
+    blockers = backend_blockers([cfg.mlip.backend, cfg.dft.backend])
+    if is_repo_template(path, REPO) and not (
+        options.allow_template or os.environ.get(TEMPLATE_ENV) == "1"
+    ):
+        blockers.append(
+            f"{path} is a repository example, not your campaign; create one with "
+            f"`matsim-agents al init-campaign` or opt in with {TEMPLATE_ENV}=1"
+        )
+    return Preflight({"mlip": cfg.mlip.backend, "dft": cfg.dft.backend}, blockers)
+
+
+def _al_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.active_learning import ALConfig
+    from matsim_agents.workflows.active_learning.loop import run_active_learning
+
+    run_active_learning(ALConfig.from_yaml(path, mlip=_mlip_override(options)))
+    return Outcome("complete", None, {"note": "see the active-learning run directory"})
+
+
+# --- NEB --------------------------------------------------------------------------------
+
+_NEB_KEYS = {"parent", "defect", "lattice_parameter", "qe", "images", "method_id"}
+
+
+def _neb_inputs(path: Path):
+    from matsim_agents.backends.dft.qe_neb import QENebConfig
+    from matsim_agents.science.defects.point_defects import generate_vacancy
+    from matsim_agents.science.neb.endpoints import generate_vacancy_hop, vacancy_neighbors
+    from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
+
+    data = load_yaml(path)
+    if unknown := set(data) - _NEB_KEYS:
+        raise ValueError(f"{path}: unknown keys {sorted(unknown)}")
+    parent = generate_alloy(AlloySpec(**data["parent"]))
+    lattice = float(data["lattice_parameter"])
+    defect = data["defect"]
+    if defect["mechanism"] != "vacancy_hop":
+        raise ValueError(f"unsupported mechanism {defect['mechanism']!r}; build the pair in Python")
+    initial, defect_config = generate_vacancy(parent, "parent", int(defect["site"]))
+    neighbors = vacancy_neighbors(initial, defect_config, lattice)
+    if not neighbors:
+        raise ValueError("the vacancy has no nearest neighbours")
+    mover = int(defect.get("mover", neighbors[0]))
+    pair = generate_vacancy_hop(initial, defect_config, parent, mover, lattice)
+    return data, pair, QENebConfig(**data["qe"])
+
+
+def _neb_preflight(path: Path, options: RunOptions) -> Preflight:
+    data, pair, _ = _neb_inputs(path)
+    blockers = []
+    if options.dispatch:
+        blockers += backend_blockers(["qe"])
+    return Preflight(
+        {"mechanism": data["defect"]["mechanism"], "dispatch": options.dispatch}, blockers
+    )
+
+
+def _neb_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.neb import run_neb_workflow
+
+    data, pair, qe = _neb_inputs(path)
+    images = {
+        k: float(v) for k, v in data.get("images", {}).items() if k in ("min_distance", "max_step")
+    }
+    outcome = run_neb_workflow(
+        pair,
+        qe,
+        run.path / "neb",
+        dispatch=options.dispatch,
+        method_id=data.get("method_id"),
+        **images,
+    )
+    plan = outcome.plan
+    if plan.status == "rejected":
+        return Outcome("failed", str(run.path / "neb"), failure_reason="; ".join(plan.reasons))
+    summary = {
+        "pathway_id": plan.pathway_id,
+        "dry_run": plan.dry_run,
+        "input": str(plan.input_path),
+    }
+    return Outcome("complete", str(run.path / "neb"), summary)
+
+
+# --- external tools ---------------------------------------------------------------------
+
+
+def _external_campaign(path: Path):
+    from matsim_agents.backends.external.spectra_pka.config import load_config_file
+
+    parsed = load_config_file(path)
+    if parsed.campaign is None:
+        raise ValueError(f"{path} has no 'campaign' section")
+    return parsed
+
+
+def _external_preflight(path: Path, options: RunOptions) -> Preflight:
+    from matsim_agents.backends.external.spectra_pka.availability import check_availability
+
+    parsed = _external_campaign(path)
+    result = check_availability(parsed.external_tools.spectra_pka, parsed.campaign, invoke=False)
+    blockers = (
+        []
+        if result.status.value == "READY"
+        else [
+            f"SPECTRA-PKA {result.status.value}: "
+            + "; ".join(f"{c.name} ({c.detail})" for c in result.checks if c.ok is False)
+        ]
+    )
+    return Preflight(
+        {"tool": "spectra-pka", "status": result.status.value}, blockers if options.dispatch else []
+    )
+
+
+def _external_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.backends.external.spectra_pka import adapter
+
+    parsed = _external_campaign(path)
+    result = adapter.run(
+        parsed.external_tools.spectra_pka, parsed.campaign, execute=options.dispatch
+    )
+    failed = result.status in {"EXECUTION_FAILED", "PARSE_FAILED", "STRUCTURALLY_INVALID"}
+    return Outcome(
+        "failed" if failed else "complete",
+        str(result.run_dir),
+        {
+            "status": result.status,
+            "command": list(result.command),
+            "numerical_validation": "NOT_VALIDATED",
+        },
+        result.message or None if failed else None,
+    )
+
+
 # --- registry ---------------------------------------------------------------------------
 
 HANDLERS: dict[str, Handler] = {
+    "al": Handler(_al_preflight, _al_execute),
+    "neb": Handler(_neb_preflight, _neb_execute),
+    "external": Handler(_external_preflight, _external_execute),
     "relax": Handler(_relax_preflight, _relax_execute),
     "debate": Handler(_debate_preflight, _debate_execute),
     "llm-check": Handler(_llm_check_preflight, _llm_check_execute),
@@ -354,18 +520,28 @@ def _handler(kind: str, path: Path) -> Handler:
     return HANDLERS[kind]
 
 
-def validate(path: str | Path) -> tuple[str, Preflight]:
+def validate(path: str | Path, options: RunOptions | None = None) -> tuple[str, Preflight]:
     """Validate statically and report blockers; no side effects. Raises on invalid input."""
     kind, target = _resolve(Path(path))
-    return kind, _handler(kind, target).preflight(target)
+    return kind, _handler(kind, target).preflight(target, options or RunOptions())
 
 
-def run(path: str | Path, *, runs_dir: str | Path = "runs") -> tuple[Path, RunRecord]:
+def run(
+    path: str | Path, *, runs_dir: str | Path = "runs", options: RunOptions | None = None
+) -> tuple[Path, RunRecord]:
     """Execute a config file; blocked, failed and interrupted runs are recorded, not lost."""
     source = Path(path)
     kind, target = _resolve(source)
     handler = _handler(kind, target)
-    pre = handler.preflight(target)
+    options = options or RunOptions()
+    try:
+        pre = handler.preflight(target, options)
+    except (ValueError, OSError, KeyError, TypeError) as error:
+        run_dir, record = start_run(runs_dir, kind=kind, source=source)
+        record.state = "failed"
+        record.failure_reason = f"invalid or incomplete configuration: {error}"
+        write_record(run_dir, record)
+        return run_dir.path, record
     run_dir, record = start_run(runs_dir, kind=kind, source=source, resolved_config=pre.summary)
     record.summary = pre.summary
     if pre.blockers:
@@ -373,7 +549,7 @@ def run(path: str | Path, *, runs_dir: str | Path = "runs") -> tuple[Path, RunRe
         write_record(run_dir, record)
         return run_dir.path, record
     try:
-        outcome = handler.execute(target, run_dir)
+        outcome = handler.execute(target, run_dir, options)
     except KeyboardInterrupt:
         record.state, record.resumable = "interrupted", handler.resume is not None
         write_record(run_dir, record)
@@ -427,6 +603,7 @@ __all__ = [
     "HANDLERS",
     "Outcome",
     "Preflight",
+    "RunOptions",
     "UnrunnableInput",
     "backend_blockers",
     "detect_kind",
