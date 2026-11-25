@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from matsim_agents.science.irradiation.contracts import RecoilSpecies
 from matsim_agents.science.irradiation.nuclear_evidence import (
     ExternalNuclearEvidence,
     NuclearEvidenceError,
@@ -27,6 +28,8 @@ from matsim_agents.science.irradiation.nuclear_evidence import (
 APPLICATION = "FISPACT-II"
 _G_PER_KG = 1000.0
 _W_PER_KW = 1000.0
+_APPM = 1e6
+GAS_ELEMENTS = ("H", "He")
 
 
 class _Reported(BaseModel):
@@ -202,8 +205,88 @@ def to_activation_evidence(
     )
 
 
+def _atoms(nuclides: tuple[FispactNuclide, ...]) -> dict[str, float]:
+    """Relative atom counts (mol of atoms) per isotope key; metastable states fold into one."""
+    out: dict[str, float] = {}
+    for n in nuclides:
+        if n.isotope <= 0:
+            raise NuclearEvidenceError(f"{n.name}: the isotope must be a positive mass number")
+        key = f"{n.element}{n.isotope}"
+        out[key] = out.get(key, 0.0) + n.grams / n.isotope
+    return out
+
+
+def to_transmutation_evidence(
+    inventory: FispactInventory,
+    *,
+    cooling_time_s: float,
+    material_id: str,
+    irradiation_scenario_id: str,
+    application_version: str,
+    nuclear_data_library: str,
+    input_files: Mapping[str, str | Path],
+    output_name: str = "inventory.json",
+    elements: tuple[str, ...] = GAS_ELEMENTS,
+    synthetic: bool = False,
+) -> ExternalNuclearEvidence:
+    """Family-B evidence: appm of the chosen elements' isotopes after the selected step.
+
+    The JSON gives grams, not atoms, so atoms are taken as grams / mass number; the isotope mass
+    in u is not in the file, which biases each count by under 1 % (mass defect). appm is per
+    atom of the initial material, taken from the first step.
+    """
+    if not inventory.source_sha256:
+        raise NuclearEvidenceError("read the inventory with read_inventory so it has a hash")
+    if not input_files:
+        raise NuclearEvidenceError("input_files are required to hash the FISPACT-II inputs")
+    initial = inventory.steps[0]
+    if initial.irradiation_time != 0 or initial.cooling_time != 0:
+        raise NuclearEvidenceError("the first step must be the unirradiated material")
+    step = select_step(inventory, cooling_time_s)
+    if step.irradiation_time <= 0:
+        raise NuclearEvidenceError("the selected step has not been irradiated")
+    start = _atoms(initial.nuclides)
+    total = math.fsum(start.values())
+    if total <= 0:
+        raise NuclearEvidenceError("the initial material has no atoms")
+    now = _atoms(step.nuclides)
+    wanted = {e.lower() for e in elements}
+    seen = {n.element + str(n.isotope): n for n in step.nuclides if n.element.lower() in wanted}
+    quantities = tuple(
+        NuclearQuantity(
+            name="concentration_appm",
+            value=now[key] / total * _APPM,
+            unit="appm",
+            isotope=RecoilSpecies(element=n.element, mass_number=n.isotope),
+        )
+        for key, n in sorted(seen.items())
+    )
+    if not quantities:
+        raise NuclearEvidenceError(f"no {', '.join(elements)} isotopes in the selected step")
+    return ExternalNuclearEvidence(
+        family=NuclearFamily.TRANSMUTATION,
+        external_application=APPLICATION,
+        application_version=application_version,
+        nuclear_data_library=nuclear_data_library,
+        input_sha256={Path(name).name: sha256_file(path) for name, path in input_files.items()},
+        output_sha256={output_name: inventory.source_sha256},
+        material_id=material_id,
+        isotope_inventory={key: value / total for key, value in sorted(start.items())},
+        irradiation_scenario_id=irradiation_scenario_id,
+        exposure_time_s=step.irradiation_time,
+        cooling_time_s=step.cooling_time,
+        quantities=quantities,
+        synthetic=synthetic,
+        notes=(
+            f"fispact_run: {inventory.run_name}".rstrip(),
+            "atoms = grams / mass number; appm per initial atom; no uncertainty reported",
+        ),
+    )
+
+
 __all__ = [
     "APPLICATION",
+    "GAS_ELEMENTS",
     "FispactInventory",
     "FispactNuclide",
     "FispactStep",
@@ -212,4 +295,5 @@ __all__ = [
     "select_step",
     "sha256_file",
     "to_activation_evidence",
+    "to_transmutation_evidence",
 ]

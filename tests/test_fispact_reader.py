@@ -9,6 +9,7 @@ from matsim_agents.backends.external.fispact.inventory import (
     read_inventory,
     select_step,
     to_activation_evidence,
+    to_transmutation_evidence,
 )
 from matsim_agents.science.irradiation.nuclear_evidence import (
     NuclearEvidenceError,
@@ -161,3 +162,60 @@ def test_real_fispact_reference_file(tmp_path):
         synthetic=True,
     )
     assert ev.quantities
+
+
+def _transmutation_document():
+    doc = _document()
+    doc["inventory_data"][0]["nuclides"] = [_nuclide(1000.0, 0.0, "Al", 27)]
+    doc["inventory_data"][1]["nuclides"] = [
+        _nuclide(999.0, 0.0, "Al", 27),
+        _nuclide(0.9, 0.0, "H", 1),
+        _nuclide(0.1, 0.0, "He", 4),
+    ]
+    return doc
+
+
+def test_transmutation_appm_from_grams_per_mass_number(tmp_path):
+    out = tmp_path / "t.json"
+    out.write_text(json.dumps(_transmutation_document()))
+    inp = tmp_path / "run.i"
+    inp.write_text("x")
+    ev = to_transmutation_evidence(
+        read_inventory(out),
+        cooling_time_s=0.0,
+        material_id="Al",
+        irradiation_scenario_id="s",
+        application_version="5.0",
+        nuclear_data_library="TENDL-2019",
+        input_files={"run.i": inp},
+        synthetic=True,
+    )
+    total = 1000.0 / 27
+    assert ev.hydrogen_isotopes("concentration_appm") == {"H": pytest.approx(0.9 / total * 1e6)}
+    assert ev.helium_isotopes("concentration_appm") == {
+        "He-4": pytest.approx(0.1 / 4 / total * 1e6)
+    }
+    assert ev.isotope_inventory == {"Al27": 1.0}
+    assert all(q.uncertainty is None for q in ev.quantities)
+
+
+def test_transmutation_needs_an_irradiated_step_and_gas(tmp_path):
+    inp = tmp_path / "run.i"
+    inp.write_text("x")
+    doc = _transmutation_document()
+    doc["inventory_data"][1]["nuclides"] = [_nuclide(1000.0, 0.0, "Al", 27)]
+    out = tmp_path / "t.json"
+    out.write_text(json.dumps(doc))
+    args = dict(
+        material_id="Al",
+        irradiation_scenario_id="s",
+        application_version="5.0",
+        nuclear_data_library="x",
+        input_files={"run.i": inp},
+    )
+    with pytest.raises(NuclearEvidenceError, match="no H, He isotopes"):
+        to_transmutation_evidence(read_inventory(out), cooling_time_s=0.0, **args)
+    doc["inventory_data"][1]["irradiation_time"] = 0.0
+    out.write_text(json.dumps(doc))
+    with pytest.raises(NuclearEvidenceError, match="not been irradiated"):
+        to_transmutation_evidence(read_inventory(out), cooling_time_s=0.0, **args)
