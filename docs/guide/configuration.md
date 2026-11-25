@@ -27,9 +27,10 @@ Ready-made files are in [examples/mlip/](../../examples/mlip/).
 
 HydraGNN uses fused 16-head inference by default, which requires
 `mlp_checkpoint`. To pin one head for MLIP inference, set `inference_head` to a
-case-insensitive dataset name or its index, for example
-`inference_head: OMat24`. Pinned mode invokes only that decoder, does not require
-the branch MLP, and does not report branch-weight uncertainty. It preserves
+case-insensitive dataset name, its index, or a `branch-N` alias (for example,
+`inference_head: branch-7` selects the OMat24 head). Pinned mode invokes only
+that decoder, does not require the branch MLP, and does not report branch-weight
+uncertainty. It preserves
 the loader's precision/autocast context, including `bf16`, during energy and
 force inference.
 

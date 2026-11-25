@@ -329,6 +329,15 @@ def _al_preflight(path: Path, options: RunOptions) -> Preflight:
 
     cfg = ALConfig.from_yaml(path, mlip=_mlip_override(options))
     blockers = backend_blockers([cfg.mlip.backend, cfg.dft.backend])
+    if cfg.sampling is not None:
+        for strategy in cfg.sampling.strategies:
+            if strategy.method == "neb":
+                for endpoint in (
+                    strategy.parameters.initial_path,
+                    strategy.parameters.final_path,
+                ):
+                    if not endpoint.is_file():
+                        blockers.append(f"NEB endpoint {endpoint} does not exist")
     if is_repo_template(path, REPO) and not (
         options.allow_template or os.environ.get(TEMPLATE_ENV) == "1"
     ):
@@ -603,7 +612,10 @@ def detect_kind(path: str | Path) -> str:
         (lambda k: "contract_id" in k, "characterize"),
         (lambda k: {"mode", "structure_path"} <= k, "relax"),
         (lambda k: {"parent", "defect"} <= k, "neb"),
-        (lambda k: {"random_seed", "md", "acquisition"} <= k, "al"),
+        (
+            lambda k: {"random_seed", "acquisition"} <= k and ("md" in k or "sampling" in k),
+            "al",
+        ),
         (lambda k: {"formula", "mlip"} <= k, "explore"),
         (lambda k: {"crystal_structure", "counts"} <= k, "alloy-spec"),
         (lambda k: k == {"mlip"}, "mlip"),

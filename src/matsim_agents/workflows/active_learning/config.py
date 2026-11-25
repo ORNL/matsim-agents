@@ -8,7 +8,7 @@ a top-level field so the YAML is self-documenting and trivially diffable.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -43,6 +43,44 @@ class MDConfig(BaseModel):
     sample_every: int = 10  # snapshot every N steps for the candidate pool
     max_force_threshold_eV_per_A: float = 50.0  # discard exploding frames
     max_displacement_A: float = 5.0  # discard frames moving > X Å from start
+
+
+class NebSamplingConfig(BaseModel):
+    """ASE NEB sampling settings for one pair of endpoint structures."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    initial_path: Path
+    final_path: Path
+    transition_id: str | None = None
+    n_images: int = Field(7, ge=4)
+    interpolation: Literal["linear", "idpp"] = "linear"
+    spring_constant_eV_per_A2: float = Field(0.1, gt=0, allow_inf_nan=False)
+    optimizer: Literal["FIRE", "BFGS", "LBFGS"] = "FIRE"
+    fmax_eV_per_A: float = Field(0.02, gt=0, allow_inf_nan=False)
+    max_steps: int = Field(1000, ge=1)
+    climbing_image: bool = False
+    record_every: int = Field(10, ge=1)
+    min_distance_A: float = Field(1.0, gt=0, allow_inf_nan=False)
+    max_step_A: float = Field(1.0, gt=0, allow_inf_nan=False)
+    relax_endpoints: bool = False
+    endpoint_fmax_eV_per_A: float = Field(0.02, gt=0, allow_inf_nan=False)
+    endpoint_max_steps: int = Field(200, ge=1)
+    uncertainty_interval_steps: int = Field(
+        0,
+        ge=0,
+        description=(
+            "Evaluate ensemble barrier uncertainty every N NEB steps; 0 disables interim checks."
+        ),
+    )
+    max_pathway_uncertainty_eV: float | None = Field(None, gt=0, allow_inf_nan=False)
+    resume: bool = True
+
+    @model_validator(mode="after")
+    def _check_uncertainty_gate(self) -> NebSamplingConfig:
+        if self.max_pathway_uncertainty_eV is not None and not self.uncertainty_interval_steps:
+            raise ValueError("max_pathway_uncertainty_eV requires uncertainty_interval_steps > 0")
+        return self
 
 
 class LLMSeedConfig(BaseModel):
@@ -128,6 +166,33 @@ class SeedSourceConfig(BaseModel):
 MDConfig.model_rebuild()
 
 
+class MDSamplingStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["md"]
+    parameters: MDConfig
+
+
+class NEBSamplingStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["neb"]
+    parameters: NebSamplingConfig
+
+
+SamplingStrategy = Annotated[
+    MDSamplingStrategy | NEBSamplingStrategy, Field(discriminator="method")
+]
+
+
+class SamplingConfig(BaseModel):
+    """One or more independent numerical strategies sharing the same MLIP and AL pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    strategies: list[SamplingStrategy] = Field(min_length=1)
+
+
 class AcquisitionConfig(BaseModel):
     """Which uncertainty measure(s) to use to pick frames for VASP labelling."""
 
@@ -137,6 +202,11 @@ class AcquisitionConfig(BaseModel):
     mc_dropout_p: float = 0.1
     diversity_filter: bool = True  # greedy-farthest-point on composition + UQ score
     min_uncertainty_eV_per_A: float = 0.0  # below this, skip labelling
+    max_per_neb_pathway: int | None = Field(
+        2,
+        ge=1,
+        description="Cap selected NEB images per transition so one path cannot consume the budget.",
+    )
 
 
 class TrainingReferences(BaseModel):
@@ -392,7 +462,8 @@ class ALConfig(BaseModel):
         ),
     )
     mlip: MLIPConfig
-    md: MDConfig
+    md: MDConfig | None = None
+    sampling: SamplingConfig | None = None
     acquisition: AcquisitionConfig
     dft: DFTConfig
     trainer: TrainerConfig
@@ -405,6 +476,20 @@ class ALConfig(BaseModel):
             "when trainer.enabled is true."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_sampling(self) -> ALConfig:
+        if self.sampling is None and self.md is None:
+            raise ValueError("specify legacy md configuration or sampling.strategies")
+        if (
+            self.md is not None
+            and self.sampling is not None
+            and any(strategy.method == "md" for strategy in self.sampling.strategies)
+        ):
+            raise ValueError(
+                "configure MD either in sampling.strategies or the legacy md field, not both"
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_resource_pools(self) -> ALConfig:

@@ -44,10 +44,11 @@ def test_hydragnn_dataset_head_mapping_matches_training_order():
     assert HYDRAGNN_DATASET_HEADS == EXPECTED_HEADS
     assert [resolve_hydragnn_inference_head(name) for name in EXPECTED_HEADS] == list(range(16))
     assert resolve_hydragnn_inference_head("omat24") == 7
+    assert resolve_hydragnn_inference_head("branch-7") == 7
     assert resolve_hydragnn_inference_head("15") == 15
 
 
-@pytest.mark.parametrize("value", [-1, 16, "unknown-dataset"])
+@pytest.mark.parametrize("value", [-1, 16, "branch-16", "unknown-dataset"])
 def test_hydragnn_dataset_head_rejects_invalid_selection(value):
     with pytest.raises(ValueError):
         resolve_hydragnn_inference_head(value)
@@ -195,7 +196,8 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
         assert not loaded
 
 
-def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
+@pytest.mark.parametrize("inference_head", ["OMat24", "branch-7"])
+def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch, inference_head):
     import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"
@@ -228,7 +230,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
 
     monkeypatch.setattr(calculator, "_build_selected_head_calculator", selected_builder)
 
-    result = build_hydragnn_calculator(HydraGNNConfig(logdir=logdir, inference_head="OMat24"))
+    result = build_hydragnn_calculator(HydraGNNConfig(logdir=logdir, inference_head=inference_head))
 
     assert result.head_index == 7
     assert restored and restored[0][1] == "cuda"

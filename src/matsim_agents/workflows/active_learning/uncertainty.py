@@ -31,8 +31,8 @@ from ase import Atoms
 
 from matsim_agents.backends.mlip.dropout import enable_dropout
 from matsim_agents.core.seeding import numpy_rng, seeded_torch
+from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import AcquisitionConfig
-from matsim_agents.workflows.active_learning.md_sampler import Candidate
 
 log = logging.getLogger(__name__)
 

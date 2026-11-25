@@ -139,6 +139,53 @@ For `compositions` and `prompt`, `max_phases_per_composition` caps
 prototype-derived seeds and `n_random` requests additional pyXtal seeds
 (default `0`); the generated count can be lower.
 
+### Shared MD and NEB sampling
+
+The legacy top-level `md:` block remains valid. For NEB-only or combined runs,
+use `sampling.strategies`; each method writes candidates into the same
+uncertainty selection, DFT single-point labeling, dataset, and optional
+retraining pipeline. NEB endpoints must have compatible cells, periodic
+boundaries, species, and stable integer `atom_id` arrays.
+
+```yaml
+sampling:
+  strategies:
+    - method: neb
+      parameters:
+        initial_path: /campaign/initial.extxyz
+        final_path: /campaign/final.extxyz
+        transition_id: vacancy-hop-001
+        n_images: 7
+        interpolation: idpp
+        spring_constant_eV_per_A2: 0.1
+        optimizer: FIRE
+        climbing_image: true
+        fmax_eV_per_A: 0.02
+        max_steps: 1000
+        uncertainty_interval_steps: 10
+        max_pathway_uncertainty_eV: 0.25
+```
+
+Add a second strategy with `method: md` and its normal `MDConfig` under
+`parameters:` to sample both methods in one AL iteration. A legacy `md:` block
+can also be combined with a `sampling:` list containing NEB strategies. NEB
+optimization uses ASE and the configured MLIP; it can optionally relax
+endpoints through the shared MLIP structure-relaxation workflow. The stored
+barrier uncertainty is the ensemble spread evaluated on the fixed optimized
+path, not uncertainty in the minimum-energy path location. Missing ensemble
+uncertainty is recorded as unavailable, never as low uncertainty. At most two
+images per transition are selected by default (`acquisition.max_per_neb_pathway`).
+NEB trajectory snapshots are recorded every ten optimizer steps by default;
+`record_every` configures this interval while restart checkpoints are refreshed
+each step.
+
+The shared AL escalation labels selected NEB images with single-point DFT and
+may retrain/promote the common MLIP. This does **not** make those labels a
+DFT-optimized NEB barrier; use the existing specialized `neb` workflow when a
+full DFT NEB calculation is required. Both the standard
+`matsim-agents run CONFIG.yaml` entry point and the backward-compatible
+`al run` command execute the active-learning config.
+
 ### Random seed
 
 The required top-level `random_seed` is the root of every random draw in the

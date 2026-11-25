@@ -74,7 +74,7 @@ def _resolve_path(base: Path, value: object) -> object:
 
 
 def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
-    """Resolve a HydraGNN dataset name or branch index to the canonical head index."""
+    """Resolve a dataset name, head index, or ``branch-N`` alias to its canonical index."""
     if value is None:
         return None
     if isinstance(value, int) or str(value).strip().isdigit():
@@ -83,10 +83,15 @@ def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
             return index
         raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
     normalized = str(value).strip().casefold()
+    if normalized.startswith("branch-") and normalized[7:].isdigit():
+        index = int(normalized[7:])
+        if 0 <= index < len(HYDRAGNN_DATASET_HEADS):
+            return index
+        raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
     by_name = {name.casefold(): index for index, name in enumerate(HYDRAGNN_DATASET_HEADS)}
     if normalized not in by_name:
         raise ValueError(
-            f"unknown HydraGNN inference head {value!r}; expected one of "
+            f"unknown HydraGNN inference head {value!r}; expected a branch index or one of "
             f"{', '.join(HYDRAGNN_DATASET_HEADS)}"
         )
     return by_name[normalized]
@@ -313,7 +318,8 @@ class HydraGNNConfig(MLIPBackendConfig):
     inference_head: str | int | None = Field(
         None,
         description=(
-            "Optional decoding head selected by canonical dataset name or index 0..15. "
+            "Optional decoding head selected by canonical dataset name, index 0..15, "
+            "or a 'branch-N' name. "
             "When set, inference bypasses BranchWeightMLP and uses only that head."
         ),
     )

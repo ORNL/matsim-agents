@@ -112,6 +112,12 @@ def test_invalid_config_is_recorded_as_failed(tmp_path) -> None:
     assert runner.exit_code(record) == 1
 
 
+def test_neb_only_active_learning_config_is_detected(tmp_path):
+    config = tmp_path / "al-neb.yaml"
+    config.write_text("random_seed: 1\nsampling:\n  strategies: []\nacquisition: {}\n")
+    assert runner.detect_kind(config) == "al"
+
+
 def test_neb_example_runs_as_dry_run(tmp_path) -> None:
     source = REPO / "examples/radiation_damage/neb_vacancy_hop.example.yaml"
     directory, record = runner.run(source, runs_dir=tmp_path)

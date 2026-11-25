@@ -64,7 +64,13 @@ from matsim_agents.workflows.active_learning.campaign_init import (
     check_reference_coverage,
     elements_of,
 )
-from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.candidates import Candidate
+from matsim_agents.workflows.active_learning.config import (
+    ALConfig,
+    MDSamplingStrategy,
+    NEBSamplingStrategy,
+    SamplingStrategy,
+)
 from matsim_agents.workflows.active_learning.dft_protocol import (
     dft_method_signature,
     scientific_dft_payload,
@@ -77,7 +83,7 @@ from matsim_agents.workflows.active_learning.evaluate import (
     evaluate_frames,
     evaluate_promotion_candidate,
 )
-from matsim_agents.workflows.active_learning.md_sampler import Candidate, sample_md_candidates
+from matsim_agents.workflows.active_learning.md_sampler import sample_md_candidates
 from matsim_agents.workflows.active_learning.seed_sources import resolve_seed_structures
 from matsim_agents.workflows.active_learning.trainer import (
     append_frames_to_extxyz,
@@ -336,7 +342,7 @@ def _select_for_labelling(
     completed_dft: int,
     state: IterationState,
 ) -> list:
-    """Score MD candidates and pick those to label within the remaining DFT budget."""
+    """Score sampling candidates and pick those to label within the remaining DFT budget."""
     t0 = time.time()
     selected, scores = select_candidates(
         candidates,
@@ -345,12 +351,28 @@ def _select_for_labelling(
         ensemble_calculators=ensemble_calcs or None,
         seed=stream_seed(cfg.random_seed, "acquisition", i),
     )
+    if cfg.acquisition.max_per_neb_pathway is not None:
+        counts: dict[str, int] = {}
+        capped = []
+        for candidate in selected:
+            if candidate.sampling_method != "neb":
+                capped.append(candidate)
+                continue
+            pathway = candidate.parent_id or candidate.sampling_run_id or candidate.candidate_id
+            pathway = candidate.provenance.get("transition_id", pathway)
+            count = counts.get(pathway, 0)
+            if count < cfg.acquisition.max_per_neb_pathway:
+                capped.append(candidate)
+                counts[pathway] = count + 1
+        selected = capped
     if cfg.loop.max_dft_calculations is not None:
         remaining_dft = cfg.loop.max_dft_calculations - completed_dft
         selected = selected[:remaining_dft]
     state.n_selected = len(selected)
     state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
     selected_ids = set(state.selected_candidate_ids)
+    for candidate, score in zip(candidates, scores, strict=True):
+        candidate.uncertainty = float(score) if np.isfinite(score) else None
     state.candidate_uncertainty = {
         candidate.candidate_id: float(score)
         for candidate, score in zip(candidates, scores, strict=True)
@@ -416,37 +438,71 @@ def _label_with_dft(
 def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:
     """Record where each label came from, for grouped and chronological dataset splits.
 
-    Each seed's MD in an iteration is one trajectory; ``time_index`` is the MD
-    step of the snapshot. See :mod:`matsim_agents.data.splits`.
+    Method-independent identity and sampling provenance are shared. MD steps remain
+    MD-only; NEB image indices are recorded as optimization coordinates, not time.
     """
     candidates = {candidate.candidate_id: candidate for candidate in selected}
     for frame in frames:
         candidate = candidates.get(Path(frame.source_work_dir).name)
         info = frame.atoms.info
         if candidate is not None:
-            for key in (
-                "sampling_method",
-                "e3_action_id",
-                "e3_geometry_stage",
-                "incumbent_checkpoint_sha256",
-            ):
+            method = candidate.atoms.info.get("sampling_method", candidate.sampling_method)
+            info["sampling_method"] = method
+            info["candidate_id"] = candidate.candidate_id
+            info["parent_structure_id"] = candidate.parent_id or ""
+            info["sampling_run_id"] = candidate.sampling_run_id or ""
+            if candidate.model_id is not None:
+                info["mlip_model_id"] = candidate.model_id
+            if candidate.geometry_fingerprint is not None:
+                info["geometry_fingerprint"] = candidate.geometry_fingerprint
+            if candidate.uncertainty is not None:
+                info["configuration_uncertainty"] = candidate.uncertainty
+            info.update(candidate.atoms.info)
+            if method == "md":
+                temperature = candidate.metadata.get("temperature_K")
+                if temperature is None and cfg.md is not None:
+                    temperature = cfg.md.temperature_K
+                if temperature is not None:
+                    info["temperature_K"] = temperature
+                thermostat = candidate.metadata.get(
+                    "thermostat", None if cfg.md is None else cfg.md.thermostat
+                )
+                if thermostat is not None:
+                    info["thermostat"] = thermostat
+                info["md_step"] = candidate.md_step
+            elif method == "neb":
+                info["transition_id"] = candidate.provenance.get("transition_id", "")
+                info["neb_state"] = candidate.provenance.get("neb_state", "")
+                for key, value in candidate.provenance.items():
+                    if value is not None:
+                        info[key] = value
+                info.update(candidate.metadata)
+            for key in ("e3_action_id", "e3_geometry_stage", "incumbent_checkpoint_sha256"):
                 if key in candidate.atoms.info:
                     info[key] = candidate.atoms.info[key]
-        if info.get("sampling_method", "md") == "md":
-            info["temperature_K"] = float(cfg.md.temperature_K)
         info["source_campaign"] = str(cfg.loop.out_dir)
         if candidate is None:
             continue
-        seed = (
-            candidate.candidate_id
-            if info.get("sampling_method") == "e3_geometry_optimization"
-            else Path(candidate.seed_path).stem
-        )
         info["config_id"] = f"iteration-{i:04d}/{candidate.candidate_id}"
-        info["candidate_id"] = candidate.candidate_id
-        info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
-        info["time_index"] = int(candidate.md_step)
-        info["initial_structure_id"] = seed
+        method = candidate.atoms.info.get("sampling_method", candidate.sampling_method)
+        if method == "md":
+            seed = Path(candidate.seed_path).stem
+            info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
+            info["time_index"] = int(candidate.md_step or 0)
+            info["initial_structure_id"] = seed
+        elif method == "neb":
+            run_id = candidate.sampling_run_id or candidate.parent_id or candidate.candidate_id
+            info["trajectory_id"] = f"iteration-{i:04d}/{run_id}"
+            info["initial_structure_id"] = candidate.parent_id or run_id
+        else:
+            seed = (
+                candidate.candidate_id
+                if method == "e3_geometry_optimization"
+                else Path(candidate.seed_path).stem
+            )
+            info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
+            info["time_index"] = int(candidate.md_step or 0)
+            info["initial_structure_id"] = seed
 
 
 def _append_labelled_frames(
@@ -857,17 +913,33 @@ def run_active_learning(
         # invokes the LLM exactly once and caches the resulting JSON under
         # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
         seeds_dir = root / "seeds"
+        strategies = _sampling_strategies(cfg)
+        md_config = next(
+            (
+                strategy.parameters
+                for strategy in strategies
+                if isinstance(strategy, MDSamplingStrategy)
+            ),
+            None,
+        )
         seed_paths = (
             resolve_seed_structures(
-                cfg.md.seed_source,
+                md_config.seed_source,
                 seeds_dir,
                 random_seed=stream_seed(cfg.random_seed, "seed-source"),
             )
-            if candidate_sampler is None
+            if candidate_sampler is None and md_config is not None
             else []
         )
         log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
-        check_reference_coverage(cfg.trainer, elements_of(seed_paths))
+        training_inputs = list(seed_paths)
+        training_inputs.extend(
+            path
+            for strategy in strategies
+            if isinstance(strategy, NEBSamplingStrategy)
+            for path in (strategy.parameters.initial_path, strategy.parameters.final_path)
+        )
+        check_reference_coverage(cfg.trainer, elements_of(training_inputs))
 
         # The configured model, before a resume points cfg.mlip at the last promoted one.
         foundation_mlip = cfg.mlip.model_copy(deep=True)
@@ -954,6 +1026,19 @@ def _score_benchmarks(
         }
 
 
+def _sampling_strategies(cfg: ALConfig) -> list[SamplingStrategy]:
+    if cfg.sampling is not None:
+        strategies = list(cfg.sampling.strategies)
+        if cfg.md is not None and not any(
+            isinstance(strategy, MDSamplingStrategy) for strategy in strategies
+        ):
+            strategies.insert(0, MDSamplingStrategy(method="md", parameters=cfg.md))
+        return strategies
+    if cfg.md is None:
+        raise ValueError("legacy MD sampling requires md configuration")
+    return [MDSamplingStrategy(method="md", parameters=cfg.md)]
+
+
 def _run_iterations(
     cfg: ALConfig,
     placement: Placement,
@@ -990,26 +1075,46 @@ def _run_iterations(
             primary_calc, ensemble_calcs = models.calculators(cfg.mlip, enable_drop)
             state.timings_sec["build_calculators"] = time.time() - t0
 
-            # --- 2. Generate candidates via MD --------------------------------
+            # --- 2. Generate candidates with the configured numerical methods -
             t0 = time.time()
-            md_dir = it_dir / "md"
-            # Seeds run concurrently on the mlip pool, one per device.
             if candidate_sampler is not None:
                 candidates = candidate_sampler(cfg, i, it_dir)
             else:
-                with models.md_pool() as md_pool:
-                    candidates = sample_md_candidates(
-                        cfg.md,
-                        primary_calc,
-                        md_dir,
-                        seed_paths=seed_paths,
-                        random_seed=stream_seed(cfg.random_seed, "md", i),
-                        mlip_pool=md_pool,
-                        mlip_cfg=cfg.mlip,
-                        enable_mc_dropout=enable_drop,
-                    )
+                candidates = []
+                for strategy_index, strategy in enumerate(_sampling_strategies(cfg)):
+                    if isinstance(strategy, MDSamplingStrategy):
+                        with models.md_pool() as md_pool:
+                            candidates.extend(
+                                sample_md_candidates(
+                                    strategy.parameters,
+                                    primary_calc,
+                                    it_dir / "md",
+                                    seed_paths=seed_paths,
+                                    random_seed=stream_seed(
+                                        cfg.random_seed, "md", i, strategy_index
+                                    ),
+                                    mlip_pool=md_pool,
+                                    mlip_cfg=cfg.mlip,
+                                    enable_mc_dropout=enable_drop,
+                                )
+                            )
+                    elif isinstance(strategy, NEBSamplingStrategy):
+                        from matsim_agents.workflows.active_learning.neb_sampler import (
+                            sample_neb_candidates,
+                        )
+
+                        outcome = sample_neb_candidates(
+                            strategy.parameters,
+                            primary_calc,
+                            it_dir / "neb",
+                            iteration=i,
+                            model_id=cfg.mlip.model_reference,
+                            mlip_config=cfg.mlip,
+                            uncertainty_calculators=ensemble_calcs or (),
+                        )
+                        candidates.extend(outcome.candidates)
             state.n_candidates = len(candidates)
-            state.timings_sec["md_sampling"] = time.time() - t0
+            state.timings_sec["sampling"] = time.time() - t0
             log.info("Iter %d: produced %d candidates", i, len(candidates))
 
             if not candidates:
