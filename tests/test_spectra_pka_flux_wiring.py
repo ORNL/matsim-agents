@@ -48,3 +48,20 @@ def test_stage_inputs_writes_native_flux_from_csv(tmp_path):
     assert text[2] == "2 -2" and float(text[3]) == pytest.approx(0.1)
     assert {"spectrum_source", "spectrum_content", FLUX_LINK} <= set(staged.data_sha256)
     assert not (tmp_path / "run" / FLUX_LINK).is_symlink()
+
+
+def test_mode_three_is_rejected_for_a_generated_spectrum():
+    spec = from_groups([1.0, 2.0, 4.0], [3.0, 1.0], identity="d")
+    with pytest.raises(InputError, match="norm_type 3"):
+        native_flux_text(spec, 3)
+
+
+def test_shape_only_spectrum_needs_an_explicit_rescale(tmp_path):
+    campaign = make_campaign(tmp_path)
+    csv = tmp_path / "data" / "shape.csv"
+    csv.write_text("e_low,e_high,flux\n1e5,1e6,0.5\n1e6,2e7,0.5\n")
+    flux = campaign.flux.model_copy(update={"file": None, "spectrum_file": csv, "absolute": False})
+    with pytest.raises(InputError, match="rescale_value"):
+        stage_inputs(campaign.model_copy(update={"flux": flux}), tmp_path / "run")
+    flux = flux.model_copy(update={"rescale_value": 1e14})
+    stage_inputs(campaign.model_copy(update={"flux": flux}), tmp_path / "run2")

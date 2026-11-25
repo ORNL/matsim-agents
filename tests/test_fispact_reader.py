@@ -219,3 +219,52 @@ def test_transmutation_needs_an_irradiated_step_and_gas(tmp_path):
     out.write_text(json.dumps(doc))
     with pytest.raises(NuclearEvidenceError, match="not been irradiated"):
         to_transmutation_evidence(read_inventory(out), cooling_time_s=0.0, **args)
+
+
+def _missing(mutate):
+    doc = _document()
+    mutate(doc["inventory_data"][1])
+    return parse_inventory(doc, source_sha256="0" * 64)
+
+
+def _quantities(inventory, tmp_path):
+    inp = tmp_path / "run.i"
+    inp.write_text("x")
+    ev = to_activation_evidence(
+        inventory,
+        cooling_time_s=0.0,
+        material_id="m",
+        irradiation_scenario_id="s",
+        application_version="5",
+        nuclear_data_library="L",
+        input_files={"run.i": inp},
+        synthetic=True,
+    )
+    return {q.name for q in ev.quantities}, ev.notes
+
+
+def test_missing_heat_and_dose_are_omitted_not_zero(tmp_path):
+    def mutate(step):
+        del step["total_heat"]
+        step["dose_rate"] = {"type": "Plane source", "distance": 1.0}
+
+    names, notes = _quantities(_missing(mutate), tmp_path)
+    assert names == {"specific_activity"}
+    assert any("total_heat not reported" in n for n in notes)
+
+
+def test_missing_activity_is_omitted_but_reported_zero_is_kept(tmp_path):
+    def mutate(step):
+        del step["nuclides"][0]["activity"]
+
+    assert "specific_activity" not in _quantities(_missing(mutate), tmp_path)[0]
+    zero = _missing(lambda step: step.update(total_heat=0.0))
+    assert "decay_heat" in _quantities(zero, tmp_path)[0]
+
+
+def test_missing_mass_is_an_error(tmp_path):
+    def mutate(step):
+        del step["nuclides"][1]["grams"]
+
+    with pytest.raises(NuclearEvidenceError, match="mass"):
+        _quantities(_missing(mutate), tmp_path)

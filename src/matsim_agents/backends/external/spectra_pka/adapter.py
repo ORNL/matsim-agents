@@ -40,7 +40,7 @@ from matsim_agents.backends.external.spectra_pka.validation import (
     ValidationReport,
     validate_output,
 )
-from matsim_agents.core.hashing import sha256_json
+from matsim_agents.core.hashing import sha256_file, sha256_json
 from matsim_agents.science.irradiation.contracts import (
     IrradiationScenario,
     PKASourceProvenance,
@@ -170,14 +170,26 @@ def cache_key(availability: Availability, staged: StagedInputs, results_stub: st
     )
 
 
+def _output_hashes(run_dir: Path, results_stub: str) -> dict[str, str]:
+    names = (f"{results_stub}.out", f"{results_stub}.indexes")
+    return {name: sha256_file(run_dir / name) for name in names if (run_dir / name).is_file()}
+
+
 def _cache_hit(run_dir: Path, key: str, results_stub: str) -> bool:
     record = run_dir / CACHE_RECORD
     if not (record.is_file() and (run_dir / f"{results_stub}.out").is_file()):
         return False
     try:
-        return json.loads(record.read_text()).get("key") == key
+        data = json.loads(record.read_text())
     except ValueError:
         return False
+    # Structure alone cannot show that the preserved bytes came from the cached execution.
+    return data.get("key") == key and data.get("outputs") == _output_hashes(run_dir, results_stub)
+
+
+def _clear_previous_outputs(run_dir: Path, results_stub: str) -> None:
+    for suffix in (".out", ".indexes", ".log"):
+        (run_dir / f"{results_stub}{suffix}").unlink(missing_ok=True)
 
 
 def run(
@@ -236,6 +248,8 @@ def run(
                 message=f"cache hit {key[:12]}; not re-executed",
             )
     (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
+    # Only artifacts of this invocation may be collected and cached.
+    _clear_previous_outputs(prepared.run_dir, campaign.results_stub)
     # a real probe before a real run
     availability = check_availability(config, campaign, invoke=True)
     if availability.status is Status.EXECUTION_FAILED:
@@ -265,7 +279,10 @@ def run(
         outcome=outcome,
     )
     if result.status == "STRUCTURALLY_VALID":
-        (prepared.run_dir / CACHE_RECORD).write_text(json.dumps({"key": key}) + "\n")
+        outputs = _output_hashes(prepared.run_dir, campaign.results_stub)
+        (prepared.run_dir / CACHE_RECORD).write_text(
+            json.dumps({"key": key, "outputs": outputs}) + "\n"
+        )
     else:
         (prepared.run_dir / CACHE_RECORD).unlink(missing_ok=True)
     return result

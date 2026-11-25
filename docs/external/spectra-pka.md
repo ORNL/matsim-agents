@@ -124,8 +124,9 @@ The neutron flux is given by exactly one of two keys under `flux`:
 - `file`: a native SPECTRA-PKA flux file, linked into the run directory unchanged.
 - `spectrum_file`: a CSV `e_low,e_high,flux`, written as a native itype-2 file (MeV, `ksail -2`).
   Declare `energy_units` (eV, keV, MeV), `flux_units`, `value_kind` (integrated, per_energy,
-  per_lethargy) and `absolute`. A line spectrum, or a shape-only spectrum with an absolute
-  normalisation type, is rejected. SPECTRA-PKA collapses the flux onto the library grid itself.
+  per_lethargy) and `absolute`. A line spectrum, `norm_type: 3` (upstream skips the cm2-to-barn
+  factor there), or a shape-only spectrum without `rescale_value` is rejected. SPECTRA-PKA
+  collapses the flux onto the library grid itself.
 
 The run record keeps the SHA-256 of the source spectrum and of the generated `flux.dat`.
 

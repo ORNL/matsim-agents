@@ -29,6 +29,7 @@ def _write(tmp_path, campaign: dict, data_root: bool = True):
 
 
 def test_natural_abundance_channels_match_the_composition(tmp_path):
+    pytest.importorskip("mendeleev")
     cfg = load_config_file(_write(tmp_path, {"composition": {"W": 0.9, "Ta": 0.1}}))
     campaign = cfg.campaign
     assert campaign is not None and not campaign.derive_channels

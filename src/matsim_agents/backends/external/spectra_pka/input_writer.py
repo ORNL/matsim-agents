@@ -78,7 +78,8 @@ def build_input_text(spec: CampaignSpec) -> str:
     total = 0.0
     for ch in spec.channels:
         name = pka_link_name(ch.parent_ele, ch.parent_num)
-        ratio = ch.atom_fraction / spec.composition[ch.parent_ele]
+        # Upstream weights global sums by this ratio, so it is the whole-material atom fraction.
+        ratio = ch.atom_fraction
         total += ratio
         lines.append(f'"{name}" {ratio:.10f} {ch.parent_ele} {ch.parent_num}')
     lines += [
@@ -117,8 +118,9 @@ def native_flux_text(spec: NeutronSpectrum, norm_type: int) -> str:
     """Native flux file (itype 2, no covariances), boundaries in MeV; SPECTRA-PKA collapses it."""
     if spec.is_line:
         raise InputError("a monoenergetic spectrum has no group structure; give a group spectrum")
-    if not spec.absolute and norm_type == 3:
-        raise InputError("flux_norm_type 3 keeps absolute rates, but the spectrum is shape-only")
+    if norm_type == 3:
+        # Upstream skips the cm2->barn factor in mode 3, so these n/cm2/s values would be 1e24 high.
+        raise InputError("flux_norm_type 3 is not supported for a generated group spectrum")
     edges = [e / ENERGY_TO_EV["MeV"] for e in spec.boundaries_eV]
     lines = [
         f"{spec.identity[:90]} (matsim-agents)",
@@ -149,6 +151,8 @@ def stage_inputs(spec: CampaignSpec, run_dir: Path) -> StagedInputs:
     if not spec.flux.source_path.is_file():
         raise InputError(f"flux file not found: {spec.flux.source_path}")
     spectrum = load_flux_spectrum(spec.flux)
+    if spectrum is not None and not spectrum.absolute and spec.flux.rescale_value is None:
+        raise InputError("a shape-only spectrum needs flux.rescale_value to become a physical flux")
     flux_text = native_flux_text(spectrum, spec.flux.norm_type) if spectrum else None
     text = build_input_text(spec)
     run_dir.mkdir(parents=True, exist_ok=True)

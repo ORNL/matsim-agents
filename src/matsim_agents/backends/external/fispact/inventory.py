@@ -41,13 +41,18 @@ def _num() -> Any:
     return Field(0.0, ge=0, allow_inf_nan=False)
 
 
+def _optional() -> Any:
+    # A value the file does not report stays None; only a reported 0 is a measured zero.
+    return Field(None, ge=0, allow_inf_nan=False)
+
+
 class FispactNuclide(_Reported):
     element: str
     isotope: int
     state: str = ""
-    grams: float = _num()
-    activity: float = _num()
-    heat: float = _num()
+    grams: float | None = _optional()
+    activity: float | None = _optional()
+    heat: float | None = _optional()
 
     @property
     def name(self) -> str:
@@ -57,24 +62,32 @@ class FispactNuclide(_Reported):
 class FispactDoseRate(_Reported):
     type: str = ""
     distance: float = _num()
-    dose: float = _num()
+    dose: float | None = _optional()
 
 
 class FispactStep(_Reported):
     irradiation_time: float = _num()
     cooling_time: float = _num()
     flux: float = _num()
-    total_heat: float = _num()
+    total_heat: float | None = _optional()
     dose_rate: FispactDoseRate = FispactDoseRate()
     nuclides: tuple[FispactNuclide, ...] = ()
 
     @property
-    def mass_kg(self) -> float:
-        return math.fsum(n.grams for n in self.nuclides) / _G_PER_KG
+    def mass_kg(self) -> float | None:
+        """None unless every nuclide reports its mass."""
+        grams = [n.grams for n in self.nuclides]
+        if not grams or any(g is None for g in grams):
+            return None
+        return math.fsum(g for g in grams if g is not None) / _G_PER_KG
 
     @property
-    def total_activity_bq(self) -> float:
-        return math.fsum(n.activity for n in self.nuclides)
+    def total_activity_bq(self) -> float | None:
+        """None unless every nuclide reports its activity."""
+        values = [n.activity for n in self.nuclides]
+        if not values or any(v is None for v in values):
+            return None
+        return math.fsum(v for v in values if v is not None)
 
 
 class FispactInventory(_Reported):
@@ -159,18 +172,13 @@ def to_activation_evidence(
         raise NuclearEvidenceError("input_files are required to hash the FISPACT-II inputs")
     step = select_step(inventory, cooling_time_s)
     mass_kg = step.mass_kg
-    if mass_kg <= 0:
-        raise NuclearEvidenceError("the selected step has no mass; cannot normalise per kg")
+    if mass_kg is None or mass_kg <= 0:
+        raise NuclearEvidenceError(
+            "the selected step does not report a positive mass for every nuclide; "
+            "cannot normalise per kg"
+        )
 
-    quantities = [
-        NuclearQuantity(
-            name="specific_activity", value=step.total_activity_bq / mass_kg, unit="Bq/kg"
-        ),
-        NuclearQuantity(
-            name="decay_heat", value=step.total_heat * _W_PER_KW / mass_kg, unit="W/kg"
-        ),
-    ]
-    dose = step.dose_rate
+    quantities: list[NuclearQuantity] = []
     notes = [
         f"fispact_run: {inventory.run_name}".rstrip(),
         f"fispact_flux: {inventory.flux_name}".rstrip(),
@@ -178,13 +186,31 @@ def to_activation_evidence(
         "decay heat is the file's total_heat, converted from kW",
         "no uncertainty is reported by this result",
     ]
-    if dose.type:
+    activity = step.total_activity_bq
+    if activity is None:
+        notes.append("activity not reported for every nuclide in this step; omitted")
+    else:
+        quantities.append(
+            NuclearQuantity(name="specific_activity", value=activity / mass_kg, unit="Bq/kg")
+        )
+    if step.total_heat is None:
+        notes.append("total_heat not reported in this step; decay heat omitted")
+    else:
+        quantities.append(
+            NuclearQuantity(
+                name="decay_heat", value=step.total_heat * _W_PER_KW / mass_kg, unit="W/kg"
+            )
+        )
+    dose = step.dose_rate
+    if dose.type and dose.dose is not None:
         quantities.append(NuclearQuantity(name="shutdown_dose_rate", value=dose.dose, unit="Sv/h"))
         dose_model = dose_model or f"FISPACT-II dose rate ({dose.type})"
         dose_geometry = dose_geometry or f"{dose.type}, distance {dose.distance:g} m"
     else:
         dose_model = dose_geometry = None
         notes.append("no dose rate in this step")
+    if not quantities:
+        raise NuclearEvidenceError("the selected step reports no activity, heat or dose rate")
 
     return ExternalNuclearEvidence(
         family=NuclearFamily.ACTIVATION,
@@ -211,6 +237,8 @@ def _atoms(nuclides: tuple[FispactNuclide, ...]) -> dict[str, float]:
     for n in nuclides:
         if n.isotope <= 0:
             raise NuclearEvidenceError(f"{n.name}: the isotope must be a positive mass number")
+        if n.grams is None:
+            raise NuclearEvidenceError(f"{n.name}: the file does not report its mass")
         key = f"{n.element}{n.isotope}"
         out[key] = out.get(key, 0.0) + n.grams / n.isotope
     return out

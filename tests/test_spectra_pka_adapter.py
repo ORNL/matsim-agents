@@ -527,3 +527,34 @@ def test_failed_run_leaves_no_cache_record(tmp_path, campaign):
     cfg = make_config(tmp_path, exe)
     adapter.run(cfg, campaign, execute=True)
     assert not (adapter.run_directory(cfg, campaign) / adapter.CACHE_RECORD).exists()
+
+
+def test_tampered_cached_output_is_not_a_cache_hit(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    adapter.run(cfg, campaign, execute=True)
+    out = adapter.run_directory(cfg, campaign) / f"{campaign.results_stub}.out"
+    out.write_text(out.read_text() + "\n")
+    again = adapter.run(cfg, campaign, execute=True)
+    assert again.outcome is not None and "cache hit" not in again.message
+
+
+def test_rerun_removes_artifacts_of_the_previous_run(tmp_path, mock_exe, campaign):
+    cfg = make_config(tmp_path, mock_exe)
+    adapter.run(cfg, campaign, execute=True)
+    run_dir = adapter.run_directory(cfg, campaign)
+    stale = run_dir / f"{campaign.results_stub}.log"
+    stale.write_text("stale\n")
+    adapter.run(cfg, campaign, execute=True, use_cache=False)
+    assert not stale.exists() or stale.read_text() != "stale\n"
+
+
+def test_global_ratios_carry_the_whole_material_fraction(tmp_path):
+    from matsim_agents.backends.external.spectra_pka.input_writer import build_input_text
+
+    campaign = make_campaign(tmp_path)
+    ratios = [
+        float(line.split()[1])
+        for line in build_input_text(campaign).splitlines()
+        if line.startswith('"pka_')
+    ]
+    assert ratios == pytest.approx([0.9, 0.1])
