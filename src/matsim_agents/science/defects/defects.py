@@ -179,7 +179,7 @@ def reference_set_entries(reference_energies: Any) -> list[Any]:
             ComputedEntry(
                 composition,
                 elemental_total + formation_per_atom * composition.num_atoms,
-                entry_id=None if phase_id.startswith("formula:") else phase_id,
+                entry_id=phase_id,
             )
         )
     return entries

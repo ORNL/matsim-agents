@@ -299,7 +299,7 @@ def recalibrate_hull_reports(
             ComputedEntry(
                 composition,
                 reference_total + formation_per_atom * composition.num_atoms,
-                entry_id=None if phase_id.startswith("formula:") else phase_id,
+                entry_id=phase_id,
             )
         )
 
@@ -478,7 +478,7 @@ def score_stability(
                 ComputedEntry(
                     comp,
                     ref_total + formation_per_atom * comp.num_atoms,
-                    entry_id=None if phase_id.startswith("formula:") else phase_id,
+                    entry_id=phase_id,
                 )
             )
         candidate_entries = []
