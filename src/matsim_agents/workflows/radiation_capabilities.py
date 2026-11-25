@@ -68,9 +68,9 @@ class CapabilityReadiness(BaseModel):
 RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="alloy-generation",
-        summary="Seeded BCC multi-element supercells with exact composition and SRO descriptors.",
+        summary="Seeded alloy supercells on any lattice, exact composition, SRO descriptors.",
         entry_points=(
-            "matsim_agents.science.structures.alloys:build_bcc_supercell",
+            "matsim_agents.science.structures.alloys:build_supercell",
             "matsim_agents.science.structures.alloys:warren_cowley_sro",
             "matsim_agents.science.structures.alloy_ensemble:AlloyEnsemble",
         ),

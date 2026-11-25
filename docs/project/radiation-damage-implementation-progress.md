@@ -94,6 +94,10 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - No new code: `find_symmetry_equivalents` (A2.8c) already combines the cached translation permutations with cached site permutations of the 48 signed coordinate permutations, keeps only those valid for the actual supercell, keeps the first configuration as representative, preserves exact and translation classifications, and reports `status`/`unchecked` when its budget stops the check.
   - Acceptance (`tests/test_alloy_ensemble.py`, cubic 2x2x2 Mo8Ta4W4 cell): 90-degree, 180-degree and 120-degree [111] rotations are merged (48 operations, status complete); a mirror, inversion and the x = y mirror are merged; a Mo-Ta site swap and a Ta/W relabelling stay distinct.
   - Scope: ideal BCC supercells only; distorted geometries are not supported.
+- [x] Generic parent lattices
+  - `AlloySpec.crystal_structure` takes `sc`, `bcc`, `fcc`, `hcp`, `diamond` or `custom` (with a `UnitCell`), plus `cell_choice` and `c_over_a`. `repeats` takes a triple or a 3x3 integer matrix. `build_supercell` replaces `build_bcc_supercell`.
+  - Neighbour shells are found from geometry (`shell_radii`, `shell_topology`), not from bcc constants. Translation and point-group permutations for `find_translation_equivalents` and `find_symmetry_equivalents` come from spglib on the actual supercell.
+  - Tests: `tests/test_alloys_lattices.py`.
 - [x] A2.9 Phase A2 integration test
   - File: `tests/test_phase_a2_integration.py` (2 tests).
   - Small Mo12Ta8W12 cell: A1 generation with exact composition; first- and second-shell SRO; targeted-SRO optimization lowers the objective and the reported alpha matches re-measurement; a four-member random ensemble is deduplicated (exact and symmetry, status complete); ensemble SRO mean and sample standard deviation match an independent recomputation from re-measured alphas; the whole workflow repeats identically with the same seeds.

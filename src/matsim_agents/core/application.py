@@ -19,17 +19,17 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
-ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4}
+ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4, "hcp": 2, "diamond": 8}
 
 
 class SupercellTarget(BaseModel):
-    """A fixed-composition supercell on a cubic parent lattice, checked for consistency."""
+    """A fixed-composition supercell of a parent lattice, checked for consistency."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     composition: dict[str, StrictInt] = Field(min_length=1)
     supercell: tuple[StrictInt, StrictInt, StrictInt]
-    parent_lattice: Literal["sc", "bcc", "fcc"]
+    parent_lattice: Literal["sc", "bcc", "fcc", "hcp", "diamond"]
     expected_sites: StrictInt = Field(gt=0)
     reference: str = ""
 

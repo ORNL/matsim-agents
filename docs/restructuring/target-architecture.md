@@ -178,10 +178,12 @@ Implemented on branch `refactor/framework-architecture` (PR #80):
 
 Known blockers and deviations:
 
-- `science.structures` alloy generation (`AlloySpec`) and
-  `ParentSupercell.lattice` support BCC only, so the Cantor application uses
-  the hierarchy workflow and does not build its FCC supercell. Adding FCC
-  generation is new scientific capability, out of scope here.
+- Alloy generation (`AlloySpec`, `build_supercell`) handles sc, bcc, fcc,
+  hcp, diamond and custom unit cells, conventional or primitive, with diagonal
+  or full integer supercell matrices. `application check` builds every target
+  parent, including the Cantor 4x4x4 FCC cell (256 sites). The
+  full-supercell defect workflow and `find_cross_cell_equivalents` are still
+  bcc-only, because they use bcc interstitial and cubic-axis geometry.
 - `examples/perovskite_oxides/run.py` generates candidates only; relaxation
   and hull ranking need an MLIP and are not run in CI.
 - Acceptance criterion 3 is met through `matsim-agents application check`,

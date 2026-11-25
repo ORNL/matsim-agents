@@ -1,4 +1,4 @@
-"""Reproducible ensembles of independent BCC alloy occupations at fixed composition.
+"""Reproducible ensembles of independent alloy occupations at fixed composition.
 
 Each configuration gets its own random stream derived from one ensemble seed with
 ``matsim_agents.core.seeding.stream_seed``. Independent seeds do not guarantee distinct or
@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
+import warnings
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -19,7 +21,6 @@ from typing import Any, Literal
 
 import numpy as np
 from ase import Atoms
-from ase.build import bulk
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.core.seeding import stream_seed
@@ -28,10 +29,11 @@ from matsim_agents.science.structures.alloys import (
     ShellSRO,
     SROResult,
     SROTarget,
+    UnitCell,
     _shuffled_symbols,
-    bcc_topology,
-    build_bcc_supercell,
+    build_supercell,
     generate_targeted_sro,
+    shell_topology,
     warren_cowley_sro,
 )
 
@@ -229,35 +231,78 @@ class TranslationDeduplication:
     translation_equivalent_to: dict[str, str]
 
 
-@lru_cache(maxsize=8)
-def _translation_permutations(
-    repeats: tuple[int, int, int], lattice_parameter: float
-) -> np.ndarray:
-    """Site permutations of all BCC supercell translations, shape (n_sites, n_sites).
+_KEY_GRID = 1 << 20
 
-    Sites are addressed on the integer grid of half lattice parameters (all-even corner sites,
-    all-odd body-centre sites), in ``build_bcc_supercell`` order. Translating by the vector to any
-    site, including the body-centre vector (a/2, a/2, a/2) that swaps the two sublattices, gives
-    one row; ``numbers[perms[t]]`` is the occupation shifted by t. No distances are computed.
+
+def _site_keys(frac: np.ndarray) -> np.ndarray:
+    """One int64 per fractional position on a 2**-20 grid, periodic in each axis."""
+    grid = np.rint(np.mod(frac, 1.0) * _KEY_GRID).astype(np.int64) % _KEY_GRID
+    return (grid[..., 0] * _KEY_GRID + grid[..., 1]) * _KEY_GRID + grid[..., 2]
+
+
+@lru_cache(maxsize=8)
+def _supercell_operations(lattice_key: str) -> tuple[np.ndarray, np.ndarray]:
+    """Site permutations of the undecorated periodic supercell described by ``lattice_key``.
+
+    Returns ``(translations, points)``. ``translations`` holds one row per pure lattice
+    translation that maps the site set onto itself (shape (n_translations, n_sites)), and
+    ``points`` one row per distinct rotation part of the space group (shape (n_operations,
+    n_sites)), each taken with one of its fractional translations. Row 0 of each is the identity.
+    Operations come from spglib on the supercell itself, so axes are exchanged only when the
+    supercell allows it and nonsymmorphic lattices (hcp, diamond) are handled. ``numbers[row]``
+    is the occupation moved by that operation. Combining every point row with every translation
+    row gives the full symmetry group of the periodic cell.
     """
-    unit = bulk("W", crystalstructure="bcc", a=lattice_parameter, cubic=True)
-    grid = np.rint(unit.repeat(repeats).positions / (lattice_parameter / 2)).astype(np.int64)
-    shape = 2 * np.array(repeats)
-    lookup = np.full(tuple(shape), -1, dtype=np.int32)
-    lookup[tuple(grid.T)] = np.arange(len(grid), dtype=np.int32)
-    perms = np.empty((len(grid), len(grid)), dtype=np.int32)
-    for t, shift in enumerate(grid):
-        perms[t] = lookup[tuple(((grid + shift) % shape).T)]
-    if perms.min() < 0:
-        raise AssertionError("a BCC translation left the site lattice")
-    perms.setflags(write=False)
-    return perms
+    import spglib
+
+    fields = json.loads(lattice_key)
+    unit_cell = fields.pop("unit_cell")
+    probe = AlloySpec.model_construct(
+        **fields, unit_cell=unit_cell and UnitCell.model_validate(unit_cell)
+    )
+    spec = AlloySpec(**fields, unit_cell=unit_cell, counts={"H": probe.n_sites}, seed=0)
+    lattice = build_supercell(spec)
+    frac = lattice.get_scaled_positions(wrap=True)
+    keys = _site_keys(frac)
+    order = np.argsort(keys)
+    sorted_keys = keys[order]
+    cell = (lattice.cell.array, frac, np.ones(len(lattice), dtype=int))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        symmetry = spglib.get_symmetry(cell, symprec=1e-4 * spec.lattice_parameter)
+    if symmetry is None:
+        raise AssertionError("spglib found no symmetry for the parent supercell")
+
+    def permutation(rotation: np.ndarray, shift: np.ndarray) -> np.ndarray:
+        moved = _site_keys(frac @ rotation.T + shift)
+        where = np.searchsorted(sorted_keys, moved).clip(max=len(keys) - 1)
+        if not np.array_equal(sorted_keys[where], moved):
+            raise AssertionError("a symmetry operation left the site lattice")
+        return order[where].astype(np.int32)
+
+    identity = np.eye(3, dtype=int)
+    translations: dict[bytes, np.ndarray] = {}
+    points: dict[bytes, np.ndarray] = {}
+    for rotation, shift in zip(symmetry["rotations"], symmetry["translations"], strict=True):
+        if np.array_equal(rotation, identity):
+            row = permutation(rotation, shift)
+            translations.setdefault(row.tobytes(), row)
+        elif rotation.tobytes() not in points:
+            points[rotation.tobytes()] = permutation(rotation, shift)
+    base = np.arange(len(lattice), dtype=np.int32)
+    translations.setdefault(base.tobytes(), base)
+    t_rows = [base] + [row for row in translations.values() if not np.array_equal(row, base)]
+    p_rows = [base, *points.values()]
+    result = np.stack(t_rows), np.stack(p_rows)
+    for array in result:
+        array.setflags(write=False)
+    return result
 
 
 def find_translation_equivalents(ensemble: AlloyEnsemble) -> TranslationDeduplication:
     """Group configurations that are identical or related by a periodic lattice translation.
 
-    Every structure must sit on the ideal BCC supercell of ``ensemble.spec.alloy`` (same cell and
+    Every structure must sit on the ideal supercell of ``ensemble.spec.alloy`` (same cell and
     site positions), otherwise ``ValueError`` is raised. An occupation's canonical form is the
     smallest of its translated copies; translations form a group, so equal canonical forms mean
     equivalence exactly. SRO matrices are never used. Nothing in ``ensemble`` is modified.
@@ -266,7 +311,7 @@ def find_translation_equivalents(ensemble: AlloyEnsemble) -> TranslationDeduplic
     _require_parent_lattice(ensemble)
     exact = find_exact_duplicates(ensemble)
     index = {record.config_id: k for k, record in enumerate(ensemble.records)}
-    perms = _translation_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
+    perms = _supercell_operations(alloy.lattice_key)[0]
     representatives: dict[bytes, ConfigurationRecord] = {}
     final: dict[str, str] = {}
     for record in exact.unique:
@@ -286,7 +331,7 @@ def find_translation_equivalents(ensemble: AlloyEnsemble) -> TranslationDeduplic
 
 
 def _require_parent_lattice(ensemble: AlloyEnsemble) -> None:
-    lattice = build_bcc_supercell(ensemble.spec.alloy)
+    lattice = build_supercell(ensemble.spec.alloy)
     for record, atoms in zip(ensemble.records, ensemble.structures, strict=True):
         if (
             len(atoms) != len(lattice)
@@ -294,44 +339,15 @@ def _require_parent_lattice(ensemble: AlloyEnsemble) -> None:
             or not np.allclose(atoms.cell.array, lattice.cell.array)
             or not np.allclose(atoms.positions, lattice.positions)
         ):
-            raise ValueError(f"{record.config_id} is not on the parent BCC supercell")
-
-
-@lru_cache(maxsize=8)
-def _point_permutations(repeats: tuple[int, int, int], lattice_parameter: float) -> np.ndarray:
-    """Site permutations of the cubic point operations that preserve the supercell.
-
-    The BCC point group is the 48 signed axis permutations (m-3m). Each is applied about the
-    origin atom and kept only if it maps the periodic box onto itself: axes may be exchanged only
-    when their repeat counts are equal, while sign flips (reflections, inversion) are always
-    valid. Combined with all translations this is the full symmetry group of the periodic cell.
-    Shape (n_operations, n_sites); row 0 is the identity.
-    """
-    unit = bulk("W", crystalstructure="bcc", a=lattice_parameter, cubic=True)
-    grid = np.rint(unit.repeat(repeats).positions / (lattice_parameter / 2)).astype(np.int64)
-    shape = 2 * np.array(repeats)
-    lookup = np.full(tuple(shape), -1, dtype=np.int32)
-    lookup[tuple(grid.T)] = np.arange(len(grid), dtype=np.int32)
-    rows = []
-    for axes in itertools.permutations(range(3)):
-        if tuple(shape[list(axes)]) != tuple(shape):
-            continue
-        for signs in itertools.product((1, -1), repeat=3):
-            moved = (grid[:, list(axes)] * np.array(signs)) % shape
-            rows.append(lookup[tuple(moved.T)])
-    perms = np.stack(rows)
-    if perms.min() < 0:
-        raise AssertionError("a point operation left the site lattice")
-    perms.setflags(write=False)
-    return perms
+            raise ValueError(f"{record.config_id} is not on the parent supercell")
 
 
 @dataclass(frozen=True, eq=False)
 class SymmetryDeduplication:
-    """Deduplication under the space-group operations of the undecorated periodic BCC supercell.
+    """Deduplication under the space-group operations of the undecorated periodic supercell.
 
-    Operations are the periodic translations (including the body-centre shift) combined with the
-    cubic point operations that preserve the supercell, so a noncubic cell has fewer than 48.
+    Operations are the periodic lattice translations combined with the point operations that
+    preserve the supercell, so for a cubic lattice a noncubic cell has fewer than 48.
     ``unique`` keeps the earliest member of every class. The three maps send later configuration
     IDs to their representative's ID and are mutually exclusive: ``exact_duplicate_of`` for an
     identical occupation, ``translation_equivalent_to`` for a pure translation of it, and
@@ -374,9 +390,9 @@ def find_symmetry_equivalents(
 ) -> SymmetryDeduplication:
     """Group configurations related by translations, rotations or reflections of the parent.
 
-    Structures must sit on the ideal BCC supercell of ``ensemble.spec.alloy`` or ``ValueError`` is
+    Structures must sit on the ideal supercell of ``ensemble.spec.alloy`` or ``ValueError`` is
     raised. The group is complete for that periodic cell: all lattice translations modulo the
-    supercell times every cubic point operation that preserves it.
+    supercell times every point operation that preserves it.
 
     Exact duplicates are removed first. Configurations whose integer first- and second-shell pair
     counts differ cannot be equivalent and are never compared; equal counts only nominate
@@ -392,8 +408,7 @@ def find_symmetry_equivalents(
     _require_parent_lattice(ensemble)
     exact = find_exact_duplicates(ensemble)
     index = {record.config_id: k for k, record in enumerate(ensemble.records)}
-    shifts = _translation_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
-    points = _point_permutations(tuple(alloy.repeats), alloy.lattice_parameter)
+    shifts, points = _supercell_operations(alloy.lattice_key)
 
     candidates: dict[tuple[Any, ...], list[ConfigurationRecord]] = defaultdict(list)
     for record in exact.unique:
@@ -699,7 +714,7 @@ def generate_alloy_ensemble(
     max_swap_attempts: int = 1000,
     tolerance: float = 1e-4,
 ) -> AlloyEnsemble:
-    """Generate ``n_configurations`` independently seeded occupations of one BCC lattice.
+    """Generate ``n_configurations`` independently seeded occupations of one parent lattice.
 
     Per-configuration seeds come from ``matsim_agents.core.seeding.stream_seed``; the global
     NumPy state is untouched. The lattice and its neighbour shells are built once and shared.
@@ -717,8 +732,8 @@ def generate_alloy_ensemble(
         max_swap_attempts=max_swap_attempts,
         tolerance=tolerance,
     )
-    lattice = build_bcc_supercell(spec)
-    topology = bcc_topology(lattice, spec.lattice_parameter)
+    lattice = build_supercell(spec)
+    topology = shell_topology(lattice, spec.lattice_parameter)
     species = tuple(spec.counts)
 
     records: list[ConfigurationRecord] = []

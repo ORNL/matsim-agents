@@ -8,12 +8,9 @@ from ase.neighborlist import neighbor_list
 from pydantic import ValidationError
 
 from matsim_agents.science.structures.alloys import (
-    BCC_FIRST_SHELL,
-    BCC_SECOND_SHELL,
     AlloySpec,
     assign_species,
-    bcc_site_count,
-    build_bcc_supercell,
+    build_supercell,
     first_neighbor_list,
     generate_alloy,
     second_neighbor_list,
@@ -39,7 +36,7 @@ def test_reference_spec_is_valid_and_has_1024_sites():
     ],
 )
 def test_valid_small_specs_are_accepted(counts, repeats):
-    assert AlloySpec(counts=counts, repeats=repeats, seed=0).n_sites == bcc_site_count(repeats)
+    assert AlloySpec(counts=counts, repeats=repeats, seed=0).n_sites == (2 * int(np.prod(repeats)))
 
 
 def test_zero_counts_are_dropped_not_rejected():
@@ -106,7 +103,7 @@ def test_alloy_spec_json_round_trips_counts_as_plain_mapping():
 
 def test_bcc_supercell_geometry_and_periodicity():
     spec = AlloySpec(counts=REFERENCE_COUNTS, seed=0)
-    atoms = build_bcc_supercell(spec)
+    atoms = build_supercell(spec)
     assert len(atoms) == 1024
     assert atoms.pbc.all()
     assert np.allclose(atoms.cell.lengths(), 8 * spec.lattice_parameter)
@@ -119,17 +116,17 @@ def test_bcc_first_shell_has_eight_neighbours_per_site():
     first_shell = spec.lattice_parameter * np.sqrt(3) / 2
     i, _ = neighbor_list("ij", atoms, 1.1 * first_shell)
     coordination = np.bincount(i, minlength=len(atoms))
-    assert set(coordination) == {BCC_FIRST_SHELL}
+    assert set(coordination) == {8}
 
 
 @pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
 def test_first_neighbor_list_gives_eight_periodic_body_diagonals_per_site(repeats):
-    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats, seed=0)
-    atoms = build_bcc_supercell(spec)
+    spec = AlloySpec(counts={"W": (2 * int(np.prod(repeats)))}, repeats=repeats, seed=0)
+    atoms = build_supercell(spec)
     i, _, vectors = first_neighbor_list(atoms, spec.lattice_parameter)
     half_diagonal = spec.lattice_parameter / 2
 
-    assert len(i) == BCC_FIRST_SHELL * len(atoms)
+    assert len(i) == 8 * len(atoms)
     assert np.allclose(np.linalg.norm(vectors, axis=1), np.sqrt(3) * half_diagonal)
     directions = np.rint(vectors / half_diagonal).astype(int)
     expected = {(sx, sy, sz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)}
@@ -142,18 +139,18 @@ def test_first_neighbor_list_on_reference_structure_excludes_second_shell():
     atoms = generate_alloy(spec)
     i, _, vectors = first_neighbor_list(atoms, spec.lattice_parameter)
     coordination = np.bincount(i, minlength=len(atoms))
-    assert set(coordination) == {BCC_FIRST_SHELL}
+    assert set(coordination) == {8}
     assert np.allclose(np.linalg.norm(vectors, axis=1), np.sqrt(3) * spec.lattice_parameter / 2)
 
 
 @pytest.mark.parametrize("repeats", [(1, 1, 1), (2, 2, 2), (3, 2, 4)])
 def test_second_neighbor_list_gives_six_axis_aligned_neighbours_per_site(repeats):
-    spec = AlloySpec(counts={"W": bcc_site_count(repeats)}, repeats=repeats, seed=0)
-    atoms = build_bcc_supercell(spec)
+    spec = AlloySpec(counts={"W": (2 * int(np.prod(repeats)))}, repeats=repeats, seed=0)
+    atoms = build_supercell(spec)
     i, _, vectors = second_neighbor_list(atoms, spec.lattice_parameter)
     a = spec.lattice_parameter
 
-    assert len(i) == BCC_SECOND_SHELL * len(atoms)
+    assert len(i) == 6 * len(atoms)
     assert np.allclose(np.linalg.norm(vectors, axis=1), a)
     directions = np.rint(vectors / a).astype(int)
     expected = {(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)}
@@ -167,8 +164,8 @@ def test_second_shell_is_disjoint_from_first_and_reciprocal_on_reference_structu
     first_i, _, _ = first_neighbor_list(atoms, spec.lattice_parameter)
     i, j, vectors = second_neighbor_list(atoms, spec.lattice_parameter)
 
-    assert set(np.bincount(i, minlength=len(atoms))) == {BCC_SECOND_SHELL}
-    assert len(first_i) + len(i) == (BCC_FIRST_SHELL + BCC_SECOND_SHELL) * len(atoms)
+    assert set(np.bincount(i, minlength=len(atoms))) == {6}
+    assert len(first_i) + len(i) == (8 + 6) * len(atoms)
 
     units = np.rint(vectors / spec.lattice_parameter).astype(int)
     forward = set(zip(i.tolist(), j.tolist(), map(tuple, units.tolist()), strict=True))
@@ -179,11 +176,11 @@ def test_second_shell_is_disjoint_from_first_and_reciprocal_on_reference_structu
 def _b2_binary(repeats):
     """W on cube corners, Mo on body centres: perfectly ordered CsCl-type BCC."""
     spec = AlloySpec(
-        counts={"Mo": bcc_site_count(repeats) // 2, "W": bcc_site_count(repeats) // 2},
+        counts={"Mo": (2 * int(np.prod(repeats))) // 2, "W": (2 * int(np.prod(repeats))) // 2},
         repeats=repeats,
         seed=0,
     )
-    atoms = build_bcc_supercell(spec)
+    atoms = build_supercell(spec)
     parity = np.rint(2 * atoms.positions / spec.lattice_parameter).astype(int).sum(axis=1) % 2
     atoms.set_chemical_symbols(["W" if p == 0 else "Mo" for p in parity])
     return atoms, spec.lattice_parameter
@@ -220,8 +217,8 @@ def test_reference_alloy_gives_two_6x6_matrices_satisfying_identities():
     assert result.species == ("Cr", "Hf", "Mo", "Ta", "V", "W")
     assert np.allclose(result.composition, species_counts / 1024)
     for shell, z in (
-        (result.first_shell, BCC_FIRST_SHELL),
-        (result.second_shell, BCC_SECOND_SHELL),
+        (result.first_shell, 8),
+        (result.second_shell, 6),
     ):
         assert shell.alpha.shape == (6, 6)
         assert shell.pair_counts.sum() == z * 1024
@@ -253,7 +250,7 @@ def test_sro_is_deterministic_for_identical_inputs():
 
 
 def test_single_species_structure_has_zero_sro():
-    atoms = build_bcc_supercell(AlloySpec(counts={"W": 16}, repeats=(2, 2, 2), seed=0))
+    atoms = build_supercell(AlloySpec(counts={"W": 16}, repeats=(2, 2, 2), seed=0))
     atoms.set_chemical_symbols(["W"] * 16)
     result = warren_cowley_sro(atoms, 3.16)
     assert np.allclose(result.first_shell.alpha, [[0.0]])

@@ -1,9 +1,15 @@
-"""Generic, typed BCC alloy supercell generation with short-range-order control.
+"""Generic, typed alloy supercell generation with short-range-order control.
 
-The generator is element-agnostic: any set of elements and integer counts is accepted,
-independently of the frozen E3 structure generator in ``benchmarks/e3``. A cell is a
-``2 * nx * ny * nz`` conventional BCC supercell (1024 atoms for 8x8x8), occupied so that
-the requested composition is met exactly.
+The generator is element- and lattice-agnostic. A parent lattice is a named ASE structure
+(``sc``, ``bcc``, ``fcc``, ``hcp``, ``diamond``; conventional or primitive cell) or a custom
+unit cell given as a cell matrix and fractional site positions. The supercell is either a
+diagonal ``repeats`` triple or any nonsingular 3x3 integer supercell matrix, so the site count
+is ``len(unit cell) * |det(repeats)|`` (1024 atoms for the default 8x8x8 conventional bcc
+cell). Every site is substitutional and occupied so that the requested composition is met
+exactly. This module is independent of the frozen E3 structure generator in ``benchmarks/e3``.
+
+Neighbour shells are geometric: shell radii are the distinct pair distances shared by most
+sites of the structure, so the same SRO and coordination code serves every lattice.
 
 Seeds are required, nonnegative integers. Each function draws from its own named stream of
 ``matsim_agents.core.seeding``: ``generate_alloy`` uses ``(seed, "alloy-occupation")`` and
@@ -22,7 +28,7 @@ from typing import Literal
 
 import numpy as np
 from ase import Atoms
-from ase.build import bulk
+from ase.build import bulk, make_supercell
 from ase.neighborlist import neighbor_list
 from pydantic import (
     BaseModel,
@@ -37,34 +43,71 @@ from pymatgen.core import Element
 
 from matsim_agents.core.seeding import numpy_rng
 
-CrystalStructure = Literal["bcc"]
+CrystalStructure = Literal["sc", "bcc", "fcc", "hcp", "diamond", "custom"]
+CellChoice = Literal["conventional", "primitive"]
 OrderingMode = Literal["random"]
 SROStatus = Literal["converged", "not_converged"]
+Vector3 = tuple[float, float, float]
+IntVector3 = tuple[int, int, int]
+Repeats = IntVector3 | tuple[IntVector3, IntVector3, IntVector3]
 
 DEFAULT_REPEATS = (8, 8, 8)
 DEFAULT_LATTICE_PARAMETER = 3.16
-BCC_FIRST_SHELL = 8
-BCC_SECOND_SHELL = 6
-BCC_FIRST_SHELL_RATIO = float(np.sqrt(3) / 2)
-BCC_SECOND_SHELL_RATIO = 1.0
-BCC_THIRD_SHELL_RATIO = float(np.sqrt(2))
+IDEAL_HCP_C_OVER_A = math.sqrt(8 / 3)
+NAMED_STRUCTURES: tuple[str, ...] = ("sc", "bcc", "fcc", "hcp", "diamond")
+_SHELL_TOL = 0.02  # a gap wider than this fraction of the lattice parameter separates shells
 _ALPHA_TOL = 1e-9
 _ROW_TOL = 1e-6
 
 
-class AlloySpec(BaseModel):
-    """Validated description of one BCC alloy supercell.
+class UnitCell(BaseModel):
+    """A custom parent unit cell: rows of ``cell`` in units of the lattice parameter."""
 
-    ``counts`` holds the exact nonnegative integer number of atoms per element. Their sum
-    must equal the site count of the ``repeats`` supercell, so composition is never rounded.
+    model_config = ConfigDict(frozen=True)
+
+    cell: tuple[Vector3, Vector3, Vector3]
+    scaled_positions: tuple[Vector3, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate(self) -> UnitCell:
+        cell = np.array(self.cell, dtype=float)
+        if not np.isfinite(cell).all() or abs(np.linalg.det(cell)) < 1e-8:
+            raise ValueError("unit cell must be finite and nonsingular")
+        frac = np.array(self.scaled_positions, dtype=float)
+        if not np.isfinite(frac).all():
+            raise ValueError("scaled positions must be finite")
+        delta = frac[:, None, :] - frac[None, :, :]
+        delta -= np.rint(delta)
+        distance = np.linalg.norm(delta @ cell, axis=-1) + np.eye(len(frac))
+        if (distance < 1e-6).any():
+            raise ValueError("unit cell has coincident sites")
+        return self
+
+
+def _repeats_matrix(repeats: Repeats) -> np.ndarray:
+    matrix = np.array(repeats, dtype=np.int64)
+    return np.diag(matrix) if matrix.ndim == 1 else matrix
+
+
+class AlloySpec(BaseModel):
+    """Validated description of one substitutional alloy supercell on any parent lattice.
+
+    ``counts`` holds the exact nonnegative integer number of atoms per element. Their sum must
+    equal the site count of the supercell, so composition is never rounded. ``repeats`` is a
+    diagonal triple or a full integer supercell matrix (rows are supercell vectors in units of
+    the unit-cell vectors). ``unit_cell`` is required for, and only allowed with,
+    ``crystal_structure="custom"``; ``c_over_a`` only applies to ``hcp`` (default ideal).
     """
 
     model_config = ConfigDict(frozen=True)
 
     crystal_structure: CrystalStructure = "bcc"
     counts: Mapping[str, StrictInt]
-    repeats: tuple[int, int, int] = DEFAULT_REPEATS
+    repeats: Repeats = DEFAULT_REPEATS
     lattice_parameter: float = Field(default=DEFAULT_LATTICE_PARAMETER, gt=0, allow_inf_nan=False)
+    cell_choice: CellChoice = "conventional"
+    c_over_a: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    unit_cell: UnitCell | None = None
     ordering: OrderingMode = "random"
     seed: StrictInt = Field(ge=0)
 
@@ -89,24 +132,36 @@ class AlloySpec(BaseModel):
 
     @field_validator("repeats")
     @classmethod
-    def _validate_repeats(cls, value: tuple[int, int, int]) -> tuple[int, int, int]:
-        if any(n <= 0 for n in value):
+    def _validate_repeats(cls, value: Repeats) -> Repeats:
+        matrix = np.array(value)
+        if matrix.ndim == 1 and (matrix <= 0).any():
             raise ValueError(f"supercell repeats must be positive, got {value}")
+        if matrix.ndim == 2 and round(np.linalg.det(matrix)) == 0:
+            raise ValueError(f"supercell matrix must be nonsingular, got {value}")
         return value
 
     @model_validator(mode="after")
-    def _validate_site_count(self) -> AlloySpec:
-        sites = bcc_site_count(self.repeats)
+    def _validate_lattice(self) -> AlloySpec:
+        if (self.crystal_structure == "custom") != (self.unit_cell is not None):
+            raise ValueError('unit_cell is required for, and only allowed with, "custom"')
+        if self.c_over_a is not None and self.crystal_structure != "hcp":
+            raise ValueError("c_over_a only applies to hcp")
+        sites = self.n_sites
         total = sum(self.counts.values())
         if total != sites:
             raise ValueError(
-                f"counts sum to {total} but the {self.repeats} BCC supercell has {sites} sites"
+                f"counts sum to {total} but the {self.repeats} {self.crystal_structure} "
+                f"supercell has {sites} sites"
             )
         return self
 
     @property
+    def sites_per_unit_cell(self) -> int:
+        return len(build_unit_cell(self))
+
+    @property
     def n_sites(self) -> int:
-        return bcc_site_count(self.repeats)
+        return self.sites_per_unit_cell * abs(round(np.linalg.det(_repeats_matrix(self.repeats))))
 
     @property
     def composition(self) -> dict[str, float]:
@@ -114,53 +169,106 @@ class AlloySpec(BaseModel):
         total = sum(self.counts.values())
         return {symbol: amount / total for symbol, amount in self.counts.items()}
 
+    @property
+    def lattice_key(self) -> str:
+        """JSON of the undecorated supercell (no counts, ordering or seed); hashable."""
+        return self.model_dump_json(
+            include={
+                "crystal_structure",
+                "repeats",
+                "lattice_parameter",
+                "cell_choice",
+                "c_over_a",
+                "unit_cell",
+            }
+        )
 
-def bcc_site_count(repeats: tuple[int, int, int]) -> int:
-    """Number of atoms in a conventional BCC supercell with the given repeats."""
-    nx, ny, nz = repeats
-    return 2 * nx * ny * nz
+
+def build_unit_cell(spec: AlloySpec) -> Atoms:
+    """Periodic parent unit cell of ``spec`` with placeholder species ``X``."""
+    a = spec.lattice_parameter
+    if spec.unit_cell is not None:
+        return Atoms(
+            ["X"] * len(spec.unit_cell.scaled_positions),
+            cell=np.array(spec.unit_cell.cell) * a,
+            scaled_positions=spec.unit_cell.scaled_positions,
+            pbc=True,
+        )
+    if spec.crystal_structure == "hcp":
+        return bulk("X", "hcp", a=a, covera=spec.c_over_a or IDEAL_HCP_C_OVER_A)
+    cubic = spec.cell_choice == "conventional"
+    return bulk("X", spec.crystal_structure, a=a, cubic=cubic)
 
 
-def build_bcc_supercell(spec: AlloySpec) -> Atoms:
-    """Periodic conventional cubic BCC supercell with unoccupied (placeholder) species.
+def build_supercell(spec: AlloySpec) -> Atoms:
+    """Periodic supercell of ``spec`` with unoccupied (placeholder ``X``) species.
 
-    The cell is built from the two-atom conventional BCC unit cell, replicated
-    ``spec.repeats`` times along each axis, with ``cubic=True`` so the cell is orthorhombic.
+    Diagonal ``repeats`` replicate the unit cell along its axes (ASE ``repeat`` order); a full
+    matrix uses ``ase.build.make_supercell``.
     """
-    unit = bulk("W", crystalstructure="bcc", a=spec.lattice_parameter, cubic=True)
-    atoms = unit.repeat(spec.repeats)
+    unit = build_unit_cell(spec)
+    matrix = np.array(spec.repeats)
+    atoms = unit.repeat(spec.repeats) if matrix.ndim == 1 else make_supercell(unit, matrix)
     if len(atoms) != spec.n_sites:
-        raise AssertionError(f"BCC supercell has {len(atoms)} sites, expected {spec.n_sites}")
+        raise AssertionError(f"supercell has {len(atoms)} sites, expected {spec.n_sites}")
     return atoms
+
+
+def shell_radii(atoms: Atoms, lattice_parameter: float, n_shells: int = 3) -> tuple[float, ...]:
+    """Radii of the first ``n_shells`` neighbour shells shared by most sites of ``atoms``.
+
+    Sorted directed pair distances are split wherever consecutive values differ by more than
+    ``0.02 * lattice_parameter`` (so thermally or chemically distorted shells stay whole), and a
+    group counts as a lattice shell when it holds at least ``len(atoms) / 2`` pairs, so the few
+    distances introduced by isolated point defects do not displace the lattice shells.
+    ``lattice_parameter`` only sets the length scale of the search.
+    """
+    if not (math.isfinite(lattice_parameter) and lattice_parameter > 0):
+        raise ValueError(f"lattice parameter must be positive and finite, got {lattice_parameter}")
+    tol = _SHELL_TOL * lattice_parameter
+    radius = 1.5 * lattice_parameter
+    while radius <= 8 * lattice_parameter:
+        distances = np.sort(neighbor_list("d", atoms, radius))
+        groups = np.split(distances, np.flatnonzero(np.diff(distances) > tol) + 1)
+        shells = [
+            float(g.mean()) for g in groups if len(g) >= len(atoms) / 2 and g[-1] < radius - tol
+        ]
+        if len(shells) >= n_shells:
+            return tuple(shells[:n_shells])
+        radius *= 1.5
+    raise ValueError(f"could not find {n_shells} neighbour shells within 8 lattice parameters")
+
+
+def _shell_lists(
+    atoms: Atoms, radii: tuple[float, ...]
+) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    inner = 0.5 * (radii[0] + radii[1])
+    outer = 0.5 * (radii[1] + radii[2])
+    i, j, vectors = neighbor_list("ijD", atoms, outer)
+    near = np.linalg.norm(vectors, axis=1) < inner
+    return (i[near], j[near], vectors[near]), (i[~near], j[~near], vectors[~near])
 
 
 def first_neighbor_list(
     atoms: Atoms, lattice_parameter: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Periodic directed (i, j, vector) pairs within the first BCC shell, via ASE cell lists."""
-    # Midpoint of the gap between the first and second shells.
-    cutoff = 0.5 * (BCC_FIRST_SHELL_RATIO + BCC_SECOND_SHELL_RATIO) * lattice_parameter
-    i, j, vectors = neighbor_list("ijD", atoms, cutoff)
-    return i, j, vectors
+    """Periodic directed (i, j, vector) pairs within the first neighbour shell."""
+    return _shell_lists(atoms, shell_radii(atoms, lattice_parameter))[0]
 
 
 def second_neighbor_list(
     atoms: Atoms, lattice_parameter: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Periodic directed (i, j, vector) pairs within the second BCC shell (distance a)."""
-    inner = 0.5 * (BCC_FIRST_SHELL_RATIO + BCC_SECOND_SHELL_RATIO) * lattice_parameter
-    outer = 0.5 * (BCC_SECOND_SHELL_RATIO + BCC_THIRD_SHELL_RATIO) * lattice_parameter
-    i, j, vectors = neighbor_list("ijD", atoms, outer)
-    keep = np.linalg.norm(vectors, axis=1) >= inner
-    return i[keep], j[keep], vectors[keep]
+    """Periodic directed (i, j, vector) pairs within the second neighbour shell."""
+    return _shell_lists(atoms, shell_radii(atoms, lattice_parameter))[1]
 
 
 @dataclass(frozen=True, eq=False)
-class BCCTopology:
+class ShellTopology:
     """Directed first- and second-shell (i, j) neighbour pairs of one fixed periodic cell.
 
-    Depends only on site positions, cell and lattice parameter, so one instance can serve every
-    occupation of the same lattice. It is not re-validated against the structure it is used with.
+    Depends only on site positions and cell, so one instance can serve every occupation of the
+    same lattice. It is not re-validated against the structure it is used with.
     """
 
     n_atoms: int
@@ -168,11 +276,10 @@ class BCCTopology:
     second: tuple[np.ndarray, np.ndarray]
 
 
-def bcc_topology(atoms: Atoms, lattice_parameter: float) -> BCCTopology:
+def shell_topology(atoms: Atoms, lattice_parameter: float) -> ShellTopology:
     """Neighbour pairs of the first two shells, computed once with ASE cell lists."""
-    first_i, first_j, _ = first_neighbor_list(atoms, lattice_parameter)
-    second_i, second_j, _ = second_neighbor_list(atoms, lattice_parameter)
-    return BCCTopology(len(atoms), (first_i, first_j), (second_i, second_j))
+    first, second = _shell_lists(atoms, shell_radii(atoms, lattice_parameter))
+    return ShellTopology(len(atoms), first[:2], second[:2])
 
 
 @dataclass(frozen=True, eq=False)
@@ -228,9 +335,9 @@ def warren_cowley_sro(
     lattice_parameter: float,
     species: tuple[str, ...] | None = None,
     *,
-    topology: BCCTopology | None = None,
+    topology: ShellTopology | None = None,
 ) -> SROResult:
-    """Measured Warren-Cowley parameters alpha_ij = 1 - P(j|i) / c_j for the first two BCC shells.
+    """Measured Warren-Cowley parameters alpha_ij = 1 - P(j|i) / c_j for the first two shells.
 
     c_j is the actual atomic fraction in ``atoms`` and P(j|i) the measured probability that a
     neighbour of an i atom is j, so a finite random alloy reports its nonzero sampled SRO.
@@ -261,7 +368,7 @@ def warren_cowley_sro(
     composition.setflags(write=False)
 
     if topology is None:
-        topology = bcc_topology(atoms, lattice_parameter)
+        topology = shell_topology(atoms, lattice_parameter)
     elif topology.n_atoms != len(atoms):
         raise ValueError(f"topology has {topology.n_atoms} atoms, structure has {len(atoms)}")
     return SROResult(
@@ -426,9 +533,9 @@ def generate_targeted_sro(
     seed: int,
     tolerance: float = 1e-4,
     max_attempts: int = 20_000,
-    topology: BCCTopology | None = None,
+    topology: ShellTopology | None = None,
 ) -> TargetedSROResult:
-    """Swap species between sites of a BCC alloy to approach target Warren-Cowley parameters.
+    """Swap species between lattice sites to approach target Warren-Cowley parameters.
 
     Greedy, bounded search: each attempt swaps two sites of different species and is kept only
     if it strictly lowers L = sum w * (alpha - alpha_target)^2 over the listed targets. Sites,
@@ -438,7 +545,7 @@ def generate_targeted_sro(
     either way. Targets listed for (i, j) and (j, i) are the same quantity and are merged
     (first weight kept); conflicting values, unknown species, values outside the attainable
     range, or full rows breaking sum_j c_j alpha_ij = 0 raise ``ValueError``. ``topology``
-    reuses neighbour pairs computed for the same lattice by ``bcc_topology``.
+    reuses neighbour pairs computed for the same lattice by ``shell_topology``.
     """
     if not targets:
         raise ValueError("at least one target is required")
@@ -455,11 +562,12 @@ def generate_targeted_sro(
         raise ValueError("at least two species are required to swap")
     n_atoms = len(atoms)
     if topology is None:
-        topology = bcc_topology(atoms, lattice_parameter)
+        topology = shell_topology(atoms, lattice_parameter)
     pairs = {1: topology.first, 2: topology.second}
-    for shell, expected in ((1, BCC_FIRST_SHELL), (2, BCC_SECOND_SHELL)):
-        if not (np.bincount(pairs[shell][0], minlength=n_atoms) == expected).all():
-            raise ValueError(f"shell {shell} is not {expected}-fold coordinated: not a BCC lattice")
+    for shell, (i, _) in pairs.items():
+        coordination = np.bincount(i, minlength=n_atoms)
+        if coordination.min() == 0 or coordination.min() != coordination.max():
+            raise ValueError(f"shell {shell} coordination is not uniform: not a perfect lattice")
 
     merged = _canonical_targets(targets, species, initial.composition)
     n = len(species)
@@ -612,8 +720,8 @@ def assign_species(spec: AlloySpec) -> list[str]:
 
 
 def generate_alloy(spec: AlloySpec) -> Atoms:
-    """Build a BCC alloy supercell whose species counts match ``spec`` exactly."""
-    atoms = build_bcc_supercell(spec)
+    """Build an alloy supercell whose species counts match ``spec`` exactly."""
+    atoms = build_supercell(spec)
     atoms.set_chemical_symbols(assign_species(spec))
     atoms.info["alloy_spec"] = spec.model_dump_json()
     return atoms

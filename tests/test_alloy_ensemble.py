@@ -11,7 +11,7 @@ import pytest
 
 from matsim_agents.science.structures.alloy_ensemble import (
     AlloyEnsemble,
-    _point_permutations,
+    _supercell_operations,
     ensemble_sro_statistics,
     find_cross_cell_equivalents,
     find_exact_duplicates,
@@ -396,19 +396,33 @@ def test_symmetry_check_on_1024_atom_cell():
     # Pair counts are symmetry invariant, so the stored SRO of record 0 stays valid.
     extended = AlloyEnsemble(ensemble.spec, records, (*ensemble.structures, rotated), ())
     result = find_symmetry_equivalents(extended)
-    assert _point_permutations(REFERENCE.repeats, REFERENCE.lattice_parameter).shape == (48, 1024)
+    assert _supercell_operations(REFERENCE.lattice_key)[1].shape == (48, 1024)
     assert result.status == "complete"
     assert result.point_group_equivalent_to == {"rotated": "random-0000"}
     assert [r.config_id for r in result.unique] == ["random-0000", "random-0001"]
 
 
+def _points(repeats, a, structure="bcc"):
+    n = {"bcc": 2, "fcc": 4, "hcp": 2}[structure]
+    spec = AlloySpec(
+        crystal_structure=structure,
+        counts={"W": n * int(np.prod(repeats))},
+        repeats=repeats,
+        lattice_parameter=a,
+        seed=0,
+    )
+    return _supercell_operations(spec.lattice_key)[1]
+
+
 def test_point_operations_respect_the_supercell_shape():
     a = SMALL.lattice_parameter
-    assert len(_point_permutations((2, 2, 2), a)) == 48
-    assert len(_point_permutations((4, 2, 2), a)) == 16
-    assert len(_point_permutations((4, 2, 1), a)) == 8
+    assert len(_points((2, 2, 2), a)) == 48
+    assert len(_points((4, 2, 2), a)) == 16
+    assert len(_points((4, 2, 1), a)) == 8
+    assert len(_points((2, 2, 2), a, "fcc")) == 48
+    assert len(_points((2, 2, 2), a, "hcp")) == 24
     for repeats in [(4, 2, 2), (3, 3, 2)]:
-        perms = _point_permutations(repeats, a)
+        perms = _points(repeats, a)
         assert np.array_equal(perms[0], np.arange(2 * np.prod(repeats)))
         assert all(sorted(row) == list(range(perms.shape[1])) for row in perms)
 

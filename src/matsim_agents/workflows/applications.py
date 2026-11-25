@@ -72,13 +72,32 @@ CHECKS: dict[str, Callable[[ApplicationConfig], dict[str, Any]]] = {
 }
 
 
+def _target_parent(app: ApplicationConfig) -> dict[str, Any]:
+    """Build the target's parent supercell to show the structure generator supports it."""
+    from matsim_agents.science.structures.alloys import AlloySpec, build_supercell
+
+    t = app.target
+    if t is None:
+        return {}
+    spec = AlloySpec(
+        crystal_structure=t.parent_lattice,
+        counts=dict(t.composition),
+        repeats=tuple(t.supercell),
+        seed=0,
+    )
+    n_built = len(build_supercell(spec))
+    if n_built != t.expected_sites:
+        raise ValueError(f"built {n_built} parent sites, target expects {t.expected_sites}")
+    return {"parent_sites_built": n_built}
+
+
 def check_application(app: ApplicationConfig) -> dict[str, Any]:
     """Validate an application against its workflow; raise if they disagree."""
     try:
         check = CHECKS[app.workflow]
     except KeyError:
         raise ValueError(f"unknown workflow {app.workflow!r}; known: {sorted(CHECKS)}") from None
-    return {"name": app.name, "workflow": app.workflow, **check(app)}
+    return {"name": app.name, "workflow": app.workflow, **check(app), **_target_parent(app)}
 
 
 __all__ = ["CHECKS", "check_application"]

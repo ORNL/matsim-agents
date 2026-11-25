@@ -20,6 +20,7 @@ from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+from matsim_agents.core.application import ATOMS_PER_CONVENTIONAL_CELL
 from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.science.defects.bcc import (
     generate_bcc_interstitial,
@@ -37,7 +38,11 @@ from matsim_agents.science.neb.endpoints import (
     vacancy_neighbors,
 )
 from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
-from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
+from matsim_agents.science.structures.alloys import (
+    AlloySpec,
+    build_supercell,
+    generate_alloy,
+)
 
 DEFECT_ATOM_DELTA = {"vacancy": -1, "interstitial": 1, "frenkel_pair": 0, "divacancy": -2}
 MANIFEST_FILE = "campaign_manifest.json"
@@ -47,7 +52,7 @@ Status = Literal["PREPARED", "INPUT_BLOCKED", "RESOURCE_BLOCKED"]
 class ParentSupercell(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    lattice: Literal["bcc"] = "bcc"
+    lattice: Literal["sc", "bcc", "fcc", "hcp", "diamond"] = "bcc"
     conventional_repeats: tuple[StrictInt, StrictInt, StrictInt]
     expected_parent_atoms: StrictInt = Field(gt=0)
     composition: dict[str, StrictInt]
@@ -57,11 +62,12 @@ class ParentSupercell(BaseModel):
 
     @model_validator(mode="after")
     def _consistent(self) -> ParentSupercell:
-        sites = 2 * math.prod(self.conventional_repeats)
+        sites = ATOMS_PER_CONVENTIONAL_CELL[self.lattice] * math.prod(self.conventional_repeats)
         total = sum(self.composition.values())
         if not (sites == self.expected_parent_atoms == total):
             raise ValueError(
-                f"parent supercell inconsistent: {sites} BCC sites, expected_parent_atoms="
+                f"parent supercell inconsistent: {sites} {self.lattice} sites, "
+                f"expected_parent_atoms="
                 f"{self.expected_parent_atoms}, composition sums to {total}"
             )
         if any(n <= 0 for n in self.composition.values()):
@@ -163,16 +169,19 @@ class FullSupercellCampaign(BaseModel):
 # --------------------------------------------------------------------------------------------
 
 
-def build_parent(cfg: FullSupercellCampaign) -> Atoms:
-    p = cfg.parent_supercell
-    spec = AlloySpec(
+def _parent_spec(p: ParentSupercell) -> AlloySpec:
+    return AlloySpec(
+        crystal_structure=p.lattice,
         counts=dict(p.composition),
         repeats=p.conventional_repeats,
         lattice_parameter=p.lattice_parameter,
         ordering=p.ordering,
         seed=p.seed,
     )
-    atoms = generate_alloy(spec)
+
+
+def build_parent(cfg: FullSupercellCampaign) -> Atoms:
+    atoms = generate_alloy(_parent_spec(cfg.parent_supercell))
     atoms.set_array("atom_id", np.arange(len(atoms), dtype=np.int64))
     validate_parent(atoms, cfg)
     return atoms
@@ -196,9 +205,9 @@ def validate_parent(atoms: Atoms, cfg: FullSupercellCampaign) -> str:
         )
     if _composition(atoms) != dict(p.composition):
         raise ValueError(f"parent composition {_composition(atoms)} != {dict(p.composition)}")
-    expected_cell = np.diag(np.array(p.conventional_repeats) * p.lattice_parameter)
+    expected_cell = build_supercell(_parent_spec(p)).cell.array
     if not np.allclose(atoms.cell.array, expected_cell, atol=1e-6):
-        raise ValueError("parent cell does not match conventional_repeats x lattice_parameter")
+        raise ValueError(f"parent cell does not match the {p.lattice} supercell of the config")
     return occupation_fingerprint(atoms)
 
 
@@ -246,6 +255,11 @@ def validate_neb_pair(pair: MigrationPair, expected_atoms: int) -> None:
 
 def build_structures(cfg: FullSupercellCampaign) -> dict[str, Any]:
     """Parent, defects and NEB pairs, all validated against the full-size parent."""
+    if cfg.parent_supercell.lattice != "bcc":
+        raise ValueError(
+            "the full-supercell defect set uses bcc interstitial sites; "
+            f"parent lattice {cfg.parent_supercell.lattice!r} is not supported by this workflow"
+        )
     a = cfg.parent_supercell.lattice_parameter
     d = cfg.defects
     n = cfg.parent_supercell.expected_parent_atoms
