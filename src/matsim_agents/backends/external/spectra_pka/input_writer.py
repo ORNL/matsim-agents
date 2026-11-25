@@ -18,7 +18,13 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from matsim_agents.backends.external.spectra_pka.config import CampaignSpec
+from matsim_agents.backends.external.spectra_pka.config import CampaignSpec, FluxSpec
+from matsim_agents.backends.external.spectra_pka.spectrum import (
+    ENERGY_TO_EV,
+    NeutronSpectrum,
+    SpectrumError,
+    load_spectrum_file,
+)
 from matsim_agents.core.hashing import sha256_file
 
 INPUT_NAME = "spectra_pka.in"
@@ -72,7 +78,8 @@ def build_input_text(spec: CampaignSpec) -> str:
     total = 0.0
     for ch in spec.channels:
         name = pka_link_name(ch.parent_ele, ch.parent_num)
-        ratio = ch.atom_fraction / spec.composition[ch.parent_ele]
+        # Upstream weights global sums by this ratio, so it is the whole-material atom fraction.
+        ratio = ch.atom_fraction
         total += ratio
         lines.append(f'"{name}" {ratio:.10f} {ch.parent_ele} {ch.parent_num}')
     lines += [
@@ -87,6 +94,41 @@ def build_input_text(spec: CampaignSpec) -> str:
     ]
     if spec.flux.rescale_value is not None:
         lines.append(f"flux_rescale_value={spec.flux.rescale_value!r}")
+    return "\n".join(lines) + "\n"
+
+
+def load_flux_spectrum(flux: FluxSpec) -> NeutronSpectrum | None:
+    """The group spectrum behind ``flux.spectrum_file``; None for a native flux file."""
+    if flux.spectrum_file is None:
+        return None
+    try:
+        return load_spectrum_file(
+            flux.spectrum_file,
+            identity=flux.identity,
+            energy_units=flux.energy_units,
+            flux_units=flux.flux_units,
+            value_kind=flux.value_kind,
+            absolute=flux.absolute,
+        )
+    except SpectrumError as exc:
+        raise InputError(str(exc)) from None
+
+
+def native_flux_text(spec: NeutronSpectrum, norm_type: int) -> str:
+    """Native flux file (itype 2, no covariances), boundaries in MeV; SPECTRA-PKA collapses it."""
+    if spec.is_line:
+        raise InputError("a monoenergetic spectrum has no group structure; give a group spectrum")
+    if norm_type == 3:
+        # Upstream skips the cm2->barn factor in mode 3, so these n/cm2/s values would be 1e24 high.
+        raise InputError("flux_norm_type 3 is not supported for a generated group spectrum")
+    edges = [e / ENERGY_TO_EV["MeV"] for e in spec.boundaries_eV]
+    lines = [
+        f"{spec.identity[:90]} (matsim-agents)",
+        "2 0 2 0  1.0 1.0",
+        f"{len(spec.group_flux)} -2",
+        *(f"{e:.12E}" for e in edges),
+        *(f"{f:.12E}" for f in spec.group_flux),
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -106,8 +148,12 @@ def stage_inputs(spec: CampaignSpec, run_dir: Path) -> StagedInputs:
             raise InputError(
                 f"PKA file for {ch.parent_ele}{ch.parent_num} not found: {ch.pka_file}"
             )
-    if not spec.flux.file.is_file():
-        raise InputError(f"flux file not found: {spec.flux.file}")
+    if not spec.flux.source_path.is_file():
+        raise InputError(f"flux file not found: {spec.flux.source_path}")
+    spectrum = load_flux_spectrum(spec.flux)
+    if spectrum is not None and not spectrum.absolute and spec.flux.rescale_value is None:
+        raise InputError("a shape-only spectrum needs flux.rescale_value to become a physical flux")
+    flux_text = native_flux_text(spectrum, spec.flux.norm_type) if spectrum else None
     text = build_input_text(spec)
     run_dir.mkdir(parents=True, exist_ok=True)
     data_hashes: dict[str, str] = {}
@@ -117,9 +163,17 @@ def stage_inputs(spec: CampaignSpec, run_dir: Path) -> StagedInputs:
         _link_or_copy(ch.pka_file.resolve(), run_dir / name)
         data_hashes[name] = sha256_file(ch.pka_file)
         staged[name] = str(ch.pka_file)
-    _link_or_copy(spec.flux.file.resolve(), run_dir / FLUX_LINK)
-    data_hashes[FLUX_LINK] = sha256_file(spec.flux.file)
-    staged[FLUX_LINK] = str(spec.flux.file)
+    if flux_text is None:
+        _link_or_copy(spec.flux.source_path.resolve(), run_dir / FLUX_LINK)
+    else:
+        flux_target = run_dir / FLUX_LINK
+        flux_target.unlink(missing_ok=True)
+        flux_target.write_text(flux_text)
+        assert spectrum is not None
+        data_hashes["spectrum_source"] = sha256_file(spec.flux.source_path)
+        data_hashes["spectrum_content"] = spectrum.sha256()
+    data_hashes[FLUX_LINK] = sha256_file(run_dir / FLUX_LINK)
+    staged[FLUX_LINK] = str(spec.flux.source_path)
     input_file = run_dir / INPUT_NAME
     input_file.write_text(text)
     return StagedInputs(

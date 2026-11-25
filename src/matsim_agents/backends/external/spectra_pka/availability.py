@@ -184,16 +184,25 @@ def _data_checks(config: SpectraPKAConfig, campaign: CampaignSpec | None) -> lis
         for ch in campaign.channels
         if not ch.pka_file.is_file()
     ]
-    checks.append(
-        Check(
-            "data_coverage",
-            not missing,
-            "all requested isotopes have a PKA matrix file"
-            if not missing
-            else "missing PKA files for " + "; ".join(missing),
+    if campaign.derive_channels or not campaign.channels:
+        checks.append(
+            Check(
+                "data_coverage",
+                False,
+                "the campaign has unresolved derived channels; resolve it with load_config_file",
+            )
         )
-    )
-    flux = campaign.flux.file
+    else:
+        checks.append(
+            Check(
+                "data_coverage",
+                not missing,
+                "all requested isotopes have a PKA matrix file"
+                if not missing
+                else "missing PKA files for " + "; ".join(missing),
+            )
+        )
+    flux = campaign.flux.source_path
     checks.append(
         Check(
             "spectrum_input",

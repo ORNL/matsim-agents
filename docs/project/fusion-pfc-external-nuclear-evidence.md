@@ -2,6 +2,9 @@
 
 Status: the import contract is implemented and tested on SYNTHETIC records. No nuclear
 code has been run by this software, and no imported value in the repository is real.
+The FISPACT-II reader (`backends/external/fispact`) has also been run once on real FISPACT-II
+reference outputs from pypact (`test31.json`, `test91.json`); those files and results are not
+committed, and this checks only the reader, not the physics. The JSON has no uncertainties.
 
 ## Contract
 

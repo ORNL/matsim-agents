@@ -11,7 +11,8 @@
 #   sbatch -A <allocation> deployments/frontier/jobs/job-hpc-runtime-validation-frontier.sh
 
 set -uo pipefail
-REPO="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+# Slurm runs a spooled copy of this script, so fall back to the submit directory.
+REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:-$d}")}"
 export XALT_EXECUTABLE_TRACKING=no PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 export PYTHONPATH="$REPO/src:$REPO"
 export MATSIM_QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-bash $REPO/deployments/frontier/launchers/run-pw-gpu-frontier.sh}"

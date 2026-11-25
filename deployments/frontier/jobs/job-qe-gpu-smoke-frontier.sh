@@ -10,7 +10,8 @@
 
 set -euo pipefail
 
-REPO="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+# Slurm runs a spooled copy of this script, so fall back to the submit directory.
+REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:-$d}")}"
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
 ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"

@@ -43,6 +43,22 @@ class RunOutcome:
     def process_succeeded(self) -> bool:
         return self.returncode == 0 and self.end_marker_seen and not self.timed_out
 
+    @classmethod
+    def from_dict(cls, data: dict) -> RunOutcome:
+        """Restore an outcome written by ``as_dict``; raises KeyError/TypeError if malformed."""
+        return cls(
+            mode=str(data["mode"]),
+            argv=tuple(str(a) for a in data["argv"]),
+            cwd=str(data["cwd"]),
+            returncode=data["returncode"],
+            timed_out=bool(data["timed_out"]),
+            end_marker_seen=bool(data["end_marker_seen"]),
+            wall_seconds=float(data["wall_seconds"]),
+            started_at=str(data["started_at"]),
+            job_id=data.get("job_id"),
+            submitted=data.get("submitted"),
+        )
+
     def as_dict(self) -> dict:
         return {
             "mode": self.mode,

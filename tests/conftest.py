@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,14 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from matsim_agents.agents.state import TaskSpec
 from matsim_agents.core.relaxation import RelaxationResult
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_scheduler(monkeypatch):
+    # Tests run inside a batch job must not inherit its allocation; tests that need one set it.
+    for name in list(os.environ):
+        if name.startswith(("SLURM_", "PBS_", "PALS_")):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture

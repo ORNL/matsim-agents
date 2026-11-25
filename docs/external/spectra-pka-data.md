@@ -1,0 +1,164 @@
+# SPECTRA-PKA nuclear data: the 7.9 GB `pkas.zip`
+
+## What it is
+
+The official PKA recoil matrices (NJOY-generated, 294 K) are published as one Dropbox shared
+folder, linked from the "Data download for SPECTRA-PKA" table at
+<https://fispact.github.io/resources/nuclear_data_downloads/>. Downloading it gives a single
+`pkas.zip` of 7,946,418,171 bytes (observed 2026-11-25). The folder lists these libraries:
+
+| Library | Incident particle |
+|---|---|
+| TENDL-2015, 2017, 2019, 2023 | neutron |
+| TENDL-2017 | alpha, proton |
+| TENDL-2023 | proton |
+
+## Layout (observed)
+
+- `pkas.zip` stores (method 0, no ZIP compression) one tarball per library, for example
+  `TENDL2023n-pka.tar.bz2`. The `.bz2` suffix is not reliable: five members are **gzip**
+  (`TENDL2023n`, `TENDL2023p`, `TENDL2019-n`, `TENDL2017data-p`, `TENDL2017data-a`) and two are
+  real **bzip2** (`TENDL2015data-n`, `TENDL2017data-n`). The extractor reads the magic bytes of
+  each member. Real bzip2 is much slower to decompress: `W184s.asc` from `TENDL2017data-n`
+  took 8m43s, against about 3 minutes for six matrices from `TENDL2023n`.
+- Each tarball holds `pka/<El><AAA>s.asc`, one file per target isotope (`W184s.asc`,
+  `Fe056s.asc`, `Cu063s.asc`). Mass numbers are zero-padded to three digits. Files are
+  roughly 20-90 MB each, so a full library is several GB.
+- Each `.asc` file starts with a header line such as `(n,x) proton matrix 5 0.30000E+08 1026
+  1025 1`, then the 1026-point incident energy grid (eV, from 1e-11), then the matrices.
+- Only the isotopes with evaluated data exist. A missing file means the library has no data
+  for that isotope; it must not be substituted from another library.
+- The publisher gives no checksums. Local SHA-256 values are recorded and never reported as
+  verified.
+
+The server ignores HTTP range requests (a ranged request returns the whole 7.9 GB), so the
+archive cannot be sampled. It must be streamed once from the start.
+
+## Extracting only what a material needs
+
+`matsim-agents external spectra-pka fetch-data` takes the same options as
+`scripts/spectra_pka_fetch_data.py` (library code in
+`matsim_agents.backends.external.spectra_pka.data_fetch`). It streams the archive, skips every
+other library, and writes only the requested files. It works for any material: the isotope
+list comes from the elements you name (all natural isotopes, NIST/IUPAC abundances through
+`mendeleev`), from a composition, or from explicit nuclides. Nothing is specific to a campaign.
+
+Run it on a login node (compute nodes have no internet). The stream is 7.9 GB, so expect a
+long transfer even when you keep only a few files, because the library you want can sit
+anywhere in the archive. Extraction stops once every requested file is found.
+
+```bash
+pip install 'matsim-agents[spectra-pka]'        # provides natural abundances
+DATA=/path/to/shared/spectra-pka-data           # shared cache, never inside Git
+
+# what would be needed (no download)
+python scripts/spectra_pka_fetch_data.py --dest $DATA --elements W,Fe,Cu --dry-run
+
+# elements -> all natural isotopes; composition and extra nuclides are also accepted
+python scripts/spectra_pka_fetch_data.py --dest $DATA --library TENDL2023n \
+    --composition W:0.4,Ta:0.3,Cr:0.3 --nuclides Re187
+
+# a pkas.zip you already have, no network
+python scripts/spectra_pka_fetch_data.py --dest $DATA --archive /path/pkas.zip --elements W
+```
+
+Options: `--library` must name exactly one archive member, with or without `-pka`,
+case-insensitive (`TENDL2023n`, `TENDL2019-n`, `TENDL2017data-n`, ...), default `TENDL2023n`;
+an unknown name is an error, not a partial match. A file already on disk is reused only when
+its manifest entry has the same byte size and SHA-256, otherwise it is extracted again.
+`--force` re-extracts. `--allow-missing` returns 0
+when isotopes are absent. Exit code 2 means some isotopes are not in that library.
+
+## Result on disk
+
+```text
+$DATA/TENDL2023n-pka/W180s.asc ... W186s.asc
+$DATA/TENDL2023n-pka/manifest.json
+```
+
+`manifest.json` records per file: library, file name, target isotope, source URL (without the
+share key), retrieval time (UTC), byte size, SHA-256, the header line, and
+`"checksum_verified": false`. Files already present are reused, writes are atomic
+(temporary file then rename), and the manifest is updated under a lock, so several
+users sharing one cache directory do not corrupt it.
+
+Point `external_tools.spectra_pka.nuclear_data_root` at `$DATA/TENDL2023n-pka` (the runtime
+`PKA_DATA_DIRECTORY`).
+
+## Rules
+
+- Keep one library per run. Do not mix files from different TENDL releases for one material.
+- Never commit the data to Git; it is licensed by its publishers.
+- Choose the library (release and particle) deliberately and record it with results.
+- Isotopes absent from the library are a stop condition for that material, not a prompt to
+  fall back to another release.
+
+## Using TENDL-2023 in a radiation-damage study
+
+`TENDL2023n` is the default library: TENDL-2023 neutron-induced recoil matrices at 294 K. Use
+`TENDL2023p` for protons. Pick one library per study and record it in the campaign's
+`nuclear_data_identity`, together with `manifest.json`.
+
+Workflow when MATSIM-AGENTS is deployed for a damage study:
+
+1. **Build SPECTRA-PKA** once per facility with the script under `deployments/<facility>/setup/`
+   (`deployments/common/setup/build-spectra-pka.sh`, validated on Frontier only; see
+   [spectra-pka.md](spectra-pka.md), section 2).
+2. **Fetch the matrices** the composition needs, on a login node. Isotopes come from the
+   composition, so the same command serves any alloy:
+
+   ```bash
+   DATA=/path/to/shared/spectra-pka-data
+   python scripts/spectra_pka_fetch_data.py --dest $DATA --composition W:0.9,Ta:0.1 --dry-run
+   python scripts/spectra_pka_fetch_data.py --dest $DATA --composition W:0.9,Ta:0.1
+   ```
+
+   For `W0.9Ta0.1` this needs `W180 W182 W183 W184 W186 Ta181`. If any are absent from the
+   library the command exits 2 and lists them; do not substitute another release.
+3. **Supply a neutron spectrum.** SPECTRA-PKA does not provide one. The upstream
+   `manual/test/fluxes_specter.dat` PWR spectrum is for build checks only. Give either
+   `flux.file` (a native SPECTRA-PKA flux file, linked unchanged) or `flux.spectrum_file` (CSV
+   `e_low,e_high,flux` with declared energy and flux units). The latter is validated by
+   `matsim_agents.backends.external.spectra_pka.spectrum` and written as a native itype-2 file;
+   the binary collapses it onto the library grid itself, so no pre-rebinning is needed.
+4. **Point the campaign at the data.** Set `PKA_DATA_DIRECTORY=$DATA/TENDL2023n-pka` and keep
+   `derive_channels: true` in `examples/external/spectra-pka/campaign.yaml`, then run
+   `matsim-agents external spectra-pka check`, `run`, `run --execute`.
+
+   When the config loads, `derive_channels` calls `isotopes.resolve_isotopes` on the
+   composition and writes one channel per isotope: `pka_file` is
+   `<nuclear_data_root>/<El><AAA>s.asc` and `atom_fraction` is the element fraction times the
+   isotope fraction. Natural abundance is the default; `isotope_overrides: {W: {184: 0.6,
+   186: 0.4}}` sets enriched material. A missing matrix file fails the existing data check, and
+   no other library is substituted. A hand-written `channels` list still works, but it is
+   exclusive with `derive_channels`.
+5. **Keep provenance.** Results carry the executable hash, input hash and data hashes. Local
+   data hashes are not publisher checksums.
+
+### Frontier
+
+Compute nodes have no internet, so fetch on a login node, then run the campaign anywhere. A
+7.9 GB `pkas.zip` is already in `/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/`
+(`SHA256SUMS` and `SOURCE.txt` give its provenance), so use it instead of downloading again:
+
+```bash
+C=/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka
+python scripts/spectra_pka_fetch_data.py --dest $DATA --archive $C/pkas.zip --elements W,Fe,Cu
+```
+
+Observed on a Frontier login node (2026-11-25), streaming from the network: W, Fe and Cu
+(11 isotopes, about 640 MB) took roughly 8 minutes at about 12 MB/s, and the manifest sizes
+matched the files on disk. Run it in the background (`nohup ... &`) and fetch every element a
+campaign needs in one command, because each run streams the archive from the start.
+
+Observed with `--archive` on the shared copy (same login node): `--composition W:0.9,Ta:0.1`
+(6 matrices, about 370 MB) finished in about 3 minutes, the process held no network sockets,
+and `W182s.asc` and `W184s.asc` were byte-identical to the network-extracted copies. The
+archive is read sequentially from the start, so it is faster than the network but not instant.
+`matsim-agents external spectra-pka check` on the derived-channel example then reported
+`data_coverage` ok for all six isotopes.
+
+A local `run --execute` on those six matrices with the upstream PWR sample spectrum (build
+check only) finished in 21 s: SPECTRA-PKA read 56 matrices on the 1026-group grid, reached its
+end marker, and the result was `STRUCTURALLY_VALID` with `NOT_VALIDATED`. An identical second
+`run --execute` was a cache hit and did not re-run the binary.

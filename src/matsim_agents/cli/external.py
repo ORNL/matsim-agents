@@ -103,6 +103,7 @@ def run(
                 "run_dir": str(result.run_dir),
                 "command": list(result.command),
                 "message": result.message,
+                "cached": result.cached,
                 "numerical_validation": "NOT_VALIDATED",
             },
             indent=2,
@@ -110,6 +111,19 @@ def run(
     )
     if result.status in {"EXECUTION_FAILED", "PARSE_FAILED", "STRUCTURALLY_INVALID"}:
         raise typer.Exit(code=1)
+
+
+@spka_app.command(
+    "fetch-data",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    help="Extract needed PKA matrices from pkas.zip. Arguments: see data_fetch --help.",
+)
+def fetch_data(ctx: typer.Context) -> None:
+    from matsim_agents.backends.external.spectra_pka import data_fetch
+
+    code = data_fetch.main(list(ctx.args))
+    if code:
+        raise typer.Exit(code=code)
 
 
 @spka_app.command("status")

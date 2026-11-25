@@ -98,7 +98,7 @@ def step_masks() -> str:
     probe = [sys.executable, str(Path(__file__).resolve()), "probe-mask", "--vendor", vendor]
     env = dict(os.environ)
     if preset.launcher == "srun":
-        argv = ["srun", "-N1", "-n1", "--gpus-per-node=2", "--gpu-bind=closest", *probe]
+        argv = ["srun", "-N1", "-n1", "--gpus-per-node=2", "--gpu-bind=none", *probe]
     else:
         # No scheduler step mask under PBS, so impose a two-device one.
         argv = ["mpiexec", "-n", "1", *probe]

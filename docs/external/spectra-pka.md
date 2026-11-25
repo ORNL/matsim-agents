@@ -26,8 +26,13 @@ from the adapter, so another PKA source can replace it.
 
 ## 2. Installing SPECTRA-PKA yourself
 
-MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data. Do it by hand,
-outside the tracked tree (`external/` is gitignored):
+MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data from Python. Build
+it outside the tracked tree (`external/` is gitignored). The serial gfortran build is
+facility-neutral: `deployments/common/setup/build-spectra-pka.sh` (clone, pinned commit, serial
+build, smoke test, build record). It was validated on Frontier only; on Perlmutter or Aurora
+load a GNU Fortran compiler first (for example the `PrgEnv-gnu` stack) and run it on a login
+node. Data retrieval is described in [spectra-pka-data.md](spectra-pka-data.md). Manual
+equivalent:
 
 ```bash
 cd external
@@ -41,9 +46,18 @@ make                                                       # serial; produces ./
   `fff9e3f`).
 * **Do not use `make -j`.** The Makefile has no module dependency ordering, so a parallel
   build fails with `Can't open module file 'globals.mod'`. Run `make clean && make` to retry.
-* Smoke test (bundled data, no download): `cd manual/test && ../../spectra-pka ZR.in`. The last
-  line of output must be `END as expected`, and the new `ZR.indexes` should match
+* Smoke test (bundled data, no download): run `../../spectra-pka ZR.in` in a scratch copy of
+  `manual/test`. The last line of output must be `END as expected`, and `ZR.indexes` must match
   `example_results/ZR.indexes`. This checks the build only, not any campaign.
+* Observed on Frontier (`fff9e3f`, gfortran 7.5): `ZR.indexes` matches upstream byte for byte.
+  `ZR.out` is not byte-identical to upstream's shipped `example_results/ZR.out`, because that
+  file predates the current output format: it prints energies with 4 digits (`0.3020E-03`, the
+  binary prints `3.019952E-04`) and lacks the `disp_energy (eV/s)` and `NRT_dpa/s` columns.
+  A numeric comparison of the data rows (ignoring `#` lines) found 43117 rows in each file, 657
+  rows differing only in those "estimated (n,g) recoil matrix" blocks, and a maximum relative
+  difference of 0 at the printed precision. Two Frontier runs were byte-identical, so the build
+  is deterministic. The build script therefore requires `ZR.indexes` to match and reports the
+  `ZR.out` comparison as informational. This is a build check, not a physics validation.
 * The program reads `specter.input` by default, or the input file named on the command line.
 
 ### PKA matrices (nuclear data)
@@ -78,6 +92,15 @@ unzip -p "$C/pkas.zip" TENDL2017data-n-pka.tar.bz2 \
 export PKA_DATA_DIRECTORY=$PWD/njoy_results-n-tendl2017-jc/pka
 ```
 
+The same extraction is available as a command. `--library` must name one member exactly (with or
+without `-pka`, case-insensitive), for example `TENDL2023n`, `TENDL2019-n` or `TENDL2017data-n`.
+Extraction is verified against the manifest, so a modified or missing file is extracted again:
+
+```bash
+matsim-agents external spectra-pka fetch-data --dest data --library TENDL2023n \
+  --elements W,Ta --archive "$C/pkas.zip"
+```
+
 The neutron spectrum is always supplied by the user. The upstream `manual/test/fluxes_specter.dat`
 (709-group PWR spectrum) is suitable for build checks only.
 
@@ -96,6 +119,17 @@ matsim-agents external spectra-pka check -c campaign.yaml
 See `examples/external/spectra-pka/campaign.yaml`. All paths there are placeholders. Relative
 paths resolve against the YAML file's directory; `${VAR}` is expanded.
 
+The neutron flux is given by exactly one of two keys under `flux`:
+
+- `file`: a native SPECTRA-PKA flux file, linked into the run directory unchanged.
+- `spectrum_file`: a CSV `e_low,e_high,flux`, written as a native itype-2 file (MeV, `ksail -2`).
+  Declare `energy_units` (eV, keV, MeV), `flux_units`, `value_kind` (integrated, per_energy,
+  per_lethargy) and `absolute`. A line spectrum, `norm_type: 3` (upstream skips the cm2-to-barn
+  factor there), or a shape-only spectrum without `rescale_value` is rejected. SPECTRA-PKA
+  collapses the flux onto the library grid itself.
+
+The run record keeps the SHA-256 of the source spectrum and of the generated `flux.dat`.
+
 ## 4. Commands
 
 ```bash
@@ -106,6 +140,18 @@ matsim-agents external spectra-pka run     -c campaign.yaml --execute  # real ru
 matsim-agents external spectra-pka status  -c campaign.yaml
 matsim-agents external spectra-pka import  -c campaign.yaml            # parse existing output
 ```
+
+`run --execute` is cached for local runs. The key is the SHA-256 of the executable, the input
+text, every staged data file and the output stub. A matching, structurally valid previous run is
+parsed again and not re-executed (the message says `cache hit` and `cached` is true). The
+cache record stores the original execution outcome, so a hit keeps the exit code, end marker
+and wall time of the process that wrote the bytes. A failed run never leaves a cache record.
+
+Raw outputs are never deleted. Before a fresh execution, the previous `.out`, `.indexes`,
+`.log`, input snapshot, stdout/stderr, run record and cache record are moved to
+`archive/<utc stamp>/` in the scenario directory. A campaign that still has
+`derive_channels` set (not loaded through `load_config_file`) is refused, because it has no
+channels to check or stage.
 
 `run` stages inputs and stops unless `--execute` is given. With `execution.mode: slurm` the
 job is submitted once through `execution/slurm_jobs.py` (1 node, no GPU, idempotent by spec
