@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-import json
 import warnings
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -26,10 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 from matsim_agents.core.seeding import stream_seed
 from matsim_agents.science.structures.alloys import (
     AlloySpec,
+    LatticeSpec,
     ShellSRO,
     SROResult,
     SROTarget,
-    UnitCell,
     _shuffled_symbols,
     build_supercell,
     generate_targeted_sro,
@@ -255,12 +254,7 @@ def _supercell_operations(lattice_key: str) -> tuple[np.ndarray, np.ndarray]:
     """
     import spglib
 
-    fields = json.loads(lattice_key)
-    unit_cell = fields.pop("unit_cell")
-    probe = AlloySpec.model_construct(
-        **fields, unit_cell=unit_cell and UnitCell.model_validate(unit_cell)
-    )
-    spec = AlloySpec(**fields, unit_cell=unit_cell, counts={"H": probe.n_sites}, seed=0)
+    spec = LatticeSpec.model_validate_json(lattice_key)
     lattice = build_supercell(spec)
     frac = lattice.get_scaled_positions(wrap=True)
     keys = _site_keys(frac)

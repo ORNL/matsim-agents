@@ -74,17 +74,12 @@ CHECKS: dict[str, Callable[[ApplicationConfig], dict[str, Any]]] = {
 
 def _target_parent(app: ApplicationConfig) -> dict[str, Any]:
     """Build the target's parent supercell to show the structure generator supports it."""
-    from matsim_agents.science.structures.alloys import AlloySpec, build_supercell
+    from matsim_agents.science.structures.alloys import LatticeSpec, build_supercell
 
     t = app.target
     if t is None:
         return {}
-    spec = AlloySpec(
-        crystal_structure=t.parent_lattice,
-        counts=dict(t.composition),
-        repeats=tuple(t.supercell),
-        seed=0,
-    )
+    spec = LatticeSpec(crystal_structure=t.parent_lattice, repeats=tuple(t.supercell))
     n_built = len(build_supercell(spec))
     if n_built != t.expected_sites:
         raise ValueError(f"built {n_built} parent sites, target expects {t.expected_sites}")

@@ -129,25 +129,72 @@ def _repeats_matrix(repeats: Repeats) -> np.ndarray:
     return np.diag(matrix) if matrix.ndim == 1 else matrix
 
 
-class AlloySpec(BaseModel):
-    """Validated description of one substitutional alloy supercell on any parent lattice.
+class LatticeSpec(BaseModel):
+    """Geometry of a periodic supercell on any parent lattice, without chemical occupation.
 
-    ``counts`` holds the exact nonnegative integer number of atoms per element. Their sum must
-    equal the site count of the supercell, so composition is never rounded. ``repeats`` is a
-    diagonal triple or a full integer supercell matrix (rows are supercell vectors in units of
-    the unit-cell vectors). ``unit_cell`` is required for, and only allowed with,
-    ``crystal_structure="custom"``; ``c_over_a`` only applies to ``hcp`` (default ideal).
+    ``repeats`` is a diagonal triple or a full integer supercell matrix (rows are supercell
+    vectors in units of the unit-cell vectors). ``unit_cell`` is required for, and only allowed
+    with, ``crystal_structure="custom"``; ``c_over_a`` only applies to ``hcp`` (default ideal).
     """
 
     model_config = ConfigDict(frozen=True)
 
     crystal_structure: CrystalStructure = "bcc"
-    counts: Mapping[str, StrictInt]
     repeats: Repeats = DEFAULT_REPEATS
     lattice_parameter: float = Field(default=DEFAULT_LATTICE_PARAMETER, gt=0, allow_inf_nan=False)
     cell_choice: CellChoice = "conventional"
     c_over_a: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     unit_cell: UnitCell | None = None
+
+    @field_validator("repeats")
+    @classmethod
+    def _validate_repeats(cls, value: Repeats) -> Repeats:
+        matrix = np.array(value)
+        if matrix.ndim == 1 and (matrix <= 0).any():
+            raise ValueError(f"supercell repeats must be positive, got {value}")
+        if matrix.ndim == 2 and round(np.linalg.det(matrix)) == 0:
+            raise ValueError(f"supercell matrix must be nonsingular, got {value}")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_lattice(self) -> LatticeSpec:
+        if (self.crystal_structure == "custom") != (self.unit_cell is not None):
+            raise ValueError('unit_cell is required for, and only allowed with, "custom"')
+        if self.c_over_a is not None and self.crystal_structure != "hcp":
+            raise ValueError("c_over_a only applies to hcp")
+        return self
+
+    @property
+    def sites_per_unit_cell(self) -> int:
+        return len(build_unit_cell(self))
+
+    @property
+    def n_sites(self) -> int:
+        return self.sites_per_unit_cell * abs(round(np.linalg.det(_repeats_matrix(self.repeats))))
+
+    @property
+    def lattice_key(self) -> str:
+        """JSON of the undecorated supercell; hashable and identical for any occupation."""
+        return self.model_dump_json(
+            include={
+                "crystal_structure",
+                "repeats",
+                "lattice_parameter",
+                "cell_choice",
+                "c_over_a",
+                "unit_cell",
+            }
+        )
+
+
+class AlloySpec(LatticeSpec):
+    """Validated description of one substitutional alloy supercell on any parent lattice.
+
+    ``counts`` holds the exact nonnegative integer number of atoms per element. Their sum must
+    equal the site count of the supercell, so composition is never rounded.
+    """
+
+    counts: Mapping[str, StrictInt]
     ordering: OrderingMode = "random"
     seed: StrictInt = Field(ge=0)
 
@@ -170,22 +217,8 @@ class AlloySpec(BaseModel):
             raise ValueError("composition must contain at least one atom")
         return MappingProxyType(dict(sorted(nonzero.items())))
 
-    @field_validator("repeats")
-    @classmethod
-    def _validate_repeats(cls, value: Repeats) -> Repeats:
-        matrix = np.array(value)
-        if matrix.ndim == 1 and (matrix <= 0).any():
-            raise ValueError(f"supercell repeats must be positive, got {value}")
-        if matrix.ndim == 2 and round(np.linalg.det(matrix)) == 0:
-            raise ValueError(f"supercell matrix must be nonsingular, got {value}")
-        return value
-
     @model_validator(mode="after")
-    def _validate_lattice(self) -> AlloySpec:
-        if (self.crystal_structure == "custom") != (self.unit_cell is not None):
-            raise ValueError('unit_cell is required for, and only allowed with, "custom"')
-        if self.c_over_a is not None and self.crystal_structure != "hcp":
-            raise ValueError("c_over_a only applies to hcp")
+    def _validate_counts_fill_sites(self) -> AlloySpec:
         sites = self.n_sites
         total = sum(self.counts.values())
         if total != sites:
@@ -221,35 +254,13 @@ class AlloySpec(BaseModel):
         )
 
     @property
-    def sites_per_unit_cell(self) -> int:
-        return len(build_unit_cell(self))
-
-    @property
-    def n_sites(self) -> int:
-        return self.sites_per_unit_cell * abs(round(np.linalg.det(_repeats_matrix(self.repeats))))
-
-    @property
     def composition(self) -> dict[str, float]:
         """Atomic fractions of each element."""
         total = sum(self.counts.values())
         return {symbol: amount / total for symbol, amount in self.counts.items()}
 
-    @property
-    def lattice_key(self) -> str:
-        """JSON of the undecorated supercell (no counts, ordering or seed); hashable."""
-        return self.model_dump_json(
-            include={
-                "crystal_structure",
-                "repeats",
-                "lattice_parameter",
-                "cell_choice",
-                "c_over_a",
-                "unit_cell",
-            }
-        )
 
-
-def build_unit_cell(spec: AlloySpec) -> Atoms:
+def build_unit_cell(spec: LatticeSpec) -> Atoms:
     """Periodic parent unit cell of ``spec`` with placeholder species ``X``."""
     a = spec.lattice_parameter
     if spec.unit_cell is not None:
@@ -265,7 +276,7 @@ def build_unit_cell(spec: AlloySpec) -> Atoms:
     return bulk("X", spec.crystal_structure, a=a, cubic=cubic)
 
 
-def build_supercell(spec: AlloySpec) -> Atoms:
+def build_supercell(spec: LatticeSpec) -> Atoms:
     """Periodic supercell of ``spec`` with unoccupied (placeholder ``X``) species.
 
     Diagonal ``repeats`` replicate the unit cell along its axes (ASE ``repeat`` order); a full
