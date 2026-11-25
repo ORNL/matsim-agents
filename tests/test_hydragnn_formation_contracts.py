@@ -264,6 +264,35 @@ def test_checkpoint_requires_hash_for_existing_newhead_metadata(tmp_path, traini
         restore_hydragnn_total_energy(FormationCalculator(), model)
 
 
+def test_finetune_protocol_is_recorded_and_still_restores(tmp_path, training_inputs):
+    dataset, manifest = training_inputs
+    model = tmp_path / "model"
+    prepare_hydragnn_training_frames(dataset, model, manifest)
+    checkpoint = model / "ft_model.pk"
+    checkpoint.write_text("synthetic-checkpoint")
+    (model / "config.json").write_text("{}")
+    protocol = {"backend": "hydragnn", "head_init": "pretrained", "pretrained_heads": ["OMat24"]}
+    save_hydragnn_energy_convention(model, checkpoint, inference_metadata={"finetune": protocol})
+    record = json.loads((model / "energy-convention.json").read_text())
+    assert record["finetune"] == protocol
+    restore_hydragnn_total_energy(FormationCalculator(), model)
+
+
+@pytest.mark.parametrize(
+    "head_index,resumed,expected",
+    [(None, False, "random"), (0, False, "pretrained"), (None, True, "resumed")],
+)
+def test_newhead_protocol_distinguishes_resumed_readout(tmp_path, head_index, resumed, expected):
+    from matsim_agents.training.finetune_hydragnn_newhead import _finetune_protocol
+
+    record = _finetune_protocol(
+        "lora", head_index, "none", resumed_from=tmp_path if resumed else None
+    )
+    assert record["head_init"] == expected
+    assert record.get("resumed_from") == (str(tmp_path) if resumed else None)
+    assert bool(record["pretrained_heads"]) == (head_index is not None)
+
+
 def test_missing_elements_and_double_wrapping_fail(tmp_path, training_inputs):
     model = _checkpoint(tmp_path, training_inputs)
     calculator = restore_hydragnn_total_energy(FormationCalculator(), model)

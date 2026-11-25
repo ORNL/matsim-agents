@@ -507,6 +507,13 @@ def finetune_hydragnn(
             "routed_branches": routed,
             "branch_mlp_checkpoint": mlp_snapshot.name,
             "branch_mlp_sha256": sha256_file(mlp_snapshot),
+            "finetune": {
+                "backend": "hydragnn",
+                "protocol": "routed-head-finetune",
+                "head_init": "pretrained",
+                "pretrained_heads": [BRANCH_DATASETS[b] for b in routed],
+                "unfreeze_backbone": unfreeze_backbone,
+            },
         },
     )
     log.info(

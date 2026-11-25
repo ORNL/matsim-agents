@@ -11,6 +11,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+FORMATION_ENERGY_REFERENCE = "dft:declared_elemental_formation_energy"
+
+
+def native_total_energy(backend: str) -> str:
+    """The ``energy_reference`` of raw DFT total energies from ``backend``."""
+    return f"{backend}:native_total_energy"
+
 
 class DatasetValidationSummary(BaseModel):
     accepted: int = 0
@@ -139,6 +146,45 @@ def validate_labelled_frames(
     return accepted, summary
 
 
+def load_training_manifest(dataset_path: str | Path) -> DatasetManifest:
+    """The sidecar of a dataset of native DFT total energies, checked against its bytes.
+
+    Training and reference preparation start from raw totals; a dataset of
+    formation energies (or any other convention) is refused.
+    """
+    path = Path(dataset_path)
+    sidecar = path.with_suffix(path.suffix + ".manifest.json")
+    if not sidecar.is_file():
+        raise ValueError(f"{path} needs its dataset manifest (DFT provenance): {sidecar}")
+    metadata = json.loads(sidecar.read_text())
+    if not metadata.get("dft_backend"):
+        raise ValueError(f"{sidecar} does not name the DFT backend")
+    expected = native_total_energy(metadata["dft_backend"])
+    if metadata.get("energy_reference") != expected:
+        raise ValueError(
+            f"{path.name} declares {metadata.get('energy_reference')!r} labels; this step "
+            f"requires native DFT total-energy labels ({expected!r})"
+        )
+    digest = sha256_file(path)
+    if metadata.get("sha256") != digest:
+        raise ValueError("DFT dataset manifest hash does not match the training data")
+    # Minimal sidecars omit bookkeeping fields; fill them as source_provenance() does.
+    metadata.setdefault("dataset_id", digest[:16])
+    metadata.setdefault("created_at_utc", "")
+    metadata.setdefault("path", str(path))
+    metadata.setdefault("validation", {})
+    return DatasetManifest.model_validate(metadata)
+
+
+def reject_formation_frames(frames: Iterable[Any]) -> None:
+    """Refuse frames already marked as formation-energy labels."""
+    for index, atoms in enumerate(frames):
+        if atoms.info.get("energy_convention") == FORMATION_ENERGY_REFERENCE:
+            raise ValueError(
+                f"Training frame {index} is already marked as a formation-energy label"
+            )
+
+
 def write_dataset_manifest(
     dataset_path: str | Path,
     *,
@@ -177,8 +223,12 @@ def write_dataset_manifest(
 
 
 __all__ = [
+    "FORMATION_ENERGY_REFERENCE",
     "DatasetManifest",
     "DatasetValidationSummary",
+    "load_training_manifest",
+    "native_total_energy",
+    "reject_formation_frames",
     "sha256_file",
     "structure_identity",
     "validate_labelled_frames",

@@ -102,6 +102,11 @@ Consequences:
   elemental baseline exactly once and refuses a second restoration.
 - The fine-tuners take the **raw DFT totals** and build the formation labels
   themselves. A dataset that has already been converted is rejected.
+- `energy-convention.json` records the fine-tune protocol under `finetune`:
+  the protocol name, `head_init` (`pretrained` or `random`), the pretrained
+  heads that were kept (for example `["OMat24"]`), and the freezing mode. A
+  kept pretrained head starts from the `E_VASP − Σ c_Z` scale and is adapted
+  to the DFT formation scale; this record makes that visible to evaluation.
 
 ### UMA and MACE
 
@@ -111,7 +116,9 @@ fine-tuners keep that scale: each label is shifted by
 per atom on the same elemental reference geometries. Formation energies
 relative to the references are unchanged by this shift. The offsets are
 written to `energy-alignment.json` with the dataset and manifest hashes, and
-later fine-tunes reuse them so the scale does not drift.
+later fine-tunes reuse them so the scale does not drift. Its `finetune` field
+records the backend, base model, protocol and adapter settings (for UMA also
+the task heads and that their output is denormalized and element-referenced).
 
 The UMA fine-tuner trains on fairchem's physical output: the raw head output
 is denormalized and element-referenced with the checkpoint's own task objects,

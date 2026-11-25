@@ -317,6 +317,10 @@ def test_fine_tuning_writes_its_alignment(tmp_path, references):
     record = json.loads(path.read_text())
     assert record["convention"] == "dft_formation_on_model_elemental_scale"
     assert record["source_dataset_sha256"] == "abc"
+    assert record["finetune"] is None
+    alignment.finetune = {"backend": "uma", "head_output": "denormalized_element_referenced"}
+    alignment.write(tmp_path)
+    assert recorded_alignment(tmp_path)[0].finetune == alignment.finetune
 
 
 def test_alignment_is_found_for_fairchem_nested_checkpoints(tmp_path, references):
@@ -354,17 +358,23 @@ def test_mace_reads_dft_stress_from_extxyz(tmp_path):
     assert len(stresses) == 2 and all(len(stress) in (6, 9) for stress in stresses)
 
 
-def test_mace_cli_takes_the_elemental_references(tmp_path, references):
-    from matsim_agents.training import finetune_mace
-
-    path = tmp_path / "labels.extxyz"
+def _labelled_nb(path, n=2):
     frames = []
-    for index in range(2):
+    for index in range(n):
         atoms = Atoms("Nb", positions=[[0.1 * index, 0, 0]])
         atoms.info["energy"] = -10.0
         atoms.arrays["forces"] = np.zeros((1, 3))
         frames.append(atoms)
     write(path, frames)
+    return frames
+
+
+def test_mace_cli_takes_the_elemental_references(tmp_path, references, dataset_method_sidecar):
+    from matsim_agents.training import finetune_mace
+
+    path = tmp_path / "labels.extxyz"
+    _labelled_nb(path)
+    dataset_method_sidecar(path, references)
     argv = [
         "--dataset",
         str(path),
@@ -377,3 +387,55 @@ def test_mace_cli_takes_the_elemental_references(tmp_path, references):
     with pytest.raises(SystemExit):
         finetune_mace.main(argv)  # the references are required
     assert finetune_mace.main([*argv, "--elemental-reference-manifest", str(references)]) == 0
+
+
+@pytest.mark.parametrize(
+    "defect, error",
+    [
+        ("missing", "needs its dataset manifest"),
+        ("formation_sidecar", "native DFT total-energy labels"),
+        ("hash", "hash does not match"),
+        ("method", "different DFT methods"),
+        ("formation_frame", "already marked as a formation-energy label"),
+    ],
+)
+def test_finetune_training_inputs_are_gated(
+    tmp_path, references, dataset_method_sidecar, defect, error
+):
+    from matsim_agents.datasets.governance import FORMATION_ENERGY_REFERENCE
+    from matsim_agents.training.finetune_uma import _load_training_frames
+
+    path = tmp_path / "labels.extxyz"
+    frames = _labelled_nb(path)
+    if defect == "formation_frame":
+        frames[1].info["energy_convention"] = FORMATION_ENERGY_REFERENCE
+        write(path, frames)
+    if defect != "missing":
+        sidecar = dataset_method_sidecar(path, references)
+        metadata = json.loads(sidecar.read_text())
+        if defect == "formation_sidecar":
+            metadata["energy_reference"] = FORMATION_ENERGY_REFERENCE
+        elif defect == "hash":
+            metadata["sha256"] = "0" * 64
+        elif defect == "method":
+            metadata["method_signature"] = "other-dft"
+        sidecar.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match=error):
+        _load_training_frames(path, references)
+
+
+@pytest.mark.parametrize("minimal", [False, True])
+def test_finetune_training_inputs_accept_a_verified_native_dataset(
+    tmp_path, references, dataset_method_sidecar, minimal
+):
+    from matsim_agents.training.finetune_uma import _load_training_frames
+
+    path = tmp_path / "labels.extxyz"
+    _labelled_nb(path)
+    sidecar = dataset_method_sidecar(path, references)
+    if minimal:
+        metadata = json.loads(sidecar.read_text())
+        for key in ("dataset_id", "created_at_utc", "path", "validation"):
+            del metadata[key]
+        sidecar.write_text(json.dumps(metadata))
+    assert len(_load_training_frames(path, references)) == 2

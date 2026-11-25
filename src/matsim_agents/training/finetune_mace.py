@@ -67,7 +67,7 @@ from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.seeding import seed_process, stream_seed
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 from matsim_agents.training.finetune_uma import (
-    _load_labeled_frames,
+    _load_training_frames,
     _reference_energy,
     _reference_forces,
     split_indices,
@@ -467,10 +467,12 @@ def finetune_mace(
         dev = "cpu"
     mace_device = "cuda" if dev.startswith("cuda") else "cpu"
 
-    train_atoms = _load_labeled_frames(dataset_path)
+    train_atoms = _load_training_frames(dataset_path, elemental_reference_manifest)
     n_validation = None
     if validation_dataset is not None:
-        validation = _load_labeled_frames(validation_dataset, minimum=1)
+        validation = _load_training_frames(
+            validation_dataset, elemental_reference_manifest, minimum=1
+        )
         n_validation = len(validation)
         train_atoms = train_atoms + validation
     log.info(
@@ -498,6 +500,14 @@ def finetune_mace(
         base_model=base_model,
     )
     alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    alignment.finetune = {
+        "backend": "mace",
+        "family": family,
+        "base_model": base_model,
+        "protocol": "mace_run_train-lora" if lora else "mace_run_train",
+        "e0s": "foundation",
+        "lora": bool(lora),
+    }
     energies = [alignment.aligned_energy(a, _reference_energy(a)) for a in train_atoms]
     foundation = _resolve_foundation_model_file(base_model, base, work_dir=work_dir)
     train_xyz, val_xyz, n_train, n_val, with_stress = _write_xyz_splits(

@@ -192,6 +192,17 @@ def test_missing_metadata_fails_instead_of_falling_back(tmp_path):
         make_split(plain, SplitConfig(strategy="trajectory_holdout"), tmp_path / "s", objective="x")
 
 
+def test_sidecar_without_energy_reference_is_refused(dataset, tmp_path):
+    sidecar = dataset.with_suffix(".extxyz.manifest.json")
+    metadata = json.loads(sidecar.read_text())
+    del metadata["energy_reference"]
+    sidecar.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="energy_reference"):
+        make_split(
+            dataset, SplitConfig(strategy="trajectory_holdout"), tmp_path / "s", objective="x"
+        )
+
+
 def test_too_few_groups_are_rejected(dataset, tmp_path):
     cfg = SplitConfig(
         strategy="composition_holdout",

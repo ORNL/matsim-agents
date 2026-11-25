@@ -33,7 +33,7 @@ def manifest():
 
 @pytest.fixture
 def candidate(monkeypatch, manifest):
-    monkeypatch.setenv("MATSIM_SSSP_PSEUDO_DIR", manifest["library_dir"])
+    monkeypatch.setenv("MATSIM_SSSP_PSEUDO_DIR", os.environ.get("MATSIM_SSSP_PSEUDO_DIR", "/sssp"))
     return fsc.FullSupercellCampaign.from_yaml(CANDIDATE)
 
 
@@ -65,7 +65,7 @@ def test_candidate_is_isolated_from_production(candidate, manifest, monkeypatch)
 
 
 def test_installed_files_match_manifest(manifest):
-    library = Path(manifest["library_dir"])
+    library = Path(os.path.expandvars(manifest["library_dir"]))
     if not library.is_dir():
         pytest.skip("SSSP library not installed on this host")
     for e in manifest["pseudopotentials"].values():

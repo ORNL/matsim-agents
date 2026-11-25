@@ -22,7 +22,7 @@ from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
 )
-from matsim_agents.datasets.governance import DatasetManifest, sha256_file
+from matsim_agents.datasets.governance import load_training_manifest, sha256_file
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.placement import ProcessLaunch
 
@@ -212,13 +212,7 @@ def _training_element_scope(dataset: Path) -> tuple[set[str], bool]:
     when present (it must cover every element in the frames), otherwise the
     elements found in the frames.
     """
-    dataset_metadata = DatasetManifest.model_validate_json(
-        dataset.with_suffix(dataset.suffix + ".manifest.json").read_text()
-    )
-    if dataset_metadata.energy_reference != f"{dataset_metadata.dft_backend}:native_total_energy":
-        raise ValueError("Training reference preparation requires native DFT total-energy labels")
-    if sha256_file(dataset) != dataset_metadata.sha256:
-        raise ValueError("DFT dataset manifest hash does not match the training data")
+    dataset_metadata = load_training_manifest(dataset)
     frames = list(read(dataset, index=":"))
     training_elements = {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()}
     if not training_elements:

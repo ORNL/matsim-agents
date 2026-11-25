@@ -712,7 +712,8 @@ def source_provenance(dataset: Path) -> DatasetManifest:
     metadata.setdefault("dataset_id", digest[:16])
     metadata.setdefault("created_at_utc", "")
     metadata.setdefault("path", str(dataset))
-    metadata.setdefault("energy_reference", f"{metadata['dft_backend']}:native_total_energy")
+    if not metadata.get("energy_reference"):
+        raise ValueError(f"{sidecar} does not declare the energy_reference of its labels")
     metadata.setdefault("validation", {})
     return DatasetManifest.model_validate(metadata)
 

@@ -56,7 +56,15 @@ from ase.io import read as ase_read
 
 from matsim_agents.backends.mlip.config import UMAConfig, UMATask
 from matsim_agents.datasets.energy_alignment import energy_alignment
-from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.datasets.energy_references import (
+    load_elemental_reference_manifest,
+    validate_dataset_reference_method,
+)
+from matsim_agents.datasets.governance import (
+    load_training_manifest,
+    reject_formation_frames,
+    sha256_file,
+)
 from matsim_agents.seeding import numpy_rng, seed_process
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 
@@ -115,6 +123,31 @@ def _load_labeled_frames(dataset_path: str | Path, *, minimum: int = 2) -> list[
             f"energy and forces labels; need >={minimum}."
         )
     return usable
+
+
+def _load_training_frames(
+    dataset_path: str | Path, elemental_reference_manifest: str | Path, *, minimum: int = 2
+) -> list[Atoms]:
+    """Labelled frames of a manifest-verified native-total-energy DFT dataset.
+
+    The dataset must declare the elemental references' DFT backend and method;
+    frames already marked as formation energies are refused.
+    """
+    load_training_manifest(dataset_path)
+    reference, _, _ = load_elemental_reference_manifest(
+        elemental_reference_manifest, required_elements=set()
+    )
+    validate_dataset_reference_method(
+        dataset_path,
+        reference_backend=reference["backend"],
+        reference_method_signature=reference["method_signature"],
+        reference_base_method_signature=reference.get("base_method_signature"),
+        reference_element_method_signatures=reference.get("element_method_signatures"),
+        require_sidecar=True,
+    )
+    frames = _load_labeled_frames(dataset_path, minimum=minimum)
+    reject_formation_frames(frames)
+    return frames
 
 
 # --------------------------------------------------------------------------- #
@@ -532,11 +565,13 @@ def finetune_uma(
         log.warning("CUDA requested but unavailable; falling back to CPU.")
         dev = "cpu"
 
-    frames = _load_labeled_frames(dataset_path)
+    frames = _load_training_frames(dataset_path, elemental_reference_manifest)
     if validation_dataset is not None:
         # The validation partition of a dataset split (datasets.splits) replaces
         # the random hold-out of training frames.
-        validation = _load_labeled_frames(validation_dataset, minimum=1)
+        validation = _load_training_frames(
+            validation_dataset, elemental_reference_manifest, minimum=1
+        )
         train_index = list(range(len(frames)))
         val_index = list(range(len(frames), len(frames) + len(validation)))
         frames = frames + validation
@@ -562,6 +597,16 @@ def finetune_uma(
         base_model=base_model,
     )
     alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    alignment.finetune = {
+        "backend": "uma",
+        "base_model": base_model,
+        "task_name": task_name,
+        "protocol": "conservative-head-finetune",
+        "pretrained_heads": [f"{task_name}_energy", f"{task_name}_forces"],
+        "head_output": "denormalized_element_referenced",
+        "lora": bool(lora),
+        "freeze_backbone": bool(freeze_backbone),
+    }
     energies = [alignment.aligned_energy(atoms, _reference_energy(atoms)) for atoms in frames]
 
     if not run:
