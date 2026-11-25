@@ -239,6 +239,25 @@ def test_dft_neb_reservation_survives_deletion_of_the_iteration_directory(tmp_pa
     assert _completed_dft_neb_count(root) == 1
 
 
+def test_interrupted_reservation_is_added_to_legacy_runs_without_double_counting(tmp_path):
+    root = tmp_path / "run"
+    for index, count in ((0, 1), (1, 1)):
+        directory = root / f"iteration_{index:04d}"
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text(
+            json.dumps({"iteration": index, "n_dft_neb_runs": count})
+        )
+    # Iteration 2 reserved a run and was deleted on resume; iteration 1 is ledger-backed.
+    (root / "dft_neb_reservations.jsonl").write_text(
+        json.dumps({"iteration": 1, "transition_id": "t"})
+        + "\n"
+        + json.dumps({"iteration": 2, "transition_id": "t"})
+        + "\n"
+    )
+
+    assert _completed_dft_neb_count(root) == 3
+
+
 def test_escalation_passes_optimized_images_endpoints_and_dft_environment(tmp_path, monkeypatch):
     import matsim_agents.workflows.neb as neb_workflow
 

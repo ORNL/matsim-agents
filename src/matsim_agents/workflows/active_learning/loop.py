@@ -1078,20 +1078,24 @@ def _completed_dft_neb_count(root: Path) -> int:
 
     Reservations live in a root-level ledger because ``_scan_resume`` deletes an
     interrupted iteration directory, and a reserved QE run may already have cost
-    its allocation. Iteration states are counted too, for runs from before the ledger.
+    its allocation. Runs recorded in an iteration state but not in the ledger (from before
+    the ledger) are added; ledger-backed runs are never counted twice.
     """
-    from_states = 0
+    reserved_by_iteration: dict[int, int] = {}
+    ledger = root / _DFT_NEB_RESERVATIONS
+    if ledger.exists():
+        for line in ledger.read_text(encoding="utf-8").splitlines():
+            if line:
+                iteration = int(json.loads(line)["iteration"])
+                reserved_by_iteration[iteration] = reserved_by_iteration.get(iteration, 0) + 1
+    legacy = 0
     for path in root.glob("iteration_*/state.json"):
         state = json.loads(path.read_text(encoding="utf-8"))
         count = state.get("n_dft_neb_runs", 0)
         if not isinstance(count, int) or count < 0:
             raise ValueError(f"Invalid n_dft_neb_runs in {path}")
-        from_states += count
-    ledger = root / _DFT_NEB_RESERVATIONS
-    reserved = 0
-    if ledger.exists():
-        reserved = sum(1 for line in ledger.read_text(encoding="utf-8").splitlines() if line)
-    return max(from_states, reserved)
+        legacy += max(0, count - reserved_by_iteration.get(int(state.get("iteration", -1)), 0))
+    return sum(reserved_by_iteration.values()) + legacy
 
 
 def _reserve_dft_neb(root: Path, iteration: int, transition_id: str) -> None:

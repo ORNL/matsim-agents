@@ -213,6 +213,9 @@ def prepare_neb_workflow(
         path_images = tuple(image.copy() for image in images)
         if len(path_images) != config.n_images:
             return reject([f"images: {len(path_images)} supplied, config has {config.n_images}"])
+        if any(len(image.constraints) for image in path_images):
+            # The QE positions card carries no fixed-coordinate flags.
+            return reject(["images: constrained images are not supported by the QE NEB input"])
         path_parameters = {
             "method": "supplied",
             "n_images": len(path_images),

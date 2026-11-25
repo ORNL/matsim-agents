@@ -158,3 +158,34 @@ def test_standalone_md_candidates_receive_ensemble_uncertainty():
 
     assert md.uncertainty is not None and md.uncertainty > 0
     assert neb.uncertainty == 0.5
+
+
+def test_standalone_ensemble_then_dropout_refines_the_screened_candidates(monkeypatch):
+    import numpy as np
+
+    import matsim_agents.workflows.active_learning.uncertainty as uncertainty
+    from matsim_agents.workflows.active_learning.candidates import Candidate
+    from matsim_agents.workflows.active_learning.config import AcquisitionConfig
+    from matsim_agents.workflows.active_learning.standalone_sampling import _score_md_candidates
+
+    atoms = Atoms("Cu2", positions=[[0, 0, 0], [2.5, 0, 0]], cell=[8, 8, 8], pbc=True)
+    candidates = [Candidate(candidate_id=f"md-{i}", atoms=atoms) for i in range(6)]
+    monkeypatch.setattr(uncertainty, "score_ensemble", lambda cands, ens: np.arange(6.0))
+    refined_for = []
+
+    def refine(cands, primary, passes, p, seed):
+        refined_for.extend(c.candidate_id for c in cands)
+        return np.full(len(cands), 9.0)
+
+    monkeypatch.setattr(uncertainty, "score_mc_dropout", refine)
+
+    _score_md_candidates(
+        candidates,
+        AcquisitionConfig(strategy="ensemble_then_dropout", n_select=1),
+        object(),
+        [object(), object()],
+        3,
+    )
+
+    assert sorted(refined_for) == ["md-2", "md-3", "md-4", "md-5"]
+    assert [c.uncertainty for c in candidates] == [None, None, 9.0, 9.0, 9.0, 9.0]

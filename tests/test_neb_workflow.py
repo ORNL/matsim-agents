@@ -215,6 +215,23 @@ def test_supplied_images_replace_the_linear_guess(tmp_path):
     assert rejected.status == "rejected"
 
 
+def test_constrained_supplied_images_are_rejected(tmp_path):
+    from ase.constraints import FixAtoms
+
+    from matsim_agents.science.neb.images import generate_linear_images
+
+    pair = _pair()
+    images = [
+        image.copy()
+        for image in generate_linear_images(pair.initial, pair.final, 6, min_distance=1.0).images
+    ]
+    images[2].set_constraint(FixAtoms(indices=[0]))
+    plan = prepare_neb_workflow(pair, _cfg(tmp_path), tmp_path / "w", images=images)
+    assert plan.status == "rejected"
+    assert any("constrained" in reason for reason in plan.reasons)
+    assert plan.input_path is None
+
+
 def test_mlip_relaxed_endpoints_do_not_name_the_qe_method(tmp_path):
     pair = _pair()
     transition = pair.transition.model_copy(

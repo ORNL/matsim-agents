@@ -46,6 +46,19 @@ def _score_md_candidates(candidates, acquisition, primary, ensemble, random_seed
         if not ensemble or len(ensemble) < 2:
             raise ValueError(f"{acquisition.strategy} requires >=2 ensemble calculators")
         scores = score_ensemble(md, ensemble)
+        if acquisition.strategy == "ensemble_then_dropout":
+            # Same screen as uncertainty.select_candidates; unrefined candidates get no value.
+            keep_n = min(len(md), max(acquisition.n_select * 4, acquisition.n_select))
+            top = np.argsort(scores)[-keep_n:]
+            refined = score_mc_dropout(
+                [md[i] for i in top],
+                primary,
+                acquisition.mc_dropout_passes,
+                acquisition.mc_dropout_p,
+                seed=stream_seed(random_seed, "md-uq"),
+            )
+            scores = np.full(len(md), np.nan, dtype=np.float64)
+            scores[top] = refined
     for candidate, score in zip(md, scores, strict=True):
         candidate.uncertainty = float(score) if np.isfinite(score) else None
 
