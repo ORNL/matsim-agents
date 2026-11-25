@@ -21,24 +21,24 @@ from matsim_agents.campaign.property_acquisition import (
     render_plan,
     reserve_approved,
 )
-from matsim_agents.campaign.selection import (
+from matsim_agents.campaign.selection_revision import revise_selection_hypothesis
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.revision import RevisionBudget
+from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
+from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     SelectionSpec,
     SelectionStatus,
     render_report,
     select,
 )
-from matsim_agents.campaign.selection_revision import revise_selection_hypothesis
-from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.core.revision import RevisionBudget
-from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
     PropertyQualification,
     PropertyStatus,
 )
-from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
 
 CONFIG = Path(__file__).parents[1] / "examples/characterization/fusion_alloy_selection.yaml"
 NEEDS_T = {"thermal_conductivity_total", "irradiation_swelling"}

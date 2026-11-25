@@ -29,12 +29,6 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from matsim_agents.campaign.selection import (
-    CandidateEvidence,
-    CandidateScore,
-    SelectionResult,
-    SelectionStatus,
-)
 from matsim_agents.core.revision import (
     MAX_RATIONALE_CHARS,
     RevisionBudget,
@@ -46,7 +40,13 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
-from matsim_agents.execution.properties import (
+from matsim_agents.science.acquisition.selection import (
+    CandidateEvidence,
+    CandidateScore,
+    SelectionResult,
+    SelectionStatus,
+)
+from matsim_agents.science.properties.calculators import (
     PropertyEvidence,
     PropertyStatus,
     to_ledger_record,

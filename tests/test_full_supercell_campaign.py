@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
+from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows import full_supercell_campaign as fsc
 
 CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
@@ -97,7 +97,7 @@ def test_neb_endpoints_compatible(structures, key, n):
 
 
 def test_magnetic_atom_id_mapping(structures):
-    from matsim_agents.discovery.magnetism.policies import configurations_for_policy, select_policy
+    from matsim_agents.science.magnetism.policies import configurations_for_policy, select_policy
 
     parent = structures["parent"]
     policy = select_policy(parent)

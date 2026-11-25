@@ -9,7 +9,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from matsim_agents.discovery.alloy_ensemble import (
+from matsim_agents.science.structures.alloy_ensemble import (
     AlloyEnsemble,
     _point_permutations,
     ensemble_sro_statistics,
@@ -20,7 +20,7 @@ from matsim_agents.discovery.alloy_ensemble import (
     generate_alloy_ensemble,
     occupation_fingerprint,
 )
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     AlloySpec,
     ShellSRO,
     SROTarget,

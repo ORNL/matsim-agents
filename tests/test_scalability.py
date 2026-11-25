@@ -2,8 +2,8 @@
 
 import pytest
 
-from matsim_agents.kinetics.benchmarks import chain_network
-from matsim_agents.kinetics.ensemble import run_ensemble
+from matsim_agents.science.kinetics.benchmarks import chain_network
+from matsim_agents.science.kinetics.ensemble import run_ensemble
 from matsim_agents.workflows.scalability import (
     check_reproducibility,
     digest,

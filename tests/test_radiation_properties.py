@@ -12,7 +12,9 @@ from matsim_agents.campaign.property_acquisition import (
     ProposedCalculation,
     plan_property_acquisition,
 )
-from matsim_agents.campaign.selection import (
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,
     Objective,
@@ -20,14 +22,12 @@ from matsim_agents.campaign.selection import (
     SelectionStatus,
     select,
 )
-from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
     PropertyQualification,
     PropertyStatus,
 )
-from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
 from matsim_agents.workflows.full_supercell_campaign import FullSupercellCampaign
 
 CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"

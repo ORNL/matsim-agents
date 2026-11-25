@@ -15,9 +15,9 @@ from matsim_agents.datasets.governance import (
     structure_identity,
     validate_labelled_frames,
 )
-from matsim_agents.discovery.seed_structures import PhaseCandidate
-from matsim_agents.discovery.stability import RankingMode, score_stability
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.science.structures.seed_structures import PhaseCandidate
+from matsim_agents.science.thermodynamics.stability import RankingMode, score_stability
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
@@ -486,7 +486,7 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
 
 
 def test_seed_only_phase_runs_the_campaign_generation_action(tmp_path, monkeypatch):
-    from matsim_agents.discovery.seed_structures import SeedGenerationAction
+    from matsim_agents.science.structures.seed_structures import SeedGenerationAction
 
     action = SeedGenerationAction(
         action_id="attempt", formula="Si", formula_units=1, pyxtal_count=2, random_seed=77

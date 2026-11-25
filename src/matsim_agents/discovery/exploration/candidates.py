@@ -20,7 +20,7 @@ import numpy as np
 from ase import Atoms
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism.config import MagneticConfiguration
 
 Status = Literal["generated", "queued", "running", "done", "failed", "skipped"]
 TERMINAL_STATUSES: frozenset[str] = frozenset({"done", "failed", "skipped"})

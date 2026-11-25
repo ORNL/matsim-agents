@@ -23,13 +23,6 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.campaign.acquisition import (
-    NOT_YET_ESTABLISHED,
-    CandidateAcquisitionInputs,
-    CandidateSelection,
-    expected_transfer_gain,
-    select_candidate_batch,
-)
 from matsim_agents.campaign.budget import (
     CATEGORIES,
     BudgetLedger,
@@ -65,6 +58,13 @@ from matsim_agents.campaign.transfer import (
     TransferVerdict,
     run_transfer_experiment,
     standard_experiments,
+)
+from matsim_agents.science.acquisition.acquisition import (
+    NOT_YET_ESTABLISHED,
+    CandidateAcquisitionInputs,
+    CandidateSelection,
+    expected_transfer_gain,
+    select_candidate_batch,
 )
 
 Submitter = Callable[[CalculationSpec], str]

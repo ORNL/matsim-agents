@@ -125,7 +125,7 @@ flowchart TD
   - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
     HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
     MACE relaxations do not emit branch-weight metrics.
-- **Unified crystal-phase seed generation** (`matsim_agents.discovery.seed_structures`)
+- **Unified crystal-phase seed generation** (`matsim_agents.science.structures.seed_structures`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the
     pymatgen-bundled AFLOW encyclopedia (~288 prototypes covering all

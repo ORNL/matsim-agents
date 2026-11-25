@@ -12,7 +12,7 @@ from itertools import combinations, product
 import numpy as np
 import pytest
 
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     AlloySpec,
     bcc_site_count,
     build_bcc_supercell,

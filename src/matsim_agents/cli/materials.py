@@ -44,11 +44,11 @@ def _read(path: Path) -> object:
 def _load(bundle: Path | None, policy: Path | None, benchmarks: Path | None, synthetic: bool):
     from pydantic import ValidationError
 
-    from matsim_agents.campaign.selection import Constraint
     from matsim_agents.fusion import synthetic as syn
     from matsim_agents.fusion.policy import builtin_policy, load_policy
     from matsim_agents.fusion.scenario import EvaluationScenario, FusionEvidence
     from matsim_agents.fusion.scoring import BenchmarkSet, load_benchmarks
+    from matsim_agents.science.acquisition.selection import Constraint
 
     if (bundle is None) == (not synthetic):
         raise _fail("give a bundle file or --synthetic, not both or neither")
@@ -232,7 +232,10 @@ def import_nuclear(
     from pydantic import ValidationError
 
     from matsim_agents.execution.ledger import EvidenceLedger, record_id
-    from matsim_agents.fusion.nuclear_evidence import ExternalNuclearEvidence, to_ledger_record
+    from matsim_agents.fusion.nuclear_evidence import (
+        ExternalNuclearEvidence,
+        to_ledger_record,
+    )
 
     try:
         ev = ExternalNuclearEvidence.model_validate(_read(evidence))

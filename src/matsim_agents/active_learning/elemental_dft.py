@@ -283,7 +283,7 @@ def _site_magnetism(phase: ElementalPhaseSpec, atoms: Atoms):
     sites = phase.qe_site_starting_magnetization
     if sites is None:
         return atoms, None
-    from matsim_agents.discovery.magnetism.config import MAGNETIC_MODES, MagneticConfiguration
+    from matsim_agents.science.magnetism.config import MAGNETIC_MODES, MagneticConfiguration
 
     if len(sites) != len(atoms):
         raise ValueError(

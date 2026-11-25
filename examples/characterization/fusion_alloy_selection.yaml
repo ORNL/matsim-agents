@@ -10,7 +10,7 @@ reference_alloy:            # existing 1,024-site parent (deployments/frontier/c
 temperature_K: 900
 irradiation: synthetic-1dpa  # label only; set from a SPECTRA-PKA run when one exists
 
-selection:                   # matsim_agents.campaign.selection.SelectionSpec
+selection:                   # matsim_agents.science.acquisition.selection.SelectionSpec
   objectives:
     - {property: thermal_conductivity_total, direction: maximize, temperature_K: 900,
        weight: 2.0, worst: 15.0, target: 60.0}

@@ -7,14 +7,14 @@ import math
 
 import pytest
 
-from matsim_agents.discovery.bcc_defects import generate_frenkel_pair
-from matsim_agents.discovery.neb_endpoints import generate_frenkel_recombination
-from matsim_agents.kinetics.ensemble import run_ensemble
-from matsim_agents.kinetics.evidence import attach_neb_result
-from matsim_agents.kinetics.kmc import run_kmc
-from matsim_agents.kinetics.rates import KB_EV_PER_K, htst_rate
-from matsim_agents.kinetics.transitions import add_candidate_transition
-from matsim_agents.kinetics.validation import validate_network
+from matsim_agents.science.defects.bcc import generate_frenkel_pair
+from matsim_agents.science.kinetics.ensemble import run_ensemble
+from matsim_agents.science.kinetics.evidence import attach_neb_result
+from matsim_agents.science.kinetics.kmc import run_kmc
+from matsim_agents.science.kinetics.rates import KB_EV_PER_K, htst_rate
+from matsim_agents.science.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.kinetics.validation import validate_network
+from matsim_agents.science.neb.endpoints import generate_frenkel_recombination
 from tests.test_kinetics_evidence import _result
 from tests.test_kinetics_transitions import PARENT, A, _hop, _network
 

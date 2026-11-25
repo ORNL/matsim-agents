@@ -2,9 +2,9 @@
 
 A ``CampaignState`` tracks every formula considered across a multi-iteration
 discovery campaign (see the element-set-to-formula generation module,
-:mod:`matsim_agents.discovery.formula`) plus the growing set of reference
+:mod:`matsim_agents.science.structures.formula`) plus the growing set of reference
 energies used for convex-hull ranking
-(:class:`matsim_agents.discovery.stability.ReferenceEnergySet`). Structure
+(:class:`matsim_agents.science.thermodynamics.stability.ReferenceEnergySet`). Structure
 generation, relaxation, and stability scoring for any one active formula
 reuse the existing single-composition pipeline
 (:mod:`matsim_agents.discovery.wrapper`); this module does not reimplement
@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry, structure_content_hash
 from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
@@ -28,8 +27,9 @@ from matsim_agents.core.contracts import (
     EvidenceLevel,
     WorkflowStatus,
 )
-from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import (
+from matsim_agents.science.acquisition.acquisition import CampaignAcquisitionState
+from matsim_agents.science.structures.formula import FormulaCandidate, FormulaGenerationPolicy
+from matsim_agents.science.thermodynamics.stability import (
     RankingMode,
     ReferenceCompletenessReport,
     ReferenceEnergySet,

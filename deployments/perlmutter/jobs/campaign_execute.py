@@ -17,7 +17,7 @@ from matsim_agents.backends.mlip.arguments import (  # noqa: E402
     add_mlip_arguments,
     mlip_config_from_args,
 )
-from matsim_agents.campaign.acquisition import CampaignAcquisitionPolicy  # noqa: E402
+from matsim_agents.science.acquisition.acquisition import CampaignAcquisitionPolicy  # noqa: E402
 from matsim_agents.campaign.formula_execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
@@ -33,7 +33,7 @@ from matsim_agents.campaign.review import (  # noqa: E402
     make_debate_review_runner,
 )
 from matsim_agents.campaign.state import CampaignState  # noqa: E402
-from matsim_agents.discovery.stability import (  # noqa: E402
+from matsim_agents.science.thermodynamics.stability import (  # noqa: E402
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,
 )

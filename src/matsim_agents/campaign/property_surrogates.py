@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from matsim_agents.campaign.transfer import RidgeEnsemble
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
     PropertyStatus,

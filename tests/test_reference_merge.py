@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from matsim_agents.campaign.orchestrator import _merge_reference_energy_sets
-from matsim_agents.discovery.stability import (
+from matsim_agents.science.thermodynamics.stability import (
     ElementalReferenceEntry,
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,

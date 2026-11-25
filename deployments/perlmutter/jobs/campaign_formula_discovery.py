@@ -2,8 +2,8 @@
 """Initialize a campaign with a real multi-LLM formula-discovery debate.
 
 Exercises the campaign formula-generation slice (element-set-to-formula
-enumeration + LLM-formula merge, see :mod:`matsim_agents.discovery.formula`,
-:mod:`matsim_agents.discovery.formula_merge`, and
+enumeration + LLM-formula merge, see :mod:`matsim_agents.science.structures.formula`,
+:mod:`matsim_agents.science.structures.formula_merge`, and
 :mod:`matsim_agents.campaign`) against a *real* multi-LLM scientific debate
 served on real vLLM endpoints -- no mocked LLM calls. This stage writes the
 resumable formula registry consumed by ``campaign_execute.py``, which owns
@@ -23,7 +23,7 @@ if str(SOURCE_ROOT) not in sys.path:
 
 from matsim_agents.campaign.orchestrator import run_formula_discovery_stage  # noqa: E402
 from matsim_agents.campaign.state import CampaignState  # noqa: E402
-from matsim_agents.discovery.formula import FormulaGenerationPolicy  # noqa: E402
+from matsim_agents.science.structures.formula import FormulaGenerationPolicy  # noqa: E402
 from matsim_agents.workflows.debate import (  # noqa: E402
     DebateParticipant,
     ScientificDebateConfig,

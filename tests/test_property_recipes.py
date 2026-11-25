@@ -15,19 +15,19 @@ from matsim_agents.campaign.characterization import (
     outstanding_steps,
     run_characterization,
 )
-from matsim_agents.campaign.property_recipes import (
+from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
+from matsim_agents.science.properties.calculators import (
+    PropertyConditions,
+    PropertyEvidence,
+    PropertyStatus,
+)
+from matsim_agents.science.properties.recipes import (
     METHODS,
     PROPERTY_RECIPES,
     BackendContext,
     BackendReadiness,
     list_recipes,
     method_readiness,
-)
-from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
-from matsim_agents.execution.properties import (
-    PropertyConditions,
-    PropertyEvidence,
-    PropertyStatus,
 )
 
 pytest.importorskip("pymatgen")

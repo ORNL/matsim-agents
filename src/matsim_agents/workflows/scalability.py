@@ -28,11 +28,11 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.kinetics.benchmarks import (
+from matsim_agents.science.kinetics.benchmarks import (
     TEMPERATURE_K,
     chain_network,
 )
-from matsim_agents.kinetics.ensemble import run_ensemble
+from matsim_agents.science.kinetics.ensemble import run_ensemble
 
 LOCK_FILE_NAMES = ("uv.lock", "poetry.lock", "requirements.lock", "conda-lock.yml")
 TRACKED_PACKAGES = ("numpy", "pydantic", "scipy", "torch", "ase")

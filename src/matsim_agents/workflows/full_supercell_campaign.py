@@ -21,23 +21,23 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.core.hashing import sha256_file as _sha256
-from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import (
+from matsim_agents.science.defects.bcc import (
     generate_bcc_interstitial,
     generate_divacancy,
     generate_frenkel_pair,
 )
-from matsim_agents.discovery.magnetism.config import MagneticConfiguration
-from matsim_agents.discovery.magnetism.policies import configurations_for_policy, select_policy
-from matsim_agents.discovery.neb_endpoints import (
+from matsim_agents.science.defects.point_defects import DefectConfiguration, generate_vacancy
+from matsim_agents.science.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism.policies import configurations_for_policy, select_policy
+from matsim_agents.science.neb.endpoints import (
     MigrationPair,
     generate_frenkel_recombination,
     generate_interstitial_migration,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.point_defects import DefectConfiguration, generate_vacancy
+from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 DEFECT_ATOM_DELTA = {"vacancy": -1, "interstitial": 1, "frenkel_pair": 0, "divacancy": -2}
 MANIFEST_FILE = "campaign_manifest.json"

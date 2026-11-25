@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from matsim_agents.core.composition import parse_composition  # noqa: E402
-from matsim_agents.discovery.seed_structures import generate_seeds  # noqa: E402
+from matsim_agents.science.structures.seed_structures import generate_seeds  # noqa: E402
 from matsim_agents.core.seeding import stream_seed  # noqa: E402
 
 DEFAULT_COMPETING_FORMULAS = [

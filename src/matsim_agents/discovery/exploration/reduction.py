@@ -19,7 +19,7 @@ from ase import Atoms
 from ase.neighborlist import neighbor_list
 
 from matsim_agents.discovery.exploration.candidates import CandidateRecord
-from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism.config import MagneticConfiguration
 
 KEY_DECIMALS = 3
 

@@ -8,7 +8,7 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 3. For every newly-seen formula the user is asked (or `--auto-confirm` is honored) whether to launch a substantial atomistic exploration.
 4. The wrapper [`explore_composition`](../../src/matsim_agents/discovery/wrapper.py) then:
    - **generates seeds** through the unified
-     [`matsim_agents.discovery.seed_structures.generate_seeds`](../../src/matsim_agents/discovery/seed_structures.py)
+     [`matsim_agents.science.structures.seed_structures.generate_seeds`](../../src/matsim_agents/science/structures/seed_structures.py)
      entry point, which combines:
      1. **AFLOW prototype decoration.** Every prototype in the
         pymatgen-bundled AFLOW encyclopedia whose reduced stoichiometric

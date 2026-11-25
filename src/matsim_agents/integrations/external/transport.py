@@ -29,7 +29,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel, at_least
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PROPERTY_FAMILY,
     PropertyConditions,
     PropertyEvidence,

@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.campaign.acquisition import NOT_YET_ESTABLISHED
+from matsim_agents.science.acquisition.acquisition import NOT_YET_ESTABLISHED
 
 Decision = Literal[
     "reuse_inventory",

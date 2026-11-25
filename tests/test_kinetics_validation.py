@@ -1,8 +1,8 @@
 """Network completeness report (synthetic fixtures)."""
 
-from matsim_agents.kinetics.evidence import attach_neb_result
-from matsim_agents.kinetics.transitions import add_candidate_transition
-from matsim_agents.kinetics.validation import validate_network
+from matsim_agents.science.kinetics.evidence import attach_neb_result
+from matsim_agents.science.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.kinetics.validation import validate_network
 from tests.test_kinetics_evidence import _result
 from tests.test_kinetics_transitions import _hop, _network
 

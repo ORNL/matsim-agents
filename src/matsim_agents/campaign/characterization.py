@@ -7,7 +7,7 @@ with their units and minimum fidelity, the methods, the numerical tolerances,
 the references, the budget, and the approvals. A recipe plans the calculations
 as an ordered task graph (:func:`plan_recipe`); the numerical work is done by
 the existing deterministic operators (:func:`matsim_agents.workflows.relaxation.
-run_relaxation`, :func:`matsim_agents.discovery.stability.score_stability`), never
+run_relaxation`, :func:`matsim_agents.science.thermodynamics.stability.score_stability`), never
 by an LLM. The answer (:class:`~matsim_agents.core.contracts.
 CharacterizationReport`) states a conclusion only when the evidence suffices
 and says otherwise what is missing:
@@ -44,13 +44,6 @@ from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.backends.dft.vasp_relax import VASPSettings
 from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.campaign.property_recipes import (
-    PROPERTY_RECIPES,
-    BackendContext,
-    assess_property_recipe,
-    load_property_evidence,
-)
-from matsim_agents.campaign.property_recipes import RECIPES as PROPERTY_RECIPE_SPECS
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
@@ -65,13 +58,6 @@ from matsim_agents.core.contracts import (
     at_least,
 )
 from matsim_agents.core.hashing import sha256_file
-from matsim_agents.discovery.defects import MAGNETISM_LIMITATION
-from matsim_agents.discovery.stability import (
-    RankingMode,
-    ReferenceEnergySet,
-    StabilityReport,
-    score_stability,
-)
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,
@@ -84,13 +70,27 @@ from matsim_agents.execution.ledger import (
     software_versions,
 )
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
-from matsim_agents.execution.properties import PropertyConditions
 from matsim_agents.execution.recovery import (
     DEFAULT_POLICY,
     FailureClass,
     adjusted_settings,
     can_retry,
     classify_failure,
+)
+from matsim_agents.science.defects.defects import MAGNETISM_LIMITATION
+from matsim_agents.science.properties.calculators import PropertyConditions
+from matsim_agents.science.properties.recipes import (
+    PROPERTY_RECIPES,
+    BackendContext,
+    assess_property_recipe,
+    load_property_evidence,
+)
+from matsim_agents.science.properties.recipes import RECIPES as PROPERTY_RECIPE_SPECS
+from matsim_agents.science.thermodynamics.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    StabilityReport,
+    score_stability,
 )
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,

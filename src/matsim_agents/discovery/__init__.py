@@ -15,7 +15,11 @@ from matsim_agents.core.composition import (
     extract_compositions,
     parse_composition,
 )
-from matsim_agents.discovery.seed_structures import (
+from matsim_agents.discovery.wrapper import (
+    CompositionExplorationResult,
+    explore_composition,
+)
+from matsim_agents.science.structures.seed_structures import (
     PhaseCandidate,
     SeedGenerationAction,
     compatible_prototypes,
@@ -24,7 +28,7 @@ from matsim_agents.discovery.seed_structures import (
     load_prototypes,
     random_search,
 )
-from matsim_agents.discovery.stability import (
+from matsim_agents.science.thermodynamics.stability import (
     ElementalReferenceEntry,
     ReferenceCompletenessPolicy,
     ReferenceCompletenessReport,
@@ -32,10 +36,6 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     StabilityReport,
     score_stability,
-)
-from matsim_agents.discovery.wrapper import (
-    CompositionExplorationResult,
-    explore_composition,
 )
 
 __all__ = [

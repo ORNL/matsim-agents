@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows.full_supercell_campaign import FullSupercellCampaign
 
 RY_TO_EV = 13.605693122994

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matsim_agents.core.contracts import DFT_EVIDENCE, EvidenceLevel, WorkflowStatus
-from matsim_agents.discovery.stability import RankingMode, StabilityReport
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
     EvidenceOutcome,
@@ -24,6 +23,7 @@ from matsim_agents.execution.ledger import (
     hashes_of,
     software_versions,
 )
+from matsim_agents.science.thermodynamics.stability import RankingMode, StabilityReport
 
 if TYPE_CHECKING:
     from matsim_agents.campaign.state import CampaignState, FormulaRunRecord

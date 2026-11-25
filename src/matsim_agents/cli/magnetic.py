@@ -25,7 +25,7 @@ app.add_typer(magnetic_app, name="magnetic")
 @magnetic_app.command("policies")
 def policies(as_json: bool = typer.Option(False, "--json", help="Print JSON.")) -> None:
     """List material-family policies and their status (never reported as qualified)."""
-    from matsim_agents.discovery.magnetism.policies import policy_readiness
+    from matsim_agents.science.magnetism.policies import policy_readiness
 
     report = policy_readiness()
     if as_json:
@@ -48,7 +48,7 @@ def generate(
     import numpy as np
     from ase.io import read
 
-    from matsim_agents.discovery.magnetism.policies import (
+    from matsim_agents.science.magnetism.policies import (
         POLICIES,
         configurations_for_policy,
         select_policy,
@@ -96,7 +96,7 @@ def show(
     config: Path = typer.Argument(..., exists=True, dir_okay=False, help="Configuration JSON."),
 ) -> None:
     """Print the mode, assumptions and fingerprint of a saved configuration."""
-    from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+    from matsim_agents.science.magnetism.config import MagneticConfiguration
 
     try:
         loaded = MagneticConfiguration.from_json(config.read_text())

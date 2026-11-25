@@ -28,21 +28,21 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from matsim_agents.backends.dft.process import run_launcher
 from matsim_agents.backends.dft.qe_neb import QENebConfig
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.neb_contracts import NebResult
-from matsim_agents.discovery.neb_endpoints import (
+from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.kinetics.contracts import NetworkProvenance
+from matsim_agents.science.kinetics.ensemble import EnsembleResult, run_ensemble
+from matsim_agents.science.kinetics.evidence import attach_neb_result
+from matsim_agents.science.kinetics.graph import TransitionNetwork
+from matsim_agents.science.kinetics.transitions import add_candidate_transition, state_from_endpoint
+from matsim_agents.science.kinetics.validation import NetworkReport, validate_network
+from matsim_agents.science.neb.contracts import NebResult
+from matsim_agents.science.neb.endpoints import (
     MigrationPair,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.point_defects import generate_vacancy
-from matsim_agents.execution.ledger import EvidenceLedger
-from matsim_agents.kinetics.contracts import NetworkProvenance
-from matsim_agents.kinetics.ensemble import EnsembleResult, run_ensemble
-from matsim_agents.kinetics.evidence import attach_neb_result
-from matsim_agents.kinetics.graph import TransitionNetwork
-from matsim_agents.kinetics.transitions import add_candidate_transition, state_from_endpoint
-from matsim_agents.kinetics.validation import NetworkReport, validate_network
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows.neb import (
     RESULT_FILE,
     NebWorkflowError,

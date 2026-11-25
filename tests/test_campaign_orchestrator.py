@@ -8,11 +8,6 @@ from ase import Atoms
 from ase.io import write
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.campaign.acquisition import (
-    CampaignAcquisitionPolicy,
-    FormulaAcquisitionMetrics,
-    select_formula_batch,
-)
 from matsim_agents.campaign.formula_execution import latest_promoted_model
 from matsim_agents.campaign.orchestrator import (
     CampaignReviewDecision,
@@ -23,13 +18,6 @@ from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
 from matsim_agents.core.seeding import stream_seed
-from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import (
-    RankingMode,
-    ReferenceEnergySet,
-    ReferencePhaseEntry,
-    score_stability,
-)
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.ledger import (
     REVIEW_ACTION,
@@ -37,6 +25,18 @@ from matsim_agents.execution.ledger import (
     EvidenceLedger,
     HypothesisRecord,
     HypothesisStatus,
+)
+from matsim_agents.science.acquisition.acquisition import (
+    CampaignAcquisitionPolicy,
+    FormulaAcquisitionMetrics,
+    select_formula_batch,
+)
+from matsim_agents.science.structures.formula import FormulaCandidate, FormulaGenerationPolicy
+from matsim_agents.science.thermodynamics.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    ReferencePhaseEntry,
+    score_stability,
 )
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 

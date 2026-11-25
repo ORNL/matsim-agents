@@ -27,7 +27,7 @@ from matsim_agents.campaign.characterization import (
     load_contract,
     run_characterization,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
+from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
 from matsim_agents.workflows.relaxation import run_relaxation
 

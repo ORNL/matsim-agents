@@ -10,7 +10,7 @@ from ase.io import read as ase_read
 
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.mlip.calculator import make_mlip_calculator
-from matsim_agents.campaign.surrogate_hull import evaluate_surrogate_hull
+from matsim_agents.science.thermodynamics.surrogate_hull import evaluate_surrogate_hull
 
 
 def main() -> int:

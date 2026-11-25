@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.neb_contracts import (
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.neb.contracts import (
     MigrationMechanism,
     NebCalculationSpec,
     NebImage,
@@ -16,7 +16,7 @@ from matsim_agents.discovery.neb_contracts import (
     check_endpoint_compatibility,
     endpoint_from_atoms,
 )
-from matsim_agents.discovery.point_defects import generate_vacancy
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 SPEC = AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1)
 PARENT = generate_alloy(SPEC)

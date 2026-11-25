@@ -2,9 +2,9 @@
 
 import pytest
 
-from matsim_agents.kinetics.graph import TransitionNetwork
-from matsim_agents.kinetics.rates import htst_rate
-from matsim_agents.kinetics.uncertainty import (
+from matsim_agents.science.kinetics.graph import TransitionNetwork
+from matsim_agents.science.kinetics.rates import htst_rate
+from matsim_agents.science.kinetics.uncertainty import (
     barrier_sensitivity,
     pathway_keys,
     perturb_network,

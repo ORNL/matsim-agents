@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.acquisition import (
+from matsim_agents.science.acquisition.acquisition import (
     CandidateAcquisitionInputs,
     CandidateAcquisitionPolicy,
     expected_transfer_gain,

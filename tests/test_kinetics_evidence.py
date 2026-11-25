@@ -2,9 +2,9 @@
 
 import pytest
 
-from matsim_agents.discovery.neb_contracts import NebResult
-from matsim_agents.kinetics.evidence import EvidenceError, attach_neb_result
-from matsim_agents.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.kinetics.evidence import EvidenceError, attach_neb_result
+from matsim_agents.science.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.neb.contracts import NebResult
 from tests.test_kinetics_transitions import _hop, _network
 
 ENERGIES = (0.0, 0.4, 0.8, 0.5, 0.1, -0.2)
@@ -99,7 +99,7 @@ def test_result_recorded_for_another_transition_is_rejected():
 
 
 def test_result_must_match_the_declared_calculation():
-    from matsim_agents.discovery.neb_contracts import NebCalculationSpec
+    from matsim_agents.science.neb.contracts import NebCalculationSpec
 
     fields = NebCalculationSpec.model_fields
     if "method_id" not in fields or "n_images" not in fields:
@@ -119,8 +119,8 @@ def test_result_must_match_the_declared_calculation():
 
 
 def test_synthetic_evidence_blocks_qualified_kmc_on_a_real_network():
-    from matsim_agents.kinetics.transitions import state_from_endpoint
-    from matsim_agents.kinetics.validation import validate_network
+    from matsim_agents.science.kinetics.transitions import state_from_endpoint
+    from matsim_agents.science.kinetics.validation import validate_network
 
     net, transition = _setup()
     attach_neb_result(net, transition, _result(), attempt_frequency_hz=1e13, synthetic=True)

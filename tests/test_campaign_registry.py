@@ -16,8 +16,8 @@ from matsim_agents.campaign.registry import (
     structure_content_hash,
 )
 from matsim_agents.core.composition import parse_composition
-from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.science.structures.seed_structures import PhaseCandidate
 
 
 def _write_structure(path, *, displacement: float = 0.0):

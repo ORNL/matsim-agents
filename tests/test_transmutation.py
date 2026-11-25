@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 from ase.geometry import get_distances
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.point_defects import generate_vacancy
-from matsim_agents.discovery.transmutation import (
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.irradiation.transmutation import (
     TransmutationError,
     TransmutationRecord,
     TransmutationScenario,
     apply_transmutation,
 )
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 PARENT_COUNTS = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
 

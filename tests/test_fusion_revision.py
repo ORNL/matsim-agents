@@ -128,9 +128,9 @@ def test_overflowing_number_is_rejected_not_raised(scored):
 
 def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
     from matsim_agents.core.contracts import EvidenceLevel
-    from matsim_agents.execution.properties import PropertyQualification, PropertyStatus
     from matsim_agents.fusion.revision import _status
     from matsim_agents.fusion.scenario import FusionEvidence
+    from matsim_agents.science.properties.calculators import PropertyQualification, PropertyStatus
 
     upd = {
         "status": PropertyStatus.CALCULATED,
@@ -188,7 +188,7 @@ def test_context_changes_ledger_identity_and_is_recorded(tmp_path, scored):
 
 
 def test_packet_carries_constraint_spec(scored):
-    from matsim_agents.campaign.selection import Constraint
+    from matsim_agents.science.acquisition.selection import Constraint
 
     cands, _ = scored
     c = Constraint(property="yield_strength", minimum=123.0, temperature_K=1200.0)

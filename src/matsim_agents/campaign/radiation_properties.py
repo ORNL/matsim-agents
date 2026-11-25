@@ -2,8 +2,8 @@
 
 This connects the existing radiation workflows (the 1,024-site gas/transmutation QE campaign,
 the SPECTRA-PKA adapter and the pseudopotential gates) to ``PropertyEvidence`` and to
-:func:`~matsim_agents.campaign.property_acquisition.plan_property_acquisition`. It computes no
-radiation physics.
+:func:`~matsim_agents.campaign.property_acquisition.plan_property_acquisition`.
+It computes no radiation physics.
 
 Rules:
 
@@ -28,19 +28,19 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.campaign.gas_qe_campaign import GasExample
-from matsim_agents.campaign.property_recipes import conditions_match
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.discovery.species_support import assess_pseudopotentials
-from matsim_agents.execution.properties import (
-    PropertyConditions,
-    PropertyEvidence,
-    PropertyStatus,
-)
 from matsim_agents.integrations.external.spectra_pka.availability import (
     Status,
     check_availability,
 )
 from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.science.properties.calculators import (
+    PropertyConditions,
+    PropertyEvidence,
+    PropertyStatus,
+)
+from matsim_agents.science.properties.recipes import conditions_match
+from matsim_agents.science.structures.species_support import assess_pseudopotentials
 from matsim_agents.workflows.full_supercell_campaign import FullSupercellCampaign
 
 RADIATION_PROPERTIES = (

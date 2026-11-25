@@ -34,14 +34,6 @@ from matsim_agents.backends.dft.qe_neb_stages import (
 )
 from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.core.hashing import sha256_file as file_sha256
-from matsim_agents.discovery.neb_contracts import NebCalculationSpec, NebResult
-from matsim_agents.discovery.neb_endpoints import MigrationPair
-from matsim_agents.discovery.neb_images import (
-    DEFAULT_MAX_STEP,
-    DEFAULT_MIN_DISTANCE,
-    generate_linear_images,
-)
-from matsim_agents.discovery.neb_serialization import METADATA_FILE, read_pathway, write_pathway
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
     EvidenceOutcome,
@@ -51,6 +43,14 @@ from matsim_agents.execution.ledger import (
     hashes_of,
     software_versions,
 )
+from matsim_agents.science.neb.contracts import NebCalculationSpec, NebResult
+from matsim_agents.science.neb.endpoints import MigrationPair
+from matsim_agents.science.neb.images import (
+    DEFAULT_MAX_STEP,
+    DEFAULT_MIN_DISTANCE,
+    generate_linear_images,
+)
+from matsim_agents.science.neb.serialization import METADATA_FILE, read_pathway, write_pathway
 from matsim_agents.workflows.neb_mapping import to_neb_result
 
 PLAN_FILE = "neb-workflow.json"

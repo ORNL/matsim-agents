@@ -37,14 +37,17 @@ from matsim_agents.campaign.budget import BudgetLedger
 from matsim_agents.campaign.hierarchy_campaign import DispatchOutcome
 from matsim_agents.campaign.qe_plan import ResourceLimits, ResourceRequest, resource_problems
 from matsim_agents.core.hashing import sha256_file as _sha256
-from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
-from matsim_agents.discovery.gas_defects import (
+from matsim_agents.science.defects.gas import (
     GasComplexSpec,
     GasPlacement,
     generate_gas_complex,
 )
-from matsim_agents.discovery.species_support import assess_pseudopotentials
-from matsim_agents.discovery.transmutation import TransmutationScenario, apply_transmutation
+from matsim_agents.science.irradiation.transmutation import (
+    TransmutationScenario,
+    apply_transmutation,
+)
+from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
+from matsim_agents.science.structures.species_support import assess_pseudopotentials
 from matsim_agents.workflows.full_supercell_campaign import (
     FullSupercellCampaign,
     build_parent,

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from matsim_agents.integrations.external.spectra_pka.config import CampaignSpec
 from matsim_agents.integrations.external.spectra_pka.parser import BlockKind, ParsedOutput
-from matsim_agents.irradiation.contracts import ValidationStatus
+from matsim_agents.science.irradiation.contracts import ValidationStatus
 
 FLUX_SUM_RTOL = 1e-3
 NORM_SUM_SLACK = 1e-6

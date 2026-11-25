@@ -12,14 +12,14 @@ from matsim_agents.campaign.property_acquisition import (
     render_plan,
     reserve_approved,
 )
-from matsim_agents.campaign.selection import (
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,
     Objective,
     SelectionSpec,
     select,
 )
-from matsim_agents.execution.properties import PropertyStatus
+from matsim_agents.science.properties.calculators import PropertyStatus
 from tests.test_selection import BULK, KAPPA, T, ev
 
 

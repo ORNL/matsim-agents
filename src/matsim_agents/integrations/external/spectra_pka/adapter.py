@@ -40,7 +40,7 @@ from matsim_agents.integrations.external.spectra_pka.validation import (
     ValidationReport,
     validate_output,
 )
-from matsim_agents.irradiation.contracts import (
+from matsim_agents.science.irradiation.contracts import (
     IrradiationScenario,
     PKASourceProvenance,
     PKASpectrum,

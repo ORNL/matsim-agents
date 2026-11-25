@@ -358,7 +358,7 @@ For `kind: prompt` the LLM proposal is persisted as
 `<out_dir>/seeds/llm_proposed_compositions.json` so the run is reproducible.
 For `kind: compositions` and `kind: prompt`, formulas are expanded into
 seed structures via
-[`matsim_agents.discovery.generate_seeds`](../../src/matsim_agents/discovery/seed_structures.py),
+[`matsim_agents.discovery.generate_seeds`](../../src/matsim_agents/science/structures/seed_structures.py),
 which enumerates every AFLOW prototype whose stoichiometric signature
 matches the target composition (288 entries from
 `pymatgen.analysis.prototypes`, covering elemental phases, rocksalt/CsCl/

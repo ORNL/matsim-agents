@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from matsim_agents.kinetics.cluster_dynamics import (
+from matsim_agents.science.kinetics.cluster_dynamics import (
     FUTURE_WORK,
     ClusterError,
     ClusterNetwork,
@@ -17,14 +17,14 @@ from matsim_agents.kinetics.cluster_dynamics import (
     import_transition_network,
     reject_future_work,
 )
-from matsim_agents.kinetics.contracts import (
+from matsim_agents.science.kinetics.contracts import (
     BarrierEvidence,
     DefectState,
     NetworkProvenance,
     TransitionEvent,
 )
-from matsim_agents.kinetics.gas_mechanisms import OpenSystemTerm
-from matsim_agents.kinetics.graph import TransitionNetwork
+from matsim_agents.science.kinetics.gas_mechanisms import OpenSystemTerm
+from matsim_agents.science.kinetics.graph import TransitionNetwork
 
 T = 600.0
 

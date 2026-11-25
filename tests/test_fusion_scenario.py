@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.core.contracts import PROPERTY_UNITS
-from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
 from matsim_agents.fusion.scenario import (
     EvaluationScenario,
     EvidenceContext,
@@ -10,6 +9,7 @@ from matsim_agents.fusion.scenario import (
     ScenarioSet,
     aggregate,
 )
+from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
 
 
 def _item(prop, *, temperature=1000.0, irradiation=None, magnetic=None, **ctx):

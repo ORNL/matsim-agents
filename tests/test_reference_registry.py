@@ -6,7 +6,7 @@ from ase.io import write
 from pydantic import ValidationError
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.discovery.stability import (
+from matsim_agents.science.thermodynamics.stability import (
     RankingMode,
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,

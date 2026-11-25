@@ -6,20 +6,6 @@ of the existing single-composition discovery machinery
 (:mod:`matsim_agents.workflows.debate`).
 """
 
-from matsim_agents.campaign.acquisition import (
-    AcquisitionSelectionRecord,
-    AcquisitionWeights,
-    CampaignAcquisitionPolicy,
-    CampaignAcquisitionState,
-    CandidateAcquisitionInputs,
-    CandidateAcquisitionPolicy,
-    CandidateSelection,
-    FormulaAcquisitionMetrics,
-    FormulaAcquisitionScore,
-    select_candidate_batch,
-    select_formula_batch,
-    update_adaptive_lambda,
-)
 from matsim_agents.campaign.benchmark import (
     BenchmarkArm,
     BenchmarkMetric,
@@ -92,6 +78,20 @@ from matsim_agents.campaign.state import (
 )
 from matsim_agents.campaign.strategies import compare_strategies
 from matsim_agents.campaign.transfer import run_transfer_experiment
+from matsim_agents.science.acquisition.acquisition import (
+    AcquisitionSelectionRecord,
+    AcquisitionWeights,
+    CampaignAcquisitionPolicy,
+    CampaignAcquisitionState,
+    CandidateAcquisitionInputs,
+    CandidateAcquisitionPolicy,
+    CandidateSelection,
+    FormulaAcquisitionMetrics,
+    FormulaAcquisitionScore,
+    select_candidate_batch,
+    select_formula_batch,
+    update_adaptive_lambda,
+)
 
 __all__ = [
     "BudgetLedger",

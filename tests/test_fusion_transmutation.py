@@ -10,7 +10,7 @@ from matsim_agents.fusion.nuclear_evidence import (
     NuclearQuantity,
 )
 from matsim_agents.fusion.transmutation import reference_site_map, transmuted_configuration
-from matsim_agents.irradiation.contracts import RecoilSpecies
+from matsim_agents.science.irradiation.contracts import RecoilSpecies
 
 H = "a" * 64
 

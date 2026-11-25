@@ -2,10 +2,10 @@
 
 import pytest
 
-from matsim_agents.kinetics.contracts import BarrierEvidence
-from matsim_agents.kinetics.graph import TransitionNetwork
-from matsim_agents.kinetics.kmc import run_kmc
-from matsim_agents.kinetics.rates import RateError
+from matsim_agents.science.kinetics.contracts import BarrierEvidence
+from matsim_agents.science.kinetics.graph import TransitionNetwork
+from matsim_agents.science.kinetics.kmc import run_kmc
+from matsim_agents.science.kinetics.rates import RateError
 from tests.test_kinetics_graph import PROV, _event, _state
 
 

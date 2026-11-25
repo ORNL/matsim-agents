@@ -137,7 +137,7 @@ class CharacterizationStatus(StrEnum):
 
 
 # Canonical unit of every material property; the property families are defined
-# in :mod:`matsim_agents.execution.properties`.
+# in :mod:`matsim_agents.science.properties.calculators`.
 PROPERTY_UNITS = {
     "thermal_conductivity_total": "W/(m K)",
     "thermal_conductivity_electronic": "W/(m K)",

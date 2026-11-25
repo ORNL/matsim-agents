@@ -5,9 +5,9 @@ import pytest
 from ase import Atoms
 from ase.build import bulk
 
-from matsim_agents.discovery.magnetism import generators as gen
-from matsim_agents.discovery.magnetism.defects import check_neb_magnetic_compatibility
-from matsim_agents.discovery.species_support import (
+from matsim_agents.science.magnetism import generators as gen
+from matsim_agents.science.magnetism.defects import check_neb_magnetic_compatibility
+from matsim_agents.science.structures.species_support import (
     NEW_SPECIES,
     SpeciesSupportError,
     assess_pseudopotentials,

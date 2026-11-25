@@ -14,7 +14,7 @@ from matsim_agents.campaign.property_surrogates import (
     train_surrogate,
 )
 from matsim_agents.core.seeding import numpy_rng
-from matsim_agents.execution.properties import PropertyConditions, PropertyStatus
+from matsim_agents.science.properties.calculators import PropertyConditions, PropertyStatus
 
 SIG = "qe-pbe-synthetic"
 TARGET = TargetSpec(

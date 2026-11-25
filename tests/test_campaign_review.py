@@ -16,8 +16,8 @@ from matsim_agents.campaign.review import (
 )
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
-from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import PhaseStability, StabilityReport
+from matsim_agents.science.structures.formula import FormulaCandidate, FormulaGenerationPolicy
+from matsim_agents.science.thermodynamics.stability import PhaseStability, StabilityReport
 from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
 
 

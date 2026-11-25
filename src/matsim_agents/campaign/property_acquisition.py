@@ -26,16 +26,16 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.campaign.selection import (
+from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.core.seeding import numpy_rng
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     SelectionResult,
     SelectionSpec,
     _pick,
     select,
 )
-from matsim_agents.core.contracts import EvidenceLevel
-from matsim_agents.core.seeding import numpy_rng
-from matsim_agents.execution.properties import PropertyStatus
+from matsim_agents.science.properties.calculators import PropertyStatus
 
 ACQUISITION_VERSION = "property-acquisition-v1"
 BUDGET_CATEGORY = "property"

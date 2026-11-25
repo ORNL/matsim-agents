@@ -3,21 +3,21 @@
 import numpy as np
 import pytest
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import (
+from matsim_agents.science.defects.bcc import (
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
 )
-from matsim_agents.discovery.neb_endpoints import (
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.kinetics.contracts import NetworkProvenance
+from matsim_agents.science.kinetics.graph import NetworkError, TransitionNetwork
+from matsim_agents.science.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.neb.endpoints import (
     generate_frenkel_recombination,
     generate_interstitial_migration,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.point_defects import generate_vacancy
-from matsim_agents.kinetics.contracts import NetworkProvenance
-from matsim_agents.kinetics.graph import NetworkError, TransitionNetwork
-from matsim_agents.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 A = 3.16
 PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1))
@@ -84,7 +84,7 @@ def test_pathway_from_another_parent_is_rejected():
 
 @pytest.fixture
 def custom_mechanisms():
-    from matsim_agents.kinetics import transitions
+    from matsim_agents.science.kinetics import transitions
 
     names = ("dimer_glide", "one_way_jump")
     transitions.register_mechanism("dimer_glide", reversible=True)
@@ -101,7 +101,7 @@ def _as(kind):
 
 
 def test_builtin_mechanisms_are_registered_with_their_policy():
-    from matsim_agents.kinetics.transitions import get_mechanism, list_mechanisms
+    from matsim_agents.science.kinetics.transitions import get_mechanism, list_mechanisms
 
     assert {"vacancy_hop", "interstitial_migration", "frenkel_recombination"} <= set(
         list_mechanisms()
@@ -125,7 +125,7 @@ def test_custom_irreversible_mechanism_has_no_reverse(custom_mechanisms):
 
 
 def test_custom_mechanism_round_trips_through_serialization(custom_mechanisms):
-    from matsim_agents.kinetics.contracts import TransitionEvent
+    from matsim_agents.science.kinetics.contracts import TransitionEvent
 
     (event, *_) = add_candidate_transition(_network(), _as("dimer_glide"))
     again = TransitionEvent.model_validate_json(event.model_dump_json())
@@ -133,7 +133,7 @@ def test_custom_mechanism_round_trips_through_serialization(custom_mechanisms):
 
 
 def test_duplicate_and_invalid_registrations_are_rejected(custom_mechanisms):
-    from matsim_agents.kinetics.transitions import register_mechanism
+    from matsim_agents.science.kinetics.transitions import register_mechanism
 
     with pytest.raises(ValueError, match="already registered"):
         register_mechanism("dimer_glide")

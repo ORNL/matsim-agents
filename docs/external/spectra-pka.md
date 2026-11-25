@@ -217,7 +217,7 @@ verification.** The tests do not run SPECTRA-PKA.
 
 ## 14. PKA-informed ranking and the synthetic chain
 
-`matsim_agents.campaign.pka_acquisition.select_pka_informed` ranks candidate calculations by
+`matsim_agents.science.acquisition.pka_acquisition.select_pka_informed` ranks candidate calculations by
 species-resolved PKA production, a diminishing return for repeating a species, user-supplied
 kinetic importance and uncertainty, and cost in node-hours. It is a policy, not a fitted
 model, and it has not been shown to beat random selection. It launches no jobs, and

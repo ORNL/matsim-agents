@@ -44,7 +44,7 @@ Read the modules in this order:
 | [`workflows/exploration_rounds.py`](../src/matsim_agents/workflows/exploration_rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
 | [`workflows/exploration_checkpoint.py`](../src/matsim_agents/workflows/exploration_checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
 | [`workflows/exploration_reporting.py`](../src/matsim_agents/workflows/exploration_reporting.py) | Read-only summaries and cumulative relative-energy reports |
-| [`discovery/structural_screening.py`](../src/matsim_agents/discovery/structural_screening.py) | Structural equivalence and deterministic diversity selection |
+| [`discovery/structural_screening.py`](../src/matsim_agents/science/structures/screening.py) | Structural equivalence and deterministic diversity selection |
 
 New scientific options belong in the validated configuration and its shared
 request builder, not duplicated single-/multi-round execution paths.

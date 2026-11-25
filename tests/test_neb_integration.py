@@ -13,19 +13,19 @@ from matsim_agents.backends.dft.qe_neb_stages import (
     prepare_stage,
 )
 from matsim_agents.cli import app
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import (
+from matsim_agents.science.defects.bcc import (
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
 )
-from matsim_agents.discovery.neb_endpoints import (
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.neb.endpoints import (
     generate_frenkel_recombination,
     generate_interstitial_migration,
     generate_vacancy_hop,
     vacancy_neighbors,
 )
-from matsim_agents.discovery.neb_serialization import read_pathway
-from matsim_agents.discovery.point_defects import generate_vacancy
+from matsim_agents.science.neb.serialization import read_pathway
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows.neb import ingest_neb_results, run_neb_workflow
 from tests.test_neb_workflow import ENERGIES, _cfg, _fake
 

@@ -15,7 +15,7 @@ from ase import Atoms
 from pydantic import BaseModel, Field
 
 from matsim_agents.campaign.registry import TARGET_ELEMENTS, CandidateRegistry, chemical_system
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     first_neighbor_list,
     warren_cowley_sro,
 )

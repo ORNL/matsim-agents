@@ -9,13 +9,20 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.pka_acquisition import PKACandidate, select_pka_informed
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.gas_defects import GasComplexSpec, GasPlacement, generate_gas_complex
-from matsim_agents.discovery.transmutation import TransmutationScenario, apply_transmutation
 from matsim_agents.integrations.external.spectra_pka import adapter
-from matsim_agents.irradiation.contracts import DefectStatus, NoCascadeModel, ValidationStatus
-from matsim_agents.irradiation.pka_sampling import sample_pka_events
+from matsim_agents.science.acquisition.pka_acquisition import PKACandidate, select_pka_informed
+from matsim_agents.science.defects.gas import GasComplexSpec, GasPlacement, generate_gas_complex
+from matsim_agents.science.irradiation.contracts import (
+    DefectStatus,
+    NoCascadeModel,
+    ValidationStatus,
+)
+from matsim_agents.science.irradiation.pka_sampling import sample_pka_events
+from matsim_agents.science.irradiation.transmutation import (
+    TransmutationScenario,
+    apply_transmutation,
+)
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from tests.spectra_pka_fixtures import make_campaign, make_config, write_mock_executable
 
 COUNTS = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}

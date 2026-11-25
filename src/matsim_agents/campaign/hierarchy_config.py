@@ -14,11 +14,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
-from matsim_agents.campaign.acquisition import CandidateAcquisitionPolicy
 from matsim_agents.campaign.qe_plan import MethodSignature, ResourceLimits, ResourceRequest
 from matsim_agents.campaign.registry import TARGET_ELEMENTS
 from matsim_agents.campaign.stages import StageThresholds
 from matsim_agents.campaign.transfer import standard_experiments
+from matsim_agents.science.acquisition.acquisition import CandidateAcquisitionPolicy
 
 TARGET_SITES = 1024
 TARGET_COMPOSITION = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}

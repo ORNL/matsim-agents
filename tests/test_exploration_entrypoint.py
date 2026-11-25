@@ -15,8 +15,8 @@ from matsim_agents.backends.mlip.config import HydraGNNConfig
 from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
-from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.workflows import (
     ExplorationConfig,
     check_exploration,

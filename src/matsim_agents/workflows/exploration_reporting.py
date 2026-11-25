@@ -7,8 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from matsim_agents.discovery.stability import score_stability
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.science.thermodynamics.stability import score_stability
 from matsim_agents.workflows.exploration_checkpoint import RoundState, _state
 
 

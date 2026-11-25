@@ -7,11 +7,6 @@ import json
 import pytest
 
 from matsim_agents.core.contracts import EvidenceLevel
-from matsim_agents.execution.properties import (
-    PropertyConditions,
-    PropertyEvidence,
-    PropertyStatus,
-)
 from matsim_agents.integrations.external.transport import (
     INGEST_FORMAT,
     SOMMERFELD_LORENZ,
@@ -20,6 +15,11 @@ from matsim_agents.integrations.external.transport import (
     combine_total_thermal_conductivity,
     ingest_transport_record,
     wiedemann_franz,
+)
+from matsim_agents.science.properties.calculators import (
+    PropertyConditions,
+    PropertyEvidence,
+    PropertyStatus,
 )
 
 COND = PropertyConditions(temperature_K=300.0)

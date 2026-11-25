@@ -14,12 +14,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.core.contracts import PROPERTY_UNITS
-from matsim_agents.execution.properties import (
+from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES
+from matsim_agents.science.properties.calculators import (
     ELASTIC_PROPERTIES,
     PropertyEvidence,
     PropertyQualification,
 )
-from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES
 
 Direction = Literal["maximize", "minimize"]
 

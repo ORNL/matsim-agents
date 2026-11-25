@@ -7,9 +7,9 @@ property, a benchmark, or a prediction, and every record says so.
 from __future__ import annotations
 
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
 from matsim_agents.fusion.scenario import EvaluationScenario, EvidenceContext, FusionEvidence
 from matsim_agents.fusion.scoring import BenchmarkSet
+from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
 
 SYNTHETIC_LABEL = "SYNTHETIC demonstration data - not a material property"
 

@@ -9,26 +9,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.campaign.acquisition import (
-    CampaignAcquisitionPolicy,
-    select_formula_batch,
-    update_adaptive_lambda,
-)
 from matsim_agents.campaign.evidence import open_campaign_ledger, record_formula_evidence
 from matsim_agents.campaign.registry import formula_acquisition_metrics, ingest_exploration_result
 from matsim_agents.campaign.state import CampaignReviewRecord, CampaignState, FormulaRunRecord
 from matsim_agents.core.contracts import WorkflowStatus
 from matsim_agents.core.seeding import stream_seed
-from matsim_agents.discovery.formula import enumerate_formulas
-from matsim_agents.discovery.formula_merge import (
-    LLMFormulaProposal,
-    extract_llm_formula_proposals,
-    merge_formulas,
-)
-from matsim_agents.discovery.stability import (
-    ReferenceEnergySet,
-    recalibrate_hull_reports,
-)
 from matsim_agents.execution.ledger import (
     REVIEW_ACTION,
     CostRecord,
@@ -36,6 +21,21 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.science.acquisition.acquisition import (
+    CampaignAcquisitionPolicy,
+    select_formula_batch,
+    update_adaptive_lambda,
+)
+from matsim_agents.science.structures.formula import enumerate_formulas
+from matsim_agents.science.structures.formula_merge import (
+    LLMFormulaProposal,
+    extract_llm_formula_proposals,
+    merge_formulas,
+)
+from matsim_agents.science.thermodynamics.stability import (
+    ReferenceEnergySet,
+    recalibrate_hull_reports,
+)
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 

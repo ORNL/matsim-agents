@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
 from matsim_agents.fusion.objectives import (
     OBJECTIVES,
     ObjectiveEvidenceError,
@@ -11,6 +10,7 @@ from matsim_agents.fusion.objectives import (
     objective,
 )
 from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES
+from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
 
 
 def _ev(prop, value=1.0, *, derived_from=(), irradiation=None, temperature=1000.0):

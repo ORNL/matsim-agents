@@ -12,7 +12,7 @@ from matsim_agents.discovery.exploration.candidates import (
     candidate_identity,
     structure_hash,
 )
-from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.science.magnetism import generators as gen
 
 
 def _atoms():

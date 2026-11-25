@@ -7,7 +7,7 @@ import pytest
 from ase.neighborlist import neighbor_list
 from pydantic import ValidationError
 
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     BCC_FIRST_SHELL,
     BCC_SECOND_SHELL,
     AlloySpec,

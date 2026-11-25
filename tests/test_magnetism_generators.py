@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.magnetism import generators as gen
+from matsim_agents.science.magnetism import generators as gen
 
 A = 2.87
 

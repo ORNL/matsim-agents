@@ -28,7 +28,10 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.campaign.selection import (
+from matsim_agents.fusion.objectives import OBJECTIVES, mechanical_screening, objective
+from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
+from matsim_agents.fusion.scenario import EvaluationScenario, EvidenceContext, FusionEvidence
+from matsim_agents.science.acquisition.selection import (
     _QUALIFICATION_ORDER,
     _STATUS_PRIORITY,
     Constraint,
@@ -36,13 +39,10 @@ from matsim_agents.campaign.selection import (
     _nondominated_mask,
     _pick,
 )
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PropertyQualification,
     PropertyStatus,
 )
-from matsim_agents.fusion.objectives import OBJECTIVES, mechanical_screening, objective
-from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
-from matsim_agents.fusion.scenario import EvaluationScenario, EvidenceContext, FusionEvidence
 
 SCORING_SCHEMA = "fusion-pfc-score-v1"
 

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from matsim_agents.discovery.gas_energetics import (
+from matsim_agents.science.defects.gas_energetics import (
     EnergyTerm,
     FragmentTerm,
     GasEnergeticsError,

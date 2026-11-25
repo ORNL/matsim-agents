@@ -17,7 +17,7 @@ from matsim_agents.execution.ledger import (
     EvidenceRecord,
     MethodRecord,
 )
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PROPERTY_FAMILY,
     PropertyConditions,
     PropertyEvidence,

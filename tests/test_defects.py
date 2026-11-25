@@ -2,7 +2,7 @@ import pytest
 from pymatgen.core import Composition
 from pymatgen.entries.computed_entries import ComputedEntry
 
-from matsim_agents.discovery.defects import (
+from matsim_agents.science.defects.defects import (
     MAGNETISM_LIMITATION,
     defect_formation_energies,
     defect_report,

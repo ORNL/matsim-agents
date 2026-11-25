@@ -15,9 +15,9 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.campaign.property_recipes import conditions_match
-from matsim_agents.execution.properties import PropertyConditions, PropertyEvidence
 from matsim_agents.fusion.objectives import objective
+from matsim_agents.science.properties.calculators import PropertyConditions, PropertyEvidence
+from matsim_agents.science.properties.recipes import conditions_match
 
 _CORE_FIELDS = (
     "temperature_K",

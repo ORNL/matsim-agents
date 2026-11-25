@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from matsim_agents.discovery.formula import FormulaGenerationPolicy, enumerate_formulas
-from matsim_agents.discovery.formula_merge import (
+from matsim_agents.science.structures.formula import FormulaGenerationPolicy, enumerate_formulas
+from matsim_agents.science.structures.formula_merge import (
     LLMFormulaProposal,
     extract_llm_formula_proposals,
     merge_formulas,

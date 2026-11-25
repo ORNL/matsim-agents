@@ -49,7 +49,6 @@ from matsim_agents.core.revision import (
     RevisionBudgetError,
 )
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisRecord, HypothesisStatus
-from matsim_agents.execution.properties import PropertyEvidence
 from matsim_agents.fusion.objectives import objective
 from matsim_agents.fusion.policy import FusionScoringPolicy
 from matsim_agents.fusion.scenario import EvidenceContext, FusionEvidence
@@ -60,6 +59,7 @@ from matsim_agents.fusion.scoring import (
     ScoringResult,
     evidence_key,
 )
+from matsim_agents.science.properties.calculators import PropertyEvidence
 
 PACKET_VERSION = "fusion-pfc-packet-v1"
 Drafter = Callable[[str], str]

@@ -31,18 +31,18 @@ from matsim_agents.execution.ledger import (
     LedgerQuantity,
     MethodRecord,
 )
-from matsim_agents.execution.properties import (
-    PropertyConditions,
-    PropertyEvidence,
-    PropertyQualification,
-    PropertyStatus,
-)
 from matsim_agents.fusion.scenario import EvidenceContext, FusionEvidence
-from matsim_agents.irradiation.contracts import (
+from matsim_agents.science.irradiation.contracts import (
     RATE_BASIS_PER_ATOM_PER_S,
     IrradiationScenario,
     PKASpectrum,
     RecoilSpecies,
+)
+from matsim_agents.science.properties.calculators import (
+    PropertyConditions,
+    PropertyEvidence,
+    PropertyQualification,
+    PropertyStatus,
 )
 
 SCHEMA = "fusion-nuclear-evidence-v1"

@@ -4,8 +4,7 @@ import numpy as np
 import pytest
 from ase.geometry import get_distances
 
-from matsim_agents.discovery.alloys import AlloySpec, first_neighbor_list, generate_alloy
-from matsim_agents.discovery.gas_defects import (
+from matsim_agents.science.defects.gas import (
     GasComplexConfiguration,
     GasComplexSpec,
     GasDefectError,
@@ -13,6 +12,7 @@ from matsim_agents.discovery.gas_defects import (
     complex_notation,
     generate_gas_complex,
 )
+from matsim_agents.science.structures.alloys import AlloySpec, first_neighbor_list, generate_alloy
 
 A = 3.165
 

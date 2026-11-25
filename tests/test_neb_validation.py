@@ -5,12 +5,12 @@ import pytest
 from ase import Atoms
 from pydantic import ValidationError
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.neb_contracts import NebCalculationSpec, NebTransition
-from matsim_agents.discovery.neb_endpoints import generate_vacancy_hop, vacancy_neighbors
-from matsim_agents.discovery.neb_images import generate_linear_images
-from matsim_agents.discovery.neb_validation import assess_pathway
-from matsim_agents.discovery.point_defects import generate_vacancy
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.neb.contracts import NebCalculationSpec, NebTransition
+from matsim_agents.science.neb.endpoints import generate_vacancy_hop, vacancy_neighbors
+from matsim_agents.science.neb.images import generate_linear_images
+from matsim_agents.science.neb.validation import assess_pathway
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 A = 3.16
 PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1))

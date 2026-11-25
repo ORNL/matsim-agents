@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.transmutation import apply_transmutation
-from matsim_agents.discovery.transmutation_source import (
+from matsim_agents.science.irradiation.transmutation import apply_transmutation
+from matsim_agents.science.irradiation.transmutation_source import (
     InventoryProvenance,
     InventorySourceError,
     inventory_from_rows,
     load_inventory,
 )
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 PROV = InventoryProvenance(source_id="syn-1", kind="synthetic")
 ROWS = [

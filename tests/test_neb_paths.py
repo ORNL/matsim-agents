@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.discovery.neb_contracts import AtomCorrespondence
-from matsim_agents.discovery.neb_paths import (
+from matsim_agents.science.neb.contracts import AtomCorrespondence
+from matsim_agents.science.neb.paths import (
     correspond_atoms,
     periodic_displacements,
 )
@@ -111,7 +111,7 @@ def test_skewed_cell_matches_brute_force_where_rounding_fails():
 def test_minimum_image_is_exact_on_a_skewed_cell_where_ase_find_mic_is_not():
     from ase.geometry import find_mic
 
-    from matsim_agents.discovery.neb_paths import minimum_image
+    from matsim_agents.science.neb.paths import minimum_image
 
     vectors = np.array(
         [np.array(f) @ SKEWED for f in product(np.linspace(-0.45, 0.45, 7), repeat=3)]

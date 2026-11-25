@@ -16,7 +16,6 @@ from matsim_agents.campaign.evidence import evidence_for_review, new_hypothesis_
 from matsim_agents.campaign.orchestrator import CampaignReviewDecision, ReviewRunner
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
-from matsim_agents.discovery.formula_merge import LLMFormulaProposal
 from matsim_agents.execution.ledger import (
     ClaimType,
     CostRecord,
@@ -26,6 +25,7 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
+from matsim_agents.science.structures.formula_merge import LLMFormulaProposal
 from matsim_agents.workflows.debate import (
     DebateParticipant,
     ScientificDebateConfig,

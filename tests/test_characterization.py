@@ -24,8 +24,8 @@ from matsim_agents.core.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome, hashes_of
+from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -815,7 +815,10 @@ def test_default_output_root_is_next_to_the_contract_file(system, monkeypatch):
 
 @pytest.mark.parametrize("where", ["set", "phase", "element"])
 def test_references_from_another_dft_backend_are_invalid_protocols(system, where):
-    from matsim_agents.discovery.stability import ElementalReferenceEntry, ReferencePhaseEntry
+    from matsim_agents.science.thermodynamics.stability import (
+        ElementalReferenceEntry,
+        ReferencePhaseEntry,
+    )
 
     tmp_path, structures, references = system
     foreign = ReferenceEnergySet.model_validate_json(references.read_text())

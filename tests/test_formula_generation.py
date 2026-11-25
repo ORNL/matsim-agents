@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.discovery.formula import FormulaGenerationPolicy, enumerate_formulas
+from matsim_agents.science.structures.formula import FormulaGenerationPolicy, enumerate_formulas
 
 
 def _nb_ta_o_policy(**overrides) -> FormulaGenerationPolicy:

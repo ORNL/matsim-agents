@@ -188,6 +188,6 @@ def test_runtime_problems_report_missing_files(tmp_path):
 
 def test_min_images_matches_the_discovery_contract():
     from matsim_agents.backends.dft import qe_neb
-    from matsim_agents.discovery import neb_contracts
+    from matsim_agents.science.neb import contracts as neb_contracts
 
     assert qe_neb.MIN_IMAGES == neb_contracts.MIN_IMAGES
