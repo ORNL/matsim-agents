@@ -5,6 +5,10 @@ categories proposed by Zekun Chen (2026-06-10).
 
 Every system has an **active-learning** configuration, `al_<name>.yaml`: the
 full discovery → uncertainty acquisition → DFT labeling → retrain loop.
+These configurations illustrate the paper cases. They are not a template to
+reuse unchanged for another system: generate your own campaign with
+`matsim-agents al init-campaign`. Running them directly requires
+`--allow-template` or `MATSIM_ALLOW_TEMPLATE_CONFIG=1`.
 
 For a quick MLIP-only feasibility pass over the checked-in seed structures, use
 `singlepass.py`. It runs the core relaxation graph once and does not launch DFT

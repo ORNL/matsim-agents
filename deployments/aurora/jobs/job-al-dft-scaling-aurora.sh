@@ -45,6 +45,8 @@ export RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 export HYDRAGNN_DIR="${HYDRAGNN_DIR:-${PROJ}/HydraGNN}"
 
 AL_CONFIG="${REPO}/examples/paper_cases/al_hea_fcc_scaling_aurora.yaml"
+# This job reproduces a repository example on purpose (`al run` refuses examples otherwise).
+export MATSIM_ALLOW_TEMPLATE_CONFIG=1
 [[ -f "${AL_CONFIG}" ]] || { echo "ERROR: missing ${AL_CONFIG}" >&2; exit 2; }
 
 # ── per-(N,repeat) run tag (consumed by the YAML via ${SCALE_TAG}) ───────────

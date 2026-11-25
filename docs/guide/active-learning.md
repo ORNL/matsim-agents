@@ -31,25 +31,57 @@ YAML field.
         └─ optional train + approved promotion ── next iteration ────────────┘
 ```
 
+### Your campaign owns its config
+
+The YAML files under `examples/` are **templates and illustrations**. They were
+written for particular chemical systems, elemental references, cutoffs and
+budgets. They are not a configuration for your campaign. Each campaign needs its
+own `al.yaml` and its own elemental reference plan, covering every element that
+can appear in its structures.
+
+`matsim-agents al run` refuses a config that lives under `examples/`. To run a
+template on purpose (for example a deployment smoke test), pass
+`--allow-template` or set `MATSIM_ALLOW_TEMPLATE_CONFIG=1`. The checked-in
+deployment jobs set this variable.
+
+Before the first iteration, `al run` and `al validate-config` also check that the
+training references cover every element in the seed structures. A missing
+element stops the run.
+
 ### Quick start
 
 ```bash
-# 1. Edit the templated example, or override via env vars at runtime
-export PROJ_ROOT=$PWD
-export RUNS_ROOT=/lustre/orion/<proj>/scratch/$USER/runs
-export RUN_TAG=al-mptrj-001
-export DFT_BACKEND=qe          # or: vasp
+# 1. Generate a campaign directory from your own seeds or compositions.
+#    Nothing in it is approved yet.
+matsim-agents al init-campaign campaigns/wtacrvhfmo \
+  --mlip-config examples/mlip/hydragnn-gfm.yaml \
+  --dft-backend qe \
+  --composition W --composition Ta --composition Cr \
+  --composition V --composition Hf --composition Mo \
+  --preset frontier
+#   -> campaigns/wtacrvhfmo/al.yaml
+#      campaigns/wtacrvhfmo/elemental-phases.yaml   (proposed reference phases)
+#      campaigns/wtacrvhfmo/references/*.extxyz     (starting structures)
 
-# 2. Validate the resolved config (no run); --mlip-config swaps in any model
-matsim-agents al validate-config examples/active_learning/al_config.example.yaml
-matsim-agents al validate-config examples/active_learning/al_config.example.yaml \
-  --mlip-config examples/mlip/mace-mp-medium.yaml
+# 2. Review elemental-phases.yaml: phases, magnetic states, k-points and the
+#    review notes (for example: Cr is antiferromagnetic but is declared
+#    nonmagnetic). Elements that cannot be proposed safely are listed as
+#    unresolved and must be added by hand. Then set phases_approved: true
+#    in al.yaml.
 
-# 3. Submit on Frontier
-sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
+# 3. Validate the resolved config (no run). --mlip-config swaps in any model.
+export PW_BIN=... PSEUDO_DIR=...   # placeholders listed in al.yaml
+matsim-agents al validate-config campaigns/wtacrvhfmo/al.yaml
+
+# 4. Submit on Frontier
+sbatch --export=ALL,AL_CONFIG=$PWD/campaigns/wtacrvhfmo/al.yaml \
     -N 64 -t 12:00:00 \
     deployments/frontier/launchers/run-active-learning-frontier.sh
 ```
+
+`al init-campaign` never overwrites an existing campaign directory. Its
+proposals are starting points, and the reference DFT still needs your approval
+(`dft_approved`) before the elemental references are computed.
 
 ### Backend toggle
 

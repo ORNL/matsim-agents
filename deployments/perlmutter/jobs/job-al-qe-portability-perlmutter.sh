@@ -37,6 +37,8 @@ RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV_ROOT=$REPO/.hpc-build/perlmutter
 
 AL_CONFIG="$REPO/examples/paper_cases/al_phosphorene_qe.yaml"
+# This job reproduces a repository example on purpose (`al run` refuses examples otherwise).
+export MATSIM_ALLOW_TEMPLATE_CONFIG=1
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }
 
 RUN_DIR="$RUNS_ROOT/al-qe-portability-${SLURM_JOB_ID:-$$}"

@@ -39,6 +39,7 @@ from typing import Any
 
 import numpy as np
 
+from matsim_agents.active_learning.campaign_init import check_reference_coverage, elements_of
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
@@ -863,6 +864,7 @@ def run_active_learning(
             else []
         )
         log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
+        check_reference_coverage(cfg.trainer, elements_of(seed_paths))
 
         # The configured model, before a resume points cfg.mlip at the last promoted one.
         foundation_mlip = cfg.mlip.model_copy(deep=True)

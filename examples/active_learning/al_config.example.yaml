@@ -1,6 +1,11 @@
 # =============================================================================
 # Active-learning configuration (matsim_agents.active_learning.ALConfig)
 #
+# TEMPLATE / ILLUSTRATION ONLY. Do not run your campaign from this file.
+# Generate a campaign-specific config and elemental reference plan with
+#   matsim-agents al init-campaign <dir> --mlip-config ... --dft-backend ...
+# `al run` refuses this file unless --allow-template is passed.
+#
 # Single unified example for BOTH DFT backends. Flip `dft.backend:` between
 # `vasp` and `qe` to switch labellers; only the matching sub-block is
 # required, but it is harmless to leave the other one populated.

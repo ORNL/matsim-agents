@@ -5,6 +5,13 @@ End-to-end loop that uses an MLIP surrogate force field (HydraGNN, UMA, or MACE)
 high-uncertainty structures discovered by surrogate-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
 
+> **These YAMLs are templates, not your campaign config.** Each campaign needs
+> its own `al.yaml` and elemental reference plan that cover its elements. Use
+> `matsim-agents al init-campaign <dir> --mlip-config ... --dft-backend ...
+> --seed ...|--composition ...` to generate them, then review and approve the
+> proposed reference phases. `al run` refuses configs under `examples/` unless
+> you pass `--allow-template` (see [docs/guide/active-learning.md](../../docs/guide/active-learning.md)).
+
 Surrogate selection is controlled by the `mlip` block in the AL config:
 
 - Default: the config's own flat block (`mlip.backend: hydragnn` plus HydraGNN
