@@ -23,7 +23,7 @@ defects:
   divacancy_shell: 1
 qe:
   # pslibrary 1.0.0 PBE PAW, downloaded 2026-11-24; checksums in SHA256SUMS next to the files.
-  # Frontier copy: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  # Frontier copy: <project-shared>/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
   # Retrieve: curl -sfS -O https://pseudopotentials.quantum-espresso.org/upf_files/<file>
   # then `sha256sum -c SHA256SUMS`. Provenance in SOURCE.txt (see docs/radiation-damage-status.md).
   pseudo_dir: ${MATSIM_PSEUDO_DIR}
