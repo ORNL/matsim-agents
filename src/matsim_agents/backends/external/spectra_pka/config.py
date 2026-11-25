@@ -29,6 +29,9 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from matsim_agents.backends.external.spectra_pka.data_fetch import matrix_name
+from matsim_agents.backends.external.spectra_pka.isotopes import IsotopeError, resolve_isotopes
+
 FRACTION_TOLERANCE = 1e-6
 _SAFE_STUB = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _ELEMENT = re.compile(r"^[A-Z][a-z]?$")
@@ -113,7 +116,11 @@ class CampaignSpec(_Strict):
     parent_alloy_id: str = Field(min_length=1)
     composition: dict[str, float]
     nuclear_data_identity: str = Field(min_length=1)
-    channels: tuple[ChannelSpec, ...] = Field(min_length=1)
+    # Either list channels, or set derive_channels to build them from the composition at load.
+    channels: tuple[ChannelSpec, ...] = ()
+    derive_channels: bool = False
+    # element -> {mass number: fraction within the element}; the rest is natural abundance.
+    isotope_overrides: dict[str, dict[int, float]] = {}
     flux: FluxSpec
     options: OptionsSpec = OptionsSpec()
     results_stub: str = "spectra_pka"
@@ -129,6 +136,14 @@ class CampaignSpec(_Strict):
                 raise ValueError(f"composition fraction of {element} must be positive")
         if abs(sum(self.composition.values()) - 1.0) > FRACTION_TOLERANCE:
             raise ValueError("composition atom fractions must sum to 1")
+        if self.derive_channels:
+            if self.channels:
+                raise ValueError("derive_channels and an explicit channel list are exclusive")
+            return self
+        if self.isotope_overrides:
+            raise ValueError("isotope_overrides only apply with derive_channels")
+        if not self.channels:
+            raise ValueError("give channels, or set derive_channels to build them")
         per_element: dict[str, float] = {}
         seen: set[tuple[str, int]] = set()
         for ch in self.channels:
@@ -165,6 +180,33 @@ class ConfigFile(_Strict):
     campaign: CampaignSpec | None = None
 
 
+def _derive_channels(campaign: CampaignSpec, data_root: Path | None) -> CampaignSpec:
+    """Replace derive_channels by explicit channels: natural or overridden isotopes per element."""
+    if data_root is None:
+        raise ConfigError("derive_channels needs external_tools.spectra_pka.nuclear_data_root")
+    try:
+        resolved = resolve_isotopes(
+            campaign.composition, overrides=campaign.isotope_overrides or None
+        )
+    except IsotopeError as exc:
+        raise ConfigError(str(exc)) from None
+    channels = [
+        {
+            "pka_file": data_root / matrix_name(element, mass),
+            "parent_ele": element,
+            "parent_num": mass,
+            "atom_fraction": fraction,
+        }
+        for (element, mass), fraction in sorted(resolved.isotope_fractions.items())
+    ]
+    data = campaign.model_dump()
+    data.update(channels=channels, derive_channels=False, isotope_overrides={})
+    try:
+        return CampaignSpec(**data)
+    except ValidationError as exc:
+        raise ConfigError(str(exc)) from None
+
+
 def _absolute(path: Path | None, base: Path) -> Path | None:
     if path is None:
         return None
@@ -196,6 +238,8 @@ def load_config_file(path: str | Path) -> ConfigFile:
         }
     )
     campaign = parsed.campaign
+    if campaign is not None and campaign.derive_channels:
+        campaign = _derive_channels(campaign, tool.nuclear_data_root)
     if campaign is not None:
         campaign = campaign.model_copy(
             update={

@@ -7,8 +7,8 @@
 #   matsim-agents external spectra-pka run   -c campaign.yaml --execute  # real run
 #
 # The composition below is an invented two-element example, not a study result. A real
-# campaign lists one channel per isotope you have a PKA matrix file for, with isotope atom
-# fractions that add up, per element, to that element's composition fraction.
+# campaign needs a PKA matrix file for every isotope of every element (fetch them with
+# scripts/spectra_pka_fetch_data.py --composition ...).
 external_tools:
   spectra_pka:
     enabled: true
@@ -30,9 +30,8 @@ campaign:
     identity: REPLACE-WITH-SPECTRUM-NAME
     normalization: "n cm^-2 s^-1 per group (flux_norm_type 2)"
     norm_type: 2
-  channels:
-    # TENDL-2017 matrices are named <El><AAA>s.asc. On Frontier, extract them from
-    # /lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/pkas.zip
-    # (commands: docs/external/spectra-pka.md, section 2, and SOURCE.txt there).
-    - {pka_file: "${PKA_DATA_DIRECTORY}/W182s.asc", parent_ele: W, parent_num: 182, atom_fraction: 0.9}
-    - {pka_file: "${PKA_DATA_DIRECTORY}/Ta181s.asc", parent_ele: Ta, parent_num: 181, atom_fraction: 0.1}
+  # One channel per isotope is derived from the composition (natural abundance) and
+  # nuclear_data_root, which must hold <El><AAA>s.asc for each. Use isotope_overrides for
+  # enriched material, e.g. isotope_overrides: {W: {184: 0.6, 186: 0.4}}. To list channels by
+  # hand instead, drop derive_channels and give `channels` (see docs/external/spectra-pka.md).
+  derive_channels: true

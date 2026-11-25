@@ -84,3 +84,65 @@ Point `external_tools.spectra_pka.nuclear_data_root` at `$DATA/TENDL2023n-pka` (
 - Choose the library (release and particle) deliberately and record it with results.
 - Isotopes absent from the library are a stop condition for that material, not a prompt to
   fall back to another release.
+
+## Using TENDL-2023 in a radiation-damage study
+
+`TENDL2023n` is the default library: TENDL-2023 neutron-induced recoil matrices at 294 K. Use
+`TENDL2023p` for protons. Pick one library per study and record it in the campaign's
+`nuclear_data_identity`, together with `manifest.json`.
+
+Workflow when MATSIM-AGENTS is deployed for a damage study:
+
+1. **Build SPECTRA-PKA** once per facility with the script under `deployments/<facility>/setup/`
+   (Frontier: `build-spectra-pka-frontier.sh`; see [spectra-pka.md](spectra-pka.md), section 2).
+2. **Fetch the matrices** the composition needs, on a login node. Isotopes come from the
+   composition, so the same command serves any alloy:
+
+   ```bash
+   DATA=/path/to/shared/spectra-pka-data
+   python scripts/spectra_pka_fetch_data.py --dest $DATA --composition W:0.9,Ta:0.1 --dry-run
+   python scripts/spectra_pka_fetch_data.py --dest $DATA --composition W:0.9,Ta:0.1
+   ```
+
+   For `W0.9Ta0.1` this needs `W180 W182 W183 W184 W186 Ta181`. If any are absent from the
+   library the command exits 2 and lists them; do not substitute another release.
+3. **Supply a neutron spectrum** (`flux.file`). SPECTRA-PKA does not provide one. The upstream
+   `manual/test/fluxes_specter.dat` PWR spectrum is for build checks only. The group structure
+   must match what the binary expects; `matsim_agents.backends.external.spectra_pka.spectrum`
+   validates, converts units and rebins a user spectrum (CSV or JSON) before it is written.
+4. **Point the campaign at the data.** Set `PKA_DATA_DIRECTORY=$DATA/TENDL2023n-pka` and keep
+   `derive_channels: true` in `examples/external/spectra-pka/campaign.yaml`, then run
+   `matsim-agents external spectra-pka check`, `run`, `run --execute`.
+
+   When the config loads, `derive_channels` calls `isotopes.resolve_isotopes` on the
+   composition and writes one channel per isotope: `pka_file` is
+   `<nuclear_data_root>/<El><AAA>s.asc` and `atom_fraction` is the element fraction times the
+   isotope fraction. Natural abundance is the default; `isotope_overrides: {W: {184: 0.6,
+   186: 0.4}}` sets enriched material. A missing matrix file fails the existing data check, and
+   no other library is substituted. A hand-written `channels` list still works, but it is
+   exclusive with `derive_channels`.
+5. **Keep provenance.** Results carry the executable hash, input hash and data hashes. Local
+   data hashes are not publisher checksums.
+
+### Frontier
+
+Compute nodes have no internet, so fetch on a login node, then run the campaign anywhere. A
+7.9 GB `pkas.zip` is already in `/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/`
+(`SHA256SUMS` and `SOURCE.txt` give its provenance), so use it instead of downloading again:
+
+```bash
+C=/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka
+python scripts/spectra_pka_fetch_data.py --dest $DATA --archive $C/pkas.zip --elements W,Fe,Cu
+```
+
+Observed on a Frontier login node (2026-11-25), streaming from the network: W, Fe and Cu
+(11 isotopes, about 640 MB) took roughly 8 minutes at about 12 MB/s, and the manifest sizes
+matched the files on disk. Run it in the background (`nohup ... &`) and fetch every element a
+campaign needs in one command, because each run streams the archive from the start.
+
+Observed with `--archive` on the shared copy (same login node): `--composition W:0.9,Ta:0.1`
+(6 matrices, about 370 MB) finished in about 3 minutes, the process held no network sockets,
+and `W182s.asc` and `W184s.asc` were byte-identical to the network-extracted copies. The
+archive is read sequentially from the start, so it is faster than the network but not instant.
+`matsim-agents external spectra-pka check` on the derived-channel example then reported
+`data_coverage` ok for all six isotopes.

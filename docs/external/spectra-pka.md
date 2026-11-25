@@ -26,8 +26,12 @@ from the adapter, so another PKA source can replace it.
 
 ## 2. Installing SPECTRA-PKA yourself
 
-MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data. Do it by hand,
-outside the tracked tree (`external/` is gitignored):
+MATSIM-AGENTS never downloads, compiles or installs SPECTRA-PKA or its data from Python. Build
+it outside the tracked tree (`external/` is gitignored). The compile step is facility-specific
+and lives under `deployments/<facility>/setup/`; Frontier has
+`deployments/frontier/setup/build-spectra-pka-frontier.sh` (clone, pinned commit, serial build,
+smoke test, build record). Other facilities need their own script there. Data retrieval is
+described in [spectra-pka-data.md](spectra-pka-data.md). Manual equivalent:
 
 ```bash
 cd external
@@ -41,9 +45,18 @@ make                                                       # serial; produces ./
   `fff9e3f`).
 * **Do not use `make -j`.** The Makefile has no module dependency ordering, so a parallel
   build fails with `Can't open module file 'globals.mod'`. Run `make clean && make` to retry.
-* Smoke test (bundled data, no download): `cd manual/test && ../../spectra-pka ZR.in`. The last
-  line of output must be `END as expected`, and the new `ZR.indexes` should match
+* Smoke test (bundled data, no download): run `../../spectra-pka ZR.in` in a scratch copy of
+  `manual/test`. The last line of output must be `END as expected`, and `ZR.indexes` must match
   `example_results/ZR.indexes`. This checks the build only, not any campaign.
+* Observed on Frontier (`fff9e3f`, gfortran 7.5): `ZR.indexes` matches upstream byte for byte.
+  `ZR.out` is not byte-identical to upstream's shipped `example_results/ZR.out`, because that
+  file predates the current output format: it prints energies with 4 digits (`0.3020E-03`, the
+  binary prints `3.019952E-04`) and lacks the `disp_energy (eV/s)` and `NRT_dpa/s` columns.
+  A numeric comparison of the data rows (ignoring `#` lines) found 43117 rows in each file, 657
+  rows differing only in those "estimated (n,g) recoil matrix" blocks, and a maximum relative
+  difference of 0 at the printed precision. Two Frontier runs were byte-identical, so the build
+  is deterministic. The build script therefore requires `ZR.indexes` to match and reports the
+  `ZR.out` comparison as informational. This is a build check, not a physics validation.
 * The program reads `specter.input` by default, or the input file named on the command line.
 
 ### PKA matrices (nuclear data)

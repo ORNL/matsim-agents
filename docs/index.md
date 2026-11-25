@@ -25,6 +25,7 @@ the framework.
 - [Scientific workflow contracts](scientific-workflows.md)
 - [Radiation-damage extension status](radiation-damage-status.md)
 - [External SPECTRA-PKA interface](external/spectra-pka.md)
+- [SPECTRA-PKA nuclear data (TENDL-2023)](external/spectra-pka-data.md)
 - [Hierarchical transfer campaign (W-Ta-Cr-V-Hf-Mo)](hierarchical-transfer-campaign.md)
 - [Characterization contracts](characterization.md)
 - [Multi-property characterization, selection, and hypothesis revision](multiproperty-selection.md)
