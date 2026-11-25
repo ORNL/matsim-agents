@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 
 BackendKind = Literal["dft", "mlip", "llm"]
 

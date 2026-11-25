@@ -4,7 +4,8 @@ import math
 
 import pytest
 
-from matsim_agents.kinetics.ensemble import run_ensemble, wilson_interval
+from matsim_agents.core.stats import wilson_interval
+from matsim_agents.kinetics.ensemble import run_ensemble
 from matsim_agents.kinetics.graph import TransitionNetwork
 from tests.test_kinetics_graph import PROV, _state
 from tests.test_kinetics_kmc import _decay, _edge

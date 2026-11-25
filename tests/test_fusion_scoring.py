@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.campaign.selection import Constraint, Correlation
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.execution.properties import (
     PropertyEvidence,
     PropertyQualification,

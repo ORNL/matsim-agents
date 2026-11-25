@@ -33,7 +33,7 @@ from matsim_agents.campaign.benchmark import (
     PairedComparison,
     compare_paired_metric,
 )
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     ClaimType,
     EvidenceKind,

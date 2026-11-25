@@ -13,11 +13,11 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from matsim_agents.backends.mlip.relaxation import CalculatorCache, relax_with_mlip
+from matsim_agents.core.seeding import stream_seed
 from matsim_agents.discovery.seed_structures import generate_seed_action
 from matsim_agents.discovery.structural_screening import select_diverse_candidates
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
-from matsim_agents.seeding import stream_seed
 from matsim_agents.workflows.exploration_checkpoint import (
     Attempt,
     Round,

@@ -25,7 +25,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.campaign.characterization import load_contract, run_characterization
-from matsim_agents.execution.contracts import CharacterizationReport, CharacterizationStatus
+from matsim_agents.core.contracts import CharacterizationReport, CharacterizationStatus
 from matsim_agents.execution.ledger import DecisionRecord, EvidenceLedger
 
 CASES_FILE = "cases.yaml"

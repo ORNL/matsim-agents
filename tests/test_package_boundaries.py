@@ -22,7 +22,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
 # Lowest layer first. A unit may import only from units in strictly lower
 # layers (or from itself); units in the same layer must not import each other.
 LAYERS: list[set[str]] = [
-    {"seeding"},
+    {"core"},
     {"execution", "datasets"},
     {"backends.llm", "backends.dft", "backends.mlip", "backends.mcp"},
     {"discovery", "training", "irradiation"},
@@ -135,7 +135,8 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
     [
         ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
         ("matsim_agents.datasets.formation_training", False, "from . import governance"),
-        ("matsim_agents.datasets", True, "from .governance import sha256_file"),
+        ("matsim_agents.datasets", True, "from .governance import DatasetManifest"),
+        ("matsim_agents.execution.ledger", False, "from ..core.hashing import sha256_file"),
         ("matsim_agents.discovery.seed_structures", False, "from ..backends.mlip import config"),
         (
             "matsim_agents.discovery.seed_structures",
@@ -183,6 +184,14 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.chat",
         "matsim_agents.active_learning.backends",
         "matsim_agents.active_learning.vasp_runner",
+        "matsim_agents.active_learning.candidates",
+        "matsim_agents.discovery.seeds",
+        "matsim_agents.discovery.selection",
+        "matsim_agents.discovery.composition",
+        "matsim_agents.execution.contracts",
+        "matsim_agents.execution.launchers",
+        "matsim_agents.orchestration.policies",
+        "matsim_agents.seeding",
     ],
 )
 def test_legacy_alias_modules_are_removed(module: str) -> None:

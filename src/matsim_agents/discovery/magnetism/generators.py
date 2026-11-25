@@ -11,8 +11,8 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 from ase import Atoms
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.discovery.magnetism.config import MagneticConfiguration
-from matsim_agents.seeding import numpy_rng
 
 Sublattices = Mapping[int, str]
 

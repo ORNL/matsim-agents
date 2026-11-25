@@ -40,8 +40,10 @@ from matsim_agents.campaign.registry import (
 )
 from matsim_agents.campaign.state import CampaignState
 from matsim_agents.campaign.surrogate_hull import evaluate_surrogate_hull
-from matsim_agents.datasets.governance import sha256_file
-from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.discovery.stability import (
     ElementalReferenceEntry,
     RankingMode,
@@ -50,9 +52,7 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
-from matsim_agents.execution.contracts import EvidenceLevel
 from matsim_agents.execution.placement import Placement
-from matsim_agents.seeding import numpy_rng, stream_seed
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,

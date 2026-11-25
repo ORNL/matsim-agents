@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from matsim_agents.cli import app
 from matsim_agents.cli.workflow_catalog import ADAPTERS, WorkflowConfig, load_workflow
 from matsim_agents.cli.workflows import _check, _command, _validate_native_cli
-from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.execution.workflow_record import WorkflowInvocation, read_invocation

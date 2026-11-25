@@ -6,7 +6,7 @@ independently of the frozen E3 structure generator in ``benchmarks/e3``. A cell 
 the requested composition is met exactly.
 
 Seeds are required, nonnegative integers. Each function draws from its own named stream of
-``matsim_agents.seeding``: ``generate_alloy`` uses ``(seed, "alloy-occupation")`` and
+``matsim_agents.core.seeding``: ``generate_alloy`` uses ``(seed, "alloy-occupation")`` and
 ``generate_targeted_sro`` uses ``(seed, "targeted-sro")``, so equal seeds passed to different
 functions never share draws.
 """
@@ -35,7 +35,7 @@ from pydantic import (
 )
 from pymatgen.core import Element
 
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 CrystalStructure = Literal["bcc"]
 OrderingMode = Literal["random"]

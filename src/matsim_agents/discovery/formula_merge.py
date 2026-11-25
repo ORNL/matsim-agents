@@ -15,7 +15,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from matsim_agents.discovery.composition import extract_compositions
+from matsim_agents.core.composition import extract_compositions
 from matsim_agents.discovery.formula import (
     FormulaCandidate,
     FormulaGenerationPolicy,

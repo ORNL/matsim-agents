@@ -26,7 +26,7 @@ from ase import Atoms
 from ase.units import GPa as ASE_GPA
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.properties import (
     PropertyConditions,
     PropertyEvidence,

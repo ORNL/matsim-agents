@@ -17,6 +17,7 @@ import numpy as np
 from ase import Atoms
 from ase.build import bulk
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
 from matsim_agents.discovery.exploration.magnetic_surrogate import (
     LabeledExample,
@@ -24,7 +25,6 @@ from matsim_agents.discovery.exploration.magnetic_surrogate import (
     select_for_labeling,
 )
 from matsim_agents.discovery.exploration.sampling import sample_random
-from matsim_agents.seeding import numpy_rng
 
 Evaluator = Callable[[CandidateRecord, Atoms], dict]
 

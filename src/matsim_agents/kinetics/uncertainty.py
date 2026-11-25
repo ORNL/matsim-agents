@@ -13,11 +13,11 @@ from collections.abc import Collection, Mapping
 
 from pydantic import BaseModel, ConfigDict
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.kinetics.contracts import TransitionEvent
 from matsim_agents.kinetics.ensemble import run_ensemble
 from matsim_agents.kinetics.graph import TransitionNetwork
 from matsim_agents.kinetics.rates import Require
-from matsim_agents.seeding import numpy_rng
 
 PathwayKey = tuple[str, str, str]
 

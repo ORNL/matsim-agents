@@ -11,8 +11,8 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.execution.contracts import ComputeBudget
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.contracts import ComputeBudget
+from matsim_agents.core.seeding import numpy_rng
 
 
 class BenchmarkArm(StrEnum):

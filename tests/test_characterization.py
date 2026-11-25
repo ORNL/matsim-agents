@@ -18,13 +18,13 @@ from matsim_agents.campaign.characterization import (
     plan_recipe,
     run_characterization,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     CharacterizationReport,
     CharacterizationStatus,
     EvidenceLevel,
     ObservableRequirement,
 )
+from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome, hashes_of
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,

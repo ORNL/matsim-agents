@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.core.hashing import sha256_file
+
 FORMATION_ENERGY_REFERENCE = "dft:declared_elemental_formation_energy"
 
 
@@ -40,14 +42,6 @@ class DatasetManifest(BaseModel):
     parent_dataset_id: str | None = None
     split_role: str = "training_pool"
     validation: DatasetValidationSummary
-
-
-def sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def structure_identity(atoms: Any) -> str:
@@ -229,7 +223,6 @@ __all__ = [
     "load_training_manifest",
     "native_total_energy",
     "reject_formation_frames",
-    "sha256_file",
     "structure_identity",
     "validate_labelled_frames",
     "write_dataset_manifest",

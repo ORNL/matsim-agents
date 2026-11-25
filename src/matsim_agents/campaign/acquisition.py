@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.seeding import python_rng
+from matsim_agents.core.seeding import python_rng
 
 
 class FormulaAcquisitionMetrics(BaseModel):

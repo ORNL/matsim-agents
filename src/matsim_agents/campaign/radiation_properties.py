@@ -29,8 +29,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.campaign.gas_qe_campaign import GasExample
 from matsim_agents.campaign.property_recipes import conditions_match
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.discovery.species_support import assess_pseudopotentials
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.execution.properties import (
     PropertyConditions,
     PropertyEvidence,

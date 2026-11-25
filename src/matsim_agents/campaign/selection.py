@@ -22,7 +22,7 @@ Statuses (first match wins):
 Thermal and electrical conductivity are physically coupled (Wiedemann-Franz), so a
 value derived from another property is sampled with correlation +/-1 to its source, and
 correlated objectives share one weight in the desirability score instead of counting twice.
-Monte-Carlo propagation (seeded through :mod:`matsim_agents.seeding`) turns property
+Monte-Carlo propagation (seeded through :mod:`matsim_agents.core.seeding`) turns property
 uncertainty into score spread, constraint probability, rank distribution, and Pareto
 robustness. This module never calls an LLM and never alters evidence.
 """
@@ -38,14 +38,14 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.execution.properties import (
     PROPERTY_SHAPE,
     PropertyEvidence,
     PropertyQualification,
     PropertyStatus,
 )
-from matsim_agents.seeding import numpy_rng
 
 SCORING_VERSION = "selection-v1"
 _QUALIFICATION_ORDER = {

@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 METRIC_DEFINITIONS = {
     "force_mae_eV_per_A": "Mean absolute error over all Cartesian force components (eV/A).",

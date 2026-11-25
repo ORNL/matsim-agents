@@ -15,9 +15,9 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from matsim_agents.discovery.composition import parse_composition  # noqa: E402
-from matsim_agents.discovery.seeds import generate_seeds  # noqa: E402
-from matsim_agents.seeding import stream_seed  # noqa: E402
+from matsim_agents.core.composition import parse_composition  # noqa: E402
+from matsim_agents.discovery.seed_structures import generate_seeds  # noqa: E402
+from matsim_agents.core.seeding import stream_seed  # noqa: E402
 
 DEFAULT_COMPETING_FORMULAS = [
     "NbTa",

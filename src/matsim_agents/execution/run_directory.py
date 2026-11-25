@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from matsim_agents.execution.contracts import ProvenanceRecord
+from matsim_agents.core.contracts import ProvenanceRecord
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 _STANDARD_DIRS = ("structures", "calculations", "datasets", "models")

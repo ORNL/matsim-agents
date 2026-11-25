@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, model_validator
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     ApprovalPolicy,
     EvidenceLevel,
     ProvenanceRecord,

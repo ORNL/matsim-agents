@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     PROPERTY_UNITS,
     CharacterizationReport,
     CharacterizationStatus,

@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 Strategy = Literal["random", "stratified", "adaptive", "adaptive_exploration"]
 

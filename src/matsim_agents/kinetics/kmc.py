@@ -12,9 +12,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.kinetics.graph import TransitionNetwork
 from matsim_agents.kinetics.rates import Require, event_rate
-from matsim_agents.seeding import numpy_rng
 
 Termination = Literal["absorbed", "horizon", "max_events", "stuck"]
 

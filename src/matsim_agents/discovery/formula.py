@@ -22,7 +22,7 @@ from itertools import combinations, product
 from pydantic import BaseModel, Field, model_validator
 from pymatgen.core import Element
 
-from matsim_agents.discovery.composition import _hill_order, _reduce
+from matsim_agents.core.composition import _hill_order, _reduce
 
 
 class FormulaGenerationPolicy(BaseModel):

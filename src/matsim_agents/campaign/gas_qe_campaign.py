@@ -17,7 +17,6 @@ whatever the campaign file states, and their convergence is ``not_run``.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -37,6 +36,7 @@ from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.campaign.budget import BudgetLedger
 from matsim_agents.campaign.hierarchy_campaign import DispatchOutcome
 from matsim_agents.campaign.qe_plan import ResourceLimits, ResourceRequest, resource_problems
+from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.gas_defects import (
     GasComplexSpec,
@@ -225,10 +225,6 @@ def build_gas_examples(cfg: FullSupercellCampaign) -> list[GasExample]:
 def _composition(atoms: Atoms) -> dict[str, int]:
     symbols, counts = np.unique(atoms.get_chemical_symbols(), return_counts=True)
     return {str(s): int(n) for s, n in zip(symbols, counts, strict=True)}
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _atomic_json(path: Path, payload: Any) -> None:

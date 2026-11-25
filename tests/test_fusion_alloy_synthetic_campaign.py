@@ -29,7 +29,7 @@ from matsim_agents.campaign.selection import (
     select,
 )
 from matsim_agents.campaign.selection_revision import revise_selection_hypothesis
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
 from matsim_agents.execution.properties import (
     PropertyConditions,

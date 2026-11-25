@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.execution.contracts import PROPERTY_UNITS
+from matsim_agents.core.contracts import PROPERTY_UNITS
 from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
 from matsim_agents.fusion.scenario import (
     EvaluationScenario,

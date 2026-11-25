@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
     PROPERTY_UNITS,
     EvidenceLevel,

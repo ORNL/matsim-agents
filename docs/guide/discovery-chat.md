@@ -4,11 +4,11 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 **closed loop between dialogue and atomistic simulation**:
 
 1. The user and the assistant exchange messages about a target property.
-2. After each turn, [`extract_compositions`](../../src/matsim_agents/discovery/composition.py) scans both messages for chemical formulas (validates element symbols, reduces stoichiometry, ignores English words like "Carbon" or "Hello").
+2. After each turn, [`extract_compositions`](../../src/matsim_agents/core/composition.py) scans both messages for chemical formulas (validates element symbols, reduces stoichiometry, ignores English words like "Carbon" or "Hello").
 3. For every newly-seen formula the user is asked (or `--auto-confirm` is honored) whether to launch a substantial atomistic exploration.
 4. The wrapper [`explore_composition`](../../src/matsim_agents/discovery/wrapper.py) then:
    - **generates seeds** through the unified
-     [`matsim_agents.discovery.seed_structures.generate_seeds`](../../src/matsim_agents/discovery/seeds.py)
+     [`matsim_agents.discovery.seed_structures.generate_seeds`](../../src/matsim_agents/discovery/seed_structures.py)
      entry point, which combines:
      1. **AFLOW prototype decoration.** Every prototype in the
         pymatgen-bundled AFLOW encyclopedia whose reduced stoichiometric
@@ -128,7 +128,7 @@ downstream scorers can filter or weight them.
 > **Composition detection is regex-based.** The chat REPL extracts
 > target materials by pattern-matching chemical formulas (`Li2MnO3`,
 > `CrMoNbTaW`) in user and assistant text via
-> [`extract_compositions`](../../src/matsim_agents/discovery/composition.py).
+> [`extract_compositions`](../../src/matsim_agents/core/composition.py).
 > This is intentionally minimal but has known failure modes:
 > - **Fires on context, not intent.** `"CO2 emissions are dominated by
 >   CaO formation"`, `"Following Smith et al. on BaTiO3 ferroelectrics

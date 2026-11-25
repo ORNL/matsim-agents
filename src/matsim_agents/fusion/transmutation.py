@@ -21,12 +21,12 @@ from matsim_agents.campaign.radiation_properties import (
     REFERENCE_REPEATS,
     REFERENCE_SITES,
 )
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.fusion.nuclear_evidence import (
     ExternalNuclearEvidence,
     NuclearEvidenceError,
     NuclearFamily,
 )
-from matsim_agents.seeding import numpy_rng
 
 TRANSMUTATION_VERSION = "fusion-pfc-transmutation-v1"
 SITE_MAP_SEED = 0

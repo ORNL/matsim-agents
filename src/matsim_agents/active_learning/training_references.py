@@ -18,11 +18,12 @@ from matsim_agents.active_learning.elemental_dft import (
     prepare_elemental_references,
 )
 from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
 )
-from matsim_agents.datasets.governance import load_training_manifest, sha256_file
+from matsim_agents.datasets.governance import load_training_manifest
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.placement import ProcessLaunch
 

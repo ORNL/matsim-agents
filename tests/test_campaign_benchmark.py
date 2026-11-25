@@ -10,7 +10,7 @@ from matsim_agents.campaign.benchmark import (
     compare_paired_metric,
     paired_metric_differences,
 )
-from matsim_agents.execution.contracts import ComputeBudget
+from matsim_agents.core.contracts import ComputeBudget
 
 
 def _protocol() -> BenchmarkProtocol:

@@ -31,10 +31,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.campaign.budget import BudgetLedger
 from matsim_agents.campaign.property_acquisition import BUDGET_CATEGORY, BudgetReport, _budget
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
 from matsim_agents.fusion.scoring import BenchmarkSet, ConstraintStatus, ScoringResult
-from matsim_agents.seeding import numpy_rng
 
 ACQUISITION_VERSION = "fusion-pfc-acquisition-v1"
 Decision = Literal["selected", "not_selected", "blocked", "unquantified", "duplicate", "refused"]

@@ -66,7 +66,7 @@ def _checkpoint(tmp_path, training_inputs):
 
 
 def _bind_output_to_reference_manifest(output, reference_manifest):
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     for path in (
         output / "energy-convention.json",
@@ -424,7 +424,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         branch_mlp = model_dir / "branch-mlp.pt"
         branch_mlp.write_text("routing-checkpoint")
         (model_dir / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
-        from matsim_agents.datasets.governance import sha256_file
+        from matsim_agents.core.hashing import sha256_file
 
         save_hydragnn_energy_convention(
             model_dir,
@@ -795,7 +795,7 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
 
 
 def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     model = _checkpoint(tmp_path, training_inputs)
     branch_mlp = model / "branch-mlp.pt"

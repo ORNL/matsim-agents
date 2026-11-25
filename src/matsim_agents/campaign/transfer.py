@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from scipy import stats
 
 from matsim_agents.campaign.registry import NOT_YET_ESTABLISHED
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 STRATEGIES = ("A", "B", "C", "D", "E")
 STRATEGY_NAMES = {

@@ -42,12 +42,12 @@ from matsim_agents.campaign.surrogate_hull import (
     surrogate_hull_coverage,
 )
 from matsim_agents.campaign.unary_references import relax_unary_references, unary_cache_directory
-from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
 from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -768,7 +768,7 @@ def test_perturbation_robustness_records_each_seed(tmp_path):
         relaxation_runner=runner,
     )
 
-    from matsim_agents.seeding import stream_seed
+    from matsim_agents.core.seeding import stream_seed
 
     assert [trial["seed"] for trial in evidence["trials"]] == [
         stream_seed(cfg.random_seed, "perturbation", index) for index in range(3)

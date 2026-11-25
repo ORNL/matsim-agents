@@ -7,7 +7,6 @@ cells are never substituted; a gate failure raises ``ValueError`` before any inp
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -21,6 +20,7 @@ from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
 from matsim_agents.discovery.bcc_defects import (
@@ -302,10 +302,6 @@ def _pseudo_map(cfg: FullSupercellCampaign) -> dict[str, str]:
             and f.lower().endswith(".upf")
         )
     return out
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def prepare_campaign(

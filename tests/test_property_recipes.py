@@ -23,7 +23,7 @@ from matsim_agents.campaign.property_recipes import (
     list_recipes,
     method_readiness,
 )
-from matsim_agents.execution.contracts import CharacterizationStatus, EvidenceLevel
+from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
 from matsim_agents.execution.properties import (
     PropertyConditions,
     PropertyEvidence,

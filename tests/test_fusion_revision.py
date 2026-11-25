@@ -127,7 +127,7 @@ def test_overflowing_number_is_rejected_not_raised(scored):
 
 
 def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
-    from matsim_agents.execution.contracts import EvidenceLevel
+    from matsim_agents.core.contracts import EvidenceLevel
     from matsim_agents.execution.properties import PropertyQualification, PropertyStatus
     from matsim_agents.fusion.revision import _status
     from matsim_agents.fusion.scenario import FusionEvidence

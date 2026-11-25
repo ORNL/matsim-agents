@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.execution.contracts import PROPERTY_UNITS
+from matsim_agents.core.contracts import PROPERTY_UNITS
 from matsim_agents.execution.properties import (
     ELASTIC_PROPERTIES,
     PropertyEvidence,

@@ -39,7 +39,7 @@ from matsim_agents.campaign.transfer import (
     paired_difference,
     uncertainty_diversity_selector,
 )
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 CORE_FAMILIES = ("original_alloy", "core_mechanism")
 GAS_FAMILIES = ("transmutation", "hydrogen", "helium", "gas_vacancy_cluster")

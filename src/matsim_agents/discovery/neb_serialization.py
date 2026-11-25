@@ -31,6 +31,7 @@ from ase import Atoms
 from ase.io import read
 from pydantic import BaseModel, ConfigDict
 
+from matsim_agents.core.hashing import sha256_file as _sha256_file
 from matsim_agents.discovery.neb_contracts import NebTransition
 from matsim_agents.discovery.neb_images import DEFAULT_MAX_STEP, DEFAULT_MIN_DISTANCE
 from matsim_agents.discovery.neb_validation import PathwayAssessment, assess_pathway
@@ -74,10 +75,6 @@ def _frame(atoms: Atoms) -> str:
 
 def _write_frames(path: Path, frames: Sequence[Atoms]) -> None:
     path.write_text("".join(_frame(a) for a in frames), encoding="utf-8")
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _canonical(data: dict) -> str:

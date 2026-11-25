@@ -682,7 +682,7 @@ def _aflow_oxide_candidates(
         import pymatgen.analysis.prototypes as prototype_data
         from pymatgen.io.ase import AseAtomsAdaptor
 
-        from matsim_agents.discovery.composition import parse_composition
+        from matsim_agents.core.composition import parse_composition
         from matsim_agents.discovery.seed_structures import (
             _balanced_supercell_matrix,
             compatible_prototypes,
@@ -770,7 +770,7 @@ def _pyxtal_oxide_candidates(
         import pyxtal
         from pymatgen.io.ase import AseAtomsAdaptor
 
-        from matsim_agents.discovery.composition import parse_composition
+        from matsim_agents.core.composition import parse_composition
         from matsim_agents.discovery.seed_structures import random_search
     except ImportError as exc:
         raise StructureGenerationError(

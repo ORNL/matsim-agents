@@ -23,6 +23,7 @@ from ase import Atoms
 from ase.geometry import get_distances
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
 from matsim_agents.discovery.alloys import (
     AlloySpec,
@@ -30,7 +31,6 @@ from matsim_agents.discovery.alloys import (
     second_neighbor_list,
 )
 from matsim_agents.discovery.point_defects import DefectConfiguration, geometry_fingerprint
-from matsim_agents.seeding import numpy_rng
 
 DEFAULT_MAX_SOLUTE_FRACTION = 0.01
 # "Isolated" means no other solute within this many lattice parameters (beyond the 2NN shell).

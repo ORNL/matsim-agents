@@ -34,6 +34,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 from scipy.linalg import expm
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.kinetics.gas_mechanisms import (
     GasMechanismError,
     OpenSystemTerm,
@@ -43,7 +44,6 @@ from matsim_agents.kinetics.gas_mechanisms import (
 from matsim_agents.kinetics.graph import TransitionNetwork
 from matsim_agents.kinetics.rates import RateError, event_rate, htst_rate
 from matsim_agents.kinetics.uncertainty import _quantile
-from matsim_agents.seeding import numpy_rng
 
 FUTURE_WORK: dict[str, str] = {
     "bubble_pressure": "equation of state and overpressure of gas-filled cavities",

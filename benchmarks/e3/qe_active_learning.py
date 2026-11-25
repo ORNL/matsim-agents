@@ -442,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
                 "benchmarks/e3/scientific-objectives.yaml",
                 "src/matsim_agents/active_learning/loop.py",
                 "src/matsim_agents/active_learning/config.py",
-                "src/matsim_agents/seeding.py",
+                "src/matsim_agents/core/seeding.py",
                 "src/matsim_agents/backends/llm/hypotheses.py",
                 "benchmarks/e3/hypothesis_tracking.py",
             )

@@ -69,6 +69,7 @@ from matsim_agents.backends.mlip.config import (
     MLIPConfig,
     parse_mlip_config,
 )
+from matsim_agents.core.seeding import stream_seed
 from matsim_agents.datasets.splits import (
     SplitConfig,
     SplitManifest,
@@ -76,7 +77,6 @@ from matsim_agents.datasets.splits import (
     load_split,
     make_split,
 )
-from matsim_agents.seeding import stream_seed
 
 log = logging.getLogger(__name__)
 
@@ -493,7 +493,7 @@ def _prepare_split(
     validate_method,
 ) -> SplitManifest:
     """Make, or load and verify, the split one repetition uses."""
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     if evaluation.split_manifest is not None:
         manifest = load_split(evaluation.split_manifest)
@@ -641,11 +641,11 @@ def _artifact_digest(path: str) -> str | None:
     """SHA-256 of a model file, or of the files directly in a model directory."""
     target = Path(path)
     if target.is_file():
-        from matsim_agents.datasets.governance import sha256_file
+        from matsim_agents.core.hashing import sha256_file
 
         return sha256_file(target)
     if target.is_dir():
-        from matsim_agents.datasets.governance import sha256_file
+        from matsim_agents.core.hashing import sha256_file
 
         digest = hashlib.sha256()
         for item in sorted(p for p in target.iterdir() if p.is_file()):

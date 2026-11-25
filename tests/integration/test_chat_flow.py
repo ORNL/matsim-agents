@@ -22,7 +22,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
-from matsim_agents.discovery.composition import Composition
+from matsim_agents.core.composition import Composition
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.orchestration.interactive_chat import (
     DiscoveryChatConfig,

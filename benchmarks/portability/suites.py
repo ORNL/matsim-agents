@@ -306,7 +306,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
 
 
 def _phase_result(composition: str, output_dir: str):
-    from matsim_agents.discovery.composition import parse_composition
+    from matsim_agents.core.composition import parse_composition
     from matsim_agents.discovery.seed_structures import PhaseCandidate
     from matsim_agents.discovery.wrapper import CompositionExplorationResult
     from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult

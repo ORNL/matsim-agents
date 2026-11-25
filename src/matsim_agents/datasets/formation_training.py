@@ -12,6 +12,7 @@ from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
@@ -21,7 +22,6 @@ from matsim_agents.datasets.governance import (
     DatasetValidationSummary,
     load_training_manifest,
     reject_formation_frames,
-    sha256_file,
     write_dataset_manifest,
 )
 

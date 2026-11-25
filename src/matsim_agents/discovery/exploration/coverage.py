@@ -7,27 +7,12 @@ computed here; the other two are carried as explicit "not assessed" fields, neve
 
 from __future__ import annotations
 
-import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from matsim_agents.seeding import python_rng
-
-Z95 = 1.959963984540054
-
-
-def wilson_interval(successes: int, n: int, z: float = Z95) -> tuple[float, float]:
-    """Wilson score interval for a proportion; (0, 1) when ``n`` is zero."""
-    if n < 0 or successes < 0 or successes > n:
-        raise ValueError("require 0 <= successes <= n")
-    if n == 0:
-        return 0.0, 1.0
-    p = successes / n
-    denom = 1 + z * z / n
-    centre = (p + z * z / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return max(0.0, centre - half), min(1.0, centre + half)
+from matsim_agents.core.seeding import python_rng
+from matsim_agents.core.stats import wilson_interval
 
 
 def bootstrap_mean_interval(

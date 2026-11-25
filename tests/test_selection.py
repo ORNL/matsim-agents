@@ -14,7 +14,7 @@ from matsim_agents.campaign.selection import (
     SelectionStatus,
     select,
 )
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.execution.properties import (
     PropertyConditions,
     PropertyEvidence,

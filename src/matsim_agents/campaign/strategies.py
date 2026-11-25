@@ -28,7 +28,7 @@ from matsim_agents.campaign.transfer import (
     split_experiment,
     uncertainty_diversity_selector,
 )
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 COMPARISON_STRATEGIES = ("A", "B", "C", "D", "E")
 COMPARISON_NAMES = {

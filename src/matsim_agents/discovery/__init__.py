@@ -10,7 +10,7 @@ Submodules:
       relaxation, and stability scoring together.
 """
 
-from matsim_agents.discovery.composition import (
+from matsim_agents.core.composition import (
     Composition,
     extract_compositions,
     parse_composition,

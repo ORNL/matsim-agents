@@ -20,7 +20,9 @@ from matsim_agents.campaign.orchestrator import (
     run_campaign,
 )
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
-from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
+from matsim_agents.core.seeding import stream_seed
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import (
     RankingMode,
@@ -29,7 +31,6 @@ from matsim_agents.discovery.stability import (
     score_stability,
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
 from matsim_agents.execution.ledger import (
     REVIEW_ACTION,
     CostRecord,
@@ -37,7 +38,6 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
-from matsim_agents.seeding import stream_seed
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 

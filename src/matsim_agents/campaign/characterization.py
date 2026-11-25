@@ -8,7 +8,7 @@ the references, the budget, and the approvals. A recipe plans the calculations
 as an ordered task graph (:func:`plan_recipe`); the numerical work is done by
 the existing deterministic operators (:func:`matsim_agents.workflows.relaxation.
 run_relaxation`, :func:`matsim_agents.discovery.stability.score_stability`), never
-by an LLM. The answer (:class:`~matsim_agents.execution.contracts.
+by an LLM. The answer (:class:`~matsim_agents.core.contracts.
 CharacterizationReport`) states a conclusion only when the evidence suffices
 and says otherwise what is missing:
 
@@ -51,16 +51,8 @@ from matsim_agents.campaign.property_recipes import (
     load_property_evidence,
 )
 from matsim_agents.campaign.property_recipes import RECIPES as PROPERTY_RECIPE_SPECS
-from matsim_agents.datasets.governance import sha256_file
-from matsim_agents.discovery.composition import parse_composition
-from matsim_agents.discovery.defects import MAGNETISM_LIMITATION
-from matsim_agents.discovery.stability import (
-    RankingMode,
-    ReferenceEnergySet,
-    StabilityReport,
-    score_stability,
-)
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
     ApprovalPolicy,
     CharacterizationReport,
@@ -71,6 +63,14 @@ from matsim_agents.execution.contracts import (
     ObservableRequirement,
     ObservableValue,
     at_least,
+)
+from matsim_agents.core.hashing import sha256_file
+from matsim_agents.discovery.defects import MAGNETISM_LIMITATION
+from matsim_agents.discovery.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    StabilityReport,
+    score_stability,
 )
 from matsim_agents.execution.ledger import (
     CostRecord,

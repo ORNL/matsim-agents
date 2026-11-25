@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from matsim_agents.campaign.orchestrator import run_formula_discovery_stage
 from matsim_agents.campaign.state import CampaignState
+from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
 from matsim_agents.discovery.stability import (
     PhaseStability,
@@ -14,7 +15,6 @@ from matsim_agents.discovery.stability import (
     ReferenceEnergySet,
     StabilityReport,
 )
-from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateVerdict, ScientificDebateResult
 
 

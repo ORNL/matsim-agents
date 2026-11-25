@@ -233,7 +233,7 @@ def retrain_hydragnn(
     _require_direct_placement(trainer_cfg, launch, "HydraGNN fine-tuning")
 
     from matsim_agents.active_learning.training_references import resolve_training_references
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     reference_manifest = resolve_training_references(
         trainer_cfg,
@@ -328,8 +328,8 @@ def _run_trainer(argv: list[str], log_path: Path, launch: ProcessLaunch, local: 
 
 def _check_energy_alignment(out_dir: Path, dataset_path: Path, dataset_sha256: str, manifest: Path):
     """The fine-tune aligned exactly the requested dataset with the requested references."""
+    from matsim_agents.core.hashing import sha256_file
     from matsim_agents.datasets.energy_alignment import ENERGY_ALIGNMENT_FILE, EnergyAlignment
-    from matsim_agents.datasets.governance import sha256_file
 
     path = out_dir / ENERGY_ALIGNMENT_FILE
     if not path.is_file():
@@ -366,7 +366,7 @@ def retrain_uma(
     to the base model's energy scale with the training references (see
     :mod:`matsim_agents.training.finetune_uma`).
     """
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     out_model_dir = Path(out_model_dir)
     if not trainer_cfg.enabled:
@@ -432,7 +432,7 @@ def retrain_mace(
     aligned to the base model's energy scale with the training references (see
     :mod:`matsim_agents.training.finetune_mace`).
     """
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     out_model_dir = Path(out_model_dir)
     if not trainer_cfg.enabled:

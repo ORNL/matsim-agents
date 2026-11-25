@@ -10,6 +10,7 @@ import pytest
 from ase import Atoms
 from ase.io import read, write
 
+from matsim_agents.core.seeding import stream_seed
 from matsim_agents.datasets.energy_alignment import (
     ENERGY_ALIGNMENT_FILE,
     energy_alignment,
@@ -17,7 +18,6 @@ from matsim_agents.datasets.energy_alignment import (
 )
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
-from matsim_agents.seeding import stream_seed
 
 # -- energy alignment -----------------------------------------------------------
 

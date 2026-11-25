@@ -16,7 +16,7 @@ from matsim_agents.campaign.elasticity import (
     plan_calculations,
     strain_set,
 )
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.properties import PropertyStatus
 
 

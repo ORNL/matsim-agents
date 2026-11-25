@@ -17,7 +17,6 @@ qualified.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import tempfile
@@ -25,6 +24,8 @@ from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from matsim_agents.core.hashing import sha256_file
 
 MATRIX_SCHEMA = "matsim-radiation-qualification/1"
 
@@ -181,14 +182,6 @@ class QualificationMatrix(BaseModel):
         return counts
 
 
-def sha256_file(path: str | os.PathLike) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def record_evidence(
     matrix: QualificationMatrix,
     row_id: str,
@@ -298,5 +291,4 @@ __all__ = [
     "radiation_damage_rows",
     "record_evidence",
     "save_matrix",
-    "sha256_file",
 ]

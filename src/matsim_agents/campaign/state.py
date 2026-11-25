@@ -22,6 +22,12 @@ from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry, structure_content_hash
+from matsim_agents.core.contracts import (
+    DFT_EVIDENCE,
+    ComputeBudget,
+    EvidenceLevel,
+    WorkflowStatus,
+)
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import (
     RankingMode,
@@ -30,12 +36,6 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     StabilityReport,
     recalibrate_hull_reports,
-)
-from matsim_agents.execution.contracts import (
-    DFT_EVIDENCE,
-    ComputeBudget,
-    EvidenceLevel,
-    WorkflowStatus,
 )
 
 if TYPE_CHECKING:

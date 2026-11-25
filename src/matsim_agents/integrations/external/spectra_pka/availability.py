@@ -12,7 +12,6 @@ the expected program without running any physics.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -21,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.integrations.external.spectra_pka.config import (
     CampaignSpec,
     SpectraPKAConfig,
@@ -71,14 +71,6 @@ class Availability:
             "checks": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "meaning": "tool readiness only; not scientific qualification",
         }
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def locate_executable(config: SpectraPKAConfig) -> Path | None:
@@ -290,6 +282,5 @@ __all__ = [
     "locate_executable",
     "probe_invocation",
     "read_smoke_record",
-    "sha256_file",
     "write_smoke_record",
 ]

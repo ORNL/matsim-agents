@@ -18,6 +18,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.integrations.external.spectra_pka.config import CampaignSpec
 
 INPUT_NAME = "spectra_pka.in"
@@ -38,14 +39,6 @@ class StagedInputs:
     data_sha256: dict[str, str]  # staged name -> sha256 of the user's file
     staged_names: dict[str, str]  # staged name -> original path
     results_stub: str
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _fortran_bool(value: bool) -> str:
@@ -148,6 +141,5 @@ __all__ = [
     "StagedInputs",
     "build_input_text",
     "pka_link_name",
-    "sha256_file",
     "stage_inputs",
 ]

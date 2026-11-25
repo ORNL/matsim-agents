@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from matsim_agents.campaign.registry import TARGET_ELEMENTS, chemical_system
 from matsim_agents.campaign.transfer import TransferData
-from matsim_agents.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng
 
 
 def feature_vector(fractions: np.ndarray, sro: float) -> np.ndarray:

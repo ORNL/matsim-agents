@@ -34,7 +34,7 @@ from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.active_learning.config import AcquisitionConfig
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.datasets.splits import SplitConfig, make_split
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,

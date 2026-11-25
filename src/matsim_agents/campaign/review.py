@@ -15,7 +15,7 @@ from matsim_agents.backends.llm.transcript import Contribution
 from matsim_agents.campaign.evidence import evidence_for_review, new_hypothesis_id
 from matsim_agents.campaign.orchestrator import CampaignReviewDecision, ReviewRunner
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
-from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.core.composition import parse_composition
 from matsim_agents.discovery.formula_merge import LLMFormulaProposal
 from matsim_agents.execution.ledger import (
     ClaimType,

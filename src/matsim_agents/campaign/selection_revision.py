@@ -226,7 +226,7 @@ def build_evidence_packet(
 
 
 def _unit(prop: str) -> str:
-    from matsim_agents.execution.contracts import PROPERTY_UNITS
+    from matsim_agents.core.contracts import PROPERTY_UNITS
 
     return PROPERTY_UNITS[prop]
 

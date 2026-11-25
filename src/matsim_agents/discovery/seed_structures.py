@@ -32,7 +32,6 @@ ready to feed into the relaxation pipeline.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -46,8 +45,9 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from matsim_agents.discovery.composition import Composition, parse_composition
-from matsim_agents.seeding import numpy_rng, python_rng
+from matsim_agents.core.composition import Composition, parse_composition
+from matsim_agents.core.hashing import sha256_file as _file_sha256
+from matsim_agents.core.seeding import numpy_rng, python_rng
 
 if TYPE_CHECKING:
     from pymatgen.core import Structure
@@ -730,10 +730,6 @@ def _lattice_parameters(structure: Structure) -> dict[str, float]:
         "beta": float(lattice.beta),
         "gamma": float(lattice.gamma),
     }
-
-
-def _file_sha256(path: str) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def generate_seed_action(

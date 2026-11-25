@@ -9,15 +9,15 @@ from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import LabelledFrame
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.contracts import ComputeBudget
 from matsim_agents.datasets.governance import (
     structure_identity,
     validate_labelled_frames,
 )
-from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.stability import RankingMode, score_stability
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.contracts import ComputeBudget
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 

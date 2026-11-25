@@ -166,7 +166,7 @@ def test_config_schema_exports_every_kind(tmp_path):
 
 
 def test_relax_prints_a_summary_and_json_on_request(monkeypatch, tmp_path):
-    from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
+    from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
     from matsim_agents.workflows import relaxation
     from matsim_agents.workflows.relaxation import (
         RelaxationMode,
@@ -208,7 +208,7 @@ def test_relax_prints_a_summary_and_json_on_request(monkeypatch, tmp_path):
 
 
 def test_llm_check_summary_reports_failed_stages(monkeypatch, tmp_path):
-    from matsim_agents.execution.contracts import WorkflowStatus
+    from matsim_agents.core.contracts import WorkflowStatus
     from matsim_agents.workflows import llm_check
     from matsim_agents.workflows.llm_check import LLMCheckResult
 
@@ -233,7 +233,7 @@ def test_llm_check_summary_reports_failed_stages(monkeypatch, tmp_path):
 
 
 def test_debate_summary_points_to_the_transcript(monkeypatch, tmp_path):
-    from matsim_agents.execution.contracts import WorkflowStatus
+    from matsim_agents.core.contracts import WorkflowStatus
     from matsim_agents.workflows import debate
     from matsim_agents.workflows.debate import ScientificDebateResult
 

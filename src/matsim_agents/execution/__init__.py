@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from matsim_agents.execution.allocation import Allocation, discover_allocation
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     ApprovalPolicy,
     ComputeBudget,
     EvidenceLevel,
@@ -15,6 +14,7 @@ from matsim_agents.execution.contracts import (
     WorkflowResult,
     WorkflowStatus,
 )
+from matsim_agents.execution.allocation import Allocation, discover_allocation
 from matsim_agents.execution.iri import IRIError, IRIFacility, IRIPlatform, IRIWaitTimeout
 from matsim_agents.execution.provenance import RunStore, append_jsonl_record
 from matsim_agents.execution.resources import ResourceRequest

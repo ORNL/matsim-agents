@@ -15,13 +15,13 @@ from typing import Literal
 
 import numpy as np
 
+from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.irradiation.contracts import (
     RATE_BASIS_PER_ATOM_PER_S,
     ContractError,
     PKAEvent,
     PKASpectrum,
 )
-from matsim_agents.seeding import numpy_rng
 
 
 @dataclass(frozen=True)

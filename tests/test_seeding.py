@@ -1,6 +1,6 @@
 """Central seed management: stream derivation and the repository-wide policy.
 
-Every random generator comes from :mod:`matsim_agents.seeding`, and
+Every random generator comes from :mod:`matsim_agents.core.seeding`, and
 seeds are configured values: no generator is built elsewhere, no seed is a
 literal or ``seed + i`` arithmetic, and no seed parameter has a default.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from matsim_agents.seeding import (
+from matsim_agents.core.seeding import (
     numpy_rng,
     python_rng,
     seed_process,
@@ -23,7 +23,7 @@ from matsim_agents.seeding import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SEEDING = ROOT / "src" / "matsim_agents" / "seeding.py"
+SEEDING = ROOT / "src" / "matsim_agents" / "core" / "seeding.py"
 CHECKED = [
     *sorted((ROOT / "src" / "matsim_agents").rglob("*.py")),
     *sorted((ROOT / "deployments").rglob("*.py")),
@@ -167,7 +167,8 @@ def _violations(path: Path) -> list[str]:
                 or (owner in {"random", "np.random", "numpy.random"} and name != "Generator")
             ):
                 report(
-                    node, f"random generator {ast.unparse(func)}() outside matsim_agents.seeding"
+                    node,
+                    f"random generator {ast.unparse(func)}() outside matsim_agents.core.seeding",
                 )
             for keyword in node.keywords:
                 if _seed_name(keyword.arg) and _unconfigured(keyword.value):
@@ -180,7 +181,7 @@ def _violations(path: Path) -> list[str]:
             and path != SEEDING
             and any(alias.name != "Generator" for alias in node.names)
         ):
-            report(node, f"from {node.module} import bypasses matsim_agents.seeding")
+            report(node, f"from {node.module} import bypasses matsim_agents.core.seeding")
         elif isinstance(node, ast.Dict):
             for key, value in zip(node.keys, node.values, strict=True):
                 if (

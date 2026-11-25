@@ -26,7 +26,7 @@ from matsim_agents.campaign.agent_eval import (
     run_agent_eval,
 )
 from matsim_agents.campaign.benchmark import BenchmarkArm
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
     EvidenceOutcome,

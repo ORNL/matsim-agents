@@ -11,10 +11,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.structural_screening import CandidateSelection
-from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
-from matsim_agents.execution.ledger import file_sha256
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.exploration_config import ExplorationConfig, check_exploration
 
@@ -116,9 +116,9 @@ class RoundState(BaseModel):
 def _compatibility() -> dict[str, str]:
     # Refuse to combine evidence produced by changed workflow/optimizer code
     # or scientific dependencies. Users can inspect the original run instead.
-    from matsim_agents import seeding
     from matsim_agents.backends.mlip import calculator, mace_inference, relaxation
-    from matsim_agents.discovery import composition, seeds, selection, stability
+    from matsim_agents.core import composition, seeding
+    from matsim_agents.discovery import seed_structures, stability, structural_screening
     from matsim_agents.workflows import (
         exploration,
         exploration_checkpoint,
@@ -134,8 +134,8 @@ def _compatibility() -> dict[str, str]:
         mace_inference,
         relaxation,
         composition,
-        seeds,
-        selection,
+        seed_structures,
+        structural_screening,
         stability,
         exploration,
         exploration_checkpoint,
