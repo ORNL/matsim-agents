@@ -62,7 +62,10 @@ class Handler:
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise ValueError(f"{path}: malformed YAML: {error}") from error
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: expected a mapping at the top level")
     return raw
@@ -552,7 +555,7 @@ def run(
     options = options or RunOptions()
     try:
         pre = handler.preflight(target, options)
-    except (ValueError, OSError, KeyError, TypeError) as error:
+    except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
         run_dir, record = start_run(runs_dir, kind=kind, source=source)
         record.state = "failed"
         record.failure_reason = f"invalid or incomplete configuration: {error}"

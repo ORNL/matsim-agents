@@ -7,10 +7,9 @@ warnings.filterwarnings("ignore", message=r"The default value of `allowed_object
 
 # Import order defines the order commands are listed in ``--help``.
 from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
-    workflow_commands,
-    exploration,
-    workflows,
+    runs,
     objective,
+    exploration,
     interactive,
     active_learning,
     resources,
@@ -25,7 +24,6 @@ from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
     system,
     config_tools,
     tools,
-    application,
 )
 from matsim_agents.cli._app import app  # noqa: E402
 

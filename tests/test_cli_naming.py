@@ -36,7 +36,9 @@ def test_alias_is_hidden_from_root_help_but_preferred_name_is_listed():
     assert "e1-development" not in text
 
 
-@pytest.mark.parametrize("command", ["run", "plan", "chat", "explore", "workflow"])
+@pytest.mark.parametrize(
+    "command", ["validate", "plan", "run", "resume", "objective", "chat", "explore"]
+)
 def test_entry_commands_state_when_to_use(command):
     assert text_has_one_guidance_line(_help(command))
 

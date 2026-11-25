@@ -152,7 +152,7 @@ def test_cli_config_validation_errors_do_not_expose_input_values(tmp_path, serve
 
     path = tmp_path / "mcp.yaml"
     path.write_text(json.dumps({"mcp": {"servers": [server]}}))
-    result = CliRunner().invoke(app, ["run", "x", "--mcp-config", str(path)])
+    result = CliRunner().invoke(app, ["objective", "x", "--mcp-config", str(path)])
     assert result.exit_code != 0
     assert "secret-value" not in result.output
     assert "credentials in headers" in result.output or "api_key" in result.output

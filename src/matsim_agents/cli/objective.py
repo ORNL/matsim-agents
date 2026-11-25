@@ -1,4 +1,4 @@
-"""Objective mode: ``run`` (planner -> executor -> analyst graph) and ``plan``."""
+"""``objective``: a natural-language objective through the planner -> executor -> analyst graph."""
 
 from __future__ import annotations
 
@@ -92,9 +92,14 @@ def _build_run_config(
     return config
 
 
-@app.command()
-def run(
+@app.command(name="objective")
+def objective_command(
     objective: str = typer.Argument(..., help="Free-form objective for the agent system."),
+    plan_only: bool = typer.Option(
+        False, "--plan-only", help="Print the planner's task list and execute nothing."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="With --plan-only, print JSON."),
+    runs_dir: Path = typer.Option("runs", "--runs-dir", help="Directory for the run record."),
     mlip_config: Path | None = opt_mlip_config(),
     output_dir: Path | None = typer.Option(None, help="Where to write artifacts."),
     max_iterations: int = typer.Option(5, help="Maximum executor iterations."),
@@ -142,14 +147,19 @@ def run(
         help="JSONL path for MCP audit records (default: <output-dir>/mcp/mcp_audit.jsonl).",
     ),
 ):
-    """Run the planner -> executor -> analyst graph for a given objective.
+    """Plan and execute a written objective, and record the run.
 
-    When to use: you have a written objective and want it planned and executed end to end.
+    When to use: you have a goal in words rather than a config file. Use `--plan-only` to preview.
     """
     from matsim_agents.agents.objective_graph import build_graph
     from matsim_agents.agents.state import MatSimState
+    from matsim_agents.workflows import run_records
 
+    if plan_only:
+        _print_plan(objective, as_json)
+        return
     mlip = load_mlip_option(mlip_config)
+    run_dir, record = run_records.start_run(runs_dir, kind="objective", objective=objective)
     graph = build_graph()
     state = MatSimState(
         objective=objective,
@@ -175,11 +185,23 @@ def run(
         )
 
         final = graph.invoke(state, config=config)
+    except BaseException as error:
+        record.state = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+        record.failure_reason = f"{type(error).__name__}: {error}"
+        run_records.write_record(run_dir, record)
+        raise
     finally:
         if mcp_client is not None:
             mcp_client.close()
 
-    console.print(Panel.fit("matsim-agents run summary", style="bold cyan"))
+    record.state = "complete"
+    record.summary = {
+        "tasks_executed": len(final["results"]),
+        "structures": [r.optimized_structure_path for r in final["results"]],
+    }
+    run_records.write_record(run_dir, record)
+    console.print(f"Run {record.run_id}: {record.state}", markup=False)
+    console.print(Panel.fit("matsim-agents objective summary", style="bold cyan"))
     console.print(f"Objective: {final['objective']}")
     console.print(f"Tasks executed: {len(final['results'])}")
     for r in final["results"]:
@@ -191,15 +213,7 @@ def run(
     console.print(Panel(final.get("analysis") or "(no analysis)", title="Analyst"))
 
 
-@app.command()
-def plan(
-    objective: str,
-    as_json: bool = typer.Option(False, "--json", help="Print the task list as JSON."),
-):
-    """Run the planner only and print the proposed task list.
-
-    When to use: preview what ``run`` would do for an objective before executing anything.
-    """
+def _print_plan(objective: str, as_json: bool) -> None:
     from matsim_agents.agents.roles.planner import planner_node
     from matsim_agents.agents.state import MatSimState
 
@@ -220,4 +234,4 @@ def plan(
             markup=False,
             soft_wrap=True,
         )
-    console.print("Nothing was executed. Use `matsim-agents run` to execute the objective.")
+    console.print("Nothing was executed. Drop --plan-only to execute the objective.")

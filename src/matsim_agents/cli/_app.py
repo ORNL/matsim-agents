@@ -8,6 +8,7 @@ from typing import NoReturn
 
 import click
 import typer
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from typer.core import TyperGroup
@@ -37,7 +38,14 @@ class FriendlyTyperGroup(TyperGroup):
             return super().invoke(ctx)
         except (click.ClickException, click.Abort, typer.Exit):
             raise
-        except (KeyError, OSError, RuntimeError, ValueError, ValidationError) as error:
+        except (
+            KeyError,
+            OSError,
+            RuntimeError,
+            ValueError,
+            ValidationError,
+            yaml.YAMLError,
+        ) as error:
             state = ctx.find_root().ensure_object(CLIState)
             if state.debug:
                 raise
@@ -55,8 +63,8 @@ app = typer.Typer(
     cls=FriendlyTyperGroup,
     help=(
         "Multi-agent AI for atomistic materials simulation.\n\n"
-        "Start with `matsim-agents workflow list`, `workflow check CONFIG.yaml`, "
-        "or `explore check CONFIG.yaml`."
+        "Start with `matsim-agents validate CONFIG.yaml`, then `run CONFIG.yaml`, "
+        'or `objective "TEXT"` for a goal in words.'
     ),
     no_args_is_help=True,
     pretty_exceptions_enable=False,

@@ -801,7 +801,11 @@ def test_cli_plan_json_redacts_mcp_arguments(monkeypatch):
         ),
     ]
     _scripted_planner(monkeypatch, tasks)
-    result = CliRunner().invoke(app, ["plan", "x", "--json"], env={"MATSIM_LLM_PROVIDER": "vllm"})
+    result = CliRunner().invoke(
+        app,
+        ["objective", "x", "--plan-only", "--json"],
+        env={"MATSIM_LLM_PROVIDER": "vllm"},
+    )
     assert result.exit_code == 0, result.output
     assert "pw-live-1" not in result.output and "tk-live-2" not in result.output
     planned = json.loads(result.output)
@@ -845,7 +849,7 @@ def test_cli_run_with_mcp_config_end_to_end(monkeypatch, tmp_path):
     result = CliRunner().invoke(
         app,
         [
-            "run",
+            "objective",
             "add 4 and 5",
             "--llm-provider",
             "vllm",
@@ -871,7 +875,7 @@ def test_cli_rejects_invalid_mcp_config(tmp_path):
 
     bad = tmp_path / "bad.yaml"
     bad.write_text("mcp:\n  servers:\n    - {name: a, transport: stdio}\n")
-    result = CliRunner().invoke(app, ["run", "x", "--mcp-config", str(bad)])
+    result = CliRunner().invoke(app, ["objective", "x", "--mcp-config", str(bad)])
     assert result.exit_code != 0
     assert "requires command" in result.output
 

@@ -210,8 +210,8 @@ def test_direct_dft_launcher_runs_on_this_node_with_translated_mask(monkeypatch)
 
 
 def test_saved_workflow_configs_with_null_resources_rerun(tmp_path):
-    from matsim_agents.cli.workflow_commands import _load_workflow_config
     from matsim_agents.workflows.llm_check import LLMCheckConfig
+    from matsim_agents.workflows.runner import load_workflow_config as _load_workflow_config
 
     saved = tmp_path / "resolved_config.json"
     saved.write_text(

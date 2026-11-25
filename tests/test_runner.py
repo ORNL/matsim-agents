@@ -194,3 +194,20 @@ def test_mlip_relax_mode_reports_a_missing_backend_as_blocked(tmp_path) -> None:
     _, record = runner.run(config, runs_dir=tmp_path / "runs")
     assert record.state in {"blocked", "failed"}
     assert record.native_run_directory is None or record.state == "failed"
+
+
+@pytest.mark.parametrize("command", ["validate", "plan", "run"])
+def test_malformed_yaml_is_a_config_error_not_a_traceback(tmp_path, command):
+    from typer.testing import CliRunner
+
+    from matsim_agents.cli import app
+
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("name: [unclosed\n  bad: : :\n")
+    args = [command, str(bad)] + (
+        ["--runs-dir", str(tmp_path / "runs")] if command == "run" else []
+    )
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 2, result.output
+    assert not isinstance(result.exception, yaml.YAMLError)
+    assert "malformed YAML" in result.output

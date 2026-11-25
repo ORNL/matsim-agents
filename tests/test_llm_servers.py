@@ -750,8 +750,8 @@ def test_debate_participant_validation():
 
 
 def test_debate_example_with_plan_servers_loads(monkeypatch):
-    from matsim_agents.cli.workflow_commands import _load_workflow_config
     from matsim_agents.workflows.debate import ScientificDebateConfig
+    from matsim_agents.workflows.runner import load_workflow_config as _load_workflow_config
 
     monkeypatch.setenv("MODEL_ROOT", "/models")
     path = (

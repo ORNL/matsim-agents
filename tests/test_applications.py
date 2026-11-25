@@ -141,7 +141,7 @@ def test_every_application_dry_runs_through_the_cli(path):
 
     from matsim_agents.cli import app
 
-    result = CliRunner().invoke(app, ["application", "check", str(path)])
+    result = CliRunner().invoke(app, ["validate", str(path)])
     assert result.exit_code == 0, result.output
     assert load_application(path).name in result.output
 
