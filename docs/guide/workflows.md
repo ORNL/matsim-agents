@@ -20,13 +20,12 @@ enforce. Command options are listed in the [command-line guide](cli.md).
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
-| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--mlip-config`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `--mlip-config` replacing its `mlip` block | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
 
 Notes:
 
-- `run`, `chat`, and `supervisor-run` can escalate to AL using `--al-config` plus UQ policy flags.
+- `run` and `chat` can escalate to AL using `--al-config` plus UQ policy flags.
 - Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
 
 ## Minimum viable commands
@@ -85,14 +84,16 @@ matsim-agents chat \
   --peer-review-rounds 2 \
   --critic-cross-critique
 
-# 3) Supervisor orchestration with AL handoff planning
-matsim-agents supervisor-run Li2MnO3 \
+# 3) Agent graph with UQ-triggered AL handoff with AL handoff planning
+matsim-agents run "Find stable phases of Li2MnO3" \
+  --trigger-al-handoff \
   --mlip-config hydragnn.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
-# 3a) Supervisor orchestration with UMA relaxations
-matsim-agents supervisor-run Li2MnO3 \
+# 3a) The same with UMA relaxations
+matsim-agents run "Find stable phases of Li2MnO3" \
+  --trigger-al-handoff \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run

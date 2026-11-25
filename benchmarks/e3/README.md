@@ -75,7 +75,7 @@ An ambiguous `sbatch` failure also retains its reservation; an operator must
 establish whether an allocation was created before releasing any time.
 The [shared executable catalog](feasibility.py) filters unavailable prototypes
 and exposes joint capacities to both policy implementations. The production
-design remains LLM-only. See the [generation and recovery contract](../../docs/workflows/run-campaigns.md)
+design remains LLM-only. See the [generation and recovery contract](operations.md)
 for raw proposal retention, generation shortfalls, and the frozen one-call
 limit for acquisition decisions that blocks unapproved replacement decisions.
 

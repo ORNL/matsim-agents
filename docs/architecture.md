@@ -4,25 +4,27 @@ This page is for contributors: it maps Python packages to their responsibilities
 For the agent graphs, workflows, and current capabilities, see
 [Architecture and capabilities](guide/architecture.md).
 
-The library is organized around stable scientific responsibilities rather than
-individual experiments or machines.
+`src/matsim_agents` is a general framework. It holds no campaign, material
+system or facility constants. Scientific campaigns are applications in
+[examples/](../examples/README.md): an `application.yaml` read with
+`matsim_agents.core.application.load_application`. Benchmarks live in
+`benchmarks/`, machine job scripts in `deployments/`, frozen research
+artifacts in `research/`.
 
 | Package | Responsibility |
 | --- | --- |
-| `orchestration` | Typed workflow state, objective/composition graphs, the interactive discovery chat, and explicit policies |
-| `orchestration.agents` | Planner, executor, and analyst nodes wired by the objective graph |
-| `discovery` | Composition parsing, structure generation, and stability analysis |
-| `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
-| `training` | Standalone UMA, MACE, and HydraGNN fine-tuning programs and their cost tracking |
-| `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
+| `core` | Dependency-free contracts: application schema, composition, seeding, hashing, energy conventions, relaxation results, numerical stress |
+| `execution` | Scheduler-neutral resources, launch contracts, provenance, run directories, allocation, budgets and the capability registry |
+| `data` | Dataset governance, energy alignment, formation-energy training data and objective-aware splits |
 | `backends.llm` | Configuration-selected language-model providers |
-| `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
-| `backends.mcp` | Optional client for external Model Context Protocol servers: configuration, deny-by-default tool authorization, sessions, and audit records ([MCP tools](mcp.md)) |
-| `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
-| `seeding` | The only source of random generators and seeds: named streams derived from one configured seed ([reproducibility](reproducibility.md)) |
-| `execution` | Scheduler-neutral resources, launch contracts, provenance, and the backend capability registry |
-| `datasets` | Dependency-free dataset governance, elemental reference manifests, formation-energy dataset preparation, energy alignment, and objective-aware train/validation/test splits |
-| `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
+| `backends.dft` | DFT job contracts, concurrent dispatch, Quantum ESPRESSO and VASP |
+| `backends.mlip` | MLIP configuration, calculator factories, HydraGNN, MC dropout, relaxation and fine-tuning |
+| `backends.mcp` | Optional Model Context Protocol client with deny-by-default authorization ([MCP tools](mcp.md)) |
+| `science` | Backend-free physics: structures, thermodynamics, defects, NEB, kinetics, irradiation, magnetism, properties, acquisition and decision scoring |
+| `backends.external` | Adapters for external codes that consume science contracts, e.g. SPECTRA-PKA |
+| `workflows` | Composable relaxation, exploration, active learning, hierarchy, full-supercell, radiation, debate and evaluation workflows |
+| `agents` | Objective graph, role agents and interactive chat |
+| `cli` | The `matsim-agents` command; generic commands only |
 
 The workflow layer uses `execution.contracts` for evidence, validation,
 approval, compute-budget, provenance, status, and result envelopes. Scientific
@@ -39,12 +41,12 @@ Read the modules in this order:
 | Module | Responsibility |
 | --- | --- |
 | [`cli/exploration.py`](../src/matsim_agents/cli/exploration.py) | Parse commands and present progress, errors, and summaries |
-| [`workflows/exploration.py`](../src/matsim_agents/workflows/exploration/api.py) | Small public API: check, run, summarize, resume |
-| [`workflows/exploration_config.py`](../src/matsim_agents/workflows/exploration/config.py) | Validate settings, resolve paths, preflight dependencies/checkpoint, build relaxation requests |
-| [`workflows/exploration_rounds.py`](../src/matsim_agents/workflows/exploration/rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
-| [`workflows/exploration_checkpoint.py`](../src/matsim_agents/workflows/exploration/checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
-| [`workflows/exploration_reporting.py`](../src/matsim_agents/workflows/exploration/reporting.py) | Read-only summaries and cumulative relative-energy reports |
-| [`discovery/structural_screening.py`](../src/matsim_agents/science/structures/screening.py) | Structural equivalence and deterministic diversity selection |
+| [`workflows/exploration/api.py`](../src/matsim_agents/workflows/exploration/api.py) | Small public API: check, run, summarize, resume |
+| [`workflows/exploration/config.py`](../src/matsim_agents/workflows/exploration/config.py) | Validate settings, resolve paths, preflight dependencies/checkpoint, build relaxation requests |
+| [`workflows/exploration/rounds.py`](../src/matsim_agents/workflows/exploration/rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
+| [`workflows/exploration/checkpoint.py`](../src/matsim_agents/workflows/exploration/checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
+| [`workflows/exploration/reporting.py`](../src/matsim_agents/workflows/exploration/reporting.py) | Read-only summaries and cumulative relative-energy reports |
+| [`science/structures/screening.py`](../src/matsim_agents/science/structures/screening.py) | Structural equivalence and deterministic diversity selection |
 
 New scientific options belong in the validated configuration and its shared
 request builder, not duplicated single-/multi-round execution paths.
@@ -72,8 +74,6 @@ streaming and local child cleanup;
 saved process state and readable reports using atomic run-directory storage.
 Scientific checkpoints/results remain owned by their native engines.
 
-The E3 presets reuse the frozen production/Aurora batch runners, keep approvals
-and resource accounting explicit, and do not introduce generic scheduler adapters.
 User-facing guides separate [running tasks](workflows/run-campaigns.md),
 [interpreting results](workflows/interpret-results.md), and
 [extending the library](workflows/extend-library.md).
@@ -87,21 +87,32 @@ enforced by `tests/test_package_boundaries.py`.
 | Layer | Packages |
 | --- | --- |
 | 8 | `cli` |
-| 7 | `fusion` |
-| 6 | `orchestration`, `campaign` |
-| 5 | `active_learning`, `workflows` |
-| 4 | `discovery`, `training` |
+| 7 | `agents` |
+| 6 | `workflows` |
+| 5 | `backends.external` |
+| 4 | `science` |
 | 3 | `backends.llm`, `backends.dft`, `backends.mlip`, `backends.mcp` |
-| 2 | `execution`, `datasets` |
-| 1 | `seeding` |
+| 2 | `execution`, `data` |
+| 1 | `core` |
+
+`tests/test_package_boundaries.py` also checks that:
+
+- `science` imports no backend;
+- the framework imports nothing from `examples/`, `benchmarks/` or `research/`;
+- `src/` holds no campaign or facility literals (compositions such as
+  `W640...`, project ids, site paths);
+- module and CLI command names are campaign-neutral;
+- removed modules stay removed.
+
+CI runs these checks, and dry-runs every application, in the `architecture` job of `.github/workflows/ci.yml`.
 
 When new code needs something from a higher layer, move the shared piece down
-(usually into `datasets`, `execution`, or the relevant `backends` package)
+(usually into `core`, `data`, `execution`, or the relevant `backends` package)
 instead of adding an upward import.
 
 ## Orchestration topology
 
-The CLI exposes objective, composition, and interactive modes over shared
+The CLI exposes objective and interactive modes over shared
 scientific capabilities. Each mode can hand low-confidence work to the same
 active-learning implementation when its UQ policy permits it. The full diagram
 is maintained in [Agentic AI Workflow Diagram](workflows/agentic-ai-workflow.md),
@@ -115,16 +126,13 @@ flowchart TD
     subgraph MODES[User-facing modes]
       direction LR
       O[Objective<br/>run] --> OP[Plan and execute]
-      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
       I[Interactive<br/>chat] --> IP[Detect and confirm]
     end
 
     G --> O
-    G --> P
     G --> I
 
     OP -->|HydraGNN, UMA, or MACE| X
-    PP -->|HydraGNN, UMA, or MACE| X
     IP -->|HydraGNN, UMA, or MACE| X
 
     subgraph SCIENCE[Shared scientific capabilities]
@@ -141,12 +149,8 @@ flowchart TD
 
     E --> R{Return to invoking mode}
     R --> OA[Analyst report]
-    R --> PS[Composition summary]
     R --> IR[Chat response]
 ```
-
-Machine-specific setup and job scripts live in `deployments/`; research-only
-paper and Codabench artifacts live in `research/`.
 
 ## Five stable interfaces
 
@@ -171,10 +175,8 @@ replacement backend interfaces.
 
 ## Compatibility policy
 
-Each module has exactly one import path. The former aliases
-(`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
-`matsim_agents.supervisor`, the `matsim_agents.tools` package, the top-level
-`matsim_agents.agents` package (now `matsim_agents.agents.roles`),
-`matsim_agents.chat` (now `matsim_agents.agents.interactive_chat`),
-and `matsim_agents.workflows.active_learning.backends`) have been removed; import from the
-canonical packages listed above.
+Each module has exactly one import path; there are no aliases, wrappers or
+deprecated commands. Removed modules, including the former campaign, fusion,
+supervisor and E1/E3 packages, are listed in `tests/test_package_boundaries.py`
+and must not return. Campaign code belongs in an application under `examples/`
+or in `benchmarks/`.

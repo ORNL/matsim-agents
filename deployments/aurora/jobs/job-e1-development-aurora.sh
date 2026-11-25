@@ -72,7 +72,7 @@ PY
 }
 trap finalize_job EXIT
 
-E1_COMMAND=(matsim-agents e1-development "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
+E1_COMMAND=(python -m benchmarks.e1 "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
 if [[ -n "${E1_RETRY_OUTPUT:-}" ]]; then
   [[ -f "${E1_RETRY_OUTPUT}/manifest.json" ]] || { echo "ERROR: retry output has no manifest.json: ${E1_RETRY_OUTPUT}" >&2; exit 2; }
   [[ -f "${E1_RETRY_OUTPUT}/responses.jsonl" ]] || { echo "ERROR: retry output has no responses.jsonl: ${E1_RETRY_OUTPUT}" >&2; exit 2; }

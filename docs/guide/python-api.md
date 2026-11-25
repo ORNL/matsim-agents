@@ -88,22 +88,6 @@ final = graph.invoke(
 print(final["analysis"])
 ```
 
-### Run the supervisor LangGraph workflow
-
-```python
-from matsim_agents.agents.composition_graph import SupervisorConfig, run_supervisor
-
-final = run_supervisor(SupervisorConfig(
-  composition="Li2MnO3",
-  mlip=mlip,
-  output_dir="./outputs",
-  trigger_active_learning_on_high_uq=True,
-  active_learning_config="examples/active_learning/al_config.example.yaml",
-  active_learning_dry_run=True,
-))
-print(final.get("summary"))
-```
-
 ### Embed the chat loop in your own app
 
 ```python

@@ -133,3 +133,28 @@ def test_application_with_missing_file_is_rejected(tmp_path):
     )
     with pytest.raises((FileNotFoundError, ValueError)):
         load_application(path)
+
+
+@pytest.mark.parametrize("path", [FUSION, CANTOR, PEROVSKITE], ids=lambda p: p.parent.name)
+def test_every_application_dry_runs_through_the_cli(path):
+    from typer.testing import CliRunner
+
+    from matsim_agents.cli import app
+
+    result = CliRunner().invoke(app, ["application", "check", str(path)])
+    assert result.exit_code == 0, result.output
+    assert load_application(path).name in result.output
+
+
+def test_application_check_rejects_a_target_that_disagrees_with_its_config(tmp_path):
+    from matsim_agents.workflows.applications import check_application
+
+    text = FUSION.read_text().replace("W: 640, Ta: 128", "W: 639, Ta: 129")
+    for name in ("campaign.yaml", "../fusion_pfc/policy.yaml"):
+        dest = tmp_path / "app" / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text((FUSION.parent / name).read_text())
+    path = tmp_path / "app" / "application.yaml"
+    path.write_text(text)
+    with pytest.raises(ValueError, match="composition"):
+        check_application(load_application(path))

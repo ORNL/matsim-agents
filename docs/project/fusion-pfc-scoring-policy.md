@@ -43,12 +43,12 @@ observable.
 - **Scenarios**: `matsim_agents.science.decision.scenario.aggregate` normalizes per-scenario
   scores to the declared scenario ids, and refuses scores for undeclared ones.
 
-## Command line
+## Running it
 
-`matsim-agents materials validate|score|report|pareto|sensitivity|packet-export|import`.
-Use `--synthetic` for the A/B/C demo bundle, or pass a YAML bundle with `scenario`,
-`candidates`, optional `constraints` and `benchmarks`. Every command reads evidence
-only. The SYNTHETIC end-to-end demo is
+Scoring has no dedicated CLI command; it is the Python API in
+`matsim_agents.science.decision.scoring`, driven by the application's
+[policy file](../../examples/fusion_pfc/policy.yaml). A bundle has `scenario`,
+`candidates`, optional `constraints` and `benchmarks`. Scoring reads evidence only. The SYNTHETIC end-to-end demo is
 [examples/fusion_pfc/synthetic_demo.py](../../examples/fusion_pfc/synthetic_demo.py).
 
 ## Acquisition advice
@@ -66,5 +66,4 @@ $P(\text{top}) \cdot n_\text{complete}/n_\text{ranked}$.
 
 Tests: [tests/test_fusion_policy.py](../../tests/test_fusion_policy.py),
 [tests/test_fusion_scoring.py](../../tests/test_fusion_scoring.py),
-[tests/test_fusion_acquisition.py](../../tests/test_fusion_acquisition.py),
-[tests/test_fusion_cli.py](../../tests/test_fusion_cli.py).
+[tests/test_fusion_acquisition.py](../../tests/test_fusion_acquisition.py).

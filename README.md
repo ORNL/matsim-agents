@@ -14,7 +14,7 @@ agentic loop. The user states a research objective in natural language;
 agents plan, run MLIP-driven simulations, score chemical and
 dynamical stability, and report the findings. By default, chat asks before
 each exploration (`--auto-confirm` skips the prompt). Explicit approvals gate
-DFT in `matsim-agents relax`, elemental-reference DFT, E3 campaign execution,
+DFT in `matsim-agents relax`, elemental-reference DFT,
 and model promotion; active-learning DFT labeling runs without a separate
 approval once `al run` is started.
 
@@ -36,8 +36,10 @@ See the [step-by-step guide](docs/workflows/simple-exploration.md) and
 This path needs no custom Python driver and never launches LLM, DFT, or
 active-learning work. Multi-round LLM steering is not part of this first interface.
 
-For the frozen E3-MLIP/E3-DFT presets and a common interface across advanced workflows,
-start with [run a campaign](docs/workflows/run-campaigns.md).
+For a common interface across advanced workflows, start with
+[run a workflow](docs/workflows/run-campaigns.md). Campaigns such as the fusion
+BCC 1024-site study are applications in [examples/](examples/): each declares
+an `application.yaml` loaded by the framework.
 Then [interpret results](docs/workflows/interpret-results.md) or
 [extend the library](docs/workflows/extend-library.md). The interface provides
 check/run/status/summary and capability-based native resume; scheduler submission
@@ -216,10 +218,11 @@ Chemical-stability proxy: PASS.
 you> Now suggest a Sb-substituted variant.
 ```
 
-### 3. Supervisor orchestration (discovery -> UQ -> optional AL handoff)
+### 3. Discovery with UQ-triggered active-learning handoff
 
 ```bash
-matsim-agents supervisor-run Li2MnO3 \
+matsim-agents run "Find stable phases of Li2MnO3" \
+  --trigger-al-handoff \
   --mlip-config mlip.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
@@ -258,7 +261,6 @@ matsim-agents tools run NAME [ARGS...]     # run a tool; its own --help lists it
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
-matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
 matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
 matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MLIP phase search
@@ -267,10 +269,10 @@ matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reason
 matsim-agents explore status RUN_DIRECTORY # last saved checkpoint progress; no scheduler query
 matsim-agents explore resume RUN_DIRECTORY # resume checkpointed exploration (one or more rounds)
 matsim-agents workflow list                # advanced workflows and native restart capabilities
-matsim-agents workflow init PRESET OUTPUT.yaml # annotated E3/exploration/debate presets; no execution
+matsim-agents workflow init PRESET OUTPUT.yaml # annotated exploration/debate presets; no execution
 matsim-agents workflow check CONFIG.yaml   # validate wrapper/native config without scientific execution
 matsim-agents workflow plan CONFIG.yaml    # validate and show the exact command without execution
-matsim-agents workflow run CONFIG.yaml [--dry-run] # preview or invoke; E3 execution requires approval
+matsim-agents workflow run CONFIG.yaml [--dry-run] # preview or invoke the native workflow
 matsim-agents workflow status RUN_DIRECTORY # last saved invocation status, not scheduler liveness
 matsim-agents workflow summary RUN_DIRECTORY # human report and links to native evidence
 matsim-agents workflow resume RUN_DIRECTORY [--native-run DIR] # native restart where supported
@@ -279,22 +281,18 @@ matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypot
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
 matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
 matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
-matsim-agents radiation-damage run|status|report|capabilities ...  # vacancy-hop recovery, exploratory and unqualified; dry run unless --dispatch
 matsim-agents external spectra-pka check|prepare|run|status|import ...  # optional interface to externally installed SPECTRA-PKA; dry run by default
-matsim-agents materials validate|score|report|pareto|sensitivity|packet-export|import ...  # eight-objective fusion PFC scoring of existing evidence; runs no calculation
-matsim-agents campaign check|inventory|coverage|transferability|preview|cost|approve|monitor|review ...  # hierarchical transfer campaign; see docs/hierarchical-transfer-campaign.md
+matsim-agents application check examples/<app>/application.yaml  # dry-run an application against its workflow
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
-matsim-agents e1-development MANIFEST.json --output DIR [--max-new-requests N] [--retry-errors]  # run one candidate's E1 development questions; held-out questions are not accepted
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
 matsim-agents coordination init|add|claim|heartbeat|complete|fail ...  # manage tasks; see docs/hpc-task-coordination.md
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml [--mlip-config FILE]  # active-learning loop (MLIP <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 matsim-agents active-learning run|validate-config ...  # same commands as `al`
-matsim-agents explore-and-learn COMPOSITION [options]  # discovery followed by active learning
 matsim-agents magnetic generate|policies|show ...  # collinear magnetic starting states for QE
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
@@ -310,7 +308,7 @@ Exit codes are the same for every command: `0` success, `1` the command ran but
 the scientific work, a preflight check or a required backend failed, and `2` a
 usage or configuration error (bad option, unreadable or invalid file).
 
-Options for `run`, `chat`, and `supervisor-run`, starter configurations,
+Options for `run` and `chat`, starter configurations,
 diagnostics, and package tools are described in the
 [command-line guide](docs/guide/cli.md). The fields of each backend's `mlip:`
 block, including HydraGNN decoder-head selection, are listed in the

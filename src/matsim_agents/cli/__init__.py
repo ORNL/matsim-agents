@@ -25,6 +25,7 @@ from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
     system,
     config_tools,
     tools,
+    application,
 )
 from matsim_agents.cli._app import app  # noqa: E402
 

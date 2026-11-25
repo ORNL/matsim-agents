@@ -18,11 +18,8 @@ Reusable standalone workflow graphics:
                 ┌───────────────────────▼──────────────────────┐
                 │         LangGraph orchestration layer         │
                 │                                               │
-                │  (A) run: planner -> executor -> uq_gate      │
+                │  run: planner -> executor -> uq_gate          │
                 │      -> [optional AL handoff] -> analyst      │
-                │  (B) supervisor-run: prepare -> explore       │
-                │      -> evaluate_uq -> [optional AL handoff]  │
-                │      -> summarize                              │
                 └───────────────────────┬──────────────────────┘
                                         │  tool calls
                 ┌───────────────────────▼──────────────────────┐
@@ -48,16 +45,13 @@ flowchart TD
     subgraph MODES[User-facing modes]
       direction LR
       O[Objective<br/>run] --> OP[Plan and execute]
-      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
       I[Interactive<br/>chat] --> IP[Detect and confirm]
     end
 
     G --> O
-    G --> P
     G --> I
 
     OP --> X
-    PP --> X
     IP --> X
 
     subgraph SCIENCE[Shared scientific capabilities]
@@ -77,12 +71,10 @@ flowchart TD
     subgraph OUTPUTS[Mode-specific presentation]
       direction LR
       OA[Analyst report]
-      PS[Composition summary]
       IR[Chat response]
     end
 
     R --> OA
-    R --> PS
     R --> IR
 
     classDef entry fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.5px
@@ -92,9 +84,9 @@ flowchart TD
     classDef output fill:#faf5ff,stroke:#9333ea,color:#3b0764
     class U entry
     class G,R decision
-    class O,OP,P,PP,I,IP mode
+    class O,OP,I,IP mode
     class X,Q,AL,E science
-    class OA,PS,IR output
+    class OA,IR output
 ```
 
 ### Capabilities
@@ -178,28 +170,23 @@ flowchart TD
   shell-style substitution with optional in-file `vars:` block, so the
   same config can be re-targeted across users / scratch dirs / runs
   without editing it.
-- **Two complementary graph entry points**:
-  - `matsim-agents run` for planner-executor-analyst task execution.
-  - `matsim-agents supervisor-run` for discovery exploration + UQ-based decisioning + optional AL handoff.
-- **Surrogate backend switch for AL/supervisor flows**: an AL config's `mlip`
+- **Graph entry point**: `matsim-agents run` for planner-executor-analyst
+  task execution, with optional UQ-triggered AL handoff (`--trigger-al-handoff`).
+- **Surrogate backend switch for AL flows**: an AL config's `mlip`
   block selects its model; `--mlip-config` replaces it at run time, so one
   config runs with any backend:
   - `matsim-agents al run <config.yaml>` (the config's own model)
   - `matsim-agents al run <config.yaml> --mlip-config examples/mlip/uma-s-1p1-omat.yaml` (frozen UMA)
-  - `matsim-agents supervisor-run <composition> --mlip-config examples/mlip/uma-s-1p1-omat.yaml ...` (UMA in supervisor path)
 
 ## Graph orchestration modes
 
-The repository currently exposes two LangGraph workflows that share the
-same numerical kernels (discovery wrapper, relaxations, AL loop):
+The repository exposes one LangGraph workflow over the shared numerical
+kernels (discovery wrapper, relaxations, AL loop):
 
 - **Core agent graph** (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
   with optional run-path AL handoff when UQ policy is triggered.
-- **Supervisor graph** (`matsim-agents supervisor-run`):
-  prepare composition -> explore composition -> evaluate UQ -> optional
-  active-learning handoff -> summarize.
 
-This split keeps decision logic agentic while preserving deterministic,
+This keeps decision logic agentic while preserving deterministic,
 restart-friendly HPC kernels for heavy computation.
 
 ### Core agent graph

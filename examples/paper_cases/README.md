@@ -30,9 +30,6 @@ These paper cases can be executed through three complementary entry points:
   with optional run-path AL handoff when UQ thresholds are crossed.
 - Active learning (`matsim-agents al run al_<case>.yaml`): iterative
   discovery -> UQ/acquisition -> DFT labeling -> retraining loop.
-- Supervisor orchestration (`matsim-agents supervisor-run`): LangGraph control
-  layer that can run discovery exploration, evaluate UQ, and conditionally
-  hand off to AL using a base AL YAML.
 
 The discovery chat path (`matsim-agents chat`) can also feed these cases by
 detecting formulas, optionally running `/relax <structure_path>`, and
@@ -41,10 +38,8 @@ escalating to AL when configured UQ thresholds are crossed.
 ```mermaid
 flowchart LR
   RG[matsim-agents run] --> RU[uq_gate]
-  SU[matsim-agents supervisor-run] --> SQ[evaluate_uq]
   CH[matsim-agents chat] --> CQ[chat UQ policy]
   RU -->|triggered| AL[matsim-agents al run al_case.yaml]
-  SQ -->|triggered| AL
   CQ -->|triggered| AL
 ```
 
@@ -123,8 +118,9 @@ matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
-# 5) supervisor-driven discovery -> optional AL handoff:
-matsim-agents supervisor-run LiFePO4 \
+# 5) agent-graph discovery -> optional AL handoff:
+matsim-agents run "Find stable phases of LiFePO4" \
+  --trigger-al-handoff \
   --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
@@ -154,7 +150,7 @@ matsim-agents supervisor-run LiFePO4 \
 > offline. Run `sbatch deployments/perlmutter/download/download-uma-perlmutter.sh`
 > once. See `docs/model-download.md` ("UMA MLIP weights on Perlmutter").
 
-> **Integration note:** `--al-dry-run` in `supervisor-run` only reports the
+> **Integration note:** `--al-dry-run` in `run` only reports the
 > planned handoff. Use `--al-run` to actually execute the AL loop.
 
 ## Minimum viable commands
@@ -164,8 +160,9 @@ matsim-agents supervisor-run LiFePO4 \
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
-# 2) Supervisor path with optional AL handoff planning
-matsim-agents supervisor-run LiFePO4 \
+# 2) Agent graph with optional AL handoff planning
+matsim-agents run "Find stable phases of LiFePO4" \
+  --trigger-al-handoff \
   --mlip-config examples/paper_cases/al_lifepo4.yaml \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
