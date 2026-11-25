@@ -14,7 +14,7 @@ evidence it produces omits both.
 | `deployments/common/setup/build-openmc.sh` and `openmc-smoke.py` | written; `bash -n` and `ruff` pass; **the script has not been run end to end** |
 | Manual build of v0.15.3 on Frontier (serial, GCC 12.3, Cray HDF5 1.14.3.9) | done; `import openmc.deplete` works with the library path below |
 | Co-59 activation against the analytic Co-60 inventory | run once on a Frontier login node (v0.15.3, ENDF/B-VIII.0): 1.522e12 atoms against 1.524e12 analytic, 0.15 % apart, PASS. This checks the solver bookkeeping only (see section 3) |
-| A runner that writes an inventory from a material and a flux | **not written**; `OpenMCInventory` JSON is the contract it will fill |
+| `run_activation` (`openmc_activation/runner.py`) writes an inventory from a material and a flux | run once on a Frontier login node for Fe (30 d at 1e14 n/cm2/s, two groups); Fe-55 matched a hand calculation from the same collapsed cross sections to four digits. Input checks are tested without OpenMC (`tests/test_openmc_runner.py`); the OpenMC run itself is not in the test suite |
 
 ## 1. Clone, install and build
 
@@ -103,6 +103,18 @@ matches your irradiation field for real work.
 
 ## 4. Use in matsim-agents
 
+Run the Fe example (needs the environment from section 2, a few minutes on a login node):
+
+```bash
+PYTHONPATH=src python examples/external/openmc_activation.py outputs/openmc_fe
+```
+
+It calls `run_activation`, which collapses the supplied group flux to one group, depletes the
+material, cools it, and writes `inventory.json`, `depletion_results.h5` and `run_spec.json` with
+SHA-256 hashes of the inputs and outputs. The example's flux is a placeholder, not a reactor or
+fusion spectrum. Pass `nuclides=[...]` to limit the collapsed cross sections to the nuclides you
+care about; with `None` OpenMC collapses every chain nuclide that has data, which is slower.
+
 `backends/external/openmc_activation/inventory.py` turns a stored inventory into the same
 `ExternalNuclearEvidence` the FISPACT-II readers produce, so downstream code is unchanged:
 
@@ -111,7 +123,7 @@ from matsim_agents.backends.external.openmc_activation.inventory import (
     read_inventory, to_activation_evidence, to_transmutation_evidence,
 )
 
-inv = read_inventory("co59-inventory.json")
+inv = read_inventory("outputs/openmc_fe/inventory.json")
 activation = to_activation_evidence(
     inv, cooling_time_s=86400.0, material_id="Co", irradiation_scenario_id="flux-1e11"
 )
@@ -138,3 +150,8 @@ helium = to_transmutation_evidence(
 - Gas production relies on the chain's reaction list. Check that the (n,p) and (n,alpha)
   reactions you care about are present before trusting a helium or hydrogen number.
 - There are no uncertainties. Do not quote an error bar for an OpenMC activation result.
+- The Fe run limited the collapsed nuclides to Fe-54 to Fe-58, so activation of impurities and
+  of daughters that need their own cross sections (for example Mn-55 or Cr-52 capture) is not
+  in the result. The Fe-55 hand check shares the runner's cross sections, so it tests
+  bookkeeping, not the nuclear data. The hydrogen and helium appm from that run were not
+  compared with any reference.
