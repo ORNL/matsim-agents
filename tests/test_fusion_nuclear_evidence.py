@@ -230,3 +230,9 @@ def test_ledger_record_and_pka_import(tmp_path):
             material_id="W",
             application_version="1.0",
         )
+
+
+def test_negative_quantities_are_rejected():
+    with pytest.raises(ValidationError, match="non-negative"):
+        NuclearQuantity(name="shutdown_dose_rate", value=-1e-3, unit="Sv/h")
+    assert NuclearQuantity(name="shutdown_dose_rate", value=0.0, unit="Sv/h").value == 0.0

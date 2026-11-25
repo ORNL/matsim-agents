@@ -17,13 +17,18 @@ policy P in scenario S":
     X is ``complete_qualified`` and another candidate dominates it with
     ``established`` dominance;
 ``UNRESOLVED``
-    anything else.
+    anything else, and always when the benchmarks are synthetic.
+
+Scored records are identified by property id plus fusion context
+(:func:`~matsim_agents.fusion.scoring.evidence_key`), so the same value under a
+different context gets its own ledger record.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -39,14 +44,16 @@ from matsim_agents.campaign.selection_revision import (
     append_property_evidence,
 )
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisRecord, HypothesisStatus
+from matsim_agents.execution.properties import PropertyEvidence
 from matsim_agents.fusion.objectives import objective
 from matsim_agents.fusion.policy import FusionScoringPolicy
-from matsim_agents.fusion.scenario import FusionEvidence
+from matsim_agents.fusion.scenario import EvidenceContext, FusionEvidence
 from matsim_agents.fusion.scoring import (
     CandidateResult,
     Dominance,
     RankingStatus,
     ScoringResult,
+    evidence_key,
 )
 from matsim_agents.workflows.radiation_hypothesis import (
     MAX_RATIONALE_CHARS,
@@ -73,8 +80,25 @@ class PacketObservable(BaseModel):
     status: str | None
     qualification: str | None
     property_id: str | None
+    context: dict[str, Any] | None = None
     ledger_evidence_id: str | None
     reason: str = ""
+
+
+class PacketConstraint(BaseModel):
+    property: str
+    minimum: float | None
+    maximum: float | None
+    temperature_K: float | None
+    status: str
+    value: float | None
+    uncertainty: float | None
+    evidence_status: str | None
+    qualification: str | None
+    property_id: str | None
+    context: dict[str, Any] | None = None
+    ledger_evidence_id: str | None
+    note: str = ""
 
 
 class PacketObjective(BaseModel):
@@ -99,6 +123,7 @@ class PacketCandidate(BaseModel):
     rank: int | None
     pareto: bool | None
     missing_objectives: list[str]
+    constraints: list[PacketConstraint] = Field(default_factory=list)
     objectives: list[PacketObjective]
 
 
@@ -113,6 +138,7 @@ class FusionEvidencePacket(BaseModel):
     benchmark_digest: str
     synthetic_benchmarks: bool
     scenario_id: str
+    scenario: dict[str, Any]
     score_digest: str
     candidates: list[PacketCandidate]
     ranking: list[str]
@@ -146,7 +172,10 @@ def build_packet(
     policy: FusionScoringPolicy,
     ledger_ids: Mapping[str, str] | None = None,
 ) -> FusionEvidencePacket:
-    """Evidence packet for a scoring result; ``ledger_ids`` maps property id to ledger id."""
+    """Evidence packet for a scoring result.
+
+    ``ledger_ids`` maps :func:`~matsim_agents.fusion.scoring.evidence_key` to ledger id.
+    """
     if policy.policy_version != result.policy_version or policy.digest() != result.policy_digest:
         raise ValueError("policy does not match the one used for scoring")
     ledger_ids = ledger_ids or {}
@@ -166,7 +195,8 @@ def build_packet(
                     status=x.status.value if x.status else None,
                     qualification=x.qualification.value if x.qualification else None,
                     property_id=x.property_id,
-                    ledger_evidence_id=ledger_ids.get(x.property_id or ""),
+                    context=_context(x.context),
+                    ledger_evidence_id=ledger_ids.get(x.evidence_key or ""),
                     reason=x.reason,
                 )
                 for x in o.observables
@@ -191,7 +221,31 @@ def build_packet(
             for v in (c.score, c.score_low, c.score_high, c.partial_weighted_sum, c.covered_weight)
             if v is not None
         ]
-        numbers += [cn.value for cn in c.constraints if cn.value is not None]
+        cons = [
+            PacketConstraint(
+                property=cn.property,
+                minimum=cn.minimum,
+                maximum=cn.maximum,
+                temperature_K=cn.temperature_K,
+                status=cn.status.value,
+                value=cn.value,
+                uncertainty=cn.uncertainty,
+                evidence_status=cn.evidence_status.value if cn.evidence_status else None,
+                qualification=cn.qualification.value if cn.qualification else None,
+                property_id=cn.property_id,
+                context=_context(cn.context),
+                ledger_evidence_id=ledger_ids.get(cn.evidence_key or ""),
+                note=cn.note,
+            )
+            for cn in c.constraints
+        ]
+        for x in cons:
+            allowed.update(i for i in (x.property_id, x.ledger_evidence_id) if i)
+            numbers += [
+                v
+                for v in (x.minimum, x.maximum, x.temperature_K, x.value, x.uncertainty)
+                if v is not None
+            ]
         cands.append(
             PacketCandidate(
                 candidate_id=c.candidate_id,
@@ -205,6 +259,7 @@ def build_packet(
                 rank=c.rank,
                 pareto=c.pareto,
                 missing_objectives=list(c.missing_objectives),
+                constraints=cons,
                 objectives=objs,
             )
         )
@@ -216,6 +271,7 @@ def build_packet(
         benchmark_digest=result.benchmark_digest,
         synthetic_benchmarks=result.synthetic_benchmarks,
         scenario_id=result.scenario_id,
+        scenario=result.scenario.model_dump(mode="json", exclude_none=True),
         score_digest=score_digest,
         candidates=cands,
         ranking=list(result.ranking),
@@ -229,6 +285,12 @@ def build_packet(
     )
     packet.digest = "fpk-" + hashlib.sha256(packet.canonical_text().encode()).hexdigest()[:24]
     return packet
+
+
+def _context(ctx: EvidenceContext | None) -> dict[str, Any] | None:
+    if ctx is None:
+        return None
+    return ctx.model_dump(mode="json", exclude_none=True) or None
 
 
 def parse_draft(
@@ -249,7 +311,7 @@ def parse_draft(
         problems.append(f"cites evidence not in the packet: {unknown}")
     for token in _NUMBER.findall(_EVIDENCE_ID.sub(" ", body)):
         x = float(token)
-        if x == int(x) and abs(x) <= _SMALL_INTEGER_LIMIT:
+        if math.isfinite(x) and abs(x) <= _SMALL_INTEGER_LIMIT and x == int(x):
             continue
         if not any(
             abs(x - n) <= _TOLERANCE * max(abs(n), 1e-12) or _rounds_to(n, token)
@@ -267,6 +329,8 @@ def parse_draft(
 
 
 def _status(c: CandidateResult, result: ScoringResult) -> tuple[HypothesisStatus, str]:
+    if result.synthetic_benchmarks:
+        return HypothesisStatus.UNRESOLVED, "benchmarks are synthetic"
     held = [p for p in result.dominance if p.winner == c.candidate_id]
     beaten = [p for p in result.dominance if p.loser == c.candidate_id]
     qualified = c.ranking_status == RankingStatus.COMPLETE_QUALIFIED
@@ -298,7 +362,7 @@ def _evidence_split(
             continue
         rivals = [r.objective(o.objective).desirability for r in others]
         rivals = [r for r in rivals if r is not None]
-        ids = [ledger_ids[x.property_id] for x in o.observables if x.property_id in ledger_ids]
+        ids = [ledger_ids[x.evidence_key] for x in o.observables if x.evidence_key in ledger_ids]
         if rivals and o.desirability >= max(rivals):
             support += ids
         elif rivals and o.desirability <= min(rivals):
@@ -334,6 +398,15 @@ def _deterministic_rationale(c: CandidateResult, reason: str) -> str:
     return "Deterministic summary: " + " | ".join(parts)
 
 
+def _with_context(item: FusionEvidence) -> PropertyEvidence:
+    """The record as stored in the ledger: its fusion context becomes a stated assumption."""
+    ctx = _context(item.context)
+    if ctx is None:
+        return item.evidence
+    note = f"fusion context: {json.dumps(ctx, sort_keys=True)}"
+    return item.evidence.model_copy(update={"limitations": [*item.evidence.limitations, note]})
+
+
 @dataclass(frozen=True)
 class FusionRevisionOutcome:
     record: HypothesisRecord
@@ -364,19 +437,21 @@ def revise_fusion_hypothesis(
         )
     c = result.by_id(candidate_id)
     used = {
-        x.property_id
+        x.evidence_key
         for cand in result.candidates
-        for o in cand.objectives
-        for x in o.observables
-        if x.property_id
+        for x in (
+            *(x for o in cand.objectives for x in o.observables),
+            *cand.constraints,
+        )
+        if x.evidence_key
     }
     ledger_ids: dict[str, str] = {}
     for items in evidence.values():
         for item in items:
-            pid = item.evidence.property_id()
-            if pid in used and pid not in ledger_ids:
-                ledger_ids[pid] = append_property_evidence(
-                    ledger, item.evidence, campaign_id=campaign_id
+            key = evidence_key(item.evidence.property_id(), item.context)
+            if key in used and key not in ledger_ids:
+                ledger_ids[key] = append_property_evidence(
+                    ledger, _with_context(item), campaign_id=campaign_id
                 )
     packet = build_packet(result, policy, ledger_ids)
     status, reason = _status(c, result)
@@ -433,7 +508,9 @@ def revise_fusion_hypothesis(
             "policy_version": policy.policy_version,
             "policy_digest": policy.digest(),
             "benchmark_version": result.benchmark_version,
+            "benchmark_digest": result.benchmark_digest,
             "scenario_id": result.scenario_id,
+            "scenario": result.scenario.model_dump(mode="json", exclude_none=True),
             "score_digest": packet.score_digest,
             "packet_version": packet.packet_version,
             "packet_digest": packet.digest,

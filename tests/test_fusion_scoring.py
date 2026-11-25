@@ -4,8 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.campaign.selection import Constraint, Correlation
-from matsim_agents.execution.contracts import PROPERTY_UNITS
-from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
+from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.execution.properties import (
+    PropertyEvidence,
+    PropertyQualification,
+    PropertyStatus,
+)
 from matsim_agents.fusion import synthetic
 from matsim_agents.fusion.policy import builtin_policy
 from matsim_agents.fusion.scenario import FusionEvidence
@@ -220,3 +224,55 @@ def test_report_and_digest_deterministic():
     assert r1.digest() == r2.digest()
     text = render_report(r1)
     assert "SYNTHETIC" in text and "PARTIAL" in text and "MISSING" in text
+
+
+def _qualified(items):
+    upd = {
+        "status": PropertyStatus.CALCULATED,
+        "evidence_level": EvidenceLevel.CONVERGED_DFT,
+        "converged": True,
+        "qualification": PropertyQualification.NUMERICALLY_VALIDATED,
+    }
+    return [
+        FusionEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context) for i in items
+    ]
+
+
+def test_constraint_result_cites_spec_and_evidence():
+    c = Constraint(property="yield_strength", minimum=100.0, temperature_K=1200.0)
+    r = _score(_ab_only(), constraints=[c])
+    cr = r.by_id("A").constraints[0]
+    assert (cr.minimum, cr.maximum, cr.temperature_K) == (100.0, None, 1200.0)
+    assert cr.property_id and cr.evidence_status and cr.qualification
+    assert cr.context is not None
+    looser = _score(_ab_only(), constraints=[c.model_copy(update={"minimum": 50.0})])
+    assert looser.digest() != r.digest()
+
+
+def test_qualified_ranking_needs_reliable_constraint_evidence():
+    cands = {k: _qualified(v) for k, v in _ab_only().items()}
+    assert _score(cands).by_id("A").ranking_status == RankingStatus.COMPLETE_QUALIFIED
+    base = cands["A"][0]
+    creep = base.evidence.model_copy(
+        update={
+            "property": "creep_rate",
+            "unit": PROPERTY_UNITS["creep_rate"],
+            "value": 1e-9,
+            "uncertainty": 1e-10,
+            "qualification": PropertyQualification.UNVALIDATED,
+        }
+    )
+    weak = [*cands["A"], FusionEvidence(evidence=creep, context=base.context)]
+    r = _score(
+        {"A": weak, "B": cands["B"]}, constraints=[Constraint(property="creep_rate", maximum=1.0)]
+    )
+    a = r.by_id("A")
+    assert a.feasibility == ConstraintStatus.FEASIBLE
+    assert a.ranking_status == RankingStatus.COMPLETE_PROVISIONAL
+
+
+def test_result_records_full_scenario():
+    r = _score(_ab_only())
+    assert r.scenario == synthetic.SCENARIO
+    other = synthetic.SCENARIO.model_copy(update={"description": "changed"})
+    assert score_candidates(POLICY, synthetic.BENCHMARKS, other, _ab_only()).digest() != r.digest()

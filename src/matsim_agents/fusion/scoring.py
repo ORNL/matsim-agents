@@ -42,7 +42,7 @@ from matsim_agents.execution.properties import (
 )
 from matsim_agents.fusion.objectives import OBJECTIVES, mechanical_screening, objective
 from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
-from matsim_agents.fusion.scenario import EvaluationScenario, FusionEvidence
+from matsim_agents.fusion.scenario import EvaluationScenario, EvidenceContext, FusionEvidence
 
 SCORING_SCHEMA = "fusion-pfc-score-v1"
 
@@ -147,14 +147,31 @@ class Dominance(StrEnum):
     UNDETERMINED = "undetermined"
 
 
+def evidence_key(property_id: str, context: EvidenceContext | None) -> str:
+    """Identity of a scored record: its property id plus its fusion context."""
+    ctx = context.model_dump_json(exclude_none=True) if context is not None else "{}"
+    return property_id if ctx == "{}" else f"{property_id}|{ctx}"
+
+
 class ConstraintResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     property: str
+    minimum: float | None = None
+    maximum: float | None = None
+    temperature_K: float | None = None
     status: ConstraintStatus
     value: float | None = None
     uncertainty: float | None = None
+    evidence_status: PropertyStatus | None = None
+    qualification: PropertyQualification | None = None
+    property_id: str | None = None
+    context: EvidenceContext | None = None
     note: str = ""
+
+    @property
+    def evidence_key(self) -> str | None:
+        return evidence_key(self.property_id, self.context) if self.property_id else None
 
 
 class ObservableResult(BaseModel):
@@ -169,8 +186,13 @@ class ObservableResult(BaseModel):
     status: PropertyStatus | None = None
     qualification: PropertyQualification | None = None
     property_id: str | None = None
+    context: EvidenceContext | None = None
     excluded: tuple[str, ...] = ()
     reason: str = ""
+
+    @property
+    def evidence_key(self) -> str | None:
+        return evidence_key(self.property_id, self.context) if self.property_id else None
 
 
 class ObjectiveResult(BaseModel):
@@ -241,6 +263,7 @@ class ScoringResult(BaseModel):
     benchmark_digest: str
     synthetic_benchmarks: bool
     scenario_id: str
+    scenario: EvaluationScenario
     candidates: tuple[CandidateResult, ...]
     ranking: tuple[str, ...]
     pareto_front: tuple[str, ...]
@@ -290,12 +313,13 @@ def _score_observable(
         if bad:
             excluded.extend(bad)
         else:
-            usable.append(ev)
-    chosen, reason, _ = _pick(usable, obs_name, None)
-    if chosen is None:
+            usable.append(item)
+    chosen_item, reason = _pick_item(usable, obs_name)
+    if chosen_item is None:
         if excluded and reason == "no evidence record":
             reason = "no comparable evidence"
         return ObservableResult(observable=obs_name, excluded=tuple(excluded), reason=reason)
+    chosen = chosen_item.evidence
     if not isinstance(chosen.value, int | float):
         return ObservableResult(observable=obs_name, reason="tensor value cannot be scored")
     v = float(chosen.value)
@@ -311,8 +335,17 @@ def _score_observable(
         status=chosen.status,
         qualification=chosen.qualification,
         property_id=chosen.property_id(),
+        context=chosen_item.context,
         excluded=tuple(excluded),
     )
+
+
+def _pick_item(items: Sequence[FusionEvidence], prop: str) -> tuple[FusionEvidence | None, str]:
+    """``_pick`` over fusion records, keeping the context of the chosen one."""
+    chosen, reason, _ = _pick([i.evidence for i in items], prop, None)
+    if chosen is None:
+        return None, reason
+    return next(i for i in items if i.evidence is chosen), ""
 
 
 def _score_objective(
@@ -364,37 +397,54 @@ def _check_constraint(
         scenario = scenario.model_copy(update={"temperature_K": c.temperature_K})
         fields = tuple(dict.fromkeys((*fields, "temperature_K")))
     rows = [
-        i.evidence
+        i
         for i in items
         if i.evidence.property == c.property and not scenario.condition_mismatches(fields, i)
     ]
-    chosen, reason, _ = _pick(rows, c.property, None)
-    if chosen is None or not isinstance(chosen.value, int | float):
-        return ConstraintResult(property=c.property, status=ConstraintStatus.UNKNOWN, note=reason)
+    spec = {"property": c.property, "minimum": c.minimum, "maximum": c.maximum}
+    spec["temperature_K"] = c.temperature_K
+    chosen_item, reason = _pick_item(rows, c.property)
+    if chosen_item is None or not isinstance(chosen_item.evidence.value, int | float):
+        return ConstraintResult(
+            **spec, status=ConstraintStatus.UNKNOWN, note=reason or "tensor value"
+        )
+    chosen = chosen_item.evidence
     v, s = float(chosen.value), float(chosen.uncertainty or 0.0)
     ok = bool(c.satisfied(v))
     margin = ok != bool(c.satisfied(v - s)) or ok != bool(c.satisfied(v + s))
     return ConstraintResult(
-        property=c.property,
+        **spec,
         status=ConstraintStatus.FEASIBLE if ok else ConstraintStatus.VIOLATED,
         value=v,
         uncertainty=s,
+        evidence_status=chosen.status,
+        qualification=chosen.qualification,
+        property_id=chosen.property_id(),
+        context=chosen_item.context,
         note="within one sigma of the limit" if margin else "",
     )
 
 
+def _reliable(status: PropertyStatus | None, qual: PropertyQualification | None) -> bool:
+    return (
+        status in {PropertyStatus.MEASURED, PropertyStatus.CALCULATED}
+        and qual is not None
+        and qual != PropertyQualification.UNVALIDATED
+    )
+
+
 def _ranking_status(
-    feasibility: ConstraintStatus, missing: list[str], objectives: Sequence[ObjectiveResult]
+    feasibility: ConstraintStatus,
+    missing: list[str],
+    objectives: Sequence[ObjectiveResult],
+    constraints: Sequence[ConstraintResult] = (),
 ) -> RankingStatus:
     if feasibility == ConstraintStatus.VIOLATED:
         return RankingStatus.INFEASIBLE
     if missing:
         return RankingStatus.INCOMPLETE
-    reliable = all(
-        o.evidence_status in {PropertyStatus.MEASURED, PropertyStatus.CALCULATED}
-        and o.qualification is not None
-        and o.qualification != PropertyQualification.UNVALIDATED
-        for o in objectives
+    reliable = all(_reliable(o.evidence_status, o.qualification) for o in objectives) and all(
+        _reliable(c.evidence_status, c.qualification) for c in constraints
     )
     if reliable and feasibility == ConstraintStatus.FEASIBLE:
         return RankingStatus.COMPLETE_QUALIFIED
@@ -522,7 +572,7 @@ def score_candidates(
                 score_high=math.fsum(o.weight * o.d_high for o in objs) if complete else None,  # type: ignore[operator]
                 partial_weighted_sum=partial,
                 covered_weight=covered,
-                ranking_status=_ranking_status(feasibility, missing, objs),
+                ranking_status=_ranking_status(feasibility, missing, objs, cons),
                 mechanical_screening=mechanical_screening([i.evidence for i in items]),
             )
         )
@@ -596,6 +646,7 @@ def score_candidates(
         benchmark_digest=benchmarks.digest(),
         synthetic_benchmarks=benchmarks.synthetic,
         scenario_id=scenario.scenario_id,
+        scenario=scenario,
         candidates=tuple(results),
         ranking=tuple(base_rank),
         pareto_front=tuple(sorted(front)),

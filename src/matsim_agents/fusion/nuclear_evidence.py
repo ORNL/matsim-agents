@@ -102,6 +102,9 @@ class NuclearQuantity(BaseModel):
     def _finite(self) -> NuclearQuantity:
         if not math.isfinite(self.value):
             raise ValueError(f"{self.name} must be finite")
+        # Every quantity in FAMILY_QUANTITIES is an amount or a rate.
+        if self.value < 0:
+            raise ValueError(f"{self.name} must be non-negative, got {self.value}")
         if self.uncertainty is not None and not math.isfinite(self.uncertainty):
             raise ValueError(f"{self.name} uncertainty must be finite")
         return self

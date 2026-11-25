@@ -118,3 +118,90 @@ def test_llm_cannot_change_score_or_status(tmp_path, scored):
         revise_fusion_hypothesis(
             ledger, "h", "A", result, POLICY, cands, budget=RevisionBudget(max_revisions=3)
         )
+
+
+def test_overflowing_number_is_rejected_not_raised(scored):
+    _, result = scored
+    p = build_packet(result, POLICY)
+    assert any("1e999" in x for x in parse_draft(_draft(rationale="A has 1e999."), p)[1])
+
+
+def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
+    from matsim_agents.execution.contracts import EvidenceLevel
+    from matsim_agents.execution.properties import PropertyQualification, PropertyStatus
+    from matsim_agents.fusion.revision import _status
+    from matsim_agents.fusion.scenario import FusionEvidence
+
+    upd = {
+        "status": PropertyStatus.CALCULATED,
+        "evidence_level": EvidenceLevel.CONVERGED_DFT,
+        "converged": True,
+        "qualification": PropertyQualification.NUMERICALLY_VALIDATED,
+        "uncertainty": 0.0,
+    }
+    cands = {
+        k: [
+            FusionEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context) for i in v
+        ]
+        for k, v in synthetic.candidates().items()
+        if k != "C"
+    }
+    real = synthetic.BENCHMARKS.model_copy(update={"synthetic": False})
+    r_real = score_candidates(POLICY, real, synthetic.SCENARIO, cands)
+    assert _status(r_real.by_id("A"), r_real)[0] == HypothesisStatus.SUPPORTED
+    r_syn = score_candidates(POLICY, synthetic.BENCHMARKS, synthetic.SCENARIO, cands)
+    assert _status(r_syn.by_id("A"), r_syn) == (
+        HypothesisStatus.UNRESOLVED,
+        "benchmarks are synthetic",
+    )
+
+
+def test_context_changes_ledger_identity_and_is_recorded(tmp_path, scored):
+    cands, result = scored
+    ledger = EvidenceLedger(tmp_path / "l.jsonl")
+    out = revise_fusion_hypothesis(ledger, "h", "A", result, POLICY, cands)
+    t = out.record.traceability
+    assert t["scenario"]["scenario_id"] == result.scenario_id
+    assert t["scenario"]["plasma_ion_energy_eV"] == 100.0
+    assert out.packet.scenario == t["scenario"]
+    obs = out.packet.candidates[0].objectives[0].observables[0]
+    assert obs.context and obs.context["plasma_ion"] == "D"
+    rec = ledger.get(obs.ledger_evidence_id)
+    assert any("fusion context" in a for a in rec.physical_assumptions)
+
+    # Same values, different context: new ledger ids.
+    sc = synthetic.SCENARIO.model_copy(update={"plasma_ion_energy_eV": 200.0})
+    moved = {
+        k: [
+            i.model_copy(
+                update={"context": i.context.model_copy(update={"plasma_ion_energy_eV": 200.0})}
+            )
+            for i in v
+        ]
+        for k, v in cands.items()
+    }
+    r2 = score_candidates(POLICY, synthetic.BENCHMARKS, sc, moved)
+    out2 = revise_fusion_hypothesis(ledger, "h2", "A", r2, POLICY, moved)
+    obs2 = out2.packet.candidates[0].objectives[0].observables[0]
+    assert obs2.property_id == obs.property_id
+    assert obs2.ledger_evidence_id != obs.ledger_evidence_id
+
+
+def test_packet_carries_constraint_spec(scored):
+    from matsim_agents.campaign.selection import Constraint
+
+    cands, _ = scored
+    c = Constraint(property="yield_strength", minimum=123.0, temperature_K=1200.0)
+    r = score_candidates(POLICY, synthetic.BENCHMARKS, synthetic.SCENARIO, cands, constraints=[c])
+    p = build_packet(r, POLICY)
+    pc = p.candidates[0].constraints[0]
+    assert (pc.minimum, pc.temperature_K) == (123.0, 1200.0)
+    assert pc.property_id in p.allowed_evidence_ids and 123.0 in p.numbers
+    r2 = score_candidates(
+        POLICY,
+        synthetic.BENCHMARKS,
+        synthetic.SCENARIO,
+        cands,
+        constraints=[c.model_copy(update={"minimum": 124.0})],
+    )
+    assert build_packet(r2, POLICY).digest != p.digest
