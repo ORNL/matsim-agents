@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from matsim_agents.campaign.registry import NOT_YET_ESTABLISHED
-from matsim_agents.campaign.strategies import compare_strategies, comparison_over_budgets
-from matsim_agents.campaign.synthetic import SyntheticSpec, make_synthetic_hierarchy
-from matsim_agents.campaign.transfer import TransferExperiment, split_experiment
+from matsim_agents.workflows.candidate_registry import NOT_YET_ESTABLISHED
+from matsim_agents.workflows.hierarchy.strategies import compare_strategies, comparison_over_budgets
+from matsim_agents.workflows.hierarchy.synthetic import SyntheticSpec, make_synthetic_hierarchy
+from matsim_agents.workflows.hierarchy.transfer import TransferExperiment, split_experiment
 
 
 def _exp(**kw) -> TransferExperiment:

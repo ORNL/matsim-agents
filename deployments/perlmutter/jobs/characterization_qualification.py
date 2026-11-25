@@ -22,7 +22,7 @@ from pathlib import Path
 from ase.build import bulk
 from ase.io import write
 
-from matsim_agents.campaign.characterization import (
+from matsim_agents.workflows.characterization import (
     CharacterizationContract,
     load_contract,
     run_characterization,

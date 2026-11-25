@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
 
@@ -447,57 +446,6 @@ def test_budget_ledger_uses_cfs_compatible_lock(tmp_path, monkeypatch):
     )
     production.release_gpu_hours(ledger, "test", actual_gpu_seconds=460_800)
     assert json.loads(ledger.read_text())["spent_gpu_seconds"] == 460_800
-
-
-@pytest.mark.parametrize("preallocated", [False, True])
-def test_workflow_wrapper_uses_current_campaign_and_full_reservation(
-    campaign,
-    monkeypatch,
-    preallocated,
-):
-    from matsim_agents.cli.workflow_catalog import WorkflowConfig
-    from matsim_agents.cli.workflows import _check, _command
-
-    manifest_path, output_root = campaign
-    ledger = output_root / "resource-budget.json"
-    monkeypatch.setenv("SLURM_JOB_ID", "test-job")
-    reservation_id = "test-job"
-    if preallocated:
-        state = json.loads(ledger.read_text())
-        reservation_id = "submission-test"
-        state["reservations"][reservation_id] = {
-            **state["reservations"].pop("test-job"),
-            "job_id": "test-job",
-        }
-        ledger.write_text(json.dumps(state))
-        monkeypatch.setenv("MATSIM_E3_MLIP_RESERVATION_ID", reservation_id)
-    else:
-        monkeypatch.delenv("MATSIM_E3_MLIP_RESERVATION_ID", raising=False)
-    config = WorkflowConfig(
-        workflow="e3-mlip",
-        settings={
-            "manifest": manifest_path,
-            "output_root": output_root,
-            "resource_state": ledger,
-            "material": "nb_ta_o",
-            "worker_python": Path("worker-python"),
-        },
-    )
-    assert "validated" in " ".join(_check(config))
-    command = _command(config, approved=True)
-    assert command[2:4] == ["benchmarks.e3.production", "run-campaign"]
-    assert "--workers" in command and "64" in command
-    state = json.loads(ledger.read_text())
-    if preallocated:
-        state["reservations"][reservation_id]["job_id"] = "other-job"
-        ledger.write_text(json.dumps(state))
-        with pytest.raises(ValueError, match="full 16-node/two-hour"):
-            _command(config, approved=True)
-        state["reservations"][reservation_id]["job_id"] = "test-job"
-    state["reservations"][reservation_id]["reserved_gpu_seconds"] = 100
-    ledger.write_text(json.dumps(state))
-    with pytest.raises(ValueError, match="full 16-node/two-hour"):
-        _command(config, approved=True)
 
 
 def test_perlmutter_launcher_matches_manifest_limits():

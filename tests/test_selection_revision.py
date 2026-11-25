@@ -4,11 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.selection_revision import (
-    build_evidence_packet,
-    revise_selection_hypothesis,
-    validate_draft,
-)
 from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisRecord, HypothesisStatus
 from matsim_agents.science.acquisition.selection import (
@@ -17,6 +12,11 @@ from matsim_agents.science.acquisition.selection import (
     Objective,
     SelectionSpec,
     select,
+)
+from matsim_agents.science.acquisition.selection_revision import (
+    build_evidence_packet,
+    revise_selection_hypothesis,
+    validate_draft,
 )
 from matsim_agents.science.properties.calculators import PropertyConditions, PropertyStatus
 from tests.test_selection import BULK, KAPPA, T, ev

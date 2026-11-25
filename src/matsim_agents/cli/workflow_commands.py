@@ -152,7 +152,7 @@ def characterize_workflow(
     Running the same contract again resumes with its outstanding calculations.
     """
 
-    from matsim_agents.campaign.characterization import load_contract, run_characterization
+    from matsim_agents.workflows.characterization import load_contract, run_characterization
 
     report = run_characterization(load_contract(contract))
     if as_json:

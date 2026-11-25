@@ -1,13 +1,15 @@
 import math
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.fusion import synthetic
-from matsim_agents.fusion.policy import builtin_policy
-from matsim_agents.fusion.scenario import FusionEvidence
-from matsim_agents.fusion.scoring import (
+from matsim_agents.science.acquisition.selection import Constraint, Correlation
+from matsim_agents.science.decision import synthetic
+from matsim_agents.science.decision.policy import load_policy
+from matsim_agents.science.decision.scenario import FusionEvidence
+from matsim_agents.science.decision.scoring import (
     BenchmarkSet,
     ConstraintStatus,
     Dominance,
@@ -15,14 +17,15 @@ from matsim_agents.fusion.scoring import (
     render_report,
     score_candidates,
 )
-from matsim_agents.science.acquisition.selection import Constraint, Correlation
 from matsim_agents.science.properties.calculators import (
     PropertyEvidence,
     PropertyQualification,
     PropertyStatus,
 )
 
-POLICY = builtin_policy("fusion_pfc_initial_v1")
+PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
+
+POLICY = load_policy(PFC_POLICY)
 
 
 def _score(cands=None, **kw):

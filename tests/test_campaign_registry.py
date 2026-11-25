@@ -5,7 +5,9 @@ from ase import Atoms
 from ase.io import write
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.campaign.registry import (
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.science.structures.seed_structures import PhaseCandidate
+from matsim_agents.workflows.candidate_registry import (
     CandidateRegistry,
     CandidateSelectionPolicy,
     formula_acquisition_metrics,
@@ -15,8 +17,6 @@ from matsim_agents.campaign.registry import (
     soap_novelty,
     structure_content_hash,
 )
-from matsim_agents.core.composition import parse_composition
-from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 
 

@@ -1,18 +1,22 @@
+from pathlib import Path
+
 import pytest
 
-from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.fusion import synthetic
-from matsim_agents.fusion.acquisition import (
+from matsim_agents.execution.budget import BudgetLedger
+from matsim_agents.science.decision import synthetic
+from matsim_agents.science.decision.acquisition import (
     FusionCalculation,
     decision_confidence,
     plan_fusion_acquisition,
     render_fusion_plan,
     reserve_selected,
 )
-from matsim_agents.fusion.policy import builtin_policy
-from matsim_agents.fusion.scoring import score_candidates
+from matsim_agents.science.decision.policy import load_policy
+from matsim_agents.science.decision.scoring import score_candidates
 
-POLICY = builtin_policy()
+PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
+
+POLICY = load_policy(PFC_POLICY)
 
 
 def _result(cands=None):
@@ -131,7 +135,7 @@ def test_policy_mismatch_rejected():
 
 
 def test_confidence_counts_incomplete_and_is_deterministic():
-    from matsim_agents.fusion.acquisition import _state
+    from matsim_agents.science.decision.acquisition import _state
 
     state, ranked = _state(_result())
     c1 = decision_confidence(state, ranked, POLICY, synthetic.BENCHMARKS, samples=200, seed=0)

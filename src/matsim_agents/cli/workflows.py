@@ -1,12 +1,10 @@
-"""Consistent entry points over native advanced workflows and E3 campaign runners."""
+"""Consistent check/plan/run/status/resume entry points over native workflows."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shlex
-import subprocess
 import sys
 from contextlib import ExitStack
 from pathlib import Path
@@ -20,8 +18,6 @@ from typer.main import get_command
 from matsim_agents.cli._app import app, console
 from matsim_agents.cli.workflow_catalog import (
     ADAPTERS,
-    E3DFTSettings,
-    E3MLIPSettings,
     WorkflowConfig,
     load_workflow,
     native_arguments,
@@ -45,16 +41,6 @@ workflow_app = typer.Typer(
     )
 )
 app.add_typer(workflow_app, name="workflow")
-REPO = Path(__file__).resolve().parents[3]
-SUBMIT_BATCH = REPO / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
-
-
-def _native_environment() -> dict[str, str]:
-    return {
-        "PYTHONPATH": os.pathsep.join(
-            [str(REPO / "src"), str(REPO), os.environ.get("PYTHONPATH", "")]
-        )
-    }
 
 
 def _validate_native_cli(arguments: list[str]) -> dict[str, Any]:
@@ -90,72 +76,15 @@ def _check(cfg: WorkflowConfig) -> list[str]:
     ]
     if cfg.config is not None and not cfg.config.is_file():
         raise ValueError(f"Native configuration does not exist: {cfg.config}")
-    if isinstance(cfg.settings, E3MLIPSettings):
-        if not (REPO / "benchmarks/e3/production.py").is_file():
-            raise ValueError("E3-MLIP requires a source checkout containing the benchmark runner")
-        checked = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "benchmarks.e3.production",
-                "validate",
-                "--manifest",
-                str(cfg.settings.manifest),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=REPO,
-            env={**os.environ, **_native_environment()},
-        )
-        if checked.returncode != 0:
-            detail = checked.stdout + checked.stderr
-            raise ValueError(f"E3-MLIP protocol preflight failed:\n{detail}")
-        notes.append("E3-MLIP protocol validated; run requires Slurm and approval.")
-        return notes
-    if isinstance(cfg.settings, E3DFTSettings):
-        manifest = json.loads(cfg.settings.manifest.read_text())
-        if manifest.get("batch_id") != "E3-round1-bcc-01":
-            raise ValueError("E3-DFT preset requires the frozen E3-round1-bcc-01 batch manifest")
-        if not SUBMIT_BATCH.is_file():
-            raise ValueError("E3-DFT requires a source checkout containing the frozen batch runner")
-        cases = manifest.get("cases")
-        if not isinstance(cases, list) or not cases:
-            raise ValueError("E3-DFT manifest has no cases")
-        ids = [case["calculation_id"] for case in cases]
-        if len(set(cfg.settings.calculation_ids)) != len(cfg.settings.calculation_ids):
-            raise ValueError("Duplicate calculation IDs in E3-DFT settings")
-        if set(cfg.settings.calculation_ids) - set(ids):
-            raise ValueError("Requested calculation IDs are not in the frozen batch")
-        command = [
-            sys.executable,
-            str(SUBMIT_BATCH),
-            "--manifest",
-            str(cfg.settings.manifest),
-            "--dry-run",
-        ]
-        if cfg.settings.calculation_ids:
-            command.extend(["--only", *cfg.settings.calculation_ids])
-        checked = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            env={**os.environ, **_native_environment()},
-        )
-        if checked.returncode != 0:
-            raise ValueError("Frozen E3/VASP preflight failed:\n" + checked.stdout + checked.stderr)
-        notes.append(
-            "Native PAW/executable/input/collision/submission-ledger dry-run checks passed."
-        )
-        return notes
     parameters = _validate_native_cli(native_arguments(cfg))
     if cfg.workflow in {"known-answers", "agent-eval"}:
         if cfg.workflow == "known-answers":
-            from matsim_agents.campaign.known_answers import load_suite
+            from matsim_agents.workflows.evaluation.known_answers import load_suite
 
             if parameters["tier"] not in {"replay", "live"}:
                 raise ValueError("Known-answer tier must be replay or live")
         else:
-            from matsim_agents.campaign.agent_eval import load_suite
+            from matsim_agents.workflows.evaluation.agent_eval import load_suite
 
         suite = load_suite(parameters["suite"])
         if set(parameters["case"] or []) - {case.case_id for case in suite.cases}:
@@ -171,7 +100,7 @@ def _check(cfg: WorkflowConfig) -> list[str]:
             if not result.ready:
                 raise ValueError("\n".join(result.errors))
         elif cfg.workflow == "characterize":
-            from matsim_agents.campaign.characterization import load_contract
+            from matsim_agents.workflows.characterization import load_contract
 
             load_contract(cfg.config)
         elif cfg.workflow == "al":
@@ -183,8 +112,6 @@ def _check(cfg: WorkflowConfig) -> list[str]:
 
             if cfg.workflow in {"debate", "llm-check"}:
                 raw = _load_workflow_config(cfg.config)
-            elif cfg.workflow == "e1":
-                raw = json.loads(cfg.config.read_text())
             else:
                 raw = yaml.safe_load(cfg.config.read_text())
             if cfg.workflow == "relax":
@@ -199,79 +126,19 @@ def _check(cfg: WorkflowConfig) -> list[str]:
                 from matsim_agents.workflows.llm_check import LLMCheckConfig
 
                 LLMCheckConfig.model_validate(raw)
-            elif cfg.workflow == "e1":
-                from matsim_agents.workflows.e1 import E1DevelopmentManifest
-
-                E1DevelopmentManifest.model_validate(raw)
             elif cfg.workflow == "agent-eval":
-                from matsim_agents.campaign.agent_eval import AgentEvalConfig
+                from matsim_agents.workflows.evaluation.agent_eval import AgentEvalConfig
 
                 AgentEvalConfig.model_validate(raw)
     return notes
 
 
-def _command(cfg: WorkflowConfig, *, approved: bool) -> list[str]:
-    if approved and cfg.workflow not in {"e3-mlip", "e3-dft"}:
-        raise ValueError(
-            "--approve-execution is only for E3 presets; use native approval settings otherwise"
-        )
-    if isinstance(cfg.settings, E3MLIPSettings):
-        if not approved:
-            raise ValueError("E3-MLIP execution requires --approve-execution")
-        if not os.environ.get("SLURM_JOB_ID"):
-            raise ValueError("E3-MLIP production must run inside an existing Slurm allocation")
-        settings = cfg.settings
-        budget = json.loads(settings.resource_state.read_text())
-        cap = 2_764_800
-        if budget.get("schema_version") != 1 or budget.get("cap_gpu_seconds") != cap:
-            raise ValueError("E3-MLIP requires the 768-GPU-hour benchmark resource ledger")
-        job_id = os.environ["SLURM_JOB_ID"]
-        reservation_id = os.environ.get("MATSIM_E3_MLIP_RESERVATION_ID", job_id)
-        reservation = budget.get("reservations", {}).get(reservation_id)
-        if (
-            not isinstance(reservation, dict)
-            or reservation.get("reserved_gpu_seconds") != 460_800
-            or reservation.get("job_id", job_id) != job_id
-        ):
-            raise ValueError("E3-MLIP requires this job's full 16-node/two-hour reservation.")
-        return [
-            sys.executable,
-            "-m",
-            "benchmarks.e3.production",
-            "run-campaign",
-            "--manifest",
-            str(settings.manifest),
-            "--output-root",
-            str(settings.output_root),
-            "--resource-state",
-            str(settings.resource_state),
-            "--material",
-            settings.material,
-            "--workers",
-            str(settings.workers),
-            "--worker-python",
-            str(settings.worker_python or (REPO / ".venv-mace/bin/python")),
-            "--hard-optimization-seconds",
-            str(settings.hard_optimization_seconds),
-        ]
-    if isinstance(cfg.settings, E3DFTSettings):
-        command = [
-            sys.executable,
-            str(SUBMIT_BATCH),
-            "--manifest",
-            str(cfg.settings.manifest),
-            "--submit" if approved else "--dry-run",
-        ]
-        if cfg.settings.calculation_ids:
-            command.extend(["--only", *cfg.settings.calculation_ids])
-        return command
+def _command(cfg: WorkflowConfig) -> list[str]:
     return [sys.executable, "-m", "matsim_agents.cli", *native_arguments(cfg)]
 
 
 def _hashes(cfg: WorkflowConfig) -> dict[str, str]:
     paths = [cfg.config] if cfg.config is not None else []
-    if cfg.settings is not None:
-        paths.append(cfg.settings.manifest)
     return {
         "workflow_config": hashlib.sha256(cfg.model_dump_json().encode()).hexdigest(),
         **{str(path): file_sha256(path) for path in paths},
@@ -301,7 +168,6 @@ def _execute_locked(run: ScientificRunDirectory, record: WorkflowInvocation) -> 
                 output,
                 lambda text: console.print(text, end="", markup=False, highlight=False),
                 cwd=record.working_directory,
-                env=_native_environment(),
             )
         record.return_code = return_code
         record.state = "completed" if return_code == 0 else "failed"
@@ -353,49 +219,27 @@ def list_workflows() -> None:
 
 @workflow_app.command("init")
 def init(
-    preset: str = typer.Argument(..., help="e3-mlip, e3-dft, explore, or debate"),
+    workflow: str = typer.Argument(..., help="A workflow name from `workflow list`."),
     output: Path = typer.Argument(..., help="Destination YAML; never overwrite an existing file"),
+    config: Path | None = typer.Option(None, help="Native configuration file for the workflow."),
 ) -> None:
-    """Copy an annotated preset, rebasing its native paths to the destination."""
-    presets = {
-        "e3-mlip": "e3-mlip.yaml",
-        "e3-dft": "e3-dft.yaml",
-        "explore": "exploration-workflow.yaml",
-        "debate": "debate-workflow.yaml",
-    }
+    """Write a workflow file for a registered workflow."""
     try:
-        if preset not in presets:
-            raise ValueError(f"Unknown preset {preset!r}; choose {', '.join(presets)}")
+        if workflow not in ADAPTERS:
+            raise ValueError(f"Unknown workflow {workflow!r}; choose {', '.join(ADAPTERS)}")
         if output.exists():
             raise ValueError(f"Refusing to overwrite {output}")
-        source = REPO / "examples/workflows" / presets[preset]
-        cfg = load_workflow(source)
-        text = source.read_text()
-        raw = yaml.safe_load(text)
-        # Keep annotations while replacing only the preset's path values.
-        for field in ("config",):
-            if field in raw:
-                text = text.replace(
-                    f"{field}: {raw[field]}", f"{field}: {json.dumps(str(getattr(cfg, field)))}"
-                )
-        if cfg.settings is not None:
-            for field in ("manifest", "output_root", "resource_state", "worker_python"):
-                resolved = getattr(cfg.settings, field, None)
-                if resolved is not None:
-                    original = raw["settings"].get(field)
-                    if original is None:
-                        continue
-                    text = text.replace(
-                        f"{field}: {original}",
-                        f"{field}: {json.dumps(str(resolved))}",
-                    )
+        data: dict[str, Any] = {"workflow": workflow, "output_root": "./workflow-records"}
+        if ADAPTERS[workflow].config_argument:
+            if config is None:
+                raise ValueError(f"{workflow} requires --config path/to/native-config")
+            data["config"] = str(config.expanduser().resolve())
+        WorkflowConfig.model_validate(data)
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x") as stream:
-            stream.write(text)
-        console.print(
-            f"Created {output}; edit settings, then workflow check {output}", markup=False
-        )
-        console.print("No model loaded, campaign started, or job submitted.")
+            yaml.safe_dump(data, stream, sort_keys=False)
+        console.print(f"Created {output}; next: workflow check {output}", markup=False)
+        console.print("No model loaded, workflow started, or job submitted.")
     except (ValueError, OSError) as error:
         console.print(f"Cannot create preset: {error}", markup=False)
         raise typer.Exit(1) from error
@@ -421,13 +265,12 @@ def check(config: Path = typer.Argument(..., exists=True, dir_okay=False)) -> No
     )
 
 
-def _plan(cfg: WorkflowConfig, *, approved: bool) -> dict[str, Any]:
+def _plan(cfg: WorkflowConfig) -> dict[str, Any]:
     notes = _check(cfg)
-    command = _command(cfg, approved=approved)
+    command = _command(cfg)
     return {
         "workflow": cfg.workflow,
         "output_root": str(cfg.output_root),
-        "execution_approved": approved,
         "command": command,
         "command_display": shlex.join(command),
         "notes": notes,
@@ -438,7 +281,6 @@ def _plan(cfg: WorkflowConfig, *, approved: bool) -> dict[str, Any]:
 def _print_plan(plan: dict[str, Any]) -> None:
     console.print(f"Workflow: {plan['workflow']}", markup=False)
     console.print(f"Output root: {plan['output_root']}", markup=False)
-    console.print(f"Execution approved: {str(plan['execution_approved']).lower()}")
     console.print("Command:", markup=False)
     console.print(f"  {plan['command_display']}", markup=False, soft_wrap=True)
     for note in plan["notes"]:
@@ -449,15 +291,12 @@ def _print_plan(plan: dict[str, Any]) -> None:
 @workflow_app.command("plan")
 def plan(
     config: Path = typer.Argument(..., exists=True, dir_okay=False),
-    approve_execution: bool = typer.Option(
-        False, help="Include explicitly approved E3 execution or scheduler submission."
-    ),
     as_json: bool = typer.Option(False, "--json", help="Print the plan as JSON."),
 ) -> None:
     """Validate a workflow and show the exact command without executing it."""
     cfg = _load(config)
     try:
-        result = _plan(cfg, approved=approve_execution)
+        result = _plan(cfg)
     except (ValueError, OSError, yaml.YAMLError) as error:
         console.print(f"Cannot plan workflow: {error}", markup=False)
         raise typer.Exit(1) from error
@@ -470,9 +309,6 @@ def plan(
 @workflow_app.command("run")
 def run(
     config: Path = typer.Argument(..., exists=True, dir_okay=False),
-    approve_execution: bool = typer.Option(
-        False, help="Explicitly approve E3-MLIP execution or E3/VASP scheduler submission."
-    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print the command without executing it."
     ),
@@ -481,10 +317,10 @@ def run(
     cfg = _load(config)
     try:
         if dry_run:
-            _print_plan(_plan(cfg, approved=approve_execution))
+            _print_plan(_plan(cfg))
             return
         _check(cfg)
-        command = _command(cfg, approved=approve_execution)
+        command = _command(cfg)
         directory = ScientificRunDirectory.create(
             cfg.output_root,
             workflow=cfg.workflow,
@@ -500,7 +336,6 @@ def run(
             working_directory=Path.cwd(),
             state="running",
             configuration_sha256=_hashes(cfg),
-            execution_approved=approve_execution,
         )
         _execute(directory, record)
     except (ValueError, OSError, yaml.YAMLError) as error:
@@ -536,17 +371,12 @@ def resume(
     native_run: Path | None = typer.Option(
         None, help="Native run/session directory for exploration or chat, shown in native output."
     ),
-    approve_execution: bool = typer.Option(
-        False, help="Explicit approval for E3-MLIP continuation."
-    ),
 ) -> None:
     try:
         if native_run is not None:
             native_run = native_run.expanduser().resolve()
         record = read_invocation(directory)
         cfg = WorkflowConfig.model_validate(saved_workflow_config(directory))
-        if approve_execution and cfg.workflow != "e3-mlip":
-            raise ValueError("--approve-execution on resume is only for E3-MLIP")
         adapter = ADAPTERS[cfg.workflow]
         if adapter.resume == "unsupported":
             raise ValueError(
@@ -554,7 +384,7 @@ def resume(
                 "completed scientific work will not be silently replayed."
             )
         if _hashes(cfg) != record.configuration_sha256:
-            raise ValueError("Resume refused: native configuration or campaign manifest changed")
+            raise ValueError("Resume refused: native configuration changed")
         if record.state == "completed":
             console.print("Invocation already completed; no command executed.")
             return
@@ -586,21 +416,20 @@ def resume(
                 )
             if "--resume" in cfg.arguments:
                 raise ValueError("Use --native-run for resume, not a stored --resume argument")
-            command = [*_command(cfg, approved=False), "--resume", str(native_run)]
+            command = [*_command(cfg), "--resume", str(native_run)]
         elif cfg.workflow == "al":
             from matsim_agents.workflows.active_learning import ALConfig
 
             if not ALConfig.from_yaml(cfg.config).loop.resume:
                 raise ValueError("Native AL configuration must enable loop.resume")
-            command = _command(cfg, approved=False)
+            command = _command(cfg)
         else:
-            command = _command(cfg, approved=approve_execution)
+            command = _command(cfg)
         record.command = command
         record.state = "running"
         record.failure_reason = None
         record.return_code = None
         record.native_run_directory = str(native_run.resolve()) if native_run else None
-        record.execution_approved = approve_execution
         _execute(ScientificRunDirectory.open(directory), record)
     except (ValueError, OSError, yaml.YAMLError) as error:
         console.print(f"Cannot resume workflow: {error}", markup=False)

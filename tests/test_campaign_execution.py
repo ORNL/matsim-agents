@@ -17,24 +17,6 @@ from matsim_agents.backends.mlip.config import (
     parse_mlip_config,
 )
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.campaign.formula_execution import (
-    CampaignDFTRefinementConfig,
-    CampaignFormulaExecutionConfig,
-    CampaignRetrainingConfig,
-    ReferenceStructureSpec,
-    _cross_model_scores,
-    _exploration_kwargs,
-    _generate_reference_energies,
-    _iteration_states,
-    _model_identifier,
-    _perturbation_robustness,
-    _relaxation_energy_per_atom,
-    _score_relaxed_candidate_uncertainty,
-    latest_promoted_model,
-    make_formula_runner,
-    run_formula_with_active_learning,
-)
-from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.science.structures.formula import FormulaGenerationPolicy
@@ -51,6 +33,24 @@ from matsim_agents.science.thermodynamics.unary_references import (
 )
 from matsim_agents.workflows.active_learning.config import ALConfig
 from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.multi_formula.formula_execution import (
+    CampaignDFTRefinementConfig,
+    CampaignFormulaExecutionConfig,
+    CampaignRetrainingConfig,
+    ReferenceStructureSpec,
+    _cross_model_scores,
+    _exploration_kwargs,
+    _generate_reference_energies,
+    _iteration_states,
+    _model_identifier,
+    _perturbation_robustness,
+    _relaxation_energy_per_atom,
+    _score_relaxed_candidate_uncertainty,
+    latest_promoted_model,
+    make_formula_runner,
+    run_formula_with_active_learning,
+)
+from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -85,7 +85,8 @@ def test_formula_runner_wires_remaining_mlip_allowance_without_changing_seeds(
         )
 
     monkeypatch.setattr(
-        "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
+        "matsim_agents.workflows.multi_formula.formula_execution.run_formula_with_active_learning",
+        run,
     )
     make_formula_runner(config)(
         "NbO",
@@ -494,7 +495,7 @@ def test_surrogate_hull_scales_compound_reference_from_loaded_structure(tmp_path
 
 
 def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -604,7 +605,7 @@ def test_cross_model_scores_records_ranking_disagreement(tmp_path):
 def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path, monkeypatch):
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -667,7 +668,7 @@ def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path,
 
 
 def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -1702,7 +1703,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
 def test_formula_execution_applies_retraining_and_promotion(
     tmp_path, monkeypatch, validation_fraction
 ):
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
@@ -1805,7 +1806,7 @@ def test_formula_execution_applies_retraining_and_promotion(
 
 
 def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_path):
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
 
     promoted = tmp_path / "promoted-model"
     cfg = SimpleNamespace(
@@ -1822,7 +1823,7 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
     cfg = SimpleNamespace(mlip=MACEConfig(family="mace_mp", model="medium", dispersion=True))
 
-    import matsim_agents.campaign.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_execution as execution
 
     execution._apply_model_override(cfg, str(tmp_path / "promoted.model"))
 
@@ -2058,7 +2059,7 @@ def test_latest_promoted_model_recovers_checkpoint_from_state(tmp_path):
 def test_formula_execution_releases_exploration_models_before_active_learning(
     tmp_path, monkeypatch
 ):
-    from matsim_agents.campaign import formula_execution
+    from matsim_agents.workflows.multi_formula import formula_execution
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -2100,7 +2101,7 @@ def test_formula_execution_releases_exploration_models_before_active_learning(
 def test_campaign_driver_mlip_work_runs_on_the_mlip_device(tmp_path, monkeypatch):
     from contextlib import contextmanager
 
-    from matsim_agents.campaign import formula_execution
+    from matsim_agents.workflows.multi_formula import formula_execution
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -2182,7 +2183,8 @@ def test_formula_runner_adopts_a_promotion_committed_before_a_failure(tmp_path, 
         raise RuntimeError("DFT refinement failed after promotion")
 
     monkeypatch.setattr(
-        "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
+        "matsim_agents.workflows.multi_formula.formula_execution.run_formula_with_active_learning",
+        run,
     )
     with pytest.raises(RuntimeError, match="after promotion"):
         make_formula_runner(config)("NbO", str(tmp_path / "attempt"), random_seed=0)

@@ -16,7 +16,7 @@ matsim-agents characterize CONTRACT.yaml
 The command prints the report as JSON and exits non-zero for
 `invalid_protocol` and `failed_infrastructure`. Running the same contract
 again resumes it: completed calculations are never repeated.
-Programmatically, use `matsim_agents.campaign.characterization`
+Programmatically, use `matsim_agents.workflows.characterization`
 (`load_contract`, `plan_recipe`, `run_characterization`, `outstanding_steps`).
 Examples are in [examples/characterization](../examples/characterization).
 

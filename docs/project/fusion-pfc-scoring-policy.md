@@ -5,10 +5,10 @@ repository is a material property, and no score is a materials claim.
 
 ## Objectives
 
-`matsim_agents.fusion.policy.FUSION_PFC_OBJECTIVES` lists the eight objectives. Each is
+`matsim_agents.science.decision.policy.FUSION_PFC_OBJECTIVES` lists the eight objectives. Each is
 maximized as a desirability $d_i \in [0, 1]$:
 
-| Objective | Scored observables (see `matsim_agents.fusion.objectives`) |
+| Objective | Scored observables (see `matsim_agents.science.decision.objectives`) |
 |---|---|
 | radiation_damage_recovery | defect recovery fraction |
 | thermal_conductivity | total thermal conductivity |
@@ -40,7 +40,7 @@ observable.
 - **Pareto and dominance** are computed on complete objectives. When some candidates
   are incomplete, the front is marked partial.
 - **Sensitivity** scales each weight and reports how the ranking changes.
-- **Scenarios**: `matsim_agents.fusion.scenario.aggregate` normalizes per-scenario
+- **Scenarios**: `matsim_agents.science.decision.scenario.aggregate` normalizes per-scenario
   scores to the declared scenario ids, and refuses scores for undeclared ones.
 
 ## Command line
@@ -53,7 +53,7 @@ only. The SYNTHETIC end-to-end demo is
 
 ## Acquisition advice
 
-`matsim_agents.fusion.acquisition.plan_fusion_acquisition` ranks proposed calculations
+`matsim_agents.science.decision.acquisition.plan_fusion_acquisition` ranks proposed calculations
 by expected gain in decision confidence per node-hour. Decision confidence is
 $P(\text{top}) \cdot n_\text{complete}/n_\text{ranked}$.
 

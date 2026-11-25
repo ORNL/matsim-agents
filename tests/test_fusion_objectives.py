@@ -2,14 +2,14 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.fusion.objectives import (
+from matsim_agents.science.decision.objectives import (
     OBJECTIVES,
     ObjectiveEvidenceError,
     check_objective_evidence,
     mechanical_screening,
     objective,
 )
-from matsim_agents.fusion.policy import FUSION_PFC_OBJECTIVES
+from matsim_agents.science.decision.policy import FUSION_PFC_OBJECTIVES
 from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
 
 

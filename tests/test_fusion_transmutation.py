@@ -2,15 +2,18 @@ from collections import Counter
 
 import pytest
 
-from matsim_agents.campaign.radiation_properties import REFERENCE_ALLOY_COUNTS
-from matsim_agents.fusion.nuclear_evidence import (
+from matsim_agents.science.irradiation.contracts import RecoilSpecies
+from matsim_agents.science.irradiation.nuclear_evidence import (
     ExternalNuclearEvidence,
     NuclearEvidenceError,
     NuclearFamily,
     NuclearQuantity,
 )
-from matsim_agents.fusion.transmutation import reference_site_map, transmuted_configuration
-from matsim_agents.science.irradiation.contracts import RecoilSpecies
+from matsim_agents.workflows.radiation.properties import REFERENCE_ALLOY_COUNTS
+from matsim_agents.workflows.radiation.transmutation_configs import (
+    reference_site_map,
+    transmuted_configuration,
+)
 
 H = "a" * 64
 

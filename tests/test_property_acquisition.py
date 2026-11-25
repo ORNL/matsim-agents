@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.budget import BudgetExceeded, BudgetLedger
-from matsim_agents.campaign.property_acquisition import (
+from matsim_agents.execution.budget import BudgetExceeded, BudgetLedger
+from matsim_agents.science.acquisition.property_acquisition import (
     ProposedCalculation,
     candidate_confidence,
     plan_property_acquisition,

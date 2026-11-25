@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from matsim_agents.campaign.synthetic import SyntheticSpec, make_synthetic_hierarchy
-from matsim_agents.campaign.transfer import (
+from matsim_agents.workflows.hierarchy.synthetic import SyntheticSpec, make_synthetic_hierarchy
+from matsim_agents.workflows.hierarchy.transfer import (
     LeakageError,
     Split,
     TransferExperiment,

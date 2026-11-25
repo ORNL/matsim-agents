@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from matsim_agents.campaign.agent_eval import (
+from matsim_agents.workflows.evaluation.agent_eval import (
     assessment_packet,
     deterministic_evidence_assessment,
     load_suite,
@@ -85,7 +85,7 @@ def evidence_refs(node, found: set[str]) -> None:
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    evaluator = ROOT / "src/matsim_agents/campaign/agent_eval.py"
+    evaluator = ROOT / "src/matsim_agents/workflows/evaluation/agent_eval.py"
     coverage, records, scores, manifest = [], [], defaultdict(dict), {"suites": []}
     structures: dict[str, set[str]] = {}
     for name, raw_rel, freeze in SUITES:

@@ -7,13 +7,12 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.backends.external.spectra_pka.config import SpectraPKAConfig
-from matsim_agents.campaign import radiation_properties as rp
-from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.campaign.property_acquisition import (
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.execution.budget import BudgetLedger
+from matsim_agents.science.acquisition.property_acquisition import (
     ProposedCalculation,
     plan_property_acquisition,
 )
-from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,
@@ -29,6 +28,7 @@ from matsim_agents.science.properties.calculators import (
     PropertyStatus,
 )
 from matsim_agents.workflows.full_supercell_campaign import FullSupercellCampaign
+from matsim_agents.workflows.radiation import properties as rp
 
 CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
 T = 900.0

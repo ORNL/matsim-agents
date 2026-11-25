@@ -3,14 +3,18 @@ from __future__ import annotations
 import numpy as np
 from ase.build import bulk
 
-from matsim_agents.campaign.coverage import (
+from matsim_agents.workflows.candidate_registry import (
+    CandidateRegistry,
+    DatasetEntry,
+    ingest_dataset,
+)
+from matsim_agents.workflows.hierarchy.coverage import (
     coverage_report,
     pair_priority,
     rank_by_coverage_gain,
     required_interactions,
     structure_descriptor,
 )
-from matsim_agents.campaign.registry import CandidateRegistry, DatasetEntry, ingest_dataset
 
 A = 3.2
 

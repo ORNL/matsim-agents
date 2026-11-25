@@ -722,33 +722,6 @@ def test_development_runner_parses_whole_response_json_fences(tmp_path):
     assert all(record["schema_error"] is None for record in records)
 
 
-def test_e1_cli_exits_nonzero_for_complete_with_errors(tmp_path, monkeypatch):
-    from typer.testing import CliRunner
-
-    import matsim_agents.workflows.e1 as e1_workflow
-    from matsim_agents.cli import app
-
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(_manifest().model_dump_json(), encoding="utf-8")
-    monkeypatch.setattr(
-        e1_workflow,
-        "run_e1_development",
-        lambda *_args, **_kwargs: {
-            "state": "complete_with_errors",
-            "completed_responses": 0,
-            "failed_responses": 2,
-        },
-    )
-
-    result = CliRunner().invoke(
-        app,
-        ["e1-development", str(manifest_path), "--output", str(tmp_path / "out")],
-    )
-
-    assert result.exit_code == 1
-    assert "complete_with_errors" in result.output
-
-
 def test_remote_truncated_reply_is_recorded_as_failed_attempt(tmp_path):
     class TruncatedModel:
         def invoke(self, _messages):

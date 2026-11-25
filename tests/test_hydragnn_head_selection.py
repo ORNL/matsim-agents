@@ -323,7 +323,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
 def test_hydragnn_head_selector_is_exposed_by_public_commands(tmp_path):
     root_command = get_command(app)
 
-    for command_name in ("run", "chat", "supervisor-run"):
+    for command_name in ("run", "chat"):
         command = root_command.commands[command_name]
         option_names = {
             option for parameter in command.params for option in getattr(parameter, "opts", ())

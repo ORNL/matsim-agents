@@ -12,12 +12,6 @@ from ase.io import write
 from pydantic import ValidationError
 
 from matsim_agents.backends.dft.qe_relax import QESettings
-from matsim_agents.campaign.characterization import (
-    CharacterizationContract,
-    outstanding_steps,
-    plan_recipe,
-    run_characterization,
-)
 from matsim_agents.core.contracts import (
     CharacterizationReport,
     CharacterizationStatus,
@@ -26,6 +20,12 @@ from matsim_agents.core.contracts import (
 )
 from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome, hashes_of
 from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry
+from matsim_agents.workflows.characterization import (
+    CharacterizationContract,
+    outstanding_steps,
+    plan_recipe,
+    run_characterization,
+)
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -420,7 +420,7 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "characterization"
 def test_examples_are_valid_contracts(tmp_path):
     import shutil
 
-    from matsim_agents.campaign.characterization import load_contract
+    from matsim_agents.workflows.characterization import load_contract
 
     for name in ("relaxation", "energy_ranking"):
         contract = load_contract(EXAMPLES / f"{name}.yaml")
@@ -593,7 +593,7 @@ def test_the_assessment_is_saved_and_not_repeated(system, monkeypatch):
         contract, relax=FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
     )
     assert outstanding_steps(contract) == []
-    import matsim_agents.campaign.characterization as module
+    import matsim_agents.workflows.characterization as module
 
     def fail(*_args, **_kwargs):
         raise AssertionError("the hull was recomputed")
@@ -680,7 +680,7 @@ def test_an_invalid_reference_file_is_an_invalid_protocol(system, content):
 def test_pseudopotential_directories_are_relative_to_the_contract(system):
     import yaml
 
-    from matsim_agents.campaign.characterization import load_contract
+    from matsim_agents.workflows.characterization import load_contract
 
     tmp_path, structures, references = system
     data = {
@@ -754,7 +754,7 @@ def test_unreadable_structures_and_uncovered_phases_are_invalid_protocols(system
 def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkeypatch):
     import yaml
 
-    from matsim_agents.campaign.characterization import load_contract
+    from matsim_agents.workflows.characterization import load_contract
 
     tmp_path, structures, _references = system
     path = tmp_path / "contract.yaml"
@@ -784,7 +784,7 @@ def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkey
 def test_default_output_root_is_next_to_the_contract_file(system, monkeypatch):
     import yaml
 
-    from matsim_agents.campaign.characterization import load_contract
+    from matsim_agents.workflows.characterization import load_contract
 
     tmp_path, structures, _references = system
     path = tmp_path / "contract.yaml"

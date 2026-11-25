@@ -1,15 +1,22 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.fusion import synthetic
-from matsim_agents.fusion.policy import builtin_policy
-from matsim_agents.fusion.revision import build_packet, parse_draft, revise_fusion_hypothesis
-from matsim_agents.fusion.scoring import score_candidates
+from matsim_agents.science.decision import synthetic
+from matsim_agents.science.decision.policy import load_policy
+from matsim_agents.science.decision.revision import (
+    build_packet,
+    parse_draft,
+    revise_fusion_hypothesis,
+)
+from matsim_agents.science.decision.scoring import score_candidates
 
-POLICY = builtin_policy("fusion_pfc_initial_v1")
+PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
+
+POLICY = load_policy(PFC_POLICY)
 
 
 @pytest.fixture
@@ -128,8 +135,8 @@ def test_overflowing_number_is_rejected_not_raised(scored):
 
 def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
     from matsim_agents.core.contracts import EvidenceLevel
-    from matsim_agents.fusion.revision import _status
-    from matsim_agents.fusion.scenario import FusionEvidence
+    from matsim_agents.science.decision.revision import _status
+    from matsim_agents.science.decision.scenario import FusionEvidence
     from matsim_agents.science.properties.calculators import PropertyQualification, PropertyStatus
 
     upd = {

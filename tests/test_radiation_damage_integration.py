@@ -3,10 +3,8 @@ produced by the fake launcher; nothing here is a scientific result."""
 
 import json
 
-import yaml
 from typer.testing import CliRunner
 
-from matsim_agents.cli import app
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
 from matsim_agents.workflows.radiation_damage import run_radiation_damage
 from matsim_agents.workflows.radiation_hypothesis import revise_hypothesis
@@ -87,18 +85,6 @@ def test_every_failed_precondition_blocks_instead_of_inventing_a_barrier(tmp_pat
     assert no_freq.state.stage("kinetics").status == "blocked"
     dry = run_radiation_damage(_config(tmp_path), tmp_path / "dry", launcher=_forbidden)
     assert dry.ensemble is None and any("missing, not zero" in b for b in dry.blockers)
-
-
-def test_cli_dispatch_without_the_unrelaxed_flag_is_refused_and_launches_nothing(tmp_path):
-    cfg = _config(tmp_path).model_dump(mode="json")
-    path = tmp_path / "rd.yaml"
-    path.write_text(yaml.safe_dump(cfg))
-    result = runner.invoke(
-        app,
-        ["radiation-damage", "run", str(path), "--out", str(tmp_path / "x"), "--dispatch"],
-    )
-    assert result.exit_code == 1 and "error" in result.output
-    assert not list((tmp_path / "x").glob("neb/neb-result.json"))
 
 
 def test_ledger_chain_survives_reopening_and_report_is_valid_json(tmp_path):

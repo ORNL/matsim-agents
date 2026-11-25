@@ -244,37 +244,6 @@ def test_hard_timeout_is_counted_as_nonconverged_without_usable_minimum(tmp_path
     assert outcome["minimum_energy_eV_per_atom"] is None
 
 
-def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path):
-    from matsim_agents.cli.workflow_catalog import WorkflowConfig
-    from matsim_agents.cli.workflows import _command
-
-    resource = tmp_path / "resource.json"
-    resource.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "cap_gpu_seconds": 2764800,
-                "reservations": {"test": {"reserved_gpu_seconds": 460800}},
-            }
-        )
-    )
-    monkeypatch.setenv("SLURM_JOB_ID", "test")
-    cfg = WorkflowConfig.model_validate(
-        {
-            "workflow": "e3-mlip",
-            "settings": {
-                "manifest": str(tmp_path / "manifest"),
-                "output_root": str(tmp_path / "runs"),
-                "resource_state": str(resource),
-                "material": "nb_ta_o",
-                "hard_optimization_seconds": 300,
-            },
-        }
-    )
-    command = _command(cfg, approved=True)
-    assert command[-2:] == ["--hard-optimization-seconds", "300"]
-
-
 def test_campaign_manifest_has_six_classes_and_bounded_budgets():
     manifest = build_campaign_manifest()
 

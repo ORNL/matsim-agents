@@ -8,13 +8,6 @@ from ase import Atoms
 from ase.io import write
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.campaign.formula_execution import latest_promoted_model
-from matsim_agents.campaign.orchestrator import (
-    CampaignReviewDecision,
-    CampaignRunPolicy,
-    run_campaign,
-)
-from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
 from matsim_agents.core.seeding import stream_seed
@@ -38,6 +31,13 @@ from matsim_agents.science.thermodynamics.stability import (
     score_stability,
 )
 from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.multi_formula.formula_execution import latest_promoted_model
+from matsim_agents.workflows.multi_formula.orchestrator import (
+    CampaignReviewDecision,
+    CampaignRunPolicy,
+    run_campaign,
+)
+from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -569,7 +569,7 @@ def test_registry_ingestion_uses_mlip_provenance(tmp_path, monkeypatch):
         return []
 
     monkeypatch.setattr(
-        "matsim_agents.campaign.orchestrator.ingest_exploration_result",
+        "matsim_agents.workflows.multi_formula.orchestrator.ingest_exploration_result",
         capture_ingestion,
     )
 
@@ -984,7 +984,9 @@ def test_campaign_resume_rejects_a_different_root_seed(tmp_path):
 def test_campaign_policies_reject_removed_seed_fields(tmp_path):
     from pydantic import ValidationError
 
-    from matsim_agents.campaign.formula_execution import CampaignFormulaExecutionConfig
+    from matsim_agents.workflows.multi_formula.formula_execution import (
+        CampaignFormulaExecutionConfig,
+    )
     from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy
 
     with pytest.raises(ValidationError, match="random_seed"):
@@ -1014,7 +1016,7 @@ def _write_al_iteration(formula_dir: Path, *, promoted: str | None, status: str)
 
 
 def test_retry_without_promotion_keeps_the_promoted_checkpoint(tmp_path):
-    from matsim_agents.campaign.formula_execution import latest_promoted_model
+    from matsim_agents.workflows.multi_formula.formula_execution import latest_promoted_model
 
     campaign = _campaign()
     campaign.formulas["NbO"].active = False

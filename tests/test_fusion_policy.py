@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
 import yaml
 
-from matsim_agents.fusion.policy import (
+from matsim_agents.science.decision.policy import (
     FUSION_PFC_OBJECTIVES,
     FusionScoringPolicy,
     PolicyError,
     PolicyRegistry,
-    builtin_policy,
     load_policy,
 )
+
+PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
 
 EXPECTED = {
     "radiation_damage_recovery": 0.25,
@@ -27,13 +29,13 @@ EXPECTED = {
 
 
 def _data(**changes):
-    data = builtin_policy().model_dump(mode="json")
+    data = load_policy(PFC_POLICY).model_dump(mode="json")
     data.update(changes)
     return data
 
 
-def test_builtin_policy_matches_the_directive():
-    policy = builtin_policy()
+def test_example_policy_matches_the_directive():
+    policy = load_policy(PFC_POLICY)
     assert policy.policy_version == "fusion_pfc_initial_v1"
     assert policy.application == "fusion_plasma_facing_component"
     assert policy.weights == EXPECTED
@@ -102,7 +104,7 @@ def test_direction_is_required():
 
 
 def test_changed_weights_need_a_new_version():
-    policy = builtin_policy()
+    policy = load_policy(PFC_POLICY)
     with pytest.raises(PolicyError, match="new policy_version"):
         policy.with_weights({}, policy_version=policy.policy_version)
     shifted = policy.with_weights(
@@ -115,8 +117,8 @@ def test_changed_weights_need_a_new_version():
 
 def test_registry_rejects_reused_version_with_other_content():
     registry = PolicyRegistry()
-    policy = registry.get("fusion_pfc_initial_v1")
-    registry.register(policy)
+    policy = registry.register(load_policy(PFC_POLICY))
+    assert registry.get("fusion_pfc_initial_v1") is policy
     clash = FusionScoringPolicy.model_validate(
         policy.with_weights(
             {"radiation_damage_recovery": 0.20, "thermal_conductivity": 0.25},
@@ -137,8 +139,6 @@ def test_load_policy_from_user_file(tmp_path):
         load_policy(path)
 
 
-def test_unknown_builtin_rejected():
-    with pytest.raises(PolicyError):
-        builtin_policy("does_not_exist")
-    with pytest.raises(PolicyError):
-        builtin_policy("../etc")
+def test_unregistered_version_rejected():
+    with pytest.raises(PolicyError, match="not registered"):
+        PolicyRegistry().get("does_not_exist")

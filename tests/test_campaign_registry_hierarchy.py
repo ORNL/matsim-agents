@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.registry import (
+from matsim_agents.workflows.candidate_registry import (
     NOT_YET_ESTABLISHED,
     TARGET_ELEMENTS,
     CandidateRegistry,

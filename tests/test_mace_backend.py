@@ -8,9 +8,9 @@ import pytest
 from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_calculator
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.campaign.formula_execution import _exploration_kwargs
 from matsim_agents.science.structures.seed_structures import PhaseCandidate, SeedGenerationAction
 from matsim_agents.workflows.composition_exploration import explore_composition
+from matsim_agents.workflows.multi_formula.formula_execution import _exploration_kwargs
 
 
 @pytest.fixture

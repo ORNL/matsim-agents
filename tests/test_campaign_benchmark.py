@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.benchmark import (
+from matsim_agents.core.contracts import ComputeBudget
+from matsim_agents.workflows.evaluation.benchmark import (
     BenchmarkArm,
     BenchmarkMetric,
     BenchmarkObservation,
@@ -10,7 +11,6 @@ from matsim_agents.campaign.benchmark import (
     compare_paired_metric,
     paired_metric_differences,
 )
-from matsim_agents.core.contracts import ComputeBudget
 
 
 def _protocol() -> BenchmarkProtocol:

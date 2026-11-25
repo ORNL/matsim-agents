@@ -5,7 +5,7 @@ code has been run by this software, and no imported value in the repository is r
 
 ## Contract
 
-`matsim_agents.fusion.nuclear_evidence.ExternalNuclearEvidence` validates one result from
+`matsim_agents.science.irradiation.nuclear_evidence.ExternalNuclearEvidence` validates one result from
 an external code (for example FISPACT-II or SPECTRA-PKA). Every record must carry:
 
 - the application and version, the nuclear-data library, and sha256 hashes of the
@@ -27,7 +27,7 @@ Scientific qualification needs a stated basis and non-synthetic data.
 
 ## Transmutation configurations
 
-`matsim_agents.fusion.transmutation.transmuted_configuration` turns per-atom
+`matsim_agents.workflows.radiation.transmutation_configs.transmuted_configuration` turns per-atom
 transmutation evidence into Re/Os substitutions on seeded W sites. It accepts
 `atom_fraction` or `concentration_appm`. The parent is the 1,024-site BCC 8x8x8
 reference alloy, W640 Ta128 Cr64 V96 Hf32 Mo64, with stable site ids.

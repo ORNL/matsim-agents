@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.core.contracts import PROPERTY_UNITS
-from matsim_agents.fusion.scenario import (
+from matsim_agents.science.decision.scenario import (
     EvaluationScenario,
     EvidenceContext,
     FusionEvidence,

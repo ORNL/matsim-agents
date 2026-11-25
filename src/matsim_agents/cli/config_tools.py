@@ -20,7 +20,7 @@ CONFIG_KINDS: dict[str, tuple[str, str, str]] = {
         "matsim-agents relax {path}",
     ),
     "characterize": (
-        "matsim_agents.campaign.characterization:CharacterizationContract",
+        "matsim_agents.workflows.characterization:CharacterizationContract",
         "examples/characterization/relaxation.yaml",
         "matsim-agents characterize {path}",
     ),

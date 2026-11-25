@@ -28,8 +28,7 @@ LAYERS: list[set[str]] = [
     {"science"},
     {"backends.external"},
     {"workflows"},
-    {"agents", "campaign"},
-    {"fusion"},
+    {"agents"},
     {"cli"},
 ]
 LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}
@@ -112,13 +111,17 @@ def _layer_violations() -> list[str]:
     [
         ("matsim_agents.data.governance", False, "from ..agents.state import X"),
         ("matsim_agents.data.governance", False, "from .. import agents"),
-        ("matsim_agents.data", True, "from ..campaign import state"),
+        ("matsim_agents.data", True, "from ..workflows import hierarchy"),
         ("matsim_agents.data.governance", False, "from matsim_agents import agents"),
         ("matsim_agents.data.governance", False, "from matsim_agents import execution, cli"),
         ("matsim_agents.data.governance", False, "from matsim_agents import MatSimState"),
         ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
         ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
-        ("matsim_agents.science.structures.seed_structures", False, "from ...workflows import e1"),
+        (
+            "matsim_agents.science.structures.seed_structures",
+            False,
+            "from ...workflows import hierarchy",
+        ),
         (
             "matsim_agents.science.structures.seed_structures",
             False,
@@ -153,7 +156,7 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
             "from matsim_agents import data",
         ),
         (
-            "matsim_agents.campaign.state",
+            "matsim_agents.workflows.multi_formula.state",
             False,
             "from ..workflows.active_learning.config import ALConfig",
         ),
@@ -219,8 +222,15 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.discovery.neb_contracts",
         "matsim_agents.discovery.magnetism",
         "matsim_agents.discovery.stability",
-        "matsim_agents.campaign.selection",
+        "matsim_agents.campaign",
+        "matsim_agents.fusion",
         "matsim_agents.execution.properties",
+        "matsim_agents.agents.composition_graph",
+        "matsim_agents.cli.campaign",
+        "matsim_agents.cli.materials",
+        "matsim_agents.cli.radiation_damage",
+        "matsim_agents.cli.e1",
+        "matsim_agents.cli.composition",
     ],
 )
 def test_legacy_alias_modules_are_removed(module: str) -> None:

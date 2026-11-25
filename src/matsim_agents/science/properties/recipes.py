@@ -2,7 +2,7 @@
 
 The recipes ``mechanical_elasticity``, ``electrical_transport``,
 ``thermal_transport``, and ``multiproperty_characterization`` extend
-:mod:`matsim_agents.campaign.characterization`. Each :class:`PropertyRecipe`
+:mod:`matsim_agents.workflows.characterization`. Each :class:`PropertyRecipe`
 declares its observables, supported methods, fidelity, operating conditions,
 convergence requirements, cost, dependencies, and limitations. Assessment is
 deterministic and never runs a calculation: it finds existing

@@ -1,7 +1,5 @@
 import json
-import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -9,8 +7,8 @@ import yaml
 from typer.testing import CliRunner
 
 from matsim_agents.cli import app
-from matsim_agents.cli.workflow_catalog import ADAPTERS, WorkflowConfig, load_workflow
-from matsim_agents.cli.workflows import _check, _command, _validate_native_cli
+from matsim_agents.cli.workflow_catalog import ADAPTERS, WorkflowConfig
+from matsim_agents.cli.workflows import _check, _validate_native_cli
 from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
@@ -42,9 +40,7 @@ def native_process(monkeypatch):
             kwargs["stdout"].write("Native workflow result: no scientific convergence asserted.\n")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("matsim_agents.cli.workflows.subprocess.run", run)
-
-    def execute(command, output, emit, *, cwd, env):
+    def execute(command, output, emit, *, cwd):
         result = run(command, stdout=output)
         return result.returncode
 
@@ -92,7 +88,6 @@ def test_known_answer_preflight_rejects_invalid_suite_requests(arguments, tmp_pa
     [
         ("objective", ["Find Cu"]),
         ("plan", ["Find Cu"]),
-        ("supervisor", ["Cu", "--mlip-config", "mlip.yaml"]),
         ("chat", ["--llm-only"]),
         ("known-answers", []),
     ],
@@ -104,15 +99,13 @@ def test_advanced_argument_adapters_parse_without_invoking(workflow, arguments, 
 
 
 @pytest.mark.parametrize(
-    "name", ["explore", "relax", "characterize", "debate", "llm-check", "al", "e1", "agent-eval"]
+    "name", ["explore", "relax", "characterize", "debate", "llm-check", "al", "agent-eval"]
 )
 def test_configured_native_adapter_arguments_parse(name, tmp_path, native_process):
     path = tmp_path / "native.yaml"
     path.write_text("{}")
     adapter = ADAPTERS[name]
     arguments = [*adapter.command, str(path)]
-    if name == "e1":
-        arguments.extend(["--output", str(tmp_path / "e1")])
     _validate_native_cli(arguments)
     assert native_process == []
 
@@ -166,7 +159,7 @@ def test_successful_run_suggests_summary_and_status(workflow_yaml, native_proces
 
 
 def test_failed_native_command_is_persisted(workflow_yaml, monkeypatch):
-    def fail(command, output, emit, *, cwd, env):
+    def fail(command, output, emit, *, cwd):
         output.write("native scientific backend failed\n")
         return 7
 
@@ -187,21 +180,6 @@ def test_nonresumable_workflows_are_never_replayed(workflow_yaml, native_process
     assert len(native_process) == 1
 
 
-def test_e3_approval_flag_is_not_silently_applied_to_other_workflows(workflow_yaml, native_process):
-    result = CliRunner().invoke(
-        app,
-        [
-            "workflow",
-            "run",
-            str(workflow_yaml),
-            "--approve-execution",
-        ],
-    )
-    assert result.exit_code == 1
-    assert "only for E3 presets" in result.output
-    assert native_process == []
-
-
 @pytest.mark.parametrize(
     "change",
     [
@@ -218,153 +196,9 @@ def test_invalid_configuration_does_not_dispatch(workflow_yaml, change, native_p
     assert result.exit_code != 0, result.output
     assert native_process == []
 
-
-def test_presets_copy_annotations_and_rebase_paths(tmp_path, native_process):
-    for preset in ("e3-mlip", "e3-dft", "explore", "debate"):
-        path = tmp_path / f"{preset}.yaml"
-        result = CliRunner().invoke(app, ["workflow", "init", preset, str(path)])
-        assert result.exit_code == 0, result.output
-        assert path.read_text().startswith("#")
-        cfg = load_workflow(path)
-        assert cfg.workflow == preset
-        if cfg.settings is not None:
-            assert cfg.settings.manifest.is_absolute()
-        else:
-            assert cfg.config.is_absolute()
-        again = CliRunner().invoke(app, ["workflow", "init", preset, str(path)])
-        assert again.exit_code == 1
-        assert "overwrite" in again.output
-    assert native_process == []
-
-
-@pytest.fixture
-def mlip_preset(tmp_path):
-    manifest = tmp_path / "campaign.json"
-    manifest.write_text("{}")
-    resource = tmp_path / "budget.json"
-    resource.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "cap_gpu_seconds": 2_764_800,
-                "reservations": {"123": {"reserved_gpu_seconds": 460_800}},
-            }
-        )
-    )
-    return WorkflowConfig.model_validate(
-        {
-            "workflow": "e3-mlip",
-            "settings": {
-                "manifest": str(manifest),
-                "resource_state": str(resource),
-                "output_root": str(tmp_path / "science"),
-                "material": "nb_ta_o",
-            },
-        }
-    )
-
-
-def test_e3_mlip_requires_approval_allocation_and_reservation(mlip_preset, monkeypatch):
-    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    with pytest.raises(ValueError, match="approve-execution"):
-        _command(mlip_preset, approved=False)
-    with pytest.raises(ValueError, match="Slurm allocation"):
-        _command(mlip_preset, approved=True)
-    monkeypatch.setenv("SLURM_JOB_ID", "456")
-    with pytest.raises(ValueError, match="full 16-node/two-hour"):
-        _command(mlip_preset, approved=True)
-    monkeypatch.setenv("SLURM_JOB_ID", "123")
-    command = _command(mlip_preset, approved=True)
-    assert command[2:4] == ["benchmarks.e3.production", "run-campaign"]
-    assert "--workers" in command and "64" in command
     # Command construction never executes the campaign.
 
-
-def test_e3_mlip_check_uses_existing_protocol_validator(mlip_preset, native_process):
-    assert _check(mlip_preset)
-    assert native_process[0][2:4] == ["benchmarks.e3.production", "validate"]
-    assert "run-replicate" not in native_process[0]
-
-
-def test_native_e3_protocol_validation_never_executes_campaign(monkeypatch, capsys):
-    from benchmarks.e3 import production
-    from matsim_agents.cli.workflows import REPO
-
-    def unexpected(*args, **kwargs):
-        pytest.fail("protocol validation must not execute or load a model")
-
-    monkeypatch.setattr(production, "run_replicate", unexpected)
-    monkeypatch.setattr(production, "_verified_checkpoint_sha256", unexpected)
-    assert (
-        production.main(
-            [
-                "validate",
-                "--manifest",
-                str(REPO / "benchmarks/e3/manifests/e3-mlip-production.json"),
-            ]
-        )
-        == 0
-    )
-    assert json.loads(capsys.readouterr().out)["execution_performed"] is False
-
-
-def test_e3_static_check_from_outside_the_checkout(tmp_path, mlip_preset):
-    from matsim_agents.cli.workflows import REPO
-
-    mlip_preset.settings.manifest = REPO / "benchmarks/e3/manifests/e3-mlip-production.json"
-    path = tmp_path / "workflow.yaml"
-    path.write_text(yaml.safe_dump(mlip_preset.model_dump(mode="json")))
-    result = subprocess.run(
-        [sys.executable, "-m", "matsim_agents.cli", "workflow", "check", str(path)],
-        cwd=tmp_path,
-        env={**os.environ, "PYTHONPATH": str(REPO / "src")},
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Preflight passed" in result.stdout
-    assert not (tmp_path / "science").exists()
-
-
-@pytest.fixture
-def dft_preset(tmp_path):
-    path = tmp_path / "vasp.json"
-    path.write_text(
-        json.dumps(
-            {
-                "batch_id": "E3-round1-bcc-01",
-                "cases": [{"calculation_id": "E3-R1-BCC-0001"}],
-            }
-        )
-    )
-    return WorkflowConfig.model_validate(
-        {
-            "workflow": "e3-dft",
-            "settings": {
-                "manifest": str(path),
-                "calculation_ids": ["E3-R1-BCC-0001"],
-            },
-        }
-    )
-
-
-def test_e3_dft_check_and_run_default_to_native_validation(dft_preset, native_process):
-    _check(dft_preset)
-    assert "--dry-run" in native_process[0]
-    assert "--submit" not in native_process[0]
-    assert "--dry-run" in _command(dft_preset, approved=False)
-    assert "--submit" in _command(dft_preset, approved=True)
     # Approved command is inspected only, never dispatched by this test.
-
-
-def test_e3_dft_validation_failure_is_explicit(dft_preset, monkeypatch):
-    monkeypatch.setattr(
-        "matsim_agents.cli.workflows.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, "PAW mismatch", ""),
-    )
-    with pytest.raises(ValueError, match="PAW mismatch"):
-        _check(dft_preset)
 
 
 def test_interruption_records_error_without_success(workflow_yaml, monkeypatch):
@@ -414,9 +248,7 @@ def test_catalog_covers_all_native_scientific_entrypoints():
         ("al", "run"),
         ("run",),
         ("plan",),
-        ("supervisor-run",),
         ("chat",),
-        ("e1-development",),
         ("benchmark", "known-answers"),
         ("benchmark", "agent-eval"),
     }
@@ -459,7 +291,7 @@ def test_relative_native_resume_path_is_resolved_in_callers_directory(
         lambda path: "same",
     )
 
-    def execute(command, output, emit, *, cwd, env):
+    def execute(command, output, emit, *, cwd):
         observed.append(command)
         return 0
 
@@ -523,7 +355,7 @@ def _saved_invocation(tmp_path, workflow, *, state="interrupted", arguments=None
     return run
 
 
-@pytest.mark.parametrize("workflow", ["characterize", "e1"])
+@pytest.mark.parametrize("workflow", ["characterize"])
 def test_native_journal_resume_delegates_without_enabling_retries(
     workflow, tmp_path, native_process, monkeypatch
 ):
@@ -554,7 +386,7 @@ def test_resume_retains_original_native_working_directory(tmp_path, monkeypatch)
     monkeypatch.chdir(elsewhere)
     observed = []
 
-    def execute(command, output, emit, *, cwd, env):
+    def execute(command, output, emit, *, cwd):
         observed.append(cwd)
         return 0
 
@@ -571,7 +403,7 @@ def test_changed_wrapper_settings_refuse_resume(tmp_path, native_process):
     run.write_json("resolved_config.json", saved)
     result = CliRunner().invoke(app, ["workflow", "resume", str(run.path)])
     assert result.exit_code == 1
-    assert "configuration or campaign manifest changed" in " ".join(result.output.split())
+    assert "native configuration changed" in " ".join(result.output.split())
     assert native_process == []
 
 

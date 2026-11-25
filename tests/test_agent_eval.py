@@ -7,7 +7,18 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage
 
-from matsim_agents.campaign.agent_eval import (
+from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.execution.ledger import (
+    EvidenceLedger,
+    EvidenceOutcome,
+    EvidenceRecord,
+    HypothesisRecord,
+    HypothesisStatus,
+    LedgerQuantity,
+    MethodRecord,
+)
+from matsim_agents.workflows.debate import DebateParticipant
+from matsim_agents.workflows.evaluation.agent_eval import (
     AgentAnswer,
     AgentEvalConfig,
     AgentEvalPacket,
@@ -25,18 +36,7 @@ from matsim_agents.campaign.agent_eval import (
     parse_round_verdict,
     run_agent_eval,
 )
-from matsim_agents.campaign.benchmark import BenchmarkArm
-from matsim_agents.core.contracts import EvidenceLevel
-from matsim_agents.execution.ledger import (
-    EvidenceLedger,
-    EvidenceOutcome,
-    EvidenceRecord,
-    HypothesisRecord,
-    HypothesisStatus,
-    LedgerQuantity,
-    MethodRecord,
-)
-from matsim_agents.workflows.debate import DebateParticipant
+from matsim_agents.workflows.evaluation.benchmark import BenchmarkArm
 
 SUITE = Path(__file__).resolve().parents[1] / "benchmarks" / "agent_eval"
 
@@ -392,7 +392,7 @@ def test_decoding_check_ignores_provider_case():
 
 
 def test_server_participants_defer_the_provider_check_to_their_endpoint():
-    from matsim_agents.campaign.agent_eval import _checked_factory
+    from matsim_agents.workflows.evaluation.agent_eval import _checked_factory
 
     participants = [DebateParticipant(name="w", server="worker")]
     AgentEvalConfig(participants=participants, arms=[BenchmarkArm.SINGLE_LLM], decoding={"seed": 1})
@@ -693,7 +693,7 @@ def test_unparseable_replies_are_graded_wrong(tmp_path):
 def test_cli_reports_arms_and_comparisons(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 
-    import matsim_agents.campaign.agent_eval as agent_eval
+    import matsim_agents.workflows.evaluation.agent_eval as agent_eval
     from matsim_agents.cli import app
 
     monkeypatch.setattr(

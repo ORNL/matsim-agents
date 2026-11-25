@@ -18,7 +18,7 @@ from matsim_agents.backends.mlip.arguments import (  # noqa: E402
     mlip_config_from_args,
 )
 from matsim_agents.science.acquisition.acquisition import CampaignAcquisitionPolicy  # noqa: E402
-from matsim_agents.campaign.formula_execution import (  # noqa: E402
+from matsim_agents.workflows.multi_formula.formula_execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
@@ -26,13 +26,13 @@ from matsim_agents.campaign.formula_execution import (  # noqa: E402
     latest_promoted_model,
     make_formula_runner,
 )
-from matsim_agents.campaign.orchestrator import CampaignRunPolicy, run_campaign  # noqa: E402
-from matsim_agents.campaign.registry import CandidateSelectionPolicy  # noqa: E402
-from matsim_agents.campaign.review import (  # noqa: E402
+from matsim_agents.workflows.multi_formula.orchestrator import CampaignRunPolicy, run_campaign  # noqa: E402
+from matsim_agents.workflows.candidate_registry import CandidateSelectionPolicy  # noqa: E402
+from matsim_agents.workflows.multi_formula.review import (  # noqa: E402
     CampaignDebateReviewConfig,
     make_debate_review_runner,
 )
-from matsim_agents.campaign.state import CampaignState  # noqa: E402
+from matsim_agents.workflows.multi_formula.state import CampaignState  # noqa: E402
 from matsim_agents.science.thermodynamics.stability import (  # noqa: E402
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,
