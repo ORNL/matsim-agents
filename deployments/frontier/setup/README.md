@@ -142,3 +142,14 @@ export SPECTRA_PKA_EXECUTABLE_PATH="$PWD/external/SPECTRA-PKA/spectra-pka"
 ```
 
 Nuclear data: see `docs/external/spectra-pka-data.md`.
+
+### ../../common/setup/build-openmc.sh
+Clones OpenMC v0.15.3, installs the Python package, builds `libopenmc.so` serially, downloads the
+ENDF/B-VIII.0 cross sections and depletion chain, and runs a Co-59 activation smoke test. Needs
+a login node, `cray-hdf5` and the activated virtualenv. See `docs/external/openmc.md`.
+
+```bash
+module load cray-hdf5
+source .venv/bin/activate
+bash deployments/common/setup/build-openmc.sh
+```
