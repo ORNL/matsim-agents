@@ -31,6 +31,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _neutron_file_hashes(xs_xml: Path, nuclides: set[str]) -> dict[str, str]:
+    """SHA-256 of the neutron HDF5 file of each nuclide the index lists; absent ones are skipped."""
+    from openmc.data import DataLibrary
+
+    hashes: dict[str, str] = {}
+    for entry in DataLibrary.from_xml(str(xs_xml)).libraries:
+        if entry["type"] == "neutron" and nuclides.intersection(entry["materials"]):
+            path = Path(entry["path"])
+            hashes[path.name] = _sha256(path)
+    return hashes
+
+
 def _existing_file(value: str | os.PathLike[str] | None, variable: str) -> Path:
     path = Path(value) if value else Path(os.environ.get(variable, ""))
     if not path.is_file():
@@ -148,6 +160,7 @@ def run_activation(
     }
     spec_path = out / "run_spec.json"
     spec_path.write_text(json.dumps(spec, indent=2, sort_keys=True), encoding="utf-8")
+    used = set(micro.nuclides) | set(material.get_nuclides())
     inventory = OpenMCInventory(
         openmc_version=openmc.__version__,
         nuclear_data_library=_library_name(xs_xml),
@@ -158,6 +171,7 @@ def run_activation(
             chain.name: _sha256(chain),
             xs_xml.name: _sha256(xs_xml),
             spec_path.name: _sha256(spec_path),
+            **_neutron_file_hashes(xs_xml, used),
         },
         output_sha256={results_path.name: _sha256(results_path)},
         notes=(

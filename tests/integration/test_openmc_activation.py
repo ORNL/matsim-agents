@@ -7,6 +7,7 @@ depletion, decay and unit handling, not the nuclear data or a realistic spectrum
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -105,5 +106,7 @@ def test_evidence_carries_the_specific_activity_and_the_hashes(cobalt):
     assert {"chain_endfb80_pwr.xml", "cross_sections.xml", "run_spec.json"} <= set(
         inventory.input_sha256
     )
+    co59 = Path(XS).parent / "neutron" / "Co59.h5"
+    assert inventory.input_sha256["Co59.h5"] == hashlib.sha256(co59.read_bytes()).hexdigest()
     assert set(inventory.output_sha256) == {"depletion_results.h5"}
     assert read_inventory(out / "inventory.json") == inventory
