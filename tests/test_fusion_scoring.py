@@ -102,6 +102,40 @@ def test_constraints_feasible_violated_unknown():
     assert "B" not in r.ranking
 
 
+def _modified(items, prop, conditions=None, context=None):
+    out = []
+    for item in items:
+        ev, ctx = item.evidence, item.context
+        if ev.property == prop:
+            if conditions:
+                ev = ev.model_copy(
+                    update={"conditions": ev.conditions.model_copy(update=conditions)}
+                )
+            if context:
+                ctx = ctx.model_copy(update=context)
+        out.append(FusionEvidence(evidence=ev, context=ctx))
+    return out
+
+
+def test_constraint_gate_uses_property_conditions():
+    cands = _ab_only()
+    # Activation records carry no temperature; the gate must not demand one.
+    no_t = _modified(cands["A"], "shutdown_dose_rate", conditions={"temperature_K": None})
+    # Wrong plasma energy must not decide feasibility.
+    bad_e = _modified(cands["B"], "sputtering_yield", context={"plasma_ion_energy_eV": 1000.0})
+    r = _score(
+        {"A": no_t, "B": bad_e},
+        constraints=[
+            Constraint(property="shutdown_dose_rate", maximum=0.0),
+            Constraint(property="sputtering_yield", maximum=0.0),
+        ],
+    )
+    a, b = r.by_id("A"), r.by_id("B")
+    assert a.feasibility == ConstraintStatus.VIOLATED
+    sputter = next(c for c in b.constraints if c.property == "sputtering_yield")
+    assert sputter.status == ConstraintStatus.UNKNOWN
+
+
 def test_incomparable_evidence_is_excluded():
     cands = _ab_only()
     hot = []

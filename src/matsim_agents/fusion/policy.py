@@ -50,6 +50,11 @@ class ObjectivePolicy(_Frozen):
     def _finite(self) -> ObjectivePolicy:
         if not math.isfinite(self.weight):
             raise ValueError(f"weight of {self.name} must be finite")
+        if self.direction != "maximize":
+            raise ValueError(
+                f"{self.name}: objectives are desirabilities and are always maximized; "
+                "orient the observable in the benchmark instead"
+            )
         return self
 
 
@@ -64,6 +69,14 @@ class RankingOptions(_Frozen):
     weighted_ranking_enabled: bool = True
     require_comparable_conditions: bool = True
     reject_missing_as_zero: bool = True
+
+    @model_validator(mode="after")
+    def _supported(self) -> RankingOptions:
+        # The scorer always performs these; a False setting would misrecord the calculation.
+        off = sorted(k for k, v in self.model_dump().items() if not v)
+        if off:
+            raise ValueError(f"ranking options {off} cannot be disabled in this version")
+        return self
 
 
 class FusionScoringPolicy(_Frozen):

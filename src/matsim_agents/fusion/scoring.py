@@ -28,7 +28,6 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.campaign.property_recipes import conditions_match
 from matsim_agents.campaign.selection import (
     _QUALIFICATION_ORDER,
     _STATUS_PRIORITY,
@@ -38,7 +37,6 @@ from matsim_agents.campaign.selection import (
     _pick,
 )
 from matsim_agents.execution.properties import (
-    PropertyConditions,
     PropertyQualification,
     PropertyStatus,
 )
@@ -353,22 +351,22 @@ def _score_objective(
 def _check_constraint(
     c: Constraint, items: Sequence[FusionEvidence], scenario: EvaluationScenario
 ) -> ConstraintResult:
-    wanted = PropertyConditions(
-        temperature_K=c.temperature_K or scenario.temperature_K,
-        irradiation=scenario.irradiation,
-    )
+    # Same conditions the property is scored under; temperature only where it applies.
+    fields = tuple(
+        dict.fromkeys(
+            f
+            for spec in OBJECTIVES.values()
+            if any(o.name == c.property for o in spec.observables())
+            for f in spec.compatible_conditions
+        )
+    ) or ("temperature_K", "irradiation")
+    if c.temperature_K is not None:
+        scenario = scenario.model_copy(update={"temperature_K": c.temperature_K})
+        fields = tuple(dict.fromkeys((*fields, "temperature_K")))
     rows = [
         i.evidence
         for i in items
-        if i.evidence.property == c.property
-        and not conditions_match(
-            wanted,
-            PropertyConditions(
-                temperature_K=i.evidence.conditions.temperature_K,
-                irradiation=i.evidence.conditions.irradiation,
-            ),
-            temperature_tolerance_K=scenario.temperature_tolerance_K,
-        )
+        if i.evidence.property == c.property and not scenario.condition_mismatches(fields, i)
     ]
     chosen, reason, _ = _pick(rows, c.property, None)
     if chosen is None or not isinstance(chosen.value, int | float):

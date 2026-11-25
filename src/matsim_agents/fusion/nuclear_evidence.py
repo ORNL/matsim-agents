@@ -135,15 +135,19 @@ class ExternalNuclearEvidence(BaseModel):
     qualification_status: PropertyQualification = PropertyQualification.UNVALIDATED
     qualification_basis: tuple[str, ...] = ()
     dpa_convention: DpaConvention | None = None
-    dose_model: str | None = Field(None, description="Dose model and geometry for dose rates.")
+    dose_model: str | None = Field(None, description="Dose model used for dose rates.")
+    dose_geometry: str | None = Field(
+        None, description="Dose geometry (e.g. 'contact', '1 m'); compared before scoring."
+    )
     synthetic: bool = Field(False, description="True for demonstration data only.")
     notes: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _contract(self) -> ExternalNuclearEvidence:
-        for name, digest in {**self.input_sha256, **self.output_sha256}.items():
-            if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-                raise ValueError(f"{name}: sha256 must be 64 lowercase hex characters")
+        for side, hashes in (("input", self.input_sha256), ("output", self.output_sha256)):
+            for name, digest in hashes.items():
+                if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                    raise ValueError(f"{side} {name}: sha256 must be 64 lowercase hex characters")
         allowed = FAMILY_QUANTITIES[self.family]
         for q in self.quantities:
             if q.name in _DEFECT_NAMES:
@@ -183,8 +187,10 @@ class ExternalNuclearEvidence(BaseModel):
             raise ValueError("SPECTRA-PKA computes recoils, not activation")
         if self.exposure_time_s is None or self.cooling_time_s is None:
             raise ValueError("activation needs exposure_time_s and cooling_time_s")
-        if any(q.name == "shutdown_dose_rate" for q in self.quantities) and not self.dose_model:
-            raise ValueError("a shutdown dose rate needs a declared dose_model")
+        if any(q.name == "shutdown_dose_rate" for q in self.quantities) and not (
+            self.dose_model and self.dose_geometry
+        ):
+            raise ValueError("a shutdown dose rate needs a declared dose_model and dose_geometry")
 
     def evidence_id(self) -> str:
         payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
@@ -198,22 +204,28 @@ class ExternalNuclearEvidence(BaseModel):
             parts.append(f"cooling {self.cooling_time_s:g} s")
         return "; ".join(parts)
 
-    def hydrogen_isotopes(self) -> dict[str, float]:
-        """H, D, T production kept apart; helium is never included."""
-        return {
-            _HYDROGEN_ISOTOPES[q.isotope.mass_number]: q.value
-            for q in self.quantities
-            if q.isotope
-            and q.isotope.element == "H"
-            and q.isotope.mass_number in _HYDROGEN_ISOTOPES
-        }
+    def _isotopes(self, quantity: str, element: str, labels: dict[int, str]) -> dict[str, float]:
+        allowed = FAMILY_QUANTITIES[self.family]
+        if quantity not in allowed:
+            raise NuclearEvidenceError(f"{quantity} is not a {self.family.value} quantity")
+        out: dict[str, float] = {}
+        for q in self.quantities:
+            if q.name != quantity or q.isotope is None or q.isotope.element != element:
+                continue
+            label = labels.get(q.isotope.mass_number)  # type: ignore[arg-type]
+            if label is None:
+                continue
+            if label in out:
+                raise NuclearEvidenceError(f"duplicate {quantity} for {label}")
+            out[label] = q.value
+        return out
 
-    def helium_isotopes(self) -> dict[str, float]:
-        return {
-            f"He-{q.isotope.mass_number}": q.value
-            for q in self.quantities
-            if q.isotope and q.isotope.element == "He" and q.isotope.mass_number in {3, 4}
-        }
+    def hydrogen_isotopes(self, quantity: str) -> dict[str, float]:
+        """H, D, T values of one quantity (unit ``FAMILY_QUANTITIES``); no helium."""
+        return self._isotopes(quantity, "H", _HYDROGEN_ISOTOPES)
+
+    def helium_isotopes(self, quantity: str) -> dict[str, float]:
+        return self._isotopes(quantity, "He", {3: "He-3", 4: "He-4"})
 
     def check_scenario(self, scenario: IrradiationScenario) -> list[str]:
         problems = []
@@ -237,6 +249,7 @@ def to_ledger_record(
         f"qualification: {evidence.qualification_status.value}",
         *([f"dpa_convention: {evidence.dpa_convention}"] if evidence.dpa_convention else []),
         *([f"dose_model: {evidence.dose_model}"] if evidence.dose_model else []),
+        *([f"dose_geometry: {evidence.dose_geometry}"] if evidence.dose_geometry else []),
         *(["SYNTHETIC demonstration data"] if evidence.synthetic else []),
         *evidence.notes,
     ]
@@ -263,7 +276,9 @@ def to_ledger_record(
         input_sha256=evidence.input_sha256,
         output_artifact_sha256=evidence.output_sha256,
         physical_assumptions=assumptions,
-        uncertainties={q.label: q.uncertainty for q in evidence.quantities if q.uncertainty},
+        uncertainties={
+            q.label: q.uncertainty for q in evidence.quantities if q.uncertainty is not None
+        },
         parent_record_ids=list(evidence.evidence_ids),
     )
 
@@ -284,7 +299,9 @@ def activation_properties(
     if evidence.family != NuclearFamily.ACTIVATION:
         raise NuclearEvidenceError("only activation evidence maps to activation properties")
     context = EvidenceContext(
-        neutron_spectrum=neutron_spectrum, cooling_time_s=evidence.cooling_time_s
+        neutron_spectrum=neutron_spectrum,
+        cooling_time_s=evidence.cooling_time_s,
+        dose_geometry=evidence.dose_geometry,
     )
     out = []
     for q in evidence.quantities:

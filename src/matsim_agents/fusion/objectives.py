@@ -232,7 +232,12 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
                 "Eroded atoms per incident ion at stated ion species and energy.",
             ),
         ),
-        compatible_conditions=("temperature_K", "plasma_ion", "plasma_ion_energy_eV"),
+        compatible_conditions=(
+            "temperature_K",
+            "plasma_ion",
+            "plasma_ion_energy_eV",
+            "ion_incidence_angle_deg",
+        ),
         methods=("binary-collision approximation", "MD cascade", "ion-beam or plasma exposure"),
         evidence_requirement="sputtering yield at the scenario plasma ion and energy",
         unsupported_proxies=(
@@ -310,7 +315,12 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
             _o("specific_activity", "minimize", "Activity per mass after cooling."),
             _o("decay_heat", "minimize", "Decay heat per mass after cooling."),
         ),
-        compatible_conditions=("irradiation", "neutron_spectrum", "cooling_time_s"),
+        compatible_conditions=(
+            "irradiation",
+            "neutron_spectrum",
+            "cooling_time_s",
+            "dose_geometry",
+        ),
         methods=("inventory solver with dose model (e.g. FISPACT-II)",),
         evidence_requirement="activation inventory plus dose model at stated cooling time",
         unsupported_proxies=(

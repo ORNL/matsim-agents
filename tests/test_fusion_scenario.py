@@ -80,6 +80,37 @@ def test_cooling_time_and_spectrum_mismatch():
     assert any("neutron_spectrum" in p for p in problems)
 
 
+def test_incidence_angle_mismatch():
+    sc = EvaluationScenario(
+        scenario_id="a",
+        temperature_K=1000.0,
+        plasma_ion="D",
+        plasma_ion_energy_eV=100.0,
+        ion_incidence_angle_deg=0.0,
+    )
+    grazing = _item(
+        "sputtering_yield", plasma_ion="D", plasma_ion_energy_eV=100.0, ion_incidence_angle_deg=80
+    )
+    problems = sc.mismatches("plasma_erosion_resistance", grazing)
+    assert any("ion_incidence_angle_deg" in p for p in problems)
+
+
+def test_dose_geometry_mismatch_only_for_dose_rate():
+    sc = EvaluationScenario(
+        scenario_id="a",
+        temperature_K=1000.0,
+        irradiation="fw",
+        neutron_spectrum="S",
+        cooling_time_s=1.0,
+        dose_geometry="contact",
+    )
+    ctx = dict(irradiation="fw", neutron_spectrum="S", cooling_time_s=1.0)
+    at_1m = _item("shutdown_dose_rate", dose_geometry="1 m", **ctx)
+    problems = sc.mismatches("low_activation_shutdown_dose", at_1m)
+    assert any("dose_geometry" in p for p in problems)
+    assert sc.mismatches("low_activation_shutdown_dose", _item("decay_heat", **ctx)) == []
+
+
 def test_unrequested_irradiation_is_a_mismatch():
     sc = EvaluationScenario(scenario_id="a", temperature_K=1000.0)
     item = _item("thermal_conductivity_total", irradiation="fw-1dpa")
@@ -102,6 +133,11 @@ def test_multi_scenario_no_average_without_weights():
     assert aggregate({"a": 0.8, "b": 0.4}, weighted).weighted_mean == pytest.approx(0.5)
     gap = aggregate({"a": 0.8, "b": None}, weighted)
     assert gap.worst_case is None and gap.weighted_mean is None
+    omitted = aggregate({"a": 0.8}, weighted)
+    assert omitted.worst_case is None and omitted.weighted_mean is None
+    assert omitted.per_scenario == {"a": 0.8, "b": None}
+    with pytest.raises(ValueError, match="undeclared"):
+        aggregate({"a": 0.8, "b": 0.4, "z": 0.1}, weighted)
 
 
 def test_scenario_weights_validated():

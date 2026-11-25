@@ -95,8 +95,26 @@ def test_transmutation_is_isotope_resolved():
         exposure_time_s=3e7,
         isotope_inventory={"Re187": 1e-5},
     )
-    assert ev.hydrogen_isotopes() == {"T": 1.0}
-    assert ev.helium_isotopes() == {"He-4": 2.0}
+    assert ev.hydrogen_isotopes("concentration_appm") == {"T": 1.0}
+    assert ev.helium_isotopes("concentration_appm") == {"He-4": 2.0}
+    assert ev.hydrogen_isotopes("production_rate") == {}
+    with pytest.raises(NuclearEvidenceError, match="not a transmutation quantity"):
+        ev.hydrogen_isotopes("dpa")
+
+
+def test_isotope_quantities_do_not_overwrite_each_other():
+    t = RecoilSpecies(element="H", mass_number=3)
+    ev = _base(
+        NuclearFamily.TRANSMUTATION,
+        [
+            NuclearQuantity(name="concentration_appm", value=5.0, unit="appm", isotope=t),
+            NuclearQuantity(name="production_rate", value=1e-6, unit="appm/s", isotope=t),
+        ],
+        exposure_time_s=3e7,
+        isotope_inventory={"H3": 5e-6},
+    )
+    assert ev.hydrogen_isotopes("concentration_appm") == {"T": 5.0}
+    assert ev.hydrogen_isotopes("production_rate") == {"T": 1e-6}
 
 
 def test_activation_rules():
@@ -108,11 +126,20 @@ def test_activation_rules():
         _base(NuclearFamily.ACTIVATION, [dose], dose_model="contact", exposure_time_s=3e7)
     with pytest.raises(ValidationError, match="dose_model"):
         _base(NuclearFamily.ACTIVATION, [dose], **times)
-    ev = _base(NuclearFamily.ACTIVATION, [dose], dose_model="contact gamma", **times)
+    with pytest.raises(ValidationError, match="dose_geometry"):
+        _base(NuclearFamily.ACTIVATION, [dose], dose_model="gamma", **times)
+    ev = _base(
+        NuclearFamily.ACTIVATION,
+        [dose],
+        dose_model="gamma",
+        dose_geometry="contact",
+        **times,
+    )
     (item,) = activation_properties(ev, composition="W", evidence_id=ev.evidence_id())
     assert item.evidence.status == PropertyStatus.APPROXIMATED
     assert item.evidence.conditions.irradiation == "demo-fw"
     assert item.context.cooling_time_s == 3e8
+    assert item.context.dose_geometry == "contact"
     assert item.evidence.limitations == ["SYNTHETIC demonstration data"]
 
 
@@ -131,6 +158,14 @@ def test_hash_format_and_synthetic_qualification():
             [NuclearQuantity(name="pka_rate", value=1.0, unit="1/(atom s)")],
             input_sha256={"in": "xyz"},
         )
+    # A valid output hash under the same name must not mask a bad input hash.
+    with pytest.raises(ValidationError, match="input result"):
+        _base(
+            NuclearFamily.PKA_DPA,
+            [NuclearQuantity(name="pka_rate", value=1.0, unit="1/(atom s)")],
+            input_sha256={"result": "xyz"},
+            output_sha256={"result": H},
+        )
     with pytest.raises(ValidationError, match="non-synthetic"):
         _base(
             NuclearFamily.PKA_DPA,
@@ -148,6 +183,12 @@ def test_ledger_record_and_pka_import(tmp_path):
     )
     rec = to_ledger_record(ev)
     assert rec.kind == "external"
+    zero = _base(
+        NuclearFamily.PKA_DPA,
+        [NuclearQuantity(name="dpa", value=1.0, unit="dpa", uncertainty=0.0)],
+        dpa_convention="NRT",
+    )
+    assert to_ledger_record(zero).uncertainties == {"dpa": 0.0}
     assert "SYNTHETIC demonstration data" in rec.physical_assumptions
     ledger = EvidenceLedger(tmp_path / "l.jsonl")
     ledger.append(rec)

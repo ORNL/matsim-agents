@@ -53,6 +53,21 @@ def test_electrical_conductivity_is_not_an_objective():
         FusionScoringPolicy.model_validate(data)
 
 
+def test_minimize_direction_rejected():
+    data = _data()
+    data["objectives"][0]["direction"] = "minimize"
+    with pytest.raises(ValueError, match="always maximized"):
+        FusionScoringPolicy.model_validate(data)
+
+
+@pytest.mark.parametrize("option", ["pareto_enabled", "weighted_ranking_enabled"])
+def test_unimplemented_ranking_switches_rejected(option):
+    data = _data()
+    data["ranking"][option] = False
+    with pytest.raises(ValueError, match="cannot be disabled"):
+        FusionScoringPolicy.model_validate(data)
+
+
 def test_weights_must_sum_to_one():
     data = _data()
     data["objectives"][0]["weight"] = 0.3

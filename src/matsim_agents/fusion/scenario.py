@@ -27,7 +27,16 @@ _CORE_FIELDS = (
     "transmutation_state",
     "loading",
 )
-_CONTEXT_FIELDS = ("neutron_spectrum", "cooling_time_s", "plasma_ion", "plasma_ion_energy_eV")
+_CONTEXT_FIELDS = (
+    "neutron_spectrum",
+    "cooling_time_s",
+    "plasma_ion",
+    "plasma_ion_energy_eV",
+    "ion_incidence_angle_deg",
+    "dose_geometry",
+)
+# Context fields that only constrain particular observables.
+_PROPERTY_SCOPED = {"dose_geometry": frozenset({"shutdown_dose_rate"})}
 _REL_TOL = 1e-9
 
 
@@ -40,6 +49,8 @@ class EvidenceContext(BaseModel):
     cooling_time_s: float | None = Field(None, ge=0)
     plasma_ion: str | None = None
     plasma_ion_energy_eV: float | None = Field(None, gt=0)
+    ion_incidence_angle_deg: float | None = Field(None, ge=0, lt=90, description="From normal.")
+    dose_geometry: str | None = None
 
 
 class FusionEvidence(BaseModel):
@@ -65,6 +76,8 @@ class EvaluationScenario(BaseModel):
     cooling_time_s: float | None = Field(None, ge=0)
     plasma_ion: str | None = None
     plasma_ion_energy_eV: float | None = Field(None, gt=0)
+    ion_incidence_angle_deg: float | None = Field(None, ge=0, lt=90, description="From normal.")
+    dose_geometry: str | None = None
     magnetic_state: str | None = None
     defect_state: str | None = None
     transmutation_state: str | None = None
@@ -75,7 +88,10 @@ class EvaluationScenario(BaseModel):
 
     def mismatches(self, objective_name: str, item: FusionEvidence) -> list[str]:
         """Why ``item`` is not comparable for ``objective_name`` in this scenario."""
-        fields = objective(objective_name).compatible_conditions
+        return self.condition_mismatches(objective(objective_name).compatible_conditions, item)
+
+    def condition_mismatches(self, fields: tuple[str, ...], item: FusionEvidence) -> list[str]:
+        """Mismatches of ``item`` on the named condition fields only."""
         core = tuple(f for f in fields if f in _CORE_FIELDS)
         have = item.evidence.conditions
         have_sub = PropertyConditions(**{f: getattr(have, f) for f in core})
@@ -86,6 +102,9 @@ class EvaluationScenario(BaseModel):
         )
         for f in fields:
             if f not in _CONTEXT_FIELDS:
+                continue
+            scope = _PROPERTY_SCOPED.get(f)
+            if scope is not None and item.evidence.property not in scope:
                 continue
             want, got = getattr(self, f), getattr(item.context, f)
             if want is None and got is None:
@@ -149,6 +168,11 @@ class ScenarioAggregate(BaseModel):
 
 def aggregate(scores: dict[str, float | None], scenarios: ScenarioSet) -> ScenarioAggregate:
     """Worst case and robustness; a mean only with user weights and no gaps."""
+    declared = [s.scenario_id for s in scenarios.scenarios]
+    unknown = sorted(set(scores) - set(declared))
+    if unknown:
+        raise ValueError(f"scores for undeclared scenario(s): {', '.join(unknown)}")
+    scores = {k: scores.get(k) for k in declared}
     notes = []
     missing = sorted(k for k, v in scores.items() if v is None)
     if missing:
