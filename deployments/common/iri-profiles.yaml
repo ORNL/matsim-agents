@@ -1,0 +1,31 @@
+# IRI Facility API profiles. The matsim_agents package carries no facility endpoints or paths;
+# pass this file as IRIPlatform(<name>, profiles="deployments/common/iri-profiles.yaml").
+# {account} in working_directory is filled from the environment variable named by account_env.
+facilities:
+  nersc-perlmutter:
+    base_url: https://api.iri.nersc.gov/api/v1
+    compute_resource_id: 94351904-6dba-4c16-b5cd-fbd280d8615b
+    token_env: IRI_TOKEN_NERSC
+    queue: regular
+    account_env: NERSC_PROJECT
+    custom_attributes: {constraint: gpu}
+  alcf-aurora:
+    base_url: https://api.alcf.anl.gov/api/v1
+    compute_resource_id: 0325fc07-6fb7-4453-b772-3d5030b2df72
+    token_env: IRI_TOKEN_ALCF
+    account_env: ALCF_PROJECT
+    custom_attributes: {filesystems: flare}
+  olcf-frontier:
+    base_url: https://amsc-moderate.s3m.olcf.ornl.gov/api/v2
+    compute_resource_id: frontier
+    token_env: IRI_TOKEN_OLCF
+    queue: batch
+    account_env: OLCF_S3M_PROJECT
+    working_directory: /lustre/orion/{account}/proj-shared
+  olcf-odo:
+    base_url: https://amsc-open.s3m.olcf.ornl.gov/api/v2
+    compute_resource_id: odo
+    token_env: IRI_TOKEN_OLCF
+    queue: batch
+    account_env: OLCF_S3M_PROJECT
+    working_directory: /gpfs/wolf2/olcf/{account}/proj-shared

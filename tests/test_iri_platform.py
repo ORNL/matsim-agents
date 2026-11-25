@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import http.client
 import json
+from pathlib import Path
 
 import pytest
 
 from matsim_agents.execution import ExecutionPlatform, iri
 from matsim_agents.execution.iri import (
-    KNOWN_FACILITIES,
     IRIError,
     IRIFacility,
     IRIPlatform,
     IRIWaitTimeout,
+    load_iri_profiles,
     walltime_seconds,
 )
 from matsim_agents.execution.resources import ResourceRequest
+
+PROFILES = Path(__file__).resolve().parents[1] / "deployments" / "common" / "iri-profiles.yaml"
 
 
 class FakeTransport:
@@ -39,7 +42,12 @@ class FakeTransport:
 
 def frontier(transport: FakeTransport, **kwargs) -> IRIPlatform:
     return IRIPlatform(
-        "olcf-frontier", token="tok", account="mat123", transport=transport, **kwargs
+        "olcf-frontier",
+        token="tok",
+        account="mat123",
+        transport=transport,
+        profiles=PROFILES,
+        **kwargs,
     )
 
 
@@ -176,7 +184,7 @@ def test_job_id_is_path_escaped():
 
 def test_resource_status_is_unauthenticated():
     transport = FakeTransport([(200, {"id": "frontier", "current_status": "up"})])
-    platform = IRIPlatform("olcf-frontier", transport=transport)
+    platform = IRIPlatform("olcf-frontier", transport=transport, profiles=PROFILES)
 
     assert platform.resource_status() == "up"
     assert "Authorization" not in transport.calls[0]["headers"]
@@ -185,7 +193,10 @@ def test_resource_status_is_unauthenticated():
 
 def test_resource_status_null_is_unknown():
     transport = FakeTransport([(200, {"id": "frontier", "current_status": None})])
-    assert IRIPlatform("olcf-frontier", transport=transport).resource_status() == "unknown"
+    assert (
+        IRIPlatform("olcf-frontier", transport=transport, profiles=PROFILES).resource_status()
+        == "unknown"
+    )
 
 
 def test_job_state_null_is_unknown():
@@ -198,7 +209,9 @@ def truncated_transport(method, url, headers, body, timeout):
 
 
 def test_truncated_response_raises_status_less_iri_error():
-    platform = IRIPlatform("olcf-frontier", token="tok", transport=truncated_transport)
+    platform = IRIPlatform(
+        "olcf-frontier", token="tok", transport=truncated_transport, profiles=PROFILES
+    )
     with pytest.raises(IRIError) as excinfo:
         platform.job("7")
     assert excinfo.value.status is None
@@ -206,22 +219,63 @@ def test_truncated_response_raises_status_less_iri_error():
 
 def test_missing_token_names_environment_variable(monkeypatch):
     monkeypatch.delenv("IRI_TOKEN_OLCF", raising=False)
-    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]))
+    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]), profiles=PROFILES)
     with pytest.raises(IRIError, match="IRI_TOKEN_OLCF"):
         platform.submit(["true"], resources=ResourceRequest(), workdir="/tmp")
 
 
 def test_account_and_working_directory_from_environment(monkeypatch):
     monkeypatch.setenv("OLCF_S3M_PROJECT", "mat999")
-    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]))
+    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]), profiles=PROFILES)
 
     assert platform.available_resources() == ResourceRequest(queue="batch", account="mat999")
     assert platform.resolved_working_directory() == "/lustre/orion/mat999/proj-shared"
 
 
-def test_unknown_facility_lists_known_names():
+def test_unknown_facility_lists_profile_names():
     with pytest.raises(ValueError, match="olcf-frontier"):
-        IRIPlatform("nowhere")
+        IRIPlatform("nowhere", profiles=PROFILES)
+
+
+def test_named_facility_without_profile_is_rejected():
+    with pytest.raises(ValueError, match="needs a profile"):
+        IRIPlatform("olcf-frontier")
+
+
+def test_missing_profile_file_is_reported(tmp_path):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        IRIPlatform("olcf-frontier", profiles=tmp_path / "absent.yaml")
+
+
+def test_empty_profile_file_is_rejected(tmp_path):
+    empty = tmp_path / "p.yaml"
+    empty.write_text("facilities: {}\n")
+    with pytest.raises(ValueError, match="no facility profiles"):
+        load_iri_profiles(empty)
+
+
+def test_explicit_facility_object_needs_no_profile_file():
+    facility = IRIFacility(
+        name="x",
+        base_url="https://example.org/api",
+        compute_resource_id="c",
+        token_env="T",
+        working_directory="/work/{account}",
+    )
+    platform = IRIPlatform(facility, account="p1", transport=FakeTransport([]))
+    assert platform.resolved_working_directory() == "/work/p1"
+
+
+def test_profile_without_working_directory_leaves_it_to_the_caller():
+    platform = IRIPlatform("alcf-aurora", account="p", profiles=PROFILES)
+    assert platform.resolved_working_directory() is None
+
+
+def test_explicit_workdir_is_used_verbatim_in_the_job_spec():
+    spec = frontier(FakeTransport([])).job_spec(
+        ["true"], resources=ResourceRequest(), workdir="/explicit/dir"
+    )
+    assert spec["directory"] == "/explicit/dir"
 
 
 def test_facility_requires_https():
@@ -289,7 +343,7 @@ def test_wait_caps_request_timeout_to_remaining_budget(clock):
 
 def test_wait_without_token_fails_immediately(clock, monkeypatch):
     monkeypatch.delenv("IRI_TOKEN_OLCF", raising=False)
-    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]))
+    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]), profiles=PROFILES)
     with pytest.raises(IRIError, match="IRI_TOKEN_OLCF"):
         platform.wait("7")
     assert clock.sleeps == []
@@ -310,7 +364,7 @@ def test_wait_retries_truncated_response(clock):
             raise http.client.IncompleteRead(b"{", 10)
         return responses(method, url, headers, body, timeout)
 
-    platform = IRIPlatform("olcf-frontier", token="tok", transport=flaky)
+    platform = IRIPlatform("olcf-frontier", token="tok", transport=flaky, profiles=PROFILES)
     assert platform.wait("7", poll_interval=1)["status"]["state"] == "completed"
     assert len(calls) == 2
 
@@ -335,5 +389,18 @@ def test_wait_rejects_bad_intervals():
         frontier(FakeTransport([])).wait("7", poll_interval=0)
 
 
-def test_known_facilities_use_https():
-    assert all(f.base_url.startswith("https://") for f in KNOWN_FACILITIES.values())
+def test_profiles_use_https():
+    profiles = load_iri_profiles(PROFILES)
+    assert profiles and all(f.base_url.startswith("https://") for f in profiles.values())
+
+
+def test_local_execution_never_needs_iri(monkeypatch, tmp_path):
+    from matsim_agents.execution import ScientificRunDirectory, discover_allocation
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("IRI must not be constructed for local execution")
+
+    monkeypatch.setattr(IRIPlatform, "__init__", forbidden)
+    discover_allocation()
+    assert ResourceRequest().nodes >= 1
+    assert ScientificRunDirectory is not None

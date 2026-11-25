@@ -191,8 +191,6 @@ APPLICATION_TREES = ("examples", "benchmarks", "research", "deployments", "scrip
 # Campaign identifiers, allocations and facility paths belong to applications
 # and deployments, never to the framework.
 FORBIDDEN_LITERALS = re.compile(r"W640|lrn110|m5216|/lustre/|/gpfs/|/global/cfs/", re.IGNORECASE)
-# Facility profiles describe where a templated ``{account}`` directory lives.
-LITERAL_ALLOWLIST = {"execution/iri.py"}
 CAMPAIGN_NAME = re.compile(r"(^|[-_ ])(e1|e2|e3|e4|nbtao5|fusion|pfc|w640)([-_ ]|$)", re.IGNORECASE)
 
 
@@ -232,7 +230,6 @@ def test_framework_has_no_campaign_or_facility_literals() -> None:
     violations = [
         f"{path.relative_to(PACKAGE_ROOT)}:{lineno}"
         for path in sorted(PACKAGE_ROOT.rglob("*.py"))
-        if path.relative_to(PACKAGE_ROOT).as_posix() not in LITERAL_ALLOWLIST
         for lineno, line in enumerate(path.read_text().splitlines(), 1)
         if FORBIDDEN_LITERALS.search(line)
     ]
