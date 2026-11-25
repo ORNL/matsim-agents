@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
+from fusion_bcc_app import CAMPAIGN, COMPOSITION, RADIATION_SPECIES, REPEATS
 
 from matsim_agents.backends.external.spectra_pka.config import SpectraPKAConfig
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
@@ -30,7 +29,7 @@ from matsim_agents.science.properties.calculators import (
 from matsim_agents.workflows.full_supercell_campaign import FullSupercellCampaign
 from matsim_agents.workflows.radiation import properties as rp
 
-CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
+CONFIG = CAMPAIGN
 T = 900.0
 STATE = rp.RadiationState(irradiation="synthetic-1dpa", temperature_K=T, defect_state="V1He1")
 KAPPA = "thermal_conductivity_total"
@@ -77,8 +76,8 @@ def swelling(value, *, irradiation="synthetic-1dpa", sid="A-s"):
 
 def test_reference_alloy_is_the_1024_site_parent():
     cfg = FullSupercellCampaign.from_yaml(CONFIG)
-    assert rp.check_reference_alloy(cfg) == rp.REFERENCE_ALLOY_COUNTS
-    assert sum(rp.REFERENCE_ALLOY_COUNTS.values()) == rp.REFERENCE_SITES == 1024
+    assert rp.check_parent(cfg, COMPOSITION, REPEATS) == COMPOSITION
+    assert sum(COMPOSITION.values()) == 1024
 
 
 def test_a_different_parent_is_refused():
@@ -95,7 +94,7 @@ def test_a_different_parent_is_refused():
         }
     )
     with pytest.raises(rp.RadiationError):
-        rp.check_reference_alloy(smaller)
+        rp.check_parent(smaller, COMPOSITION, REPEATS)
 
 
 def test_no_supplied_data_gives_missing_for_every_radiation_property_with_a_reason():
@@ -148,16 +147,16 @@ def test_derivation_rejects_a_pristine_record_that_carries_a_defect_state():
 
 
 def test_readiness_reports_missing_spectra_and_pseudopotentials_as_blockers(tmp_path):
-    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {})
+    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {}, RADIATION_SPECIES)
     assert ready.spectra_pka == "NOT_INSTALLED"
-    assert set(ready.pseudopotentials) == set(rp.RADIATION_SPECIES)
+    assert set(ready.pseudopotentials) == set(RADIATION_SPECIES)
     assert all(v == "MISSING" for v in ready.pseudopotentials.values())
     assert set(ready.blockers) == {"spectra_pka", "qe_gas_defects"}
     assert "no degradation is claimed" in ready.statement
 
 
 def test_blockers_are_carried_into_the_missing_reason(tmp_path):
-    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {})
+    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {}, RADIATION_SPECIES)
     out = rp.radiation_evidence("A-s", "A", STATE, readiness=ready)
     assert all("SPECTRA-PKA is NOT_INSTALLED" in e.reason for e in out)
 
@@ -197,7 +196,7 @@ def test_measured_swelling_enters_selection_with_its_own_value():
 
 
 def test_swelling_acquisition_is_blocked_by_the_missing_backend_and_says_why(tmp_path):
-    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {})
+    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {}, RADIATION_SPECIES)
     base = [kappa(30.0, 1.0, irradiated=True)]
     cand = CandidateEvidence(
         candidate_id="A", evidence=base + rp.radiation_evidence("A-s", "A", STATE)

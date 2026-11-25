@@ -1,6 +1,6 @@
 """MP9: radiation-resistance properties as evidence in the multi-property selection.
 
-This connects the existing radiation workflows (the 1,024-site gas/transmutation QE campaign,
+This connects the existing radiation workflows (the full-supercell gas/transmutation QE campaign,
 the SPECTRA-PKA adapter and the pseudopotential gates) to ``PropertyEvidence`` and to
 :func:`~matsim_agents.science.acquisition.property_acquisition.plan_property_acquisition`.
 It computes no radiation physics.
@@ -15,8 +15,8 @@ Rules:
 * A conductivity degradation is derived only from two records, a pristine and an irradiated
   conductivity at the same temperature. The irradiated one must itself carry an irradiation or
   defect state. The result is ``APPROXIMATED``, never qualified.
-* Readiness (SPECTRA-PKA installed, pseudopotentials for Re, Os, H, He) is reported next to the
-  evidence and turned into acquisition blockers. It is never turned into a value.
+* Readiness (SPECTRA-PKA installed, pseudopotentials for the requested species) is reported
+  next to the evidence and turned into acquisition blockers. It is never turned into a value.
 """
 
 from __future__ import annotations
@@ -48,24 +48,6 @@ RADIATION_PROPERTIES = (
     "embrittlement_dbtt_shift",
     "thermal_conductivity_degradation",
 )
-REFERENCE_ALLOY_COUNTS: dict[str, int] = {
-    "W": 640,
-    "Ta": 128,
-    "Cr": 64,
-    "V": 96,
-    "Hf": 32,
-    "Mo": 64,
-}
-REFERENCE_REPEATS = (8, 8, 8)
-REFERENCE_SITES = 1024
-# Where the inputs come from, for re-acquisition:
-# * UPFs: pslibrary 1.0.0 PBE PAW, https://pseudopotentials.quantum-espresso.org/upf_files/<file>
-#   (Re/Os.pbe-spn-kjpaw_psl.1.0.0.UPF, H/He.pbe-kjpaw_psl.1.0.0.UPF). The Frontier copy is in
-#   /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw with
-#   SOURCE.txt and SHA256SUMS; point MATSIM_PSEUDO_DIR there.
-# * SPECTRA-PKA build and PKA matrices: see docs/external/spectra-pka.md.
-RADIATION_SPECIES = ("Re", "Os", "H", "He")
-
 _MISSING_REASON = {
     "irradiation_swelling": (
         "no validated swelling model or irradiation measurement has been ingested for this "
@@ -108,7 +90,7 @@ class RadiationState(BaseModel):
 def state_for_example(
     example: GasExample, irradiation: str, temperature_K: float
 ) -> RadiationState:
-    """The radiation state of one 1,024-site gas/transmutation configuration."""
+    """The radiation state of one gas/transmutation configuration."""
     transmuted = f"Re{example.n_re}Os{example.n_os}" if example.n_re or example.n_os else None
     has_defect = bool(example.n_vacancies or example.n_he or example.n_h)
     return RadiationState(
@@ -119,20 +101,19 @@ def state_for_example(
     )
 
 
-def check_reference_alloy(cfg: FullSupercellCampaign) -> dict[str, int]:
-    """Refuse a campaign whose parent is not the 8x8x8, 1,024-site reference alloy."""
+def check_parent(
+    cfg: FullSupercellCampaign, composition: Mapping[str, int], repeats: Sequence[int]
+) -> dict[str, int]:
+    """Refuse a campaign whose parent is not the application's declared parent supercell."""
     p = cfg.parent_supercell
-    if tuple(p.conventional_repeats) != REFERENCE_REPEATS or p.expected_parent_atoms != (
-        REFERENCE_SITES
-    ):
+    sites = sum(composition.values())
+    if tuple(p.conventional_repeats) != tuple(repeats) or p.expected_parent_atoms != sites:
         raise RadiationError(
             f"parent is {p.conventional_repeats} / {p.expected_parent_atoms} sites, "
-            f"not {REFERENCE_REPEATS} / {REFERENCE_SITES}"
+            f"not {tuple(repeats)} / {sites}"
         )
-    if dict(p.composition) != REFERENCE_ALLOY_COUNTS:
-        raise RadiationError(
-            f"parent composition {dict(p.composition)} is not {REFERENCE_ALLOY_COUNTS}"
-        )
+    if dict(p.composition) != dict(composition):
+        raise RadiationError(f"parent composition {dict(p.composition)} is not {dict(composition)}")
     return dict(p.composition)
 
 
@@ -151,9 +132,9 @@ def assess_radiation_readiness(
     spectra: SpectraPKAConfig,
     pseudo_dir: str | Path,
     pseudopotentials: Mapping[str, str],
-    species: Sequence[str] = RADIATION_SPECIES,
+    species: Sequence[str],
 ) -> RadiationReadiness:
-    """SPECTRA-PKA and Re/Os/H/He pseudopotential status, as acquisition blockers."""
+    """SPECTRA-PKA and per-species pseudopotential status, as acquisition blockers."""
     availability = check_availability(spectra, None, invoke=False)
     pseudo = assess_pseudopotentials(species, pseudo_dir, pseudopotentials)
     status = {r.species: r.status for r in pseudo.records}
@@ -284,13 +265,11 @@ def _try_derive(
 
 __all__ = [
     "RADIATION_PROPERTIES",
-    "RADIATION_SPECIES",
-    "REFERENCE_ALLOY_COUNTS",
     "RadiationError",
     "RadiationReadiness",
     "RadiationState",
     "assess_radiation_readiness",
-    "check_reference_alloy",
+    "check_parent",
     "derive_conductivity_degradation",
     "radiation_evidence",
     "state_for_example",

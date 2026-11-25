@@ -11,12 +11,12 @@ allowance are written down.
 
 from __future__ import annotations
 
-from math import prod
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from matsim_agents.core.application import SupercellTarget
 from matsim_agents.science.acquisition.acquisition import CandidateAcquisitionPolicy
 from matsim_agents.workflows.hierarchy.qe_plan import (
     MethodSignature,
@@ -26,7 +26,6 @@ from matsim_agents.workflows.hierarchy.qe_plan import (
 from matsim_agents.workflows.hierarchy.stages import StageThresholds
 from matsim_agents.workflows.hierarchy.transfer import standard_experiments
 
-ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4}
 KNOWN_EXPERIMENTS = tuple(e.name for e in standard_experiments())
 
 
@@ -40,33 +39,8 @@ class CampaignSection(_Section):
     seed: StrictInt = 0
 
 
-class TargetSection(_Section):
+class TargetSection(SupercellTarget):
     composition: dict[str, StrictInt] = Field(min_length=2)
-    supercell: tuple[StrictInt, StrictInt, StrictInt]
-    parent_lattice: Literal["sc", "bcc", "fcc"]
-    expected_sites: StrictInt = Field(gt=0)
-    reference: str = ""
-
-    @property
-    def n_sites(self) -> int:
-        return ATOMS_PER_CONVENTIONAL_CELL[self.parent_lattice] * prod(self.supercell)
-
-    @property
-    def elements(self) -> tuple[str, ...]:
-        return tuple(sorted(self.composition))
-
-    @model_validator(mode="after")
-    def _consistent(self) -> TargetSection:
-        if self.n_sites != self.expected_sites:
-            raise ValueError(
-                f"target must have {self.expected_sites} sites; "
-                f"{self.parent_lattice} supercell {self.supercell} gives {self.n_sites}"
-            )
-        if any(n <= 0 for n in self.composition.values()):
-            raise ValueError("every target element needs a positive atom count")
-        if sum(self.composition.values()) != self.expected_sites:
-            raise ValueError(f"target composition must sum to {self.expected_sites} atoms")
-        return self
 
 
 class DatasetSource(_Section):

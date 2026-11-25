@@ -1,0 +1,39 @@
+# Hierarchy campaign config for the Cantor FCC application. Dry run by default: planning,
+# inventory and review run without submitting anything. Set execution.dry_run=false with
+# approved_by, approved_node_hours and execution.account to submit with sbatch.
+campaign:
+  campaign_id: cantor-fcc-256
+  description: CoCrFeMnNi subsystem-to-target transfer on a 4x4x4 FCC supercell
+target:
+  composition: {Co: 52, Cr: 51, Fe: 51, Mn: 51, Ni: 51}
+  supercell: [4, 4, 4]
+  parent_lattice: fcc
+  expected_sites: 256
+data:
+  candidates: candidates.json
+transfer_evaluation:
+  experiments: ["2,3,4->5"]
+  required_properties: [energy]
+  n_new: [12]
+  min_eval_rows: 6
+qe:
+  method:
+    functional: PBE
+    pseudopotentials:
+      Co: Co_pbe_v1.2.uspp.F.UPF
+      Cr: cr_pbe_v1.5.uspp.F.UPF
+      Fe: Fe.pbe-spn-kjpaw_psl.0.2.1.UPF
+      Mn: mn_pbe_v1.5.uspp.F.UPF
+      Ni: ni_pbe_v1.4.uspp.F.UPF
+    ecutwfc_ry: 60.0
+    ecutrho_ry: 480.0
+    smearing: mv
+    degauss_ry: 0.02
+    kpts: [2, 2, 2]
+    magnetic_convention: collinear
+  resources: {nodes: 4, walltime_hours: 2.0, memory_gb_per_node: 100.0}
+  limits: {max_nodes: 16, max_walltime_hours: 6.0, node_memory_gb: 512.0}
+budget:
+  total_node_hours: 500.0
+sampling:
+  policy: {batch_size: 4}

@@ -95,7 +95,7 @@ the software behaves correctly on synthetic data, not that real alloys transfer.
 
 - Pseudopotentials (pslibrary 1.0.0 PBE PAW, six elements, checksums and provenance beside the files
   under `/lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw`) are on disk and
-  wired into `deployments/frontier/campaigns/qe-1024/campaign.yaml`. Five full-size SCF inputs and three
+  wired into `examples/fusion_bcc_1024/campaign.yaml`. Five full-size SCF inputs and three
   NEB records now prepare; `pristine_ferromagnetic` stays `INPUT_BLOCKED` until a starting magnetization
   is derived from the UPF valence.
 - The campaign cutoffs (51 / 650 Ry) are the maxima of the UPF-header suggestions (W 50.4 Ry, V 645 Ry

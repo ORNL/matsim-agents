@@ -1,9 +1,9 @@
-"""Seeded transmutation configurations of the 1,024-site reference alloy (F9).
+"""Seeded transmutation configurations of a configured BCC parent supercell.
 
-The parent is the BCC 8x8x8 reference supercell (W640 Ta128 Cr64 V96 Hf32 Mo64) with
-stable site ids. Re and Os counts come from imported, isotope-resolved transmutation
-evidence: summed isotope atom fractions times 1,024, rounded to the nearest integer,
-and substituted on W sites chosen by a seeded generator. Hydrogen (H, D, T) and helium
+The parent (composition and conventional repeats) is supplied by the application, with
+stable site ids. Product counts come from imported, isotope-resolved transmutation
+evidence: summed isotope atom fractions times the number of sites, rounded to the nearest
+integer, and substituted on host sites chosen by a seeded generator. Hydrogen (H, D, T) and helium
 (He-3, He-4) are counted per isotope and never merged; they are not placed, because
 placing gas needs a site model that is not part of this module. Nothing is run here.
 """
@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import Counter
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,16 +23,9 @@ from matsim_agents.science.irradiation.nuclear_evidence import (
     NuclearEvidenceError,
     NuclearFamily,
 )
-from matsim_agents.workflows.radiation.properties import (
-    REFERENCE_ALLOY_COUNTS,
-    REFERENCE_REPEATS,
-    REFERENCE_SITES,
-)
 
 TRANSMUTATION_VERSION = "transmutation-v1"
 SITE_MAP_SEED = 0
-HOST = "W"
-PRODUCTS = ("Re", "Os")
 # Quantities that are fractions per atom of material, convertible to site counts.
 _PER_ATOM = {"atom_fraction": 1.0, "concentration_appm": 1e-6}
 
@@ -82,9 +76,18 @@ class TransmutedConfiguration(BaseModel):
         return "ftx-" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
-def reference_site_map(seed: int = SITE_MAP_SEED) -> tuple[Site, ...]:
-    """The 1,024 BCC sites with stable ids and a seeded, fixed element assignment."""
-    nx, ny, nz = REFERENCE_REPEATS
+def bcc_site_map(
+    composition: dict[str, int],
+    repeats: tuple[int, int, int],
+    seed: int = SITE_MAP_SEED,
+) -> tuple[Site, ...]:
+    """BCC sites with stable ids and a seeded, fixed element assignment."""
+    nx, ny, nz = repeats
+    n_sites = 2 * nx * ny * nz
+    if sum(composition.values()) != n_sites:
+        raise NuclearEvidenceError(
+            f"composition sums to {sum(composition.values())}, not {n_sites} BCC sites"
+        )
     coords = [
         ((i + b) / nx, (j + b) / ny, (k + b) / nz)
         for i in range(nx)
@@ -92,11 +95,11 @@ def reference_site_map(seed: int = SITE_MAP_SEED) -> tuple[Site, ...]:
         for k in range(nz)
         for b in (0.0, 0.5)
     ]
-    elements = [el for el, n in sorted(REFERENCE_ALLOY_COUNTS.items()) for _ in range(n)]
-    order = numpy_rng(seed, "transmutation", "site-map").permutation(REFERENCE_SITES)
+    elements = [el for el, n in sorted(composition.items()) for _ in range(n)]
+    order = numpy_rng(seed, "transmutation", "site-map").permutation(n_sites)
     return tuple(
         Site(site_id=f"s{n:04d}", frac=coords[n], element=elements[int(order[n])])
-        for n in range(REFERENCE_SITES)
+        for n in range(n_sites)
     )
 
 
@@ -125,47 +128,45 @@ def _element_fraction(evidence: ExternalNuclearEvidence, quantity: str, element:
 def transmuted_configuration(
     evidence: ExternalNuclearEvidence,
     *,
-    quantity: str = "atom_fraction",
+    sites: tuple[Site, ...],
+    host: str,
+    products: tuple[str, ...],
     seed: int,
-    sites: tuple[Site, ...] | None = None,
+    quantity: str = "atom_fraction",
 ) -> TransmutedConfiguration:
-    """Substitute Re/Os on seeded W sites from transmutation evidence; gas is counted only."""
+    """Substitute products on seeded host sites from transmutation evidence; gas is counted."""
     if evidence.family != NuclearFamily.TRANSMUTATION:
         raise NuclearEvidenceError("a transmutation configuration needs transmutation evidence")
-    sites = sites or reference_site_map()
-    if len(sites) != REFERENCE_SITES:
-        raise NuclearEvidenceError(f"site map has {len(sites)} sites, not {REFERENCE_SITES}")
+    if not sites:
+        raise NuclearEvidenceError("a transmutation configuration needs a site map")
+    n_sites = len(sites)
     scale = _per_atom(quantity)
-    expected = {el: _element_fraction(evidence, quantity, el) * REFERENCE_SITES for el in PRODUCTS}
+    expected = {el: _element_fraction(evidence, quantity, el) * n_sites for el in products}
     counts = {el: int(math.floor(v + 0.5)) for el, v in expected.items()}
-    hosts = [s for s in sites if s.element == HOST]
+    hosts = [s for s in sites if s.element == host]
     if sum(counts.values()) > len(hosts):
         raise NuclearEvidenceError(
-            f"{sum(counts.values())} substitutions exceed the {len(hosts)} {HOST} sites"
+            f"{sum(counts.values())} substitutions exceed the {len(hosts)} {host} sites"
         )
     order = numpy_rng(seed, "transmutation", evidence.evidence_id()).permutation(len(hosts))
     chosen = iter(hosts[int(i)] for i in order)
     subs = sorted(
         (
-            Substitution(site_id=next(chosen).site_id, from_element=HOST, to_element=el)
-            for el in PRODUCTS
+            Substitution(site_id=next(chosen).site_id, from_element=host, to_element=el)
+            for el in products
             for _ in range(counts[el])
         ),
         key=lambda s: s.site_id,
     )
-    composition = dict(REFERENCE_ALLOY_COUNTS)
-    composition[HOST] -= sum(counts.values())
+    composition = dict(Counter(s.element for s in sites))
+    composition[host] -= sum(counts.values())
     composition.update({el: n for el, n in counts.items() if n})
     gas = GasInventory(
-        hydrogen={
-            k: v * scale * REFERENCE_SITES for k, v in evidence.hydrogen_isotopes(quantity).items()
-        },
-        helium={
-            k: v * scale * REFERENCE_SITES for k, v in evidence.helium_isotopes(quantity).items()
-        },
+        hydrogen={k: v * scale * n_sites for k, v in evidence.hydrogen_isotopes(quantity).items()},
+        helium={k: v * scale * n_sites for k, v in evidence.helium_isotopes(quantity).items()},
     )
     notes = [
-        "Counts round expected atoms in 1,024 sites to the nearest integer.",
+        f"Counts round expected atoms in {n_sites} sites to the nearest integer.",
         "Gas isotopes are counted, not placed; placement needs a separate site model.",
         "No electronic-structure calculation has been run on this configuration.",
     ]
@@ -191,6 +192,6 @@ __all__ = [
     "Substitution",
     "TRANSMUTATION_VERSION",
     "TransmutedConfiguration",
-    "reference_site_map",
+    "bcc_site_map",
     "transmuted_configuration",
 ]

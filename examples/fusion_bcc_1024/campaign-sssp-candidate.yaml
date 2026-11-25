@@ -1,5 +1,5 @@
 # QUALIFICATION CANDIDATE ONLY -- NOT the production protocol.
-# Same 1,024-atom W-Ta-Cr-V-Hf-Mo campaign as ../qe-1024/campaign.yaml, but with
+# Same 1,024-atom W-Ta-Cr-V-Hf-Mo campaign as campaign.yaml, but with
 # SSSP 1.3.0 PBE Precision pseudopotentials. Use it only for the small-cell
 # PSlibrary-vs-SSSP comparison (docs/quantum-espresso-frontier.md, "SSSP candidate").
 # Labels from this config get a different dft_method_signature because the per-file

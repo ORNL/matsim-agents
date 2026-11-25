@@ -1,0 +1,30 @@
+# Fusion plasma-facing refractory alloy: the 1,024-site W-Ta-Cr-V-Hf-Mo study.
+# Everything specific to this study lives here; the framework reads it with
+# matsim_agents.core.application.load_application. tests/test_applications.py pins
+# the target below, so any change to it is deliberate.
+name: fusion-bcc-1024
+description: >
+  Point defects, transmutation products and H/He gas in a fixed 1,024-site BCC
+  W640Ta128Cr64V96Hf32Mo64 supercell, under a fusion first-wall irradiation scenario.
+paradigm: supercell_alloy
+workflow: full_supercell_campaign
+target:
+  composition: {W: 640, Ta: 128, Cr: 64, V: 96, Hf: 32, Mo: 64}
+  supercell: [8, 8, 8]
+  parent_lattice: bcc
+  expected_sites: 1024
+  reference: W640Ta128Cr64V96Hf32Mo64
+species: [W, Ta, Cr, V, Hf, Mo, Re, Os, H, He]
+properties:
+  - irradiation_swelling
+  - embrittlement_dbtt_shift
+  - thermal_conductivity_degradation
+policy: ../fusion_pfc/policy.yaml
+workflow_config: campaign.yaml
+parameters:
+  lattice_parameter_angstrom: 3.16
+  transmutation:
+    host: W
+    products: [Re, Os]
+  gas_species: [H, He]
+  radiation_species: [Re, Os, H, He]

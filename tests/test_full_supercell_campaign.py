@@ -11,7 +11,7 @@ from matsim_agents.science.structures.alloy_ensemble import occupation_fingerpri
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows import full_supercell_campaign as fsc
 
-CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
+CONFIG = Path(__file__).parents[1] / "examples/fusion_bcc_1024/campaign.yaml"
 
 
 @pytest.fixture(scope="module")

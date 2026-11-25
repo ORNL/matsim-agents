@@ -11,7 +11,7 @@ from matsim_agents.workflows import full_supercell_campaign as fsc
 from matsim_agents.workflows.hierarchy.qe_plan import ResourceLimits, ResourceRequest
 from matsim_agents.workflows.radiation import gas_supercells as gq
 
-CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
+CONFIG = Path(__file__).parents[1] / "examples/fusion_bcc_1024/campaign.yaml"
 UPF = (
     '<UPF version="2.0.1">\n<PP_INFO/>\n<PP_HEADER element=" {el}" pseudo_type="PAW" '
     'is_paw="true" has_so="false" core_correction="true" functional=" SLA PW PBX PBC" '
