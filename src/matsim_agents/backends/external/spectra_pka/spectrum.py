@@ -227,7 +227,9 @@ def rebin(
     """
     check_spectrum(spec)
     tgt = np.asarray(target_boundaries_eV, dtype=float)
-    if tgt.size < 2 or np.any(np.diff(tgt) <= 0.0):
+    if tgt.ndim != 1 or tgt.size < 2 or not np.all(np.isfinite(tgt)) or tgt[0] <= 0.0:
+        raise SpectrumError("target boundaries must be a finite, positive 1-D grid")
+    if np.any(np.diff(tgt) <= 0.0):
         raise SpectrumError("target boundaries must be strictly increasing")
     out = np.zeros(tgt.size - 1)
     total = spec.total_flux
@@ -259,6 +261,10 @@ def rebin(
         lost = max(0.0, 1.0 - float(out.sum()) / total) if total > 0 else 0.0
         if abs(lost) < CONSERVATION_RTOL:
             lost = 0.0
+    if lost > 0.0 and not spec.absolute:
+        raise SpectrumError(
+            f"spectrum {spec.identity!r}: a shape-only spectrum cannot be rebinned with flux loss"
+        )
     if lost > max_lost_fraction:
         raise SpectrumError(
             f"spectrum {spec.identity!r}: {lost:.3e} of the flux lies outside the library "
@@ -276,7 +282,7 @@ def rebin(
         boundaries_eV=tuple(float(e) for e in tgt),
         detail=detail,
     )
-    return result, lost
+    return check_spectrum(result), lost
 
 
 def _read_csv(path: Path) -> tuple[list[float], list[float]]:

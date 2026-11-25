@@ -79,3 +79,71 @@ def test_main_dry_run_and_missing_exit_code(archive, tmp_path, capsys):
     assert "Cu063s.asc" in capsys.readouterr().out
     code = df.main(["--dest", str(tmp_path / "c"), "--nuclides", "W999", "--archive", str(archive)])
     assert code == 2
+
+
+def _zip_of(tmp_path, members):
+    path = tmp_path / "m.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
+        for name, data in members.items():
+            z.writestr(name, data)
+    return path
+
+
+def test_unknown_library_is_an_error(archive, tmp_path):
+    with archive.open("rb") as stream, pytest.raises(df.FetchError):
+        df.extract(stream, tmp_path / "c", {"W184s.asc": ("W", 184)}, "TENDL", source="s")
+
+
+def test_traversal_member_name_stays_inside_destination(tmp_path):
+    zpath = _zip_of(tmp_path, {"../../evil.tar.bz2": _tar_gz({"W184s.asc": b"x\n"})})
+    dest = tmp_path / "cache"
+    with zpath.open("rb") as stream, pytest.raises(df.FetchError):
+        df.extract(stream, dest, {"W184s.asc": ("W", 184)}, "..", source="s")
+    assert not (tmp_path / "evil").exists()
+
+
+def test_modified_cached_file_is_re_extracted(archive, tmp_path):
+    dest = tmp_path / "cache"
+    wanted = {"W184s.asc": ("W", 184)}
+    with archive.open("rb") as stream:
+        df.extract(stream, dest, wanted, "TENDL2023n", source="s")
+    target = dest / "TENDL2023n-pka" / "W184s.asc"
+    target.write_bytes(b"corrupt")
+    with archive.open("rb") as stream:
+        again = df.extract(stream, dest, wanted, "TENDL2023n", source="s")
+    assert again["found"]["TENDL2023n-pka/W184s.asc"]["status"] == "downloaded"
+    assert target.read_bytes().endswith(b"5 6\n")
+
+
+def test_missing_manifest_entry_is_re_extracted(archive, tmp_path):
+    dest = tmp_path / "cache"
+    wanted = {"W184s.asc": ("W", 184)}
+    lib = dest / "TENDL2023n-pka"
+    lib.mkdir(parents=True)
+    (lib / "W184s.asc").write_bytes(b"partial")
+    with archive.open("rb") as stream:
+        report = df.extract(stream, dest, wanted, "TENDL2023n", source="s")
+    assert report["found"]["TENDL2023n-pka/W184s.asc"]["status"] == "downloaded"
+    assert "W184s.asc" in json.loads((lib / "manifest.json").read_text())["files"]
+
+
+def test_bzip2_member_of_another_library_is_skipped(tmp_path):
+    import bz2
+
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w") as tar:
+        info = tarfile.TarInfo("pka/W184s.asc")
+        info.size = 2
+        tar.addfile(info, io.BytesIO(b"b\n"))
+    zpath = _zip_of(
+        tmp_path,
+        {
+            "TENDL2017n-pka.tar.bz2": bz2.compress(raw.getvalue()),
+            "TENDL2023n-pka.tar.bz2": _tar_gz({"W184s.asc": b"g\n"}),
+        },
+    )
+    with zpath.open("rb") as stream:
+        report = df.extract(
+            stream, tmp_path / "c", {"W184s.asc": ("W", 184)}, "TENDL2023n", source="s"
+        )
+    assert report["missing"] == []

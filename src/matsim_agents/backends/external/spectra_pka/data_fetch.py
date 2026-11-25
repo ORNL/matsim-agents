@@ -11,6 +11,7 @@ composition, or explicit nuclides.
 from __future__ import annotations
 
 import argparse
+import bz2
 import hashlib
 import json
 import os
@@ -102,7 +103,10 @@ class _Gunzip:
     """File-like view of one stored gzip member; knows where the member ends."""
 
     def __init__(self, src: _Stream) -> None:
-        self.src, self.z, self.pending = src, zlib.decompressobj(16 + zlib.MAX_WBITS), b""
+        magic = src.read_exact(3)
+        src.unread(magic)
+        self.z: Any = bz2.BZ2Decompressor() if magic == b"BZh" else zlib.decompressobj(47)
+        self.src, self.pending = src, b""
 
     def read(self, n: int) -> bytes:
         while len(self.pending) < n and not self.z.eof:
@@ -156,6 +160,35 @@ def _extract_one(tar: tarfile.TarFile, info: tarfile.TarInfo, target: Path) -> d
     }
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(CHUNK):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_cached(lib_dir: Path, base: str, target: Path) -> bool:
+    manifest = lib_dir / MANIFEST
+    if not (target.is_file() and manifest.is_file()):
+        return False
+    try:
+        entry = json.loads(manifest.read_text())["files"][base]
+    except (ValueError, KeyError):
+        return False
+    return entry.get("bytes") == target.stat().st_size and entry.get("sha256") == _sha256(target)
+
+
+def _record(lib_dir: Path, library: str, base: str, entry: dict[str, Any]) -> None:
+    manifest_path = lib_dir / MANIFEST
+    doc = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+    doc.setdefault("library", library)
+    doc.setdefault("files", {})[base] = entry
+    tmp = manifest_path.with_name(f".{MANIFEST}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(doc, indent=2, sort_keys=True))
+    os.replace(tmp, manifest_path)
+
+
 def extract(
     stream: IO[bytes],
     destination: Path,
@@ -165,12 +198,13 @@ def extract(
     source: str,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Stream the archive and write the wanted files of the libraries matching ``library``."""
+    """Stream the archive and write the wanted files of the one library named ``library``."""
     src = _Stream(stream)
     todo = set(wanted)
     found: dict[str, dict[str, Any]] = {}
     seen: list[str] = []
     destination.mkdir(parents=True, exist_ok=True)
+    matched = False
     for name, method in _members(src):
         if name.endswith("/"):
             continue
@@ -178,10 +212,15 @@ def extract(
         if method != 0:
             raise FetchError(f"{name}: compressed zip members are not supported")
         gz = _Gunzip(src)
-        if library.lower() not in name.lower():
+        lid = library_id(name)
+        if library.lower() not in {lid.lower(), lid.removesuffix("-pka").lower()}:
             gz.finish()
             continue
-        lib_dir = destination / library_id(name)
+        matched = True
+        safe = os.path.basename(lid.replace("\\", "/"))
+        if safe in {"", ".", ".."}:
+            raise FetchError(f"unsafe archive member name {name!r}")
+        lib_dir = destination / safe
         lib_dir.mkdir(parents=True, exist_ok=True)
         with tarfile.open(fileobj=gz, mode="r|") as tar:  # type: ignore[call-overload]
             for info in tar:
@@ -189,50 +228,38 @@ def extract(
                 if not info.isfile() or base not in todo:
                     continue
                 target = lib_dir / base
-                if target.is_file() and not force:
-                    found[f"{library_id(name)}/{base}"] = {"status": "cached", "bytes": 0}
-                else:
-                    meta = _extract_one(tar, info, target)
-                    meta["status"] = "downloaded"
-                    meta["retrieved_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
-                    found[f"{library_id(name)}/{base}"] = meta
+                with exclusive_lock(lib_dir / ".lock", timeout=300):
+                    if not force and _is_cached(lib_dir, base, target):
+                        found[f"{safe}/{base}"] = {"status": "cached", "bytes": 0}
+                    else:
+                        meta = _extract_one(tar, info, target)
+                        meta["status"] = "downloaded"
+                        meta["retrieved_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
+                        element, mass = wanted[base]
+                        entry = {
+                            **meta,
+                            "file": base,
+                            "target_isotope": f"{element}{mass}",
+                            "source": source,
+                            "checksum_verified": False,
+                            "note": "SHA-256 computed locally; the publisher provides no checksums",
+                        }
+                        _record(lib_dir, safe, base, entry)
+                        found[f"{safe}/{base}"] = meta
                 todo.discard(base)
                 if not todo:
-                    return _finish(destination, wanted, found, source, seen)
+                    return _finish(wanted, found, seen)
         gz.finish()
-    return _finish(destination, wanted, found, source, seen)
+    if not matched:
+        raise FetchError(f"no archive member is the library {library!r}; seen: {seen}")
+    return _finish(wanted, found, seen)
 
 
 def _finish(
-    destination: Path,
-    wanted: dict[str, tuple[str, int]],
-    found: dict[str, dict[str, Any]],
-    source: str,
-    seen: list[str],
+    wanted: dict[str, tuple[str, int]], found: dict[str, dict[str, Any]], seen: list[str]
 ) -> dict[str, Any]:
     got = {key.split("/", 1)[1] for key in found}
-    missing = sorted(set(wanted) - got)
-    new = {k: v for k, v in found.items() if v["status"] == "downloaded"}
-    for key, meta in new.items():
-        library, base = key.split("/", 1)
-        element, mass = wanted[base]
-        entry = {
-            **meta,
-            "file": base,
-            "target_isotope": f"{element}{mass}",
-            "source": source,
-            "checksum_verified": False,
-            "note": "SHA-256 computed locally; the publisher provides no checksums",
-        }
-        manifest_path = destination / library / MANIFEST
-        with exclusive_lock(destination / ".manifest.lock", timeout=300):
-            doc = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
-            doc.setdefault("library", library)
-            doc.setdefault("files", {})[base] = entry
-            tmp = manifest_path.with_name(f".{MANIFEST}.{os.getpid()}.tmp")
-            tmp.write_text(json.dumps(doc, indent=2, sort_keys=True))
-            os.replace(tmp, manifest_path)
-    return {"found": found, "missing": missing, "archive_members_seen": seen}
+    return {"found": found, "missing": sorted(set(wanted) - got), "archive_members_seen": seen}
 
 
 def open_source(url: str | None, archive: Path | None) -> tuple[IO[bytes], str]:
@@ -256,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Extract needed SPECTRA-PKA recoil matrices from the official pkas.zip"
     )
     p.add_argument("--dest", type=Path, required=True, help="cache directory (shared is fine)")
-    p.add_argument("--library", default="TENDL2023n", help="substring of the archive member name")
+    p.add_argument("--library", default="TENDL2023n", help="library name, e.g. TENDL2023n (exact)")
     p.add_argument("--elements", default="", help="comma list; all natural isotopes of each")
     p.add_argument("--composition", default="", help="El:fraction,... (natural isotopes of each)")
     p.add_argument("--nuclides", default="", help="comma list such as W184,Fe56 (added)")
@@ -284,14 +311,13 @@ def main(argv: list[str] | None = None) -> int:
     stream, source = open_source(args.url, args.archive)
     try:
         report = extract(stream, args.dest, wanted, args.library, source=source, force=args.force)
+    except FetchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     finally:
         stream.close()
     for key, meta in sorted(report["found"].items()):
         print(f"{meta['status']:10s} {key}")
-    if not any(args.library.lower() in m.lower() for m in report["archive_members_seen"]):
-        print(f"error: no archive member matches {args.library!r}", file=sys.stderr)
-        print("members seen: " + ", ".join(report["archive_members_seen"]), file=sys.stderr)
-        return 1
     if report["missing"]:
         print("MISSING from this library: " + " ".join(report["missing"]), file=sys.stderr)
         return 0 if args.allow_missing else 2

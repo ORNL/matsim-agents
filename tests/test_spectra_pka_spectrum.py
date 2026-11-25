@@ -136,3 +136,26 @@ def test_content_hash_ignores_identity_and_paths():
 def test_validate_spectrum_on_hand_built_object():
     bad = NeutronSpectrum("x", "file", (1.0,), True, boundaries_eV=(2.0, 1.0))
     assert validate_spectrum(bad)
+
+
+@pytest.mark.parametrize(
+    "grid", [[1.0, float("nan"), 3.0], [0.0, 1.0, 2.0], [-1.0, 1.0], [[1.0, 2.0]]]
+)
+def test_rebin_rejects_bad_target_grid(grid):
+    spec = NeutronSpectrum(
+        identity="s", source="t", group_flux=(1.0,), absolute=True, boundaries_eV=(1.0, 2.0)
+    )
+    with pytest.raises(SpectrumError):
+        rebin(spec, grid)
+
+
+def test_rebin_rejects_lossy_shape_only_spectrum():
+    spec = NeutronSpectrum(
+        identity="s",
+        source="t",
+        group_flux=(0.5, 0.5),
+        absolute=False,
+        boundaries_eV=(1.0, 2.0, 4.0),
+    )
+    with pytest.raises(SpectrumError):
+        rebin(spec, [1.0, 2.0], max_lost_fraction=1.0)
