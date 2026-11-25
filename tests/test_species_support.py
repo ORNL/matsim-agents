@@ -145,6 +145,51 @@ def test_upf_header_identity_not_filename(tmp_path):
     assert len(header.sha256) == 64
 
 
+UPF_V1 = """<PP_INFO>
+  Generated using Vanderbilt code, version 7 3 4
+  Scalar-Relativistic Calculation
+</PP_INFO>
+<PP_HEADER>
+   0                   Version Number
+  Ta                   Element
+   US                  Ultrasoft pseudopotential
+    T                  Nonlinear Core Correction
+ SLA  PW   PBE  PBE     PBE  Exchange-Correlation functional
+   13.00000000000      Z valence
+  -70.00000000000      Total energy
+    0.00000    0.00000 Suggested cutoff for wfc and rho
+    2                  Max angular momentum component
+</PP_HEADER>
+"""
+
+
+def test_upf_v1_header(tmp_path):
+    (tmp_path / "ta.UPF").write_text(UPF_V1)
+    h = parse_upf_header(tmp_path / "ta.UPF")
+    assert (h.upf_version, h.element, h.pseudo_type, h.z_valence) == (1, "Ta", "US", 13.0)
+    assert h.core_correction and not h.is_paw and not h.has_so
+    assert h.functional == "SLA PW PBE PBE" and h.relativistic == "scalar"
+    assert h.wfc_cutoff_ry is None and h.rho_cutoff_ry is None
+
+
+def test_upf_v2_relativistic_and_oncv_radius_not_a_cutoff(tmp_path):
+    (tmp_path / "H.upf").write_text(
+        '<UPF version="2.0.1">\n<PP_HEADER element="H" pseudo_type="NC" relativistic="scalar" '
+        'is_paw="false" core_correction="false" functional="PBE" z_valence="1.0" '
+        'rho_cutoff="1.165e1"/>\n</UPF>\n'
+    )
+    h = parse_upf_header(tmp_path / "H.upf")
+    assert h.relativistic == "scalar" and h.upf_version == 2
+    assert h.wfc_cutoff_ry is None and h.rho_cutoff_ry is None
+
+
+def test_equivalent_pbe_spellings_are_consistent(tmp_path):
+    write_upf(tmp_path, "W.UPF", "W", "14.0")
+    (tmp_path / "Ta.UPF").write_text(UPF_V1)
+    result = assess_pseudopotentials(["W", "Ta"], tmp_path, {"W": "W.UPF", "Ta": "Ta.UPF"})
+    assert result.consistent_functional and result.functionals == ("PBE",)
+
+
 def test_pseudo_filename_lying_is_a_mismatch(tmp_path):
     write_upf(tmp_path, "Os.UPF", "Re", "15.0")
     result = assess_pseudopotentials(["Os"], tmp_path, {"Os": "Os.UPF"})

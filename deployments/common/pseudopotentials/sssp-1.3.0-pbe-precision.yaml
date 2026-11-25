@@ -1,0 +1,205 @@
+library_id: sssp-1.3.0-pbe-precision
+library_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/sssp-1.3.0-pbe-precision
+provenance:
+  source_url: https://archive.materialscloud.org/records/gvag2-y0636
+  doi: 10.24435/materialscloud:eg-28
+  archive: SSSP_1.3.0_PBE_precision.tar.gz
+  archive_md5_official: fde94756886f32ada7bf597547557eb5
+  metadata_json: SSSP_1.3.0_PBE_precision.json
+  metadata_json_sha256: 7b7b648915e54c8397cd8143a7385c17eeed3104ad1236cecd905126d338a4e3
+  license: see LICENSE.txt (per-family licenses)
+  manifest_generated_utc: '2026-11-25T03:20:14Z'
+pseudo_types:
+- NC
+- US
+campaign_minimum_cutoffs_ry:
+  ecutwfc: 80.0
+  ecutrho: 400.0
+  note: max over listed elements of SSSP-recommended cutoffs; not a convergence test
+pseudopotentials:
+  W:
+    filename: W_pbe_v1.2.uspp.F.UPF
+    sha256: 3cb024d05ba2413340c9e993bc149bf94d44fb23e609642466d87ca30c88c569
+    md5: 9c083fa34c2a2ea0f02f1f893e16e1c8
+    md5_official: 9c083fa34c2a2ea0f02f1f893e16e1c8
+    source_family: GBRV-1.2
+    sssp_cutoff_wfc_ry: 50.0
+    sssp_cutoff_rho_ry: 400.0
+    upf_version: 1
+    upf_element: W
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBE PBE
+    upf_z_valence: 14.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  Ta:
+    filename: Ta_pbe_v1.uspp.F.UPF
+    sha256: e0850b94d7007d47691d131db1fa5ffdaaa6f6a573c1ebf1fb425e46ed891ee1
+    md5: f8bbe9446314a3b8ea5d9f3e3836c939
+    md5_official: f8bbe9446314a3b8ea5d9f3e3836c939
+    source_family: GBRV-1.2
+    sssp_cutoff_wfc_ry: 50.0
+    sssp_cutoff_rho_ry: 400.0
+    upf_version: 1
+    upf_element: Ta
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBE PBE
+    upf_z_valence: 13.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  Cr:
+    filename: cr_pbe_v1.5.uspp.F.UPF
+    sha256: c7449bbfea358d76832cf2f7b43dc89101ead6891806773121bfaa93a140f6de
+    md5: 0d52af634a40206e4dee301ad30da4bf
+    md5_official: 0d52af634a40206e4dee301ad30da4bf
+    source_family: GBRV-1.5
+    sssp_cutoff_wfc_ry: 40.0
+    sssp_cutoff_rho_ry: 320.0
+    upf_version: 1
+    upf_element: Cr
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBX PBC
+    upf_z_valence: 14.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  V:
+    filename: v_pbe_v1.4.uspp.F.UPF
+    sha256: 4fc8afef98a911c82908fb9142edf71b2f598dd98762b355a6d291d834fb6d0c
+    md5: 22b79981416ebb76fdaf5b1b8640f6fb
+    md5_official: 22b79981416ebb76fdaf5b1b8640f6fb
+    source_family: GBRV-1.4
+    sssp_cutoff_wfc_ry: 40.0
+    sssp_cutoff_rho_ry: 320.0
+    upf_version: 1
+    upf_element: V
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBX PBC
+    upf_z_valence: 13.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  Hf:
+    filename: Hf-sp.oncvpsp.upf
+    sha256: f019947b40f1831f9bd44a630e9445a07c1e864ce81f0ac6286035a1e0c2080b
+    md5: 417ed15784afe83d2e06dacf143de3f8
+    md5_official: 417ed15784afe83d2e06dacf143de3f8
+    source_family: Dojo
+    sssp_cutoff_wfc_ry: 55.0
+    sssp_cutoff_rho_ry: 220.0
+    upf_version: 2
+    upf_element: Hf
+    upf_pseudo_type: NC
+    upf_is_paw: false
+    upf_functional: PBE
+    upf_z_valence: 12.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_HEADER relativistic attribute
+    upf_has_so: false
+    upf_core_correction: true
+  Mo:
+    filename: Mo_ONCV_PBE-1.0.oncvpsp.upf
+    sha256: bf2bf79aec40a5e0f0b390faabb4be1a33829e8e25d28040e01a08f0ab1dcb03
+    md5: 1b5d28e075c9ccadda658a603575cd1f
+    md5_official: 1b5d28e075c9ccadda658a603575cd1f
+    source_family: SG15
+    sssp_cutoff_wfc_ry: 35.0
+    sssp_cutoff_rho_ry: 140.0
+    upf_version: 2
+    upf_element: Mo
+    upf_pseudo_type: NC
+    upf_is_paw: false
+    upf_functional: PBE
+    upf_z_valence: 14.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_HEADER relativistic attribute
+    upf_has_so: false
+    upf_core_correction: false
+  Re:
+    filename: Re_pbe_v1.2.uspp.F.UPF
+    sha256: 61146e72676c25b08fce566316216ce8c1e4ec1317f418513daf36e6e52a65eb
+    md5: 85f993410f3e006da9d71c142b4ad953
+    md5_official: 85f993410f3e006da9d71c142b4ad953
+    source_family: GBRV-1.2
+    sssp_cutoff_wfc_ry: 30.0
+    sssp_cutoff_rho_ry: 240.0
+    upf_version: 1
+    upf_element: Re
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBE PBE
+    upf_z_valence: 15.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  Os:
+    filename: Os_pbe_v1.2.uspp.F.UPF
+    sha256: fb26113f4c4f67a8e0f996bff2a6411a1abdbd12c0d023912361536fdfde4d28
+    md5: a3fb40a04f0c37c25c34bbc47164c9a8
+    md5_official: a3fb40a04f0c37c25c34bbc47164c9a8
+    source_family: GBRV-1.2
+    sssp_cutoff_wfc_ry: 40.0
+    sssp_cutoff_rho_ry: 320.0
+    upf_version: 1
+    upf_element: Os
+    upf_pseudo_type: US
+    upf_is_paw: false
+    upf_functional: SLA PW PBE PBE
+    upf_z_valence: 16.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_INFO generation text (UPF v1 has no field; QE upfconv
+      writes 'no')
+    upf_has_so: false
+    upf_core_correction: true
+  H:
+    filename: H_ONCV_PBE-1.0.oncvpsp.upf
+    sha256: 69d631780c0178c5239ed3dcb4a3e22c13bd13cde9beb97e123d036949da5c09
+    md5: 1790becc920ee074925cf490c71280fe
+    md5_official: 1790becc920ee074925cf490c71280fe
+    source_family: SG15
+    sssp_cutoff_wfc_ry: 80.0
+    sssp_cutoff_rho_ry: 320.0
+    upf_version: 2
+    upf_element: H
+    upf_pseudo_type: NC
+    upf_is_paw: false
+    upf_functional: PBE
+    upf_z_valence: 1.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_HEADER relativistic attribute
+    upf_has_so: false
+    upf_core_correction: false
+  He:
+    filename: He_ONCV_PBE-1.0.oncvpsp.upf
+    sha256: 27fca1dad6cd2df7dbc35d5f5df3bd4e1104db0cdd929d1cab1eb6687276b035
+    md5: e7160162b946020f132a727efeb32d00
+    md5_official: e7160162b946020f132a727efeb32d00
+    source_family: SG15
+    sssp_cutoff_wfc_ry: 55.0
+    sssp_cutoff_rho_ry: 220.0
+    upf_version: 2
+    upf_element: He
+    upf_pseudo_type: NC
+    upf_is_paw: false
+    upf_functional: PBE
+    upf_z_valence: 2.0
+    upf_relativistic: scalar
+    upf_relativistic_source: PP_HEADER relativistic attribute
+    upf_has_so: false
+    upf_core_correction: false
