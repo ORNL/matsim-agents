@@ -1,4 +1,4 @@
-"""LLM-assisted hypothesis revision for fusion PFC candidates (F7).
+"""LLM-assisted revision of scored-candidate hypotheses (F7).
 
 The deterministic score decides the revision status and the evidence lists. A
 language model may only draft a structured rationale (:class:`HypothesisDraft`).
@@ -7,7 +7,7 @@ packet, quotes a number the packet does not contain, or asks to change scores,
 weights or constraints. A rejected draft falls back to deterministic text and
 the rejection is recorded in the revision's traceability.
 
-Status rules for the claim "candidate X is the preferred PFC material under
+Status rules for the claim "candidate X is the preferred material under
 policy P in scenario S":
 
 ``SUPPORTED``
@@ -19,7 +19,7 @@ policy P in scenario S":
 ``UNRESOLVED``
     anything else, and always when the benchmarks are synthetic.
 
-Scored records are identified by property id plus fusion context
+Scored records are identified by property id plus scenario context
 (:func:`~matsim_agents.science.decision.scoring.evidence_key`), so the same value under a
 different context gets its own ledger record.
 """
@@ -49,9 +49,8 @@ from matsim_agents.science.acquisition.selection_revision import (
     _rounds_to,
     append_property_evidence,
 )
-from matsim_agents.science.decision.objectives import objective
-from matsim_agents.science.decision.policy import FusionScoringPolicy
-from matsim_agents.science.decision.scenario import EvidenceContext, FusionEvidence
+from matsim_agents.science.decision.policy import ScoringPolicy
+from matsim_agents.science.decision.scenario import EvidenceContext, ScenarioEvidence
 from matsim_agents.science.decision.scoring import (
     CandidateResult,
     Dominance,
@@ -61,7 +60,7 @@ from matsim_agents.science.decision.scoring import (
 )
 from matsim_agents.science.properties.calculators import PropertyEvidence
 
-PACKET_VERSION = "fusion-pfc-packet-v1"
+PACKET_VERSION = "objective-packet-v1"
 Drafter = Callable[[str], str]
 _EVIDENCE_ID = re.compile(r"\b(?:ev|pe|fsc|fpk|nuc|hr)-[0-9a-f]{12,}\b")
 _ALTERATION = re.compile(
@@ -127,7 +126,7 @@ class PacketCandidate(BaseModel):
     objectives: list[PacketObjective]
 
 
-class FusionEvidencePacket(BaseModel):
+class ScoringEvidencePacket(BaseModel):
     """Everything the drafter may see and quote; nothing else is admissible."""
 
     packet_version: str = PACKET_VERSION
@@ -169,9 +168,9 @@ class HypothesisDraft(BaseModel):
 
 def build_packet(
     result: ScoringResult,
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     ledger_ids: Mapping[str, str] | None = None,
-) -> FusionEvidencePacket:
+) -> ScoringEvidencePacket:
     """Evidence packet for a scoring result.
 
     ``ledger_ids`` maps :func:`~matsim_agents.science.decision.scoring.evidence_key` to ledger id.
@@ -263,7 +262,7 @@ def build_packet(
                 objectives=objs,
             )
         )
-    packet = FusionEvidencePacket(
+    packet = ScoringEvidencePacket(
         policy_version=policy.policy_version,
         policy_digest=policy.digest(),
         weights=dict(policy.weights),
@@ -294,7 +293,7 @@ def _context(ctx: EvidenceContext | None) -> dict[str, Any] | None:
 
 
 def parse_draft(
-    text: str, packet: FusionEvidencePacket
+    text: str, packet: ScoringEvidencePacket
 ) -> tuple[HypothesisDraft | None, list[str]]:
     """Parse and check a drafter reply; returns the draft and the problems found."""
     try:
@@ -370,11 +369,11 @@ def _evidence_split(
     return sorted(set(support)), sorted(set(contra))
 
 
-def recommended_calculations(c: CandidateResult) -> list[str]:
+def recommended_calculations(c: CandidateResult, policy: ScoringPolicy) -> list[str]:
     """Deterministic next calculations: missing objectives first, then widest intervals."""
     out = []
     for name in c.missing_objectives:
-        d = objective(name)
+        d = policy.definition(name)
         out.append(f"{name}: {d.evidence_requirement} (methods: {', '.join(d.methods)})")
     spread = sorted(
         (o for o in c.objectives if o.d_low is not None and o.d_high is not None),
@@ -382,7 +381,9 @@ def recommended_calculations(c: CandidateResult) -> list[str]:
     )
     for o in spread[:2]:
         if o.d_high != o.d_low:
-            out.append(f"{o.objective}: reduce uncertainty ({objective(o.objective).methods[0]})")
+            out.append(
+                f"{o.objective}: reduce uncertainty ({policy.definition(o.objective).methods[0]})"
+            )
     return out or ["experimental confirmation of the scored observables"]
 
 
@@ -398,37 +399,37 @@ def _deterministic_rationale(c: CandidateResult, reason: str) -> str:
     return "Deterministic summary: " + " | ".join(parts)
 
 
-def _with_context(item: FusionEvidence) -> PropertyEvidence:
-    """The record as stored in the ledger: its fusion context becomes a stated assumption."""
+def _with_context(item: ScenarioEvidence) -> PropertyEvidence:
+    """The record as stored in the ledger: its scenario context becomes a stated assumption."""
     ctx = _context(item.context)
     if ctx is None:
         return item.evidence
-    note = f"fusion context: {json.dumps(ctx, sort_keys=True)}"
+    note = f"scenario context: {json.dumps(ctx, sort_keys=True)}"
     return item.evidence.model_copy(update={"limitations": [*item.evidence.limitations, note]})
 
 
 @dataclass(frozen=True)
-class FusionRevisionOutcome:
+class ScoringRevisionOutcome:
     record: HypothesisRecord
-    packet: FusionEvidencePacket
+    packet: ScoringEvidencePacket
     used_llm: bool
     notes: tuple[str, ...]
 
 
-def revise_fusion_hypothesis(
+def revise_scored_hypothesis(
     ledger: EvidenceLedger,
     hypothesis_id: str,
     candidate_id: str,
     result: ScoringResult,
-    policy: FusionScoringPolicy,
-    evidence: Mapping[str, Sequence[FusionEvidence]],
+    policy: ScoringPolicy,
+    evidence: Mapping[str, Sequence[ScenarioEvidence]],
     *,
     budget: RevisionBudget | None = None,
     drafter: Drafter | None = None,
     agent_model_id: str | None = None,
     campaign_id: str | None = None,
-) -> FusionRevisionOutcome:
-    """Append one revision of the claim that ``candidate_id`` is the preferred PFC material."""
+) -> ScoringRevisionOutcome:
+    """Append one revision of the claim that ``candidate_id`` is the preferred material."""
     budget = budget or RevisionBudget()
     history = ledger.history(hypothesis_id)
     if len(history) >= budget.max_revisions:
@@ -460,7 +461,7 @@ def revise_fusion_hypothesis(
     if status != HypothesisStatus.UNRESOLVED and not cited:
         status, reason = HypothesisStatus.UNRESOLVED, f"{reason}; no ledger evidence to cite"
     missing = [f"{n}: {c.objective(n).reason or 'no evidence'}" for n in c.missing_objectives]
-    calcs = recommended_calculations(c)
+    calcs = recommended_calculations(c, policy)
 
     notes: list[str] = []
     rationale = _deterministic_rationale(c, reason)
@@ -491,7 +492,8 @@ def revise_fusion_hypothesis(
         campaign_id=campaign_id,
         claim_type="property",
         scientific_claim=(
-            f"Candidate {candidate_id} is the preferred plasma-facing material under policy "
+            f"Candidate {candidate_id} is the preferred material for {policy.application} "
+            f"under policy "
             f"{policy.policy_version} in scenario {result.scenario_id}."
         ),
         falsifiable_prediction=(
@@ -526,18 +528,18 @@ def revise_fusion_hypothesis(
     )
     stored = ledger.append(record)
     assert isinstance(stored, HypothesisRecord)
-    return FusionRevisionOutcome(
+    return ScoringRevisionOutcome(
         record=stored, packet=packet, used_llm=bool(llm["accepted"]), notes=tuple(notes)
     )
 
 
 __all__ = [
     "PACKET_VERSION",
-    "FusionEvidencePacket",
-    "FusionRevisionOutcome",
+    "ScoringEvidencePacket",
+    "ScoringRevisionOutcome",
     "HypothesisDraft",
     "build_packet",
     "parse_draft",
     "recommended_calculations",
-    "revise_fusion_hypothesis",
+    "revise_scored_hypothesis",
 ]

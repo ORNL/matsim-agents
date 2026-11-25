@@ -34,3 +34,276 @@ ranking:
   weighted_ranking_enabled: true
   require_comparable_conditions: true
   reject_missing_as_zero: true
+definitions:
+  radiation_damage_recovery:
+    name: radiation_damage_recovery
+    physical_meaning: Property retention under neutron irradiation after defect evolution and recovery.
+    required:
+    - name: defect_recovery_fraction
+      direction: maximize
+      meaning: Fraction of initial damage annealed at the operating temperature.
+    optional:
+    - name: irradiation_swelling
+      direction: minimize
+      meaning: Volumetric swelling at dose.
+    - name: thermal_conductivity_degradation
+      direction: minimize
+      meaning: Fractional conductivity loss at dose.
+    - name: embrittlement_dbtt_shift
+      direction: minimize
+      meaning: DBTT shift at dose.
+    compatible_conditions:
+    - temperature_K
+    - irradiation
+    - neutron_spectrum
+    - defect_state
+    methods:
+    - object kinetic Monte Carlo
+    - cluster dynamics
+    - post-irradiation test
+    evidence_requirement: defect-evolution model or irradiation experiment at stated dose
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: dpa
+      reason: a dpa or PKA rate measures primary damage production, not damage resistance
+    - name: pka_rate
+      reason: a PKA spectrum is a damage source term, not a material response
+    qualification_note: Requires defect evolution beyond primary damage; primary-damage counts alone are
+      never accepted.
+    insufficient_alone: []
+  thermal_conductivity:
+    name: thermal_conductivity
+    physical_meaning: Total thermal conductivity at the operating temperature and state.
+    required:
+    - name: thermal_conductivity_total
+      direction: maximize
+      meaning: Electronic plus lattice conductivity.
+    optional:
+    - name: thermal_conductivity_degradation
+      direction: minimize
+      meaning: Loss of conductivity after irradiation.
+    compatible_conditions:
+    - temperature_K
+    - irradiation
+    - transmutation_state
+    - magnetic_state
+    methods:
+    - Boltzmann transport
+    - Wiedemann-Franz with lattice term
+    - laser flash
+    evidence_requirement: transport calculation or measurement at the scenario temperature
+    minimum_qualification: numerically_validated
+    unsupported_proxies: []
+    qualification_note: Electronic-only or lattice-only values are approximations and must say so.
+    insufficient_alone: []
+  mechanical_integrity:
+    name: mechanical_integrity
+    physical_meaning: Strength, toughness, and ductility retained at temperature.
+    required:
+    - name: yield_strength
+      direction: maximize
+      meaning: Yield stress at temperature.
+    - name: fracture_toughness
+      direction: maximize
+      meaning: Resistance to crack growth.
+    optional:
+    - name: ductility_elongation
+      direction: maximize
+      meaning: Uniform elongation.
+    - name: embrittlement_dbtt_shift
+      direction: minimize
+      meaning: Irradiation-induced DBTT shift.
+    - name: creep_rate
+      direction: minimize
+      meaning: Steady-state creep rate.
+    compatible_conditions:
+    - temperature_K
+    - irradiation
+    - loading
+    methods:
+    - mechanical test
+    - crystal plasticity
+    - fracture mechanics model
+    evidence_requirement: strength and toughness, not stiffness
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: bulk_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_anisotropy
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_stability_min_eigenvalue
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_stiffness_tensor
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: poissons_ratio
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: shear_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: youngs_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    qualification_note: Elastic moduli may appear only in a separately labeled mechanical screening.
+    insufficient_alone: []
+  thermal_shock_fatigue:
+    name: thermal_shock_fatigue
+    physical_meaning: Resistance to cracking under transient and cyclic heat loads.
+    required:
+    - name: thermal_shock_damage_threshold
+      direction: maximize
+      meaning: Absorbed power density at onset of cracking.
+    optional:
+    - name: thermal_fatigue_cycles_to_failure
+      direction: maximize
+      meaning: Cycles to failure at stated load.
+    - name: thermal_conductivity_total
+      direction: maximize
+      meaning: Heat removal.
+    - name: thermal_expansion_coefficient
+      direction: minimize
+      meaning: Thermal strain per kelvin.
+    - name: yield_strength
+      direction: maximize
+      meaning: Stress accommodated before yielding.
+    - name: fracture_toughness
+      direction: maximize
+      meaning: Crack resistance.
+    compatible_conditions:
+    - temperature_K
+    - loading
+    methods:
+    - electron-beam or laser heat-load test
+    - thermomechanical FEM with damage
+    evidence_requirement: heat-load test or coupled thermomechanical damage model
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: bulk_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_anisotropy
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_stability_min_eigenvalue
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: elastic_stiffness_tensor
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: poissons_ratio
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: shear_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    - name: youngs_modulus
+      reason: elastic moduli are not strength, toughness, or damage tolerance
+    qualification_note: Thermal conductivity alone does not predict thermal shock.
+    insufficient_alone:
+    - thermal_conductivity_total
+  plasma_erosion_resistance:
+    name: plasma_erosion_resistance
+    physical_meaning: Low physical and chemical sputtering under plasma ion impact.
+    required:
+    - name: sputtering_yield
+      direction: minimize
+      meaning: Eroded atoms per incident ion at stated ion species and energy.
+    optional: []
+    compatible_conditions:
+    - temperature_K
+    - plasma_ion
+    - plasma_ion_energy_eV
+    - ion_incidence_angle_deg
+    methods:
+    - binary-collision approximation
+    - MD cascade
+    - ion-beam or plasma exposure
+    evidence_requirement: sputtering yield at the scenario plasma ion and energy
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: pka_rate
+      reason: neutron PKA spectra are bulk recoils, not surface sputtering
+    - name: dpa
+      reason: a dpa or PKA rate measures primary damage production, not damage resistance
+    qualification_note: Yield depends on ion species, energy, and angle; all must match.
+    insufficient_alone: []
+  high_temperature_stability:
+    name: high_temperature_stability
+    physical_meaning: Phase and microstructure stability at the operating temperature.
+    required:
+    - name: max_phase_stable_temperature
+      direction: maximize
+      meaning: Highest temperature without phase change.
+    optional:
+    - name: recrystallization_temperature
+      direction: maximize
+      meaning: Onset of recrystallization.
+    compatible_conditions:
+    - irradiation
+    - transmutation_state
+    - magnetic_state
+    methods:
+    - free-energy model with entropy
+    - CALPHAD
+    - annealing experiment
+    evidence_requirement: finite-temperature free energy or annealing data
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: formation_energy_per_atom
+      reason: a 0 K formation energy says nothing about stability at operating temperature
+    - name: energy_above_hull
+      reason: 0 K hull distance is not high-temperature phase stability
+    qualification_note: Requires finite-temperature free energies, not 0 K energetics.
+    insufficient_alone: []
+  low_hydrogen_retention:
+    name: low_hydrogen_retention
+    physical_meaning: Low retained H, D, and T inventory; isotopes reported separately.
+    required:
+    - name: hydrogen_retention_fraction_T
+      direction: minimize
+      meaning: Retained fraction of implanted tritium.
+    optional:
+    - name: hydrogen_retention_fraction_D
+      direction: minimize
+      meaning: Retained deuterium fraction.
+    - name: hydrogen_retention_fraction_H
+      direction: minimize
+      meaning: Retained protium fraction.
+    compatible_conditions:
+    - temperature_K
+    - irradiation
+    - defect_state
+    - plasma_ion_energy_eV
+    methods:
+    - rate-equation trapping model
+    - thermal desorption spectroscopy
+    evidence_requirement: isotope-specific retention at stated fluence and temperature
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: helium_retention_fraction
+      reason: helium is not a hydrogen isotope
+    qualification_note: H, D, and T differ in mass and trapping; one isotope never stands for another.
+    insufficient_alone: []
+  low_activation_shutdown_dose:
+    name: low_activation_shutdown_dose
+    physical_meaning: Low shutdown dose rate after a stated irradiation and cooling time.
+    required:
+    - name: shutdown_dose_rate
+      direction: minimize
+      meaning: Contact dose rate after the scenario cooling time.
+    optional:
+    - name: specific_activity
+      direction: minimize
+      meaning: Activity per mass after cooling.
+    - name: decay_heat
+      direction: minimize
+      meaning: Decay heat per mass after cooling.
+    compatible_conditions:
+    - irradiation
+    - neutron_spectrum
+    - cooling_time_s
+    - dose_geometry
+    methods:
+    - inventory solver with dose model (e.g. FISPACT-II)
+    evidence_requirement: activation inventory plus dose model at stated cooling time
+    minimum_qualification: numerically_validated
+    unsupported_proxies:
+    - name: isotope_inventory
+      reason: an isotope inventory gives no dose without a dose model and geometry
+    - name: spectra_pka
+      reason: SPECTRA-PKA computes recoils, not activation
+    - name: dpa
+      reason: a dpa or PKA rate measures primary damage production, not damage resistance
+    qualification_note: Dose needs an inventory solver and a dose model; neither alone is enough.
+    insufficient_alone: []

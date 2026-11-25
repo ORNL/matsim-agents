@@ -1,4 +1,4 @@
-"""Choose fusion PFC calculations by expected decision improvement per node-hour (F8).
+"""Choose objective calculations by expected decision improvement per node-hour (F8).
 
 Decision confidence is ``P(top) * n_complete / n_ranked``: ``P(top)`` is the
 Monte-Carlo probability that the point-estimate leader stays first when every
@@ -37,14 +37,14 @@ from matsim_agents.science.acquisition.property_acquisition import (
     BudgetReport,
     _budget,
 )
-from matsim_agents.science.decision.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
+from matsim_agents.science.decision.policy import ScoringPolicy
 from matsim_agents.science.decision.scoring import BenchmarkSet, ConstraintStatus, ScoringResult
 
-ACQUISITION_VERSION = "fusion-pfc-acquisition-v1"
+ACQUISITION_VERSION = "objective-acquisition-v1"
 Decision = Literal["selected", "not_selected", "blocked", "unquantified", "duplicate", "refused"]
 
 
-class FusionCalculation(BaseModel):
+class ObjectiveCalculation(BaseModel):
     """One proposed calculation of a scored observable for one candidate."""
 
     model_config = ConfigDict(extra="forbid")
@@ -63,16 +63,14 @@ class FusionCalculation(BaseModel):
     prior_source: str | None = None
 
     @model_validator(mode="after")
-    def _prior(self) -> FusionCalculation:
+    def _prior(self) -> ObjectiveCalculation:
         given = [self.prior_value is not None, self.prior_uncertainty is not None]
         if any(given) and not (all(given) and self.prior_source):
             raise ValueError("a prior needs value, uncertainty and source")
-        if self.objective not in FUSION_PFC_OBJECTIVES:
-            raise ValueError(f"unknown objective {self.objective!r}")
         return self
 
 
-class FusionCalculationScore(BaseModel):
+class ObjectiveCalculationScore(BaseModel):
     calc_id: str
     candidate_id: str
     objective: str
@@ -89,12 +87,12 @@ class FusionCalculationScore(BaseModel):
     rank: int | None = None
 
 
-class FusionAcquisitionPlan(BaseModel):
+class ObjectiveAcquisitionPlan(BaseModel):
     version: str = ACQUISITION_VERSION
     score_digest: str
     policy_version: str
     confidence_before: float
-    items: list[FusionCalculationScore]
+    items: list[ObjectiveCalculationScore]
     selected: list[str]
     budget: BudgetReport
     observed_cost: dict[str, float] = Field(default_factory=dict)
@@ -128,7 +126,7 @@ def _state(result: ScoringResult) -> tuple[_State, list[str]]:
 def decision_confidence(
     state: _State,
     ranked: Sequence[str],
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     benchmarks: BenchmarkSet,
     *,
     samples: int = 400,
@@ -140,7 +138,7 @@ def decision_confidence(
         for cid in ranked
         if all(
             (cid, n, obs) in state
-            for n in FUSION_PFC_OBJECTIVES
+            for n in policy.names
             for obs in benchmarks.objectives[n].observables
         )
     ]
@@ -148,10 +146,10 @@ def decision_confidence(
         return 0.0
     if len(complete) == 1:
         return 1.0 / len(ranked)
-    rng = numpy_rng(seed, "fusion-acquisition", "confidence")
+    rng = numpy_rng(seed, "objective-acquisition", "confidence")
     totals = np.zeros((len(complete), samples))
     point = np.zeros(len(complete))
-    for n in FUSION_PFC_OBJECTIVES:
+    for n in policy.names:
         w = policy.weights[n]
         obs_d = np.ones((len(complete), samples))
         obs_p = np.ones(len(complete))
@@ -172,16 +170,16 @@ def decision_confidence(
 def _expected_after(
     state: _State,
     ranked: Sequence[str],
-    item: FusionCalculation,
+    item: ObjectiveCalculation,
     mu: float,
     sd: float,
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     benchmarks: BenchmarkSet,
     draws: int,
     samples: int,
     seed: int,
 ) -> float:
-    rng = numpy_rng(seed, "fusion-acquisition", item.calc_id)
+    rng = numpy_rng(seed, "objective-acquisition", item.calc_id)
     s = item.expected_uncertainty
     key = (item.candidate_id, item.objective, item.observable)
     total = 0.0
@@ -198,11 +196,11 @@ def _expected_after(
     return total / draws
 
 
-def plan_fusion_acquisition(
+def plan_objective_acquisition(
     result: ScoringResult,
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     benchmarks: BenchmarkSet,
-    proposals: Sequence[FusionCalculation],
+    proposals: Sequence[ObjectiveCalculation],
     budget: BudgetLedger,
     *,
     observed_cost: Mapping[str, float] | None = None,
@@ -212,7 +210,7 @@ def plan_fusion_acquisition(
     samples: int = 400,
     seed: int,
     min_improvement: float = 0.0,
-) -> FusionAcquisitionPlan:
+) -> ObjectiveAcquisitionPlan:
     """Rank proposals by expected decision-confidence improvement per node-hour."""
     if draws < 1 or samples < 10:
         raise ValueError("draws must be >= 1 and samples >= 10")
@@ -225,14 +223,14 @@ def plan_fusion_acquisition(
     seen: set[str] = set(done)
     targets: set[tuple[str, str, str]] = set()
     known = {c.candidate_id for c in result.candidates}
-    scored: list[FusionCalculationScore] = []
+    scored: list[ObjectiveCalculationScore] = []
     proposals_by_id = {p.calc_id: p for p in proposals}
 
     for item in sorted(proposals, key=lambda p: p.calc_id):
 
         def row(decision, reason, after=None, used_prior=False, item=item):
             gain = None if after is None else after - before
-            return FusionCalculationScore(
+            return ObjectiveCalculationScore(
                 calc_id=item.calc_id,
                 candidate_id=item.candidate_id,
                 objective=item.objective,
@@ -254,6 +252,9 @@ def plan_fusion_acquisition(
             continue
         seen.add(item.calc_id)
         targets.add(key)
+        if item.objective not in policy.definitions:
+            scored.append(row("refused", f"unknown objective {item.objective!r}"))
+            continue
         bench = benchmarks.objectives.get(item.objective)
         if bench is None or item.observable not in bench.observables:
             scored.append(
@@ -320,7 +321,7 @@ def plan_fusion_acquisition(
         limitations.append("Some improvements rest on declared priors, labelled per item.")
     if result.synthetic_benchmarks:
         limitations.append("Benchmarks are SYNTHETIC; the plan is a demonstration only.")
-    plan = FusionAcquisitionPlan(
+    plan = ObjectiveAcquisitionPlan(
         score_digest=result.digest(),
         policy_version=policy.policy_version,
         confidence_before=before,
@@ -340,7 +341,7 @@ def _num(v: object) -> bool:
 
 
 def reserve_selected(
-    plan: FusionAcquisitionPlan,
+    plan: ObjectiveAcquisitionPlan,
     budget: BudgetLedger,
     approved: Sequence[str],
     *,
@@ -358,10 +359,10 @@ def reserve_selected(
     return list(approved)
 
 
-def render_fusion_plan(plan: FusionAcquisitionPlan) -> str:
+def render_objective_plan(plan: ObjectiveAcquisitionPlan) -> str:
     b = plan.budget
     out = [
-        f"Fusion PFC acquisition plan ({plan.version}, {plan.plan_digest}); scores "
+        f"Objective acquisition plan ({plan.version}, {plan.plan_digest}); scores "
         f"{plan.score_digest}; policy {plan.policy_version}",
         f"Decision confidence now: {plan.confidence_before:.3f}. Requires approval; nothing "
         "dispatched.",
@@ -390,11 +391,11 @@ def render_fusion_plan(plan: FusionAcquisitionPlan) -> str:
 
 __all__ = [
     "ACQUISITION_VERSION",
-    "FusionAcquisitionPlan",
-    "FusionCalculation",
-    "FusionCalculationScore",
+    "ObjectiveAcquisitionPlan",
+    "ObjectiveCalculation",
+    "ObjectiveCalculationScore",
     "decision_confidence",
-    "plan_fusion_acquisition",
-    "render_fusion_plan",
+    "plan_objective_acquisition",
+    "render_objective_plan",
     "reserve_selected",
 ]

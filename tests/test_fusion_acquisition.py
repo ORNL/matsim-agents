@@ -1,22 +1,15 @@
-from pathlib import Path
-
 import pytest
+from fusion_pfc_app import POLICY, synthetic
 
 from matsim_agents.execution.budget import BudgetLedger
-from matsim_agents.science.decision import synthetic
 from matsim_agents.science.decision.acquisition import (
-    FusionCalculation,
+    ObjectiveCalculation,
     decision_confidence,
-    plan_fusion_acquisition,
-    render_fusion_plan,
+    plan_objective_acquisition,
+    render_objective_plan,
     reserve_selected,
 )
-from matsim_agents.science.decision.policy import load_policy
 from matsim_agents.science.decision.scoring import score_candidates
-
-PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
-
-POLICY = load_policy(PFC_POLICY)
 
 
 def _result(cands=None):
@@ -33,7 +26,7 @@ def _ledger(allocation=100.0):
 
 
 def _calc(calc_id, candidate, objective, observable, cost=10.0, sigma=1.0, **kw):
-    return FusionCalculation(
+    return ObjectiveCalculation(
         calc_id=calc_id,
         candidate_id=candidate,
         objective=objective,
@@ -46,7 +39,7 @@ def _calc(calc_id, candidate, objective, observable, cost=10.0, sigma=1.0, **kw)
 
 
 def _plan(proposals, ledger=None, result=None, **kw):
-    return plan_fusion_acquisition(
+    return plan_objective_acquisition(
         result or _result(),
         POLICY,
         synthetic.BENCHMARKS,
@@ -131,7 +124,7 @@ def test_policy_mismatch_rejected():
         {"thermal_conductivity": 0.21, "radiation_damage_recovery": 0.24}, policy_version="x"
     )
     with pytest.raises(ValueError, match="differ"):
-        plan_fusion_acquisition(_result(), other, synthetic.BENCHMARKS, [], _ledger(), seed=0)
+        plan_objective_acquisition(_result(), other, synthetic.BENCHMARKS, [], _ledger(), seed=0)
 
 
 def test_confidence_counts_incomplete_and_is_deterministic():
@@ -159,7 +152,7 @@ def test_plan_digest_reserve_and_render():
     p2 = _plan([calc], observed_cost={"node_hours": 3.5, "bad": "x"})
     assert p1.plan_digest == p2.plan_digest and p1.plan_digest.startswith("facq-")
     assert p1.observed_cost == {"node_hours": 3.5}
-    text = render_fusion_plan(p1)
+    text = render_objective_plan(p1)
     assert "SYNTHETIC" in text and "[prior]" in text and "nothing dispatched" in text
     ledger = _ledger()
     with pytest.raises(ValueError, match="approved"):

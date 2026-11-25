@@ -1,8 +1,8 @@
-"""Deterministic plasma-facing-component scoring (F5, F6).
+"""Deterministic multi-objective candidate scoring (F5, F6).
 
 Stage A applies user constraints (feasible / violated / unknown). Stage B
 forms a Pareto front over objective desirabilities; it is authoritative only
-when every candidate has all eight objectives. Stage C computes
+when every candidate has every policy objective. Stage C computes
 ``S = sum_i w_i d_i`` with desirabilities from fixed, user-supplied
 benchmarks, never from the candidate set's own min/max. A missing objective
 leaves the total undefined: nothing is zero-filled and weights are never
@@ -36,19 +36,19 @@ from matsim_agents.science.acquisition.selection import (
     _nondominated_mask,
     _pick,
 )
-from matsim_agents.science.decision.objectives import OBJECTIVES, mechanical_screening, objective
-from matsim_agents.science.decision.policy import FUSION_PFC_OBJECTIVES, FusionScoringPolicy
+from matsim_agents.science.decision.objectives import ObjectiveDefinition, mechanical_screening
+from matsim_agents.science.decision.policy import ScoringPolicy
 from matsim_agents.science.decision.scenario import (
     EvaluationScenario,
     EvidenceContext,
-    FusionEvidence,
+    ScenarioEvidence,
 )
 from matsim_agents.science.properties.calculators import (
     PropertyQualification,
     PropertyStatus,
 )
 
-SCORING_SCHEMA = "fusion-pfc-score-v1"
+SCORING_SCHEMA = "objective-score-v1"
 
 
 class ScoringError(ValueError):
@@ -97,26 +97,27 @@ class BenchmarkSet(BaseModel):
     synthetic: bool = False
     objectives: dict[str, ObjectiveBenchmark]
 
-    @model_validator(mode="after")
-    def _consistent(self) -> BenchmarkSet:
+    def check_against(self, policy: ScoringPolicy) -> None:
+        """Raise :class:`ScoringError` unless every benchmark fits the policy's definitions."""
         for name, bench in self.objectives.items():
-            spec = objective(name)
+            if name not in policy.definitions:
+                raise ScoringError(f"{name}: not an objective of policy {policy.policy_version}")
+            spec = policy.definitions[name]
             scored = set(bench.observables)
             missing = [o.name for o in spec.required if o.name not in scored]
             if missing:
-                raise ValueError(f"{name}: benchmark omits required {', '.join(missing)}")
+                raise ScoringError(f"{name}: benchmark omits required {', '.join(missing)}")
             if scored <= set(spec.insufficient_alone):
-                raise ValueError(f"{name}: {', '.join(sorted(scored))} alone is insufficient")
+                raise ScoringError(f"{name}: {', '.join(sorted(scored))} alone is insufficient")
             for obs_name, b in bench.observables.items():
                 obs = spec.observable(obs_name)
                 if obs is None:
-                    raise ValueError(f"{name}: {obs_name} is not an observable of the objective")
+                    raise ScoringError(f"{name}: {obs_name} is not an observable of the objective")
                 up = b.target > b.worst
                 if up != (obs.direction == "maximize"):
-                    raise ValueError(
+                    raise ScoringError(
                         f"{name}/{obs_name}: anchors contradict direction {obs.direction}"
                     )
-        return self
 
     def digest(self) -> str:
         payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
@@ -152,7 +153,7 @@ class Dominance(StrEnum):
 
 
 def evidence_key(property_id: str, context: EvidenceContext | None) -> str:
-    """Identity of a scored record: its property id plus its fusion context."""
+    """Identity of a scored record: its property id plus its scenario context."""
     ctx = context.model_dump_json(exclude_none=True) if context is not None else "{}"
     return property_id if ctx == "{}" else f"{property_id}|{ctx}"
 
@@ -260,7 +261,7 @@ class WeightSensitivity(BaseModel):
 class ScoringResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    schema_version: Literal["fusion-pfc-score-v1"] = SCORING_SCHEMA
+    schema_version: Literal["objective-score-v1"] = SCORING_SCHEMA
     policy_version: str
     policy_digest: str
     benchmark_version: str
@@ -300,19 +301,19 @@ def _weakest_qualification(
 
 
 def _score_observable(
-    objective_name: str,
+    spec: ObjectiveDefinition,
     obs_name: str,
     bench: ObservableBenchmark,
-    items: Sequence[FusionEvidence],
+    items: Sequence[ScenarioEvidence],
     scenario: EvaluationScenario,
 ) -> ObservableResult:
-    proxies = {p.name for p in objective(objective_name).unsupported_proxies}
+    proxies = {p.name for p in spec.unsupported_proxies}
     usable, excluded = [], []
     for item in items:
         ev = item.evidence
         if ev.property != obs_name:
             continue
-        bad = scenario.mismatches(objective_name, item)
+        bad = scenario.mismatches(spec, item)
         bad += [f"{ev.property}: derived from proxy {s}" for s in ev.derived_from if s in proxies]
         if bad:
             excluded.extend(bad)
@@ -344,8 +345,8 @@ def _score_observable(
     )
 
 
-def _pick_item(items: Sequence[FusionEvidence], prop: str) -> tuple[FusionEvidence | None, str]:
-    """``_pick`` over fusion records, keeping the context of the chosen one."""
+def _pick_item(items: Sequence[ScenarioEvidence], prop: str) -> tuple[ScenarioEvidence | None, str]:
+    """``_pick`` over scenario records, keeping the context of the chosen one."""
     chosen, reason, _ = _pick([i.evidence for i in items], prop, None)
     if chosen is None:
         return None, reason
@@ -353,17 +354,18 @@ def _pick_item(items: Sequence[FusionEvidence], prop: str) -> tuple[FusionEviden
 
 
 def _score_objective(
-    name: str,
+    spec: ObjectiveDefinition,
     weight: float,
     benchmarks: BenchmarkSet,
-    items: Sequence[FusionEvidence],
+    items: Sequence[ScenarioEvidence],
     scenario: EvaluationScenario,
 ) -> ObjectiveResult:
+    name = spec.name
     bench = benchmarks.objectives.get(name)
     if bench is None:
         return ObjectiveResult(objective=name, weight=weight, reason="no benchmark supplied")
     obs = tuple(
-        _score_observable(name, o, b, items, scenario) for o, b in sorted(bench.observables.items())
+        _score_observable(spec, o, b, items, scenario) for o, b in sorted(bench.observables.items())
     )
     missing = [o.observable for o in obs if o.desirability is None]
     if missing:
@@ -386,13 +388,16 @@ def _score_objective(
 
 
 def _check_constraint(
-    c: Constraint, items: Sequence[FusionEvidence], scenario: EvaluationScenario
+    c: Constraint,
+    items: Sequence[ScenarioEvidence],
+    scenario: EvaluationScenario,
+    policy: ScoringPolicy,
 ) -> ConstraintResult:
     # Same conditions the property is scored under; temperature only where it applies.
     fields = tuple(
         dict.fromkeys(
             f
-            for spec in OBJECTIVES.values()
+            for spec in policy.definitions.values()
             if any(o.name == c.property for o in spec.observables())
             for f in spec.compatible_conditions
         )
@@ -493,7 +498,7 @@ def _correlation_warnings(
 
 
 def _sensitivity(
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     complete: Sequence[CandidateResult],
     base_rank: Sequence[str],
     factors: Sequence[float],
@@ -501,7 +506,7 @@ def _sensitivity(
     out = []
     if len(complete) < 2:
         return out
-    for name in FUSION_PFC_OBJECTIVES:
+    for name in policy.names:
         for f in factors:
             w = dict(policy.weights)
             w[name] *= f
@@ -528,10 +533,10 @@ def _sensitivity(
 
 
 def score_candidates(
-    policy: FusionScoringPolicy,
+    policy: ScoringPolicy,
     benchmarks: BenchmarkSet,
     scenario: EvaluationScenario,
-    candidates: Mapping[str, Sequence[FusionEvidence]],
+    candidates: Mapping[str, Sequence[ScenarioEvidence]],
     *,
     constraints: Sequence[Constraint] = (),
     correlations: Sequence[Correlation] = (),
@@ -541,12 +546,12 @@ def score_candidates(
     """Score candidates in one scenario; evidence is read, never changed."""
     if not candidates:
         raise ScoringError("no candidates")
-    if set(OBJECTIVES) != set(policy.weights):
-        raise ScoringError("policy objectives do not match the objective registry")
+    benchmarks.check_against(policy)
+    names = policy.names
     results: list[CandidateResult] = []
     for cid in sorted(candidates):
         items = candidates[cid]
-        cons = tuple(_check_constraint(c, items, scenario) for c in constraints)
+        cons = tuple(_check_constraint(c, items, scenario, policy) for c in constraints)
         statuses = {c.status for c in cons}
         feasibility = (
             ConstraintStatus.VIOLATED
@@ -556,8 +561,8 @@ def score_candidates(
             else ConstraintStatus.FEASIBLE
         )
         objs = tuple(
-            _score_objective(n, policy.weights[n], benchmarks, items, scenario)
-            for n in FUSION_PFC_OBJECTIVES
+            _score_objective(policy.definitions[n], policy.weights[n], benchmarks, items, scenario)
+            for n in names
         )
         present = [o for o in objs if o.desirability is not None]
         missing = [o.objective for o in objs if o.desirability is None]
@@ -583,11 +588,9 @@ def score_candidates(
 
     alive = [c for c in results if c.feasibility != ConstraintStatus.VIOLATED]
     common = [
-        n
-        for n in FUSION_PFC_OBJECTIVES
-        if alive and all(c.objective(n).desirability is not None for c in alive)
+        n for n in names if alive and all(c.objective(n).desirability is not None for c in alive)
     ]
-    authoritative = bool(alive) and len(common) == len(FUSION_PFC_OBJECTIVES)
+    authoritative = bool(alive) and len(common) == len(names)
     front: set[str] = set()
     if alive and common:
         mat = np.array([[c.objective(n).desirability for n in common] for c in alive], float)
@@ -617,7 +620,7 @@ def score_candidates(
             a, b = by_id[ia], by_id[ib]
             shared = [
                 n
-                for n in FUSION_PFC_OBJECTIVES
+                for n in names
                 if a.objective(n).desirability is not None
                 and b.objective(n).desirability is not None
             ]
@@ -626,7 +629,7 @@ def score_candidates(
             d = _dominance(a, b, shared)
             if d is None:
                 continue
-            if len(shared) < len(FUSION_PFC_OBJECTIVES):
+            if len(shared) < len(names):
                 # Missing objectives could reverse the comparison.
                 d = Dominance.UNDETERMINED
             pairs.append(DominancePair(winner=ia, loser=ib, dominance=d))
@@ -634,7 +637,7 @@ def score_candidates(
     notes = []
     if not authoritative:
         notes.append(
-            f"Pareto front is partial: computed on {len(common)}/8 objectives "
+            f"Pareto front is partial: computed on {len(common)}/{len(names)} objectives "
             f"({', '.join(common) or 'none'})"
         )
     if benchmarks.synthetic:
@@ -672,7 +675,7 @@ def score_candidates(
 def render_report(result: ScoringResult) -> str:
     """Human-readable summary of a scoring result."""
     lines = [
-        f"Fusion PFC scoring ({result.schema_version})",
+        f"Multi-objective scoring ({result.schema_version})",
         f"policy {result.policy_version} [{result.policy_digest[:12]}]  "
         f"benchmarks {result.benchmark_version} [{result.benchmark_digest[:12]}]  "
         f"scenario {result.scenario_id}",

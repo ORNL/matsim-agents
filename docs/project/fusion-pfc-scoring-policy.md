@@ -5,10 +5,10 @@ repository is a material property, and no score is a materials claim.
 
 ## Objectives
 
-`matsim_agents.science.decision.policy.FUSION_PFC_OBJECTIVES` lists the eight objectives. Each is
+The `objectives` and `definitions` of `examples/fusion_pfc/policy.yaml` list the eight objectives. Each is
 maximized as a desirability $d_i \in [0, 1]$:
 
-| Objective | Scored observables (see `matsim_agents.science.decision.objectives`) |
+| Objective | Scored observables (see `definitions` in `examples/fusion_pfc/policy.yaml`) |
 |---|---|
 | radiation_damage_recovery | defect recovery fraction |
 | thermal_conductivity | total thermal conductivity |
@@ -28,7 +28,7 @@ For a candidate with every objective present,
 
 $$S = \sum_i w_i d_i, \qquad d_i = \min_{o \in i} \mathrm{clip}\left(\frac{x_o - x_o^{\mathrm{worst}}}{x_o^{\mathrm{target}} - x_o^{\mathrm{worst}}}, 0, 1\right)$$
 
-The weights come from a versioned `FusionScoringPolicy`, and `digest()` ties every
+The weights come from a versioned `ScoringPolicy`, and `digest()` ties every
 result to its policy. `[S_low, S_high]` propagates the one-sigma bounds of each
 observable.
 
@@ -53,7 +53,7 @@ only. The SYNTHETIC end-to-end demo is
 
 ## Acquisition advice
 
-`matsim_agents.science.decision.acquisition.plan_fusion_acquisition` ranks proposed calculations
+`matsim_agents.science.decision.acquisition.plan_objective_acquisition` ranks proposed calculations
 by expected gain in decision confidence per node-hour. Decision confidence is
 $P(\text{top}) \cdot n_\text{complete}/n_\text{ranked}$.
 

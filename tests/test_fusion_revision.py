@@ -1,22 +1,16 @@
 import json
-from pathlib import Path
 
 import pytest
+from fusion_pfc_app import POLICY, synthetic
 
 from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.science.decision import synthetic
-from matsim_agents.science.decision.policy import load_policy
 from matsim_agents.science.decision.revision import (
     build_packet,
     parse_draft,
-    revise_fusion_hypothesis,
+    revise_scored_hypothesis,
 )
 from matsim_agents.science.decision.scoring import score_candidates
-
-PFC_POLICY = Path(__file__).resolve().parents[1] / "examples" / "fusion_pfc" / "policy.yaml"
-
-POLICY = load_policy(PFC_POLICY)
 
 
 @pytest.fixture
@@ -66,7 +60,7 @@ def test_draft_checks(scored):
 def test_revision_records_provenance(tmp_path, scored):
     cands, result = scored
     ledger = EvidenceLedger(tmp_path / "l.jsonl")
-    out = revise_fusion_hypothesis(ledger, "h-pfc", "A", result, POLICY, cands)
+    out = revise_scored_hypothesis(ledger, "h-pfc", "A", result, POLICY, cands)
     r = out.record
     # surrogate-only synthetic evidence can never support the claim
     assert r.status == HypothesisStatus.UNRESOLVED
@@ -76,7 +70,7 @@ def test_revision_records_provenance(tmp_path, scored):
     assert t["score_digest"] == result.digest()
     assert t["supporting_evidence"] and set(t["supporting_evidence"]) <= set(r.evidence_ids)
     assert t["recommended_calculation"]
-    c = revise_fusion_hypothesis(ledger, "h-pfc", "C", result, POLICY, cands).record
+    c = revise_scored_hypothesis(ledger, "h-pfc", "C", result, POLICY, cands).record
     assert c.prior_revision_id == r.revision_id
     assert c.traceability["parent_revision_id"] == r.revision_id
     assert any("low_activation_shutdown_dose" in m for m in c.traceability["missing_evidence"])
@@ -87,7 +81,7 @@ def test_llm_cannot_change_score_or_status(tmp_path, scored):
     cands, result = scored
     ledger = EvidenceLedger(tmp_path / "l.jsonl")
     budget = RevisionBudget(max_llm_calls=2)
-    bad = revise_fusion_hypothesis(
+    bad = revise_scored_hypothesis(
         ledger,
         "h",
         "A",
@@ -98,7 +92,7 @@ def test_llm_cannot_change_score_or_status(tmp_path, scored):
         drafter=lambda _: _draft(rationale="Lower the weight of dose; A scores 0.99."),
     )
     assert not bad.used_llm and bad.record.traceability["llm"]["rejected"]
-    good = revise_fusion_hypothesis(
+    good = revise_scored_hypothesis(
         ledger,
         "h",
         "A",
@@ -117,12 +111,12 @@ def test_llm_cannot_change_score_or_status(tmp_path, scored):
         .by_id("A")
         .score
     )
-    third = revise_fusion_hypothesis(
+    third = revise_scored_hypothesis(
         ledger, "h", "A", result, POLICY, cands, budget=budget, drafter=lambda _: _draft()
     )
     assert not third.used_llm and "exhausted" in third.notes[0]
     with pytest.raises(RevisionBudgetError):
-        revise_fusion_hypothesis(
+        revise_scored_hypothesis(
             ledger, "h", "A", result, POLICY, cands, budget=RevisionBudget(max_revisions=3)
         )
 
@@ -136,7 +130,7 @@ def test_overflowing_number_is_rejected_not_raised(scored):
 def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
     from matsim_agents.core.contracts import EvidenceLevel
     from matsim_agents.science.decision.revision import _status
-    from matsim_agents.science.decision.scenario import FusionEvidence
+    from matsim_agents.science.decision.scenario import ScenarioEvidence
     from matsim_agents.science.properties.calculators import PropertyQualification, PropertyStatus
 
     upd = {
@@ -148,7 +142,8 @@ def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
     }
     cands = {
         k: [
-            FusionEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context) for i in v
+            ScenarioEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context)
+            for i in v
         ]
         for k, v in synthetic.candidates().items()
         if k != "C"
@@ -166,7 +161,7 @@ def test_synthetic_benchmarks_never_support_or_contradict(tmp_path):
 def test_context_changes_ledger_identity_and_is_recorded(tmp_path, scored):
     cands, result = scored
     ledger = EvidenceLedger(tmp_path / "l.jsonl")
-    out = revise_fusion_hypothesis(ledger, "h", "A", result, POLICY, cands)
+    out = revise_scored_hypothesis(ledger, "h", "A", result, POLICY, cands)
     t = out.record.traceability
     assert t["scenario"]["scenario_id"] == result.scenario_id
     assert t["scenario"]["plasma_ion_energy_eV"] == 100.0
@@ -174,7 +169,7 @@ def test_context_changes_ledger_identity_and_is_recorded(tmp_path, scored):
     obs = out.packet.candidates[0].objectives[0].observables[0]
     assert obs.context and obs.context["plasma_ion"] == "D"
     rec = ledger.get(obs.ledger_evidence_id)
-    assert any("fusion context" in a for a in rec.physical_assumptions)
+    assert any("scenario context" in a for a in rec.physical_assumptions)
 
     # Same values, different context: new ledger ids.
     sc = synthetic.SCENARIO.model_copy(update={"plasma_ion_energy_eV": 200.0})
@@ -188,7 +183,7 @@ def test_context_changes_ledger_identity_and_is_recorded(tmp_path, scored):
         for k, v in cands.items()
     }
     r2 = score_candidates(POLICY, synthetic.BENCHMARKS, sc, moved)
-    out2 = revise_fusion_hypothesis(ledger, "h2", "A", r2, POLICY, moved)
+    out2 = revise_scored_hypothesis(ledger, "h2", "A", r2, POLICY, moved)
     obs2 = out2.packet.candidates[0].objectives[0].observables[0]
     assert obs2.property_id == obs.property_id
     assert obs2.ledger_evidence_id != obs.ledger_evidence_id

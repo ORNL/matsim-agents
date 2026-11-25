@@ -31,7 +31,7 @@ from matsim_agents.execution.ledger import (
     LedgerQuantity,
     MethodRecord,
 )
-from matsim_agents.science.decision.scenario import EvidenceContext, FusionEvidence
+from matsim_agents.science.decision.scenario import EvidenceContext, ScenarioEvidence
 from matsim_agents.science.irradiation.contracts import (
     RATE_BASIS_PER_ATOM_PER_S,
     IrradiationScenario,
@@ -45,7 +45,7 @@ from matsim_agents.science.properties.calculators import (
     PropertyStatus,
 )
 
-SCHEMA = "fusion-nuclear-evidence-v1"
+SCHEMA = "nuclear-evidence-v1"
 
 
 class NuclearEvidenceError(ValueError):
@@ -119,7 +119,7 @@ class ExternalNuclearEvidence(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["fusion-nuclear-evidence-v1"] = SCHEMA
+    schema_version: Literal["nuclear-evidence-v1"] = SCHEMA
     family: NuclearFamily
     external_application: str = Field(min_length=1)
     application_version: str = Field(min_length=1)
@@ -292,7 +292,7 @@ def activation_properties(
     composition: str,
     evidence_id: str,
     neutron_spectrum: str | None = None,
-) -> list[FusionEvidence]:
+) -> list[ScenarioEvidence]:
     """Activation quantities as property records for scoring.
 
     Inventory-code results are not DFT, so they enter as documented
@@ -329,7 +329,7 @@ def activation_properties(
                 status=PropertyStatus.MISSING,
                 reason=f"{q.name} reported without uncertainty; not scoreable",
             )
-            out.append(FusionEvidence(evidence=prop, context=context))
+            out.append(ScenarioEvidence(evidence=prop, context=context))
             continue
         prop = PropertyEvidence(
             **common,
@@ -342,7 +342,7 @@ def activation_properties(
                 + (f" with dose model {evidence.dose_model}" if evidence.dose_model else "")
             ),
         )
-        out.append(FusionEvidence(evidence=prop, context=context))
+        out.append(ScenarioEvidence(evidence=prop, context=context))
     return out
 
 

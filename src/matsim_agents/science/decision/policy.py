@@ -1,8 +1,10 @@
-"""Versioned performance-scoring policies for fusion plasma-facing components.
+"""Versioned multi-objective scoring policies.
 
-A policy only states priorities: which objectives count, how much, and in which
-direction. It does not predict properties, evaluate candidates, or select
-calculations; those live in separate modules.
+A policy states an application's priorities: which objectives count, how much,
+in which direction, and what evidence each objective accepts (its
+:class:`ObjectiveDefinition`). Applications supply policies as files; the
+framework holds no application's objectives. A policy does not predict
+properties, evaluate candidates, or select calculations.
 """
 
 from __future__ import annotations
@@ -16,17 +18,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-FUSION_PFC_APPLICATION = "fusion_plasma_facing_component"
-FUSION_PFC_OBJECTIVES = (
-    "radiation_damage_recovery",
-    "thermal_conductivity",
-    "mechanical_integrity",
-    "thermal_shock_fatigue",
-    "plasma_erosion_resistance",
-    "high_temperature_stability",
-    "low_hydrogen_retention",
-    "low_activation_shutdown_dose",
-)
+from matsim_agents.science.decision.objectives import ObjectiveDefinition
+
 WEIGHT_SUM_TOLERANCE = 1e-9
 
 
@@ -77,29 +70,43 @@ class RankingOptions(_Frozen):
         return self
 
 
-class FusionScoringPolicy(_Frozen):
+class ScoringPolicy(_Frozen):
     policy_version: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_.-]+$")
-    application: Literal["fusion_plasma_facing_component"]
+    application: str = Field(min_length=1)
     provenance: PolicyProvenance
-    objectives: tuple[ObjectivePolicy, ...]
+    objectives: tuple[ObjectivePolicy, ...] = Field(min_length=1)
+    definitions: dict[str, ObjectiveDefinition]
     ranking: RankingOptions = Field(default_factory=RankingOptions)
 
     @model_validator(mode="after")
-    def _valid(self) -> FusionScoringPolicy:
+    def _valid(self) -> ScoringPolicy:
         names = [o.name for o in self.objectives]
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
             raise ValueError(f"duplicate objectives {duplicates}")
-        unknown = sorted(set(names) - set(FUSION_PFC_OBJECTIVES))
+        for key, spec in self.definitions.items():
+            if spec.name != key:
+                raise ValueError(f"definition {key!r} is named {spec.name!r}")
+        unknown = sorted(set(names) - set(self.definitions))
         if unknown:
-            raise ValueError(f"unknown objectives {unknown}; allowed {list(FUSION_PFC_OBJECTIVES)}")
-        missing = [n for n in FUSION_PFC_OBJECTIVES if n not in names]
+            raise ValueError(f"unknown objectives {unknown}; defined {sorted(self.definitions)}")
+        missing = [n for n in self.definitions if n not in names]
         if missing:
-            raise ValueError(f"missing objectives {missing}; a policy has all eight")
+            raise ValueError(f"missing objectives {missing}; every defined objective is weighted")
         total = math.fsum(o.weight for o in self.objectives)
         if abs(total - 1.0) > WEIGHT_SUM_TOLERANCE:
             raise ValueError(f"weights sum to {total!r}, not 1")
         return self
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(o.name for o in self.objectives)
+
+    def definition(self, name: str) -> ObjectiveDefinition:
+        try:
+            return self.definitions[name]
+        except KeyError:
+            raise PolicyError(f"unknown objective {name!r}") from None
 
     @property
     def weights(self) -> dict[str, float]:
@@ -119,9 +126,7 @@ class FusionScoringPolicy(_Frozen):
         payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    def with_weights(
-        self, weights: dict[str, float], *, policy_version: str
-    ) -> FusionScoringPolicy:
+    def with_weights(self, weights: dict[str, float], *, policy_version: str) -> ScoringPolicy:
         """A new, separately versioned policy; weights are never edited in place."""
         if policy_version == self.policy_version:
             raise PolicyError("changed weights need a new policy_version")
@@ -131,7 +136,7 @@ class FusionScoringPolicy(_Frozen):
         objectives = tuple(
             o.model_copy(update={"weight": weights.get(o.name, o.weight)}) for o in self.objectives
         )
-        return FusionScoringPolicy.model_validate(
+        return ScoringPolicy.model_validate(
             {
                 **self.model_dump(),
                 "policy_version": policy_version,
@@ -140,12 +145,12 @@ class FusionScoringPolicy(_Frozen):
         )
 
 
-def load_policy(path: str | Path) -> FusionScoringPolicy:
+def load_policy(path: str | Path) -> ScoringPolicy:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise PolicyError(f"{path}: a policy is a mapping")
     try:
-        return FusionScoringPolicy.model_validate(data)
+        return ScoringPolicy.model_validate(data)
     except ValueError as exc:
         raise PolicyError(f"{path}: {exc}") from exc
 
@@ -154,9 +159,9 @@ class PolicyRegistry:
     """Policies by version; one version names exactly one set of weights."""
 
     def __init__(self) -> None:
-        self._policies: dict[str, FusionScoringPolicy] = {}
+        self._policies: dict[str, ScoringPolicy] = {}
 
-    def register(self, policy: FusionScoringPolicy) -> FusionScoringPolicy:
+    def register(self, policy: ScoringPolicy) -> ScoringPolicy:
         existing = self._policies.get(policy.policy_version)
         if existing is not None and existing.digest() != policy.digest():
             raise PolicyError(
@@ -166,7 +171,7 @@ class PolicyRegistry:
         self._policies[policy.policy_version] = policy
         return policy
 
-    def get(self, version: str) -> FusionScoringPolicy:
+    def get(self, version: str) -> ScoringPolicy:
         if version not in self._policies:
             raise PolicyError(f"policy version {version!r} is not registered")
         return self._policies[version]
@@ -176,13 +181,11 @@ class PolicyRegistry:
 
 
 __all__ = [
-    "FUSION_PFC_APPLICATION",
-    "FUSION_PFC_OBJECTIVES",
-    "FusionScoringPolicy",
     "ObjectivePolicy",
     "PolicyError",
     "PolicyProvenance",
     "PolicyRegistry",
     "RankingOptions",
+    "ScoringPolicy",
     "load_policy",
 ]

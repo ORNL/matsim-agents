@@ -1,4 +1,4 @@
-"""SYNTHETIC candidates A/B/C for exercising the fusion scoring pipeline (F12).
+"""SYNTHETIC candidates A/B/C for exercising the scoring pipeline (F12).
 
 Every number here is invented to exercise code paths. None is a material
 property, a benchmark, or a prediction, and every record says so.
@@ -10,7 +10,7 @@ from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.science.decision.scenario import (
     EvaluationScenario,
     EvidenceContext,
-    FusionEvidence,
+    ScenarioEvidence,
 )
 from matsim_agents.science.decision.scoring import BenchmarkSet
 from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
@@ -128,7 +128,7 @@ _VALUES: dict[str, dict[str, tuple[float, float]]] = {
 }
 
 
-def _record(candidate: str, prop: str, value: float, sigma: float) -> FusionEvidence:
+def _record(candidate: str, prop: str, value: float, sigma: float) -> ScenarioEvidence:
     ev = PropertyEvidence(
         structure_id=f"synthetic-{candidate}",
         composition=f"SYNTHETIC-{candidate}",
@@ -153,10 +153,10 @@ def _record(candidate: str, prop: str, value: float, sigma: float) -> FusionEvid
         plasma_ion=SCENARIO.plasma_ion,
         plasma_ion_energy_eV=SCENARIO.plasma_ion_energy_eV,
     )
-    return FusionEvidence(evidence=ev, context=ctx)
+    return ScenarioEvidence(evidence=ev, context=ctx)
 
 
-def candidates() -> dict[str, list[FusionEvidence]]:
+def candidates() -> dict[str, list[ScenarioEvidence]]:
     return {
         cid: [_record(cid, p, v, s) for p, (v, s) in vals.items()] for cid, vals in _VALUES.items()
     }

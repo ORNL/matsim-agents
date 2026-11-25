@@ -3,7 +3,7 @@
 A value is used for an objective only if every condition that objective
 depends on matches the scenario. Conditions that ``PropertyConditions``
 already carries are compared with :func:`conditions_match`; the
-fusion-specific ones (neutron spectrum, cooling time, plasma ion and energy)
+scenario-specific ones (neutron spectrum, cooling time, plasma ion and energy)
 travel in :class:`EvidenceContext`. Several scenarios are reported side by
 side with a worst case and a robustness ratio; they are averaged only when
 the user supplies weights.
@@ -15,7 +15,7 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.science.decision.objectives import objective
+from matsim_agents.science.decision.objectives import ObjectiveDefinition
 from matsim_agents.science.properties.calculators import PropertyConditions, PropertyEvidence
 from matsim_agents.science.properties.recipes import conditions_match
 
@@ -41,7 +41,7 @@ _REL_TOL = 1e-9
 
 
 class EvidenceContext(BaseModel):
-    """Fusion conditions of one evidence record beyond ``PropertyConditions``."""
+    """Scenario conditions of one evidence record beyond ``PropertyConditions``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -53,8 +53,8 @@ class EvidenceContext(BaseModel):
     dose_geometry: str | None = None
 
 
-class FusionEvidence(BaseModel):
-    """A property record and its fusion context."""
+class ScenarioEvidence(BaseModel):
+    """A property record and its scenario context."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -86,11 +86,11 @@ class EvaluationScenario(BaseModel):
     def property_conditions(self, fields: tuple[str, ...] = _CORE_FIELDS) -> PropertyConditions:
         return PropertyConditions(**{f: getattr(self, f) for f in _CORE_FIELDS if f in fields})
 
-    def mismatches(self, objective_name: str, item: FusionEvidence) -> list[str]:
-        """Why ``item`` is not comparable for ``objective_name`` in this scenario."""
-        return self.condition_mismatches(objective(objective_name).compatible_conditions, item)
+    def mismatches(self, spec: ObjectiveDefinition, item: ScenarioEvidence) -> list[str]:
+        """Why ``item`` is not comparable for objective ``spec`` in this scenario."""
+        return self.condition_mismatches(spec.compatible_conditions, item)
 
-    def condition_mismatches(self, fields: tuple[str, ...], item: FusionEvidence) -> list[str]:
+    def condition_mismatches(self, fields: tuple[str, ...], item: ScenarioEvidence) -> list[str]:
         """Mismatches of ``item`` on the named condition fields only."""
         core = tuple(f for f in fields if f in _CORE_FIELDS)
         have = item.evidence.conditions
@@ -202,7 +202,7 @@ def aggregate(scores: dict[str, float | None], scenarios: ScenarioSet) -> Scenar
 __all__ = [
     "EvaluationScenario",
     "EvidenceContext",
-    "FusionEvidence",
+    "ScenarioEvidence",
     "ScenarioAggregate",
     "ScenarioSet",
     "aggregate",

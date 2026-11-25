@@ -28,7 +28,7 @@ from matsim_agents.workflows.radiation.properties import (
     REFERENCE_SITES,
 )
 
-TRANSMUTATION_VERSION = "fusion-pfc-transmutation-v1"
+TRANSMUTATION_VERSION = "transmutation-v1"
 SITE_MAP_SEED = 0
 HOST = "W"
 PRODUCTS = ("Re", "Os")
@@ -93,7 +93,7 @@ def reference_site_map(seed: int = SITE_MAP_SEED) -> tuple[Site, ...]:
         for b in (0.0, 0.5)
     ]
     elements = [el for el, n in sorted(REFERENCE_ALLOY_COUNTS.items()) for _ in range(n)]
-    order = numpy_rng(seed, "fusion-transmutation", "site-map").permutation(REFERENCE_SITES)
+    order = numpy_rng(seed, "transmutation", "site-map").permutation(REFERENCE_SITES)
     return tuple(
         Site(site_id=f"s{n:04d}", frac=coords[n], element=elements[int(order[n])])
         for n in range(REFERENCE_SITES)
@@ -143,7 +143,7 @@ def transmuted_configuration(
         raise NuclearEvidenceError(
             f"{sum(counts.values())} substitutions exceed the {len(hosts)} {HOST} sites"
         )
-    order = numpy_rng(seed, "fusion-transmutation", evidence.evidence_id()).permutation(len(hosts))
+    order = numpy_rng(seed, "transmutation", evidence.evidence_id()).permutation(len(hosts))
     chosen = iter(hosts[int(i)] for i in order)
     subs = sorted(
         (
