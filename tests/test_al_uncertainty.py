@@ -313,3 +313,40 @@ def test_inject_inference_dropout_is_idempotent() -> None:
     n2 = inject_inference_dropout(model, p=0.1)
     assert n1 == 2  # two Linear layers
     assert n2 == 0  # already instrumented -> nothing new injected
+
+
+def test_mc_dropout_pathway_shares_dropout_draw_on_accelerator() -> None:
+    import torch
+    import torch.nn as nn
+    from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.workflows.active_learning.uncertainty import score_mc_dropout_pathway
+
+    if not (torch.cuda.is_available() or (hasattr(torch, "xpu") and torch.xpu.is_available())):
+        pytest.skip("no accelerator available")
+    device = torch.device("cuda" if torch.cuda.is_available() else "xpu")
+
+    class RecordingCalculator(Calculator):
+        implemented_properties = ["energy"]
+
+        def __init__(self):
+            super().__init__()
+            self.model = nn.Sequential(nn.Dropout(p=0.5)).to(device)
+            self.model.register_parameter("anchor", nn.Parameter(torch.ones(1, device=device)))
+            self.energies: list[float] = []
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            energy = float(self.model(torch.ones(256, device=device)).sum())
+            self.energies.append(energy)
+            self.results["energy"] = energy
+
+    calculator = RecordingCalculator()
+    images = [Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.7 + 0.1 * i]]) for i in range(3)]
+    passes = 4
+    score = score_mc_dropout_pathway(images, calculator, passes, 0.5, seed=0)
+
+    per_pass = np.asarray(calculator.energies).reshape(passes, len(images))
+    assert (per_pass == per_pass[:, :1]).all()
+    assert len({round(value, 6) for value in per_pass[:, 0]}) > 1
+    assert score.forward_barrier_eV == 0.0
