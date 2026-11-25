@@ -192,7 +192,7 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.state",
         "matsim_agents.supervisor",
         "matsim_agents.tools",
-        "matsim_agents.agents",
+        "matsim_agents.agents.agents",
         "matsim_agents.chat",
         "matsim_agents.active_learning.backends",
         "matsim_agents.active_learning.vasp_runner",

@@ -2,7 +2,7 @@
 """Fine-tuning behaviour of HydraGNN and UMA on AL-collected DFT labels.
 
 Reads the per-iteration evaluation metrics produced by
-``python -m matsim_agents.active_learning.evaluate`` (one ``iter<N>.json`` per
+``python -m matsim_agents.workflows.active_learning.evaluate`` (one ``iter<N>.json`` per
 AL iteration, plus optional ``iter<N>_parity.npz``) for one or more backends
 and produces a 2x2 figure:
 
