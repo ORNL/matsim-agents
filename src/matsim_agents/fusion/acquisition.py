@@ -128,7 +128,7 @@ def decision_confidence(
     benchmarks: BenchmarkSet,
     *,
     samples: int = 400,
-    seed: int = 0,
+    seed: int,
 ) -> float:
     """``P(top) * n_complete / n_ranked`` for the given observable state."""
     complete = [
@@ -206,7 +206,7 @@ def plan_fusion_acquisition(
     completed_calc_ids: Collection[str] = (),
     draws: int = 12,
     samples: int = 400,
-    seed: int = 0,
+    seed: int,
     min_improvement: float = 0.0,
 ) -> FusionAcquisitionPlan:
     """Rank proposals by expected decision-confidence improvement per node-hour."""

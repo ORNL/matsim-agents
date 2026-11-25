@@ -50,6 +50,7 @@ def _plan(proposals, ledger=None, result=None, **kw):
         ledger or _ledger(),
         draws=4,
         samples=100,
+        seed=kw.pop("seed", 0),
         **kw,
     )
 
@@ -126,15 +127,15 @@ def test_policy_mismatch_rejected():
         {"thermal_conductivity": 0.21, "radiation_damage_recovery": 0.24}, policy_version="x"
     )
     with pytest.raises(ValueError, match="differ"):
-        plan_fusion_acquisition(_result(), other, synthetic.BENCHMARKS, [], _ledger())
+        plan_fusion_acquisition(_result(), other, synthetic.BENCHMARKS, [], _ledger(), seed=0)
 
 
 def test_confidence_counts_incomplete_and_is_deterministic():
     from matsim_agents.fusion.acquisition import _state
 
     state, ranked = _state(_result())
-    c1 = decision_confidence(state, ranked, POLICY, synthetic.BENCHMARKS, samples=200)
-    c2 = decision_confidence(state, ranked, POLICY, synthetic.BENCHMARKS, samples=200)
+    c1 = decision_confidence(state, ranked, POLICY, synthetic.BENCHMARKS, samples=200, seed=0)
+    c2 = decision_confidence(state, ranked, POLICY, synthetic.BENCHMARKS, samples=200, seed=0)
     assert c1 == c2
     assert c1 <= 2 / 3 + 1e-12  # C is incomplete
 

@@ -75,7 +75,7 @@ def test_substitution_counts_and_composition():
 
 
 def test_gas_isotopes_stay_separate_and_unplaced():
-    gas = transmuted_configuration(EV).gas
+    gas = transmuted_configuration(EV, seed=0).gas
     assert set(gas.hydrogen) == {"H", "D", "T"}
     assert gas.hydrogen["T"] == pytest.approx(1e-4 * 1024)
     assert set(gas.helium) == {"He-3", "He-4"}
@@ -91,7 +91,7 @@ def test_deterministic_and_seed_sensitive():
 
 def test_appm_is_converted():
     ev = _ev([_q("Re", 187, 5000.0, name="concentration_appm", unit="appm")])
-    cfg = transmuted_configuration(ev, quantity="concentration_appm")
+    cfg = transmuted_configuration(ev, quantity="concentration_appm", seed=0)
     assert cfg.counts == {"Re": 5, "Os": 0}
 
 
@@ -100,16 +100,17 @@ def test_refusals():
         transmuted_configuration(
             _ev([_q("Re", 187, 1.0, name="production_rate", unit="appm/s")]),
             quantity="production_rate",
+            seed=0,
         )
     with pytest.raises(NuclearEvidenceError, match="exceed"):
-        transmuted_configuration(_ev([_q("Re", 187, 0.7)]))
+        transmuted_configuration(_ev([_q("Re", 187, 0.7)]), seed=0)
     with pytest.raises(NuclearEvidenceError, match="duplicate"):
-        transmuted_configuration(_ev([_q("Re", 187, 1e-3), _q("Re", 187, 2e-3)]))
+        transmuted_configuration(_ev([_q("Re", 187, 1e-3), _q("Re", 187, 2e-3)]), seed=0)
     dpa = _ev(
         [NuclearQuantity(name="dpa", value=1.0, unit="dpa")],
         family=NuclearFamily.PKA_DPA,
         dpa_convention="NRT",
     )
     with pytest.raises(NuclearEvidenceError, match="needs transmutation evidence"):
-        transmuted_configuration(dpa)
-    assert any("SYNTHETIC" in n for n in transmuted_configuration(EV).notes)
+        transmuted_configuration(dpa, seed=0)
+    assert any("SYNTHETIC" in n for n in transmuted_configuration(EV, seed=0).notes)

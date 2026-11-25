@@ -46,7 +46,7 @@ def main(out: Path) -> None:
     )
     budget = BudgetLedger(total_node_hours=1000.0, allocation={"property": 50.0})
     plan = plan_fusion_acquisition(
-        result, policy, synthetic.BENCHMARKS, [proposal], budget, draws=6, samples=200
+        result, policy, synthetic.BENCHMARKS, [proposal], budget, draws=6, samples=200, seed=0
     )
     print(render_fusion_plan(plan), end="\n\n")
 

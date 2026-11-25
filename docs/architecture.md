@@ -86,7 +86,8 @@ enforced by `tests/test_package_boundaries.py`.
 
 | Layer | Packages |
 | --- | --- |
-| 7 | `cli` |
+| 8 | `cli` |
+| 7 | `fusion` |
 | 6 | `orchestration`, `campaign` |
 | 5 | `active_learning`, `workflows` |
 | 4 | `discovery`, `training` |

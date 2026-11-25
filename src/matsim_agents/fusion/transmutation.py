@@ -126,7 +126,7 @@ def transmuted_configuration(
     evidence: ExternalNuclearEvidence,
     *,
     quantity: str = "atom_fraction",
-    seed: int = 0,
+    seed: int,
     sites: tuple[Site, ...] | None = None,
 ) -> TransmutedConfiguration:
     """Substitute Re/Os on seeded W sites from transmutation evidence; gas is counted only."""
