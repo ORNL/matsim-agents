@@ -3,9 +3,11 @@
 # Validated on Frontier only (serial build, GCC 12.3, Cray HDF5 1.14.3.9, Python 3.11).
 #
 # Usage:   source .venv/bin/activate && bash deployments/common/setup/build-openmc.sh
-# Env:     OPENMC_DIR          checkout/build directory (default: <repo>/external/openmc)
+#          On Frontier use deployments/frontier/setup/build-openmc-frontier.sh, which sets the
+#          toolchain and confines everything to <repo>/.hpc-build/frontier/openmc/.
+# Env:     OPENMC_DIR          checkout/build directory (default: <repo>/.hpc-build/openmc/src)
 #          OPENMC_TAG          upstream tag (default: v0.15.3, the last release for Python 3.11)
-#          OPENMC_DATA_DIR     nuclear-data cache, outside Git (default: <repo>/.hpc-build/openmc-data)
+#          OPENMC_DATA_DIR     nuclear-data cache, outside Git (default: <repo>/.hpc-build/openmc/data)
 #          OPENMC_CXX/OPENMC_CC  compilers (default: g++/gcc from PATH)
 #          OPENMC_HDF5_ROOT    HDF5 prefix (default: $HDF5_ROOT, else $HDF5_DIR)
 #          OPENMC_SKIP_DATA=1  do not download the 3.4 GB cross sections or the 27 MB chain
@@ -21,8 +23,8 @@ REPO="$(CDPATH= cd -P -- "${SCRIPT_DIR}/../../.." && pwd -P)"
 
 UPSTREAM="https://github.com/openmc-dev/openmc.git"
 TAG="${OPENMC_TAG:-v0.15.3}"
-SRC="${OPENMC_DIR:-${REPO}/external/openmc}"
-DATA="${OPENMC_DATA_DIR:-${REPO}/.hpc-build/openmc-data}"
+SRC="${OPENMC_DIR:-${REPO}/.hpc-build/openmc/src}"
+DATA="${OPENMC_DATA_DIR:-${REPO}/.hpc-build/openmc/data}"
 CXX_BIN="${OPENMC_CXX:-g++}"
 CC_BIN="${OPENMC_CC:-gcc}"
 HDF5="${OPENMC_HDF5_ROOT:-${HDF5_ROOT:-${HDF5_DIR:-}}}"

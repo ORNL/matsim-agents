@@ -143,13 +143,18 @@ export SPECTRA_PKA_EXECUTABLE_PATH="$PWD/external/SPECTRA-PKA/spectra-pka"
 
 Nuclear data: see `docs/external/spectra-pka-data.md`.
 
-### ../../common/setup/build-openmc.sh
-Clones OpenMC v0.15.3, installs the Python package, builds `libopenmc.so` serially, downloads the
-ENDF/B-VIII.0 cross sections and depletion chain, and runs a Co-59 activation smoke test. Needs
-a login node, `cray-hdf5` and the activated virtualenv. See `docs/external/openmc.md`.
+### build-openmc-frontier.sh
+Builds OpenMC v0.15.3 with the Cray GCC 12.3 and HDF5 1.14.3.9 and runs a Co-59 activation smoke
+test, through `../../common/setup/build-openmc.sh`. Run it on a login node (internet needed, no
+allocation). Everything is confined to `.hpc-build/frontier/openmc/` (`src/`, its own `venv/`,
+`data/`, `activate.sh`). It needs no module loaded and does not touch `.venv`. See
+`docs/external/openmc.md`.
 
 ```bash
-module load cray-hdf5
-source .venv/bin/activate
-bash deployments/common/setup/build-openmc.sh
+bash deployments/frontier/setup/build-openmc-frontier.sh
+source .hpc-build/frontier/openmc/activate.sh
 ```
+
+`jobs/job-integration-tests-frontier.sh` runs `tests/integration/test_openmc_activation.py` in
+that venv as a fourth phase when `activate.sh` exists, and records that the phase was skipped
+otherwise. The venv needs the project installed (`pip install -e .`) for that phase.

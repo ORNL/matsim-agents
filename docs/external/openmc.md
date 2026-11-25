@@ -11,32 +11,48 @@ evidence it produces omits both.
 | Part | State |
 |---|---|
 | Inventory model and evidence converters (`backends/external/openmc_activation/inventory.py`) | written; `tests/test_openmc_inventory.py` covers it with a synthetic inventory (10 tests, pass) |
-| `deployments/common/setup/build-openmc.sh` and `openmc-smoke.py` | written; `bash -n` and `ruff` pass; **the script has not been run end to end** |
-| Manual build of v0.15.3 on Frontier (serial, GCC 12.3, Cray HDF5 1.14.3.9) | done; `import openmc.deplete` works with the library path below |
+| `deployments/frontier/setup/build-openmc-frontier.sh` (wraps `deployments/common/setup/build-openmc.sh` and `openmc-smoke.py`) | run end to end on a Frontier login node from an empty `src/` and `venv/` (data reused from an earlier run, so the download step was not repeated): v0.15.3, serial, GCC 12.3, Cray HDF5 1.14.3.9; smoke test PASS |
 | Co-59 activation against the analytic Co-60 inventory | run once on a Frontier login node (v0.15.3, ENDF/B-VIII.0): 1.522e12 atoms against 1.524e12 analytic, 0.15 % apart, PASS. This checks the solver bookkeeping only (see section 3) |
-| `run_activation` (`openmc_activation/runner.py`) writes an inventory from a material and a flux | run once on a Frontier login node for Fe (30 d at 1e14 n/cm2/s, two groups); Fe-55 matched a hand calculation from the same collapsed cross sections to four digits. Input checks are tested without OpenMC (`tests/test_openmc_runner.py`); the OpenMC run itself is not in the test suite |
+| `run_activation` (`openmc_activation/runner.py`) writes an inventory from a material and a flux | run once on a Frontier login node for Fe (30 d at 1e14 n/cm2/s, two groups); Fe-55 matched a hand calculation from the same collapsed cross sections to four digits. Input checks are tested without OpenMC (`tests/test_openmc_runner.py`); `tests/integration/test_openmc_activation.py` runs Co-59 through it (4 tests, passed on a login node in the OpenMC venv; skipped elsewhere). Not run on a compute node yet |
 
 ## 1. Clone, install and build
 
 Run on a login node (compute nodes have no internet). No allocation is needed.
 
+### Frontier
+
 ```bash
-source /usr/share/lmod/lmod/init/bash          # non-login shells only
-module load cray-hdf5                          # exports HDF5_ROOT; or set OPENMC_HDF5_ROOT
-source .venv/bin/activate                      # Python >= 3.11
+bash deployments/frontier/setup/build-openmc-frontier.sh
+```
+
+Everything lands under `.hpc-build/frontier/openmc/` (Git-ignored):
+
+| Path | Content |
+|---|---|
+| `src/` | OpenMC clone and C++ build |
+| `venv/` | own Python venv, so the main `.venv` is not touched |
+| `data/` | cross sections, depletion chain, `openmc-build-record.txt` |
+| `activate.sh` | activates the venv and sets the data and library variables for jobs |
+
+The wrapper pins the Cray GCC 12.3 compilers (the system g++ 7.5 cannot build OpenMC) and HDF5 1.14.3.9, sets the runtime library path, `PIP_CERT` and `XALT_EXECUTABLE_TRACKING=no`, then calls the common script. Set `OPENMC_DATA_DIR` to reuse an existing 3.4 GB data directory. The venv holds only OpenMC and its dependencies; to run the tests in it, add the project with `pip install -e .` after activating `activate.sh`.
+
+### Other systems
+
+```bash
+source .venv/bin/activate      # Python >= 3.11
+export OPENMC_HDF5_ROOT=/path/to/hdf5
 bash deployments/common/setup/build-openmc.sh
 ```
 
-The script has passed `bash -n` but has not been run start to finish; the same steps were done
-by hand to build the existing install. It is meant to be idempotent. It:
+The common script is idempotent and defaults to `.hpc-build/openmc/` instead. It:
 
-1. clones `openmc-dev/openmc` at `v0.15.3` with its vendored submodules into `external/openmc`
+1. clones `openmc-dev/openmc` at `v0.15.3` with its vendored submodules into `OPENMC_DIR`
    (Git-ignored), and refuses a checkout at another tag;
 2. installs the OpenMC dependencies and the Python package (`pip install --no-deps`);
 3. builds `libopenmc.so` serially (no MPI, no OpenMP, no DAGMC or libMesh) and copies it to
    `openmc/lib/` in the active environment, because the Python package ships without it;
 4. downloads the ENDF/B-VIII.0 HDF5 library (3.4 GB) and the thermal-spectrum depletion chain
-   (27.5 MB) to `.hpc-build/openmc-data`, checking sizes;
+   (27.5 MB) to `OPENMC_DATA_DIR`, checking sizes;
 5. writes `openmc-build-record.txt` (tag, commit, compiler, SHA-256 of the library, chain and
    `cross_sections.xml`);
 6. runs `deployments/common/setup/openmc-smoke.py` (see section 3).
@@ -45,8 +61,8 @@ v0.15.3 is used because v0.16.0 needs Python >= 3.12. Set `OPENMC_TAG` to change
 
 | Variable | Default |
 |---|---|
-| `OPENMC_DIR` | `external/openmc` |
-| `OPENMC_DATA_DIR` | `.hpc-build/openmc-data`; use a shared cache outside Git for several users |
+| `OPENMC_DIR` | `.hpc-build/openmc/src` (Frontier wrapper: `.hpc-build/frontier/openmc/src`) |
+| `OPENMC_DATA_DIR` | `.hpc-build/openmc/data` (Frontier wrapper: `.hpc-build/frontier/openmc/data`); point it at a shared cache outside Git for several users |
 | `OPENMC_HDF5_ROOT` | `$HDF5_ROOT`, else `$HDF5_DIR` |
 | `OPENMC_CXX`, `OPENMC_CC` | `g++`, `gcc` from `PATH` |
 | `OPENMC_JOBS` | 8 |
@@ -59,12 +75,14 @@ verification.
 
 ## 2. Environment
 
+On Frontier, `source .hpc-build/frontier/openmc/activate.sh` sets all of the following. Elsewhere, set the data variables by hand:
+
 ```bash
-export OPENMC_CROSS_SECTIONS=$PWD/.hpc-build/openmc-data/endfb-viii.0-hdf5/cross_sections.xml
-export OPENMC_CHAIN_FILE=$PWD/.hpc-build/openmc-data/chain_endfb80_pwr.xml
+export OPENMC_CROSS_SECTIONS=<data>/endfb-viii.0-hdf5/cross_sections.xml
+export OPENMC_CHAIN_FILE=<data>/chain_endfb80_pwr.xml
 ```
 
-On Frontier, importing `openmc.deplete` also needs these libraries on `LD_LIBRARY_PATH`
+Importing `openmc.deplete` on Frontier also needs these libraries on `LD_LIBRARY_PATH`
 (otherwise `libhdf5` or `mpi4py` fails to load):
 
 ```bash
@@ -81,6 +99,8 @@ python -c "import openmc, openmc.deplete as d; print(openmc.__version__, hasattr
 The expected output is `0.15.3 True`.
 
 ## 3. Run
+
+The wrapper's clean-room run printed Co-60+Co-60m 1.522080e+12 atoms against 1.524363e+12 analytic (relative error 1.498e-03).
 
 The smoke test depletes cobalt-59 with `IndependentOperator` (one-group cross sections from
 `MicroXS.from_multigroup_flux`, `source-rate` normalisation) at a flux low enough that burn-up

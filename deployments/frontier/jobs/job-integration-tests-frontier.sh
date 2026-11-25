@@ -7,7 +7,8 @@
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
 # Dependency-enabled regression run on a compute node, one pytest pass per environment:
-# .venv (full suite), .venv-mace (MACE tests) and .venv-uma (fairchem/UMA tests).
+# .venv (full suite), .venv-mace (MACE tests), .venv-uma (fairchem/UMA tests) and, when
+# build-openmc-frontier.sh has been run, the OpenMC activation test in its own venv.
 #   sbatch -A <allocation> deployments/frontier/jobs/job-integration-tests-frontier.sh
 # Warm-start integration tests still skip unless their launcher, pseudopotential, checkpoint
 # and model variables are set; weights are not downloaded on compute nodes.
@@ -50,10 +51,27 @@ EOF
   return "$status"
 }
 
+# OpenMC runs in its own venv (build-openmc-frontier.sh); compute nodes cannot download data.
+run_openmc_phase() {
+  local activate="${OPENMC_ACTIVATE:-$REPO/.hpc-build/frontier/openmc/activate.sh}"
+  [[ -f "$activate" ]] || { echo "openmc: missing $activate, phase skipped" | tee -a "$OUT/summary.txt"; return 0; }
+  (
+    # shellcheck disable=SC1090
+    source "$activate"
+    python -m pytest tests/integration/test_openmc_activation.py -q -rs -p no:cacheprovider \
+      --junitxml="$OUT/openmc-junit.xml" 2>&1 | tee "$OUT/openmc-pytest.txt"
+    exit "${PIPESTATUS[0]}"
+  )
+  local status=$?
+  echo "openmc pytest exit status: $status" | tee -a "$OUT/summary.txt"
+  return "$status"
+}
+
 overall=0
 run_phase main "${MATSIM_FRONTIER_VENV:-$REPO/.venv}" tests || overall=1
 run_phase mace "${MATSIM_MACE_VENV:-$REPO/.venv-mace}" tests/test_mace_*.py "${MLIP_TESTS[@]}" \
   || overall=1
 run_phase uma "${MATSIM_FAIRCHEM_VENV:-$REPO/.venv-uma}" tests/test_finetune_uma.py \
   "${MLIP_TESTS[@]}" || overall=1
+run_openmc_phase || overall=1
 exit "$overall"
