@@ -315,6 +315,12 @@ class NebResult(BaseModel):
     relative_energies_eV: tuple[float, ...] = ()
     forward_barrier_eV: float | None = Field(default=None, allow_inf_nan=False)
     reverse_barrier_eV: float | None = Field(default=None, allow_inf_nan=False)
+    saddle_image_index: StrictInt | None = Field(default=None, ge=1)
+    optimization_steps: StrictInt | None = Field(default=None, ge=0)
+    max_force_eV_per_A: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    pathway_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    forward_barrier_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    reverse_barrier_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     endpoints_qualified: bool = False
     climbing_image_used: bool = False
     warnings: tuple[str, ...] = ()
@@ -337,6 +343,8 @@ class NebResult(BaseModel):
             if not np.isfinite(np.array(self.relative_energies_eV)).all():
                 raise ValueError("relative_energies_eV must be finite")
         has_barrier = self.forward_barrier_eV is not None or self.reverse_barrier_eV is not None
+        if self.saddle_image_index is not None and self.saddle_image_index >= self.n_images - 1:
+            raise ValueError("saddle_image_index must identify an interior image")
         if self.state in ("failed", "incomplete") and (has_barrier or self.relative_energies_eV):
             raise ValueError(f"a {self.state} calculation cannot carry energies or barriers")
         if self.state == "qualified" and not (

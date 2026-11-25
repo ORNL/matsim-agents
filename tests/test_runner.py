@@ -112,6 +112,55 @@ def test_invalid_config_is_recorded_as_failed(tmp_path) -> None:
     assert runner.exit_code(record) == 1
 
 
+def test_neb_only_active_learning_config_is_detected(tmp_path):
+    config = tmp_path / "al-neb.yaml"
+    config.write_text("random_seed: 1\nsampling:\n  strategies: []\nacquisition: {}\n")
+    assert runner.detect_kind(config) == "al"
+
+
+def test_standalone_sampling_config_uses_standard_run_handler(tmp_path):
+    config = tmp_path / "sampling.yaml"
+    config.write_text(
+        "random_seed: 1\n"
+        "mlip: {}\n"
+        "sampling:\n"
+        "  strategies:\n"
+        "    - method: neb\n"
+        "      parameters: {}\n"
+    )
+    assert runner.detect_kind(config) == "sampling"
+
+
+def test_standard_run_executes_standalone_sampling_without_active_learning(tmp_path, monkeypatch):
+    initial = tmp_path / "initial.extxyz"
+    final = tmp_path / "final.extxyz"
+    initial.touch()
+    final.touch()
+    config = tmp_path / "sampling.yaml"
+    config.write_text(
+        f"random_seed: 1\n"
+        f"mlip:\n  backend: mace\n  family: mace_mp\n  model: small\n"
+        f"sampling:\n  strategies:\n    - method: neb\n      parameters:\n"
+        f"        initial_path: {initial}\n        final_path: {final}\n        n_images: 4\n"
+        f"resources:\n  pools:\n    mlip: {{}}\n"
+    )
+    monkeypatch.setattr(runner, "backend_blockers", lambda backends: [])
+    monkeypatch.setattr(
+        "matsim_agents.workflows.active_learning.standalone_sampling.run_sampling",
+        lambda cfg, directory: {
+            "n_candidates": 2,
+            "neb_pathways": [{"result": {}}],
+            "candidate_file": str(directory / "candidates.extxyz"),
+        },
+    )
+
+    _, record = runner.run(config, runs_dir=tmp_path / "runs")
+
+    assert record.state == "complete"
+    assert record.summary["n_candidates"] == 2
+    assert record.summary["n_neb_pathways"] == 1
+
+
 def test_neb_example_runs_as_dry_run(tmp_path) -> None:
     source = REPO / "examples/radiation_damage/neb_vacancy_hop.example.yaml"
     directory, record = runner.run(source, runs_dir=tmp_path)

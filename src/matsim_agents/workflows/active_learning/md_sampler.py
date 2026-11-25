@@ -28,26 +28,11 @@ from ase.io import write as ase_write
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.core.seeding import numpy_rng
+from matsim_agents.science.defects.point_defects import geometry_fingerprint
+from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import MDConfig
 
 log = logging.getLogger(__name__)
-
-
-# --------------------------------------------------------------------------- #
-# Public dataclass                                                            #
-# --------------------------------------------------------------------------- #
-
-
-@dataclass
-class Candidate:
-    """One candidate frame for potential VASP labelling."""
-
-    candidate_id: str
-    atoms: Atoms
-    seed_path: str
-    md_step: int
-    predicted_energy_eV: float | None = None
-    predicted_max_force_eV_per_A: float | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -71,6 +56,7 @@ def _sample_seed(
     seed_path: str,
     out_dir: Path,
     rng: np.random.Generator,
+    model_id: str | None = None,
 ) -> list[Candidate]:
     """Run MD from one seed and return its accepted snapshots in step order."""
     from ase import units
@@ -141,6 +127,12 @@ def _sample_seed(
 
         cand_atoms = atoms.copy()
         cand_atoms.calc = None  # detach calculator before serialising
+        cand_atoms.info.update(
+            sampling_method="md",
+            md_step=step + 1,
+            temperature_K=float(md_cfg.temperature_K),
+            thermostat=md_cfg.thermostat,
+        )
         candidates.append(
             Candidate(
                 candidate_id=f"{seed_stem}_step{step + 1:06d}",
@@ -149,6 +141,15 @@ def _sample_seed(
                 md_step=step + 1,
                 predicted_energy_eV=energy,
                 predicted_max_force_eV_per_A=fmax,
+                sampling_method="md",
+                parent_id=seed_stem,
+                sampling_run_id=seed_stem,
+                geometry_fingerprint=geometry_fingerprint(cand_atoms),
+                model_id=model_id,
+                metadata={
+                    "temperature_K": float(md_cfg.temperature_K),
+                    "thermostat": md_cfg.thermostat,
+                },
             )
         )
         ase_write(str(traj_path), cand_atoms, append=True, format="extxyz")
@@ -166,7 +167,44 @@ def _sample_seed(
 # Calculators loaded by an MD worker process, reused across its seeds; across AL
 # iterations too while the worker pool stays up (when no other pool uses the mlip
 # devices). A different model (a promotion) replaces the loaded one.
-_WORKER_CALCULATORS: dict[tuple[str, bool], object] = {}
+_WORKER_CALCULATORS: dict[tuple, object] = {}
+
+
+def _worker_mlip_calculators(
+    mlip_json: str,
+    enable_mc_dropout: bool,
+    *,
+    include_ensemble: bool = False,
+) -> tuple[object, list]:
+    """Reuse one primary and optional ensemble set per worker/model configuration."""
+    from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
+    from matsim_agents.backends.mlip.config import parse_mlip_config
+    from matsim_agents.backends.mlip.pool import release_device_memory
+
+    key = (mlip_json, enable_mc_dropout)
+    calculator = _WORKER_CALCULATORS.get(key)
+    if calculator is None:
+        if _WORKER_CALCULATORS:
+            _WORKER_CALCULATORS.clear()
+            release_device_memory()
+        calculator = make_mlip_calculator(
+            json.loads(mlip_json),
+            enable_mc_dropout=enable_mc_dropout,
+        )
+        _WORKER_CALCULATORS[key] = calculator
+
+    ensemble: list = []
+    if include_ensemble:
+        ensemble_key = (*key, "ensemble")
+        cached_ensemble = _WORKER_CALCULATORS.get(ensemble_key)
+        if cached_ensemble is None:
+            cached_ensemble = build_ensemble(
+                parse_mlip_config(json.loads(mlip_json)),
+                enable_mc_dropout=enable_mc_dropout,
+            )
+            _WORKER_CALCULATORS[ensemble_key] = cached_ensemble
+        ensemble = cached_ensemble
+    return calculator, ensemble
 
 
 @dataclass(frozen=True)
@@ -177,27 +215,19 @@ class _SeedTask:
     seed_path: str
     out_dir: str
     rng: np.random.Generator
+    model_id: str | None = None
 
 
 def _sample_seed_task(task: _SeedTask) -> list[Candidate]:
     """MLIP worker entry point: MD from one seed with the worker's own calculator."""
-    from matsim_agents.backends.mlip.calculator import make_mlip_calculator
-    from matsim_agents.backends.mlip.pool import prepare_worker_device, release_device_memory
+    from matsim_agents.backends.mlip.pool import prepare_worker_device
 
     prepare_worker_device()
-    key = (task.mlip_json, task.enable_mc_dropout)
-    calculator = _WORKER_CALCULATORS.get(key)
-    if calculator is None:
-        if _WORKER_CALCULATORS:
-            _WORKER_CALCULATORS.clear()
-            release_device_memory()  # free the previous model before loading the next
-        calculator = make_mlip_calculator(
-            json.loads(task.mlip_json),
-            enable_mc_dropout=task.enable_mc_dropout,
-        )
-        _WORKER_CALCULATORS[key] = calculator
+    calculator, _ = _worker_mlip_calculators(task.mlip_json, task.enable_mc_dropout)
     md_cfg = MDConfig.model_validate_json(task.md_json)
-    return _sample_seed(md_cfg, calculator, task.seed_path, Path(task.out_dir), task.rng)
+    return _sample_seed(
+        md_cfg, calculator, task.seed_path, Path(task.out_dir), task.rng, task.model_id
+    )
 
 
 def sample_md_candidates(
@@ -252,7 +282,16 @@ def sample_md_candidates(
     if mlip_pool is None or not mlip_pool.uses_workers or len(seeds) < 2:
         candidates: list[Candidate] = []
         for seed_path, rng in zip(seeds, rngs, strict=True):
-            candidates.extend(_sample_seed(md_cfg, calculator, seed_path, out_dir, rng))
+            candidates.extend(
+                _sample_seed(
+                    md_cfg,
+                    calculator,
+                    seed_path,
+                    out_dir,
+                    rng,
+                    None if mlip_cfg is None else mlip_cfg.model_reference,
+                )
+            )
         return candidates
 
     if mlip_cfg is None:
@@ -265,6 +304,7 @@ def sample_md_candidates(
             seed_path=seed_path,
             out_dir=str(out_dir),
             rng=rng,
+            model_id=mlip_cfg.model_reference,
         )
         for seed_path, rng in zip(seeds, rngs, strict=True)
     ]

@@ -20,6 +20,6 @@ Entry points:
     * CLI:     ``matsim-agents al run --config al.yaml``
 """
 
-from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.config import ALConfig, SamplingRunConfig
 
-__all__ = ["ALConfig"]
+__all__ = ["ALConfig", "SamplingRunConfig"]

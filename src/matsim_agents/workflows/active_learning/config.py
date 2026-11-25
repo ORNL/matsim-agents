@@ -8,13 +8,15 @@ a top-level field so the YAML is self-documenting and trivially diffable.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.mlip.config import MLIPBackendConfig, MLIPConfig
 from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.science.neb.contracts import NebTransition
 
 
 class MDConfig(BaseModel):
@@ -43,6 +45,119 @@ class MDConfig(BaseModel):
     sample_every: int = 10  # snapshot every N steps for the candidate pool
     max_force_threshold_eV_per_A: float = 50.0  # discard exploding frames
     max_displacement_A: float = 5.0  # discard frames moving > X Å from start
+
+
+class NebKineticsConfig(BaseModel):
+    """Explicit assumptions for attaching a NEB barrier to exploratory kinetics."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_frequency_hz: float = Field(gt=0, allow_inf_nan=False)
+    temperature_K: float = Field(gt=0, allow_inf_nan=False)
+    prefactor_note: str | None = None
+
+
+class NebRefinementStage(BaseModel):
+    """Optional climbing-image refinement after a converged standard-NEB stage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    optimizer: Literal["FIRE", "BFGS", "LBFGS"] = "FIRE"
+    fmax_eV_per_A: float = Field(0.02, gt=0, allow_inf_nan=False)
+    max_steps: int = Field(200, ge=1)
+    climbing_image: bool = True
+
+    @model_validator(mode="after")
+    def _require_climbing_image(self) -> NebRefinementStage:
+        if not self.climbing_image:
+            raise ValueError("a NEB refinement_stage must enable climbing_image")
+        return self
+
+
+class NebSamplingConfig(BaseModel):
+    """ASE NEB sampling settings for one pair of endpoint structures."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    initial_path: Path
+    final_path: Path
+    transition_id: str | None = None
+    transition: NebTransition | None = None
+    kinetics: NebKineticsConfig | None = None
+    n_images: int = Field(7, ge=4)
+    interpolation: Literal["linear", "idpp"] = "linear"
+    spring_constant_eV_per_A2: float = Field(0.1, gt=0, allow_inf_nan=False)
+    optimizer: Literal["FIRE", "BFGS", "LBFGS"] = "FIRE"
+    fmax_eV_per_A: float = Field(0.02, gt=0, allow_inf_nan=False)
+    max_steps: int = Field(1000, ge=1)
+    climbing_image: bool = False
+    refinement_stage: NebRefinementStage | None = None
+    record_every: int = Field(10, ge=1)
+    min_distance_A: float = Field(1.0, gt=0, allow_inf_nan=False)
+    max_step_A: float = Field(1.0, gt=0, allow_inf_nan=False)
+    relax_endpoints: bool = False
+    endpoint_fmax_eV_per_A: float = Field(0.02, gt=0, allow_inf_nan=False)
+    endpoint_max_steps: int = Field(200, ge=1)
+    uncertainty_interval_steps: int = Field(
+        0,
+        ge=0,
+        description=(
+            "Evaluate ensemble barrier uncertainty every N NEB steps; 0 disables interim checks."
+        ),
+    )
+    max_pathway_uncertainty_eV: float | None = Field(None, gt=0, allow_inf_nan=False)
+    resume: bool = True
+
+    @model_validator(mode="after")
+    def _check_uncertainty_gate(self) -> NebSamplingConfig:
+        if self.max_pathway_uncertainty_eV is not None and not self.uncertainty_interval_steps:
+            raise ValueError("max_pathway_uncertainty_eV requires uncertainty_interval_steps > 0")
+        if (
+            self.transition is not None
+            and self.transition_id is not None
+            and self.transition.transition_id != self.transition_id
+        ):
+            raise ValueError("transition_id must match transition.transition_id")
+        if self.kinetics is not None and self.transition is None:
+            raise ValueError("NEB kinetics output requires a typed transition")
+        if self.refinement_stage is not None and self.climbing_image:
+            raise ValueError("two-stage NEB requires climbing_image: false in the initial stage")
+        if (
+            self.transition is not None
+            and self.transition.calculation is not None
+            and self.transition.calculation.n_images != self.n_images
+        ):
+            raise ValueError("NEB n_images must match transition.calculation.n_images")
+        return self
+
+
+class NebEscalationConfig(BaseModel):
+    """Acceptance and optional full-QE-NEB escalation policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy: Literal["mlip_only", "uncertainty_gated", "always_dft_neb"] = "mlip_only"
+    max_pathway_uncertainty_eV: float | None = Field(None, gt=0, allow_inf_nan=False)
+    max_dft_neb_runs: int = Field(0, ge=0)
+    dft_neb: QENebConfig | None = None
+    allow_unrelaxed_endpoints: bool = False
+
+    @model_validator(mode="after")
+    def _check_policy(self) -> NebEscalationConfig:
+        if (
+            self.policy in {"mlip_only", "uncertainty_gated"}
+            and self.max_pathway_uncertainty_eV is None
+        ):
+            raise ValueError(f"{self.policy} requires max_pathway_uncertainty_eV")
+        if self.policy == "uncertainty_gated":
+            if self.dft_neb is None or self.max_dft_neb_runs < 1:
+                raise ValueError("uncertainty_gated requires dft_neb and max_dft_neb_runs >= 1")
+        elif self.policy == "always_dft_neb":
+            if self.dft_neb is None or self.max_dft_neb_runs < 1:
+                raise ValueError("always_dft_neb requires dft_neb and max_dft_neb_runs >= 1")
+        elif self.dft_neb is not None or self.max_dft_neb_runs:
+            raise ValueError("mlip_only cannot configure DFT NEB runs")
+        return self
 
 
 class LLMSeedConfig(BaseModel):
@@ -128,15 +243,69 @@ class SeedSourceConfig(BaseModel):
 MDConfig.model_rebuild()
 
 
+class MDSamplingStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["md"]
+    parameters: MDConfig
+
+
+class NEBSamplingStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["neb"]
+    parameters: NebSamplingConfig
+
+
+SamplingStrategy = Annotated[
+    MDSamplingStrategy | NEBSamplingStrategy, Field(discriminator="method")
+]
+
+
+class SamplingConfig(BaseModel):
+    """One or more independent numerical strategies sharing the same MLIP and AL pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    strategies: list[SamplingStrategy] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_neb_transition_ids(self) -> SamplingConfig:
+        identifiers = []
+        for strategy in self.strategies:
+            if not isinstance(strategy, NEBSamplingStrategy):
+                continue
+            parameters = strategy.parameters
+            identifier = (
+                parameters.transition.transition_id
+                if parameters.transition is not None
+                else parameters.transition_id
+                or f"{parameters.initial_path.stem}-to-{parameters.final_path.stem}"
+            )
+            identifiers.append(identifier)
+        duplicates = sorted({item for item in identifiers if identifiers.count(item) > 1})
+        if duplicates:
+            raise ValueError(
+                "NEB strategies must have unique effective transition IDs; "
+                f"duplicates: {', '.join(duplicates)}"
+            )
+        return self
+
+
 class AcquisitionConfig(BaseModel):
     """Which uncertainty measure(s) to use to pick frames for VASP labelling."""
 
     strategy: Literal["ensemble", "mc_dropout", "random", "ensemble_then_dropout"] = "ensemble"
     n_select: int = 256  # how many candidates to label per AL iteration
-    mc_dropout_passes: int = 8
-    mc_dropout_p: float = 0.1
+    mc_dropout_passes: int = Field(8, ge=2)
+    mc_dropout_p: float = Field(0.1, gt=0, lt=1, allow_inf_nan=False)
     diversity_filter: bool = True  # greedy-farthest-point on composition + UQ score
     min_uncertainty_eV_per_A: float = 0.0  # below this, skip labelling
+    max_per_neb_pathway: int | None = Field(
+        2,
+        ge=1,
+        description="Cap selected NEB images per transition so one path cannot consume the budget.",
+    )
 
 
 class TrainingReferences(BaseModel):
@@ -392,9 +561,11 @@ class ALConfig(BaseModel):
         ),
     )
     mlip: MLIPConfig
-    md: MDConfig
+    md: MDConfig | None = None
+    sampling: SamplingConfig | None = None
     acquisition: AcquisitionConfig
     dft: DFTConfig
+    escalation: NebEscalationConfig | None = None
     trainer: TrainerConfig
     loop: LoopConfig
     resources: ResourcePlan = Field(
@@ -405,6 +576,47 @@ class ALConfig(BaseModel):
             "when trainer.enabled is true."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_sampling(self) -> ALConfig:
+        if self.sampling is None and self.md is None:
+            raise ValueError("specify legacy md configuration or sampling.strategies")
+        if (
+            self.md is not None
+            and self.sampling is not None
+            and any(strategy.method == "md" for strategy in self.sampling.strategies)
+        ):
+            raise ValueError(
+                "configure MD either in sampling.strategies or the legacy md field, not both"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_neb_escalation(self) -> ALConfig:
+        neb_strategies = [
+            strategy.parameters
+            for strategy in (self.sampling.strategies if self.sampling is not None else ())
+            if isinstance(strategy, NEBSamplingStrategy)
+        ]
+        if self.escalation is None:
+            if any(strategy.kinetics is not None for strategy in neb_strategies):
+                raise ValueError("NEB kinetics output requires an explicit escalation policy")
+            return self
+        if not neb_strategies:
+            raise ValueError("escalation requires at least one NEB sampling strategy")
+        if self.escalation.policy in {"uncertainty_gated", "always_dft_neb"}:
+            if self.dft.backend != "qe":
+                raise ValueError("full DFT NEB escalation requires dft.backend='qe'")
+            for strategy in neb_strategies:
+                if strategy.transition is None:
+                    raise ValueError(
+                        "full DFT NEB escalation requires a typed transition for every NEB strategy"
+                    )
+                if self.escalation.dft_neb is not None and (
+                    self.escalation.dft_neb.n_images != strategy.n_images
+                ):
+                    raise ValueError("escalation.dft_neb.n_images must match each NEB strategy")
+        return self
 
     @model_validator(mode="after")
     def _check_resource_pools(self) -> ALConfig:
@@ -474,27 +686,73 @@ class ALConfig(BaseModel):
         on the raw YAML text, so you can interpolate inside paths, lists, and
         even keys.
         """
-        import yaml
+        return cls.model_validate(_load_yaml_mapping(path, mlip=mlip))
 
-        from matsim_agents.execution.variables import expand_variables, variable_defaults
 
-        path = Path(path)
-        raw_text = path.read_text()
+class SamplingRunConfig(BaseModel):
+    """Standalone MD/NEB sampling through ``matsim-agents run`` without DFT or AL."""
 
-        # First parse to extract the optional `vars:` block as fallback values.
-        try:
-            preview = yaml.safe_load(raw_text) or {}
-        except yaml.YAMLError:
-            preview = {}
-        vars_block = preview.get("vars") if isinstance(preview, dict) else None
-        defaults = variable_defaults(vars_block, source=path)
-        if mlip is not None and isinstance(preview, dict):
-            preview.pop("mlip", None)
-            raw_text = yaml.safe_dump(preview, sort_keys=False)
-        substituted = expand_variables(raw_text, defaults, source=path)
-        data = yaml.safe_load(substituted)
-        if isinstance(data, dict):
-            data.pop("vars", None)
-            if mlip is not None:
-                data["mlip"] = mlip
-        return cls.model_validate(data)
+    model_config = ConfigDict(extra="forbid")
+
+    random_seed: int
+    mlip: MLIPConfig
+    sampling: SamplingConfig
+    resources: ResourcePlan
+    acquisition: AcquisitionConfig | None = None
+
+    @model_validator(mode="after")
+    def _check_standalone_uq(self) -> SamplingRunConfig:
+        if self.acquisition is None:
+            if any(
+                isinstance(strategy, NEBSamplingStrategy)
+                and strategy.parameters.max_pathway_uncertainty_eV is not None
+                for strategy in self.sampling.strategies
+            ):
+                raise ValueError("NEB pathway uncertainty thresholds require acquisition settings")
+            return self
+        needs_ensemble = self.acquisition.strategy in {"ensemble", "ensemble_then_dropout"}
+        if needs_ensemble and not self.mlip.ensemble_models:
+            raise ValueError(
+                f"acquisition.strategy={self.acquisition.strategy!r} requires mlip.ensemble_models"
+            )
+        if self.acquisition.strategy == "random" and any(
+            isinstance(strategy, NEBSamplingStrategy)
+            and strategy.parameters.max_pathway_uncertainty_eV is not None
+            for strategy in self.sampling.strategies
+        ):
+            raise ValueError("random acquisition cannot provide a pathway uncertainty gate")
+        return self
+
+    @classmethod
+    def from_yaml(
+        cls, path: str | Path, *, mlip: MLIPBackendConfig | None = None
+    ) -> SamplingRunConfig:
+        """Load a sampling config using the active-learning variable and MLIP rules."""
+        return cls.model_validate(_load_yaml_mapping(path, mlip=mlip))
+
+
+def _load_yaml_mapping(path: str | Path, *, mlip: MLIPBackendConfig | None) -> dict[str, Any]:
+    """Expand a workflow YAML and optionally replace its selected MLIP backend."""
+    import yaml
+
+    from matsim_agents.execution.variables import expand_variables, variable_defaults
+
+    path = Path(path)
+    raw_text = path.read_text(encoding="utf-8")
+    try:
+        preview = yaml.safe_load(raw_text) or {}
+    except yaml.YAMLError:
+        preview = {}
+    vars_block = preview.get("vars") if isinstance(preview, dict) else None
+    defaults = variable_defaults(vars_block, source=path)
+    if mlip is not None and isinstance(preview, dict):
+        preview.pop("mlip", None)
+        raw_text = yaml.safe_dump(preview, sort_keys=False)
+    substituted = expand_variables(raw_text, defaults, source=path)
+    data = yaml.safe_load(substituted)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a YAML mapping")
+    data.pop("vars", None)
+    if mlip is not None:
+        data["mlip"] = mlip
+    return data

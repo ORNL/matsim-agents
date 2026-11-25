@@ -62,6 +62,15 @@ def _check_image(image: Atoms, index: int, min_distance: float) -> None:
         )
 
 
+def validate_images(images: tuple[Atoms, ...] | list[Atoms], min_distance: float) -> None:
+    """Validate all images after an interpolation/refinement algorithm changes the path."""
+    min_distance = _positive("min_distance", min_distance)
+    if not images:
+        raise ValueError("at least one NEB image is required")
+    for index, image in enumerate(images):
+        _check_image(image, index, min_distance)
+
+
 def generate_linear_images(
     initial: Atoms,
     final: Atoms,
@@ -70,12 +79,13 @@ def generate_linear_images(
     min_distance: float = DEFAULT_MIN_DISTANCE,
     max_step: float = DEFAULT_MAX_STEP,
     allow_ambiguous: bool = False,
+    check_intermediate_overlaps: bool = True,
 ) -> LinearImages:
     """``n_images`` images including both endpoints (QE needs at least 4).
 
     Raises ``ValueError`` for too few images, broken correspondence, invalid cells, ambiguous
     displacements (unless ``allow_ambiguous``), non-finite coordinates, an overlap closer than
-    ``min_distance`` in any image, or a per-atom step between neighbouring images above
+    ``min_distance`` in checked images, or a per-atom step between neighbouring images above
     ``max_step`` (a likely wrong pairing or too few images). Inputs are not modified.
     """
     if isinstance(n_images, bool) or not isinstance(n_images, int | np.integer):
@@ -101,7 +111,8 @@ def generate_linear_images(
         if k:
             image.positions = initial.positions + t * displacements.vectors
         image.info.clear()
-        _check_image(image, k, min_distance)
+        if check_intermediate_overlaps or k in (0, n_images - 1):
+            _check_image(image, k, min_distance)
         images.append(image)
     last = images[-1]
     # The last image must be the final structure up to lattice translations.
@@ -136,4 +147,5 @@ __all__ = [
     "DEFAULT_MIN_DISTANCE",
     "LinearImages",
     "generate_linear_images",
+    "validate_images",
 ]

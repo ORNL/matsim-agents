@@ -44,6 +44,7 @@ from matsim_agents.workflows.active_learning.config import (
     ALConfig,
     LoopConfig,
     MDConfig,
+    SamplingConfig,
     SeedSourceConfig,
     TrainerConfig,
 )
@@ -320,7 +321,7 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     # n_select=2 with random strategy on 3 candidates -> exactly 2 selected.
     assert state["n_selected"] == 2
     assert len(state["selected_candidate_ids"]) == 2
-    assert set(state["candidate_uncertainty"]) == set(state["selected_candidate_ids"])
+    assert state["candidate_uncertainty"] == {}
     assert all(0.0 <= score <= 1.0 for score in state["candidate_uncertainty"].values())
     assert state["n_dft_converged"] == 2
     assert state["n_dft_failed"] == 0
@@ -342,6 +343,80 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     dft_dir = iter_dir / "dft"
     assert dft_dir.is_dir()
     assert any(dft_dir.iterdir()), "DFT working directories were not created"
+
+
+def test_neb_only_iteration_uses_shared_dft_and_dataset_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.neb_sampler as neb_sampler
+
+    cfg = _make_cfg(tmp_path)
+    initial = Atoms("Si2", positions=[[0, 0, 0], [1.357, 1.357, 1.357]], cell=[5.43] * 3, pbc=True)
+    initial.set_array("atom_id", np.array([0, 1]))
+    final = initial.copy()
+    final.positions[0, 0] += 0.1
+    initial_path, final_path = tmp_path / "initial.extxyz", tmp_path / "final.extxyz"
+    ase_write(initial_path, initial)
+    ase_write(final_path, final)
+    cfg = cfg.model_copy(
+        update={
+            "md": None,
+            "sampling": SamplingConfig(
+                strategies=[
+                    {
+                        "method": "neb",
+                        "parameters": {
+                            "initial_path": initial_path,
+                            "final_path": final_path,
+                            "min_distance_A": 0.5,
+                        },
+                    }
+                ]
+            ),
+        }
+    )
+    _patch_runtime(loop_mod, monkeypatch)
+
+    def fake_neb(config, calculator, out_dir, **kwargs):
+        candidates = []
+        for index in range(1, 4):
+            candidate_atoms = initial.copy()
+            candidate_atoms.positions[0, 0] += 0.02 * index
+            candidate_atoms.info.update(sampling_method="neb", image_index=index)
+            candidates.append(
+                Candidate(
+                    candidate_id=f"hop-image-{index}",
+                    atoms=candidate_atoms,
+                    sampling_method="neb",
+                    parent_id="initial",
+                    sampling_run_id="hop",
+                    provenance={"transition_id": "hop"},
+                    metadata={"image_index": index},
+                )
+            )
+        from matsim_agents.science.neb.contracts import NebResult
+
+        return neb_sampler.NebSamplingOutcome(
+            candidates=candidates,
+            result=NebResult(state="unconverged", method_id="mock", n_images=5),
+            images=(),
+        )
+
+    monkeypatch.setattr(neb_sampler, "sample_neb_candidates", fake_neb)
+    loop_mod.run_active_learning(cfg)
+
+    state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+    frames = ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")
+    assert state["n_candidates"] == 3
+    assert len(frames) == state["n_dft_converged"]
+    assert all(frame.info["sampling_method"] == "neb" for frame in frames)
+    assert all(
+        "image_index" in frame.info and "time_index" not in frame.info for frame in frames
+    ), [
+        (frame.info.get("candidate_id"), "image_index" in frame.info, "time_index" in frame.info)
+        for frame in frames
+    ]
 
 
 @pytest.mark.parametrize(("force_error", "triggered"), [(0.0, False), (0.125, False), (0.5, True)])

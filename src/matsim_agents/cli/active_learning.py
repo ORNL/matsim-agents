@@ -83,11 +83,25 @@ def al_validate_config(
     )
 
     cfg = ALConfig.from_yaml(config, mlip=load_mlip_option(mlip_config))
-    seeds = cfg.md.seed_source
+    strategies = cfg.sampling.strategies if cfg.sampling is not None else []
+    seed_sources = [
+        strategy.parameters.seed_source for strategy in strategies if strategy.method == "md"
+    ]
+    if cfg.md is not None:
+        seed_sources.insert(0, cfg.md.seed_source)
+    seed_paths = [path for source in seed_sources for path in source.paths if path.is_file()]
+    compositions = [formula for source in seed_sources for formula in source.compositions]
+    neb_paths = [
+        path
+        for strategy in strategies
+        if strategy.method == "neb"
+        for path in (strategy.parameters.initial_path, strategy.parameters.final_path)
+        if path.is_file()
+    ]
     try:
         check_reference_coverage(
             cfg.trainer,
-            elements_of([path for path in seeds.paths if path.is_file()], seeds.compositions),
+            elements_of(seed_paths + neb_paths, compositions),
         )
     except ValueError as error:
         fail(str(error))
