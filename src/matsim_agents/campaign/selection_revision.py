@@ -41,7 +41,11 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
-from matsim_agents.execution.properties import PropertyStatus, to_ledger_record
+from matsim_agents.execution.properties import (
+    PropertyEvidence,
+    PropertyStatus,
+    to_ledger_record,
+)
 from matsim_agents.workflows.radiation_hypothesis import (
     MAX_RATIONALE_CHARS,
     RevisionBudget,
@@ -103,6 +107,27 @@ class EvidencePacket(BaseModel):
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
+def append_property_evidence(
+    ledger: EvidenceLedger, evidence: PropertyEvidence, *, campaign_id: str | None = None
+) -> str:
+    """Append one property record and return its ledger evidence id.
+
+    Parent ids that are not ledger records (for example an external source label) are kept
+    as a stated assumption instead of a parent link.
+    """
+    record = to_ledger_record(evidence, campaign_id=campaign_id)
+    unknown = [i for i in record.parent_record_ids if i not in ledger]
+    if unknown:
+        payload = record.model_dump(exclude={"evidence_id"})
+        payload["parent_record_ids"] = [i for i in record.parent_record_ids if i in ledger]
+        payload["physical_assumptions"] = [
+            *record.physical_assumptions,
+            f"source identifiers outside this ledger: {sorted(unknown)}",
+        ]
+        record = EvidenceRecord.model_validate(payload)
+    return ledger.append(record).evidence_id  # type: ignore[union-attr]
+
+
 def record_candidate_evidence(
     ledger: EvidenceLedger,
     candidates: Sequence[CandidateEvidence],
@@ -110,11 +135,7 @@ def record_candidate_evidence(
     *,
     campaign_id: str | None = None,
 ) -> dict[str, str]:
-    """Append the evidence the scores used; returns ``property_id -> ledger evidence id``.
-
-    Parent ids that are not ledger records (for example an external source label) are kept
-    as a stated assumption instead of a parent link.
-    """
+    """Append the evidence the scores used; returns ``property_id -> ledger evidence id``."""
     used = {v.property_id for c in result.candidates for v in c.values.values()}
     mapping: dict[str, str] = {}
     for cand in candidates:
@@ -122,17 +143,7 @@ def record_candidate_evidence(
             pid = ev.property_id()
             if pid not in used or pid in mapping:
                 continue
-            record = to_ledger_record(ev, campaign_id=campaign_id)
-            unknown = [i for i in record.parent_record_ids if i not in ledger]
-            if unknown:
-                payload = record.model_dump(exclude={"evidence_id"})
-                payload["parent_record_ids"] = [i for i in record.parent_record_ids if i in ledger]
-                payload["physical_assumptions"] = [
-                    *record.physical_assumptions,
-                    f"source identifiers outside this ledger: {sorted(unknown)}",
-                ]
-                record = EvidenceRecord.model_validate(payload)
-            mapping[pid] = ledger.append(record).evidence_id  # type: ignore[union-attr]
+            mapping[pid] = append_property_evidence(ledger, ev, campaign_id=campaign_id)
     return mapping
 
 
@@ -403,6 +414,7 @@ __all__ = [
     "EvidencePacket",
     "RationaleDrafter",
     "SelectionRevisionOutcome",
+    "append_property_evidence",
     "build_evidence_packet",
     "record_candidate_evidence",
     "revise_selection_hypothesis",
