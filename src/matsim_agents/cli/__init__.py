@@ -19,6 +19,7 @@ from matsim_agents.cli import (  # noqa: E402, F401, I001  (register commands)
     neb,
     magnetic,
     radiation_damage,
+    materials,
     campaign,
     benchmark,
     capabilities,

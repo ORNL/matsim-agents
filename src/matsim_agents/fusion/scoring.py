@@ -326,7 +326,7 @@ def _score_objective(
     if bench is None:
         return ObjectiveResult(objective=name, weight=weight, reason="no benchmark supplied")
     obs = tuple(
-        _score_observable(name, o, b, items, scenario) for o, b in bench.observables.items()
+        _score_observable(name, o, b, items, scenario) for o, b in sorted(bench.observables.items())
     )
     missing = [o.observable for o in obs if o.desirability is None]
     if missing:
@@ -421,8 +421,8 @@ def _correlation_warnings(
     benchmarks: BenchmarkSet, correlations: Sequence[Correlation], threshold: float
 ) -> list[str]:
     owners: dict[str, list[str]] = {}
-    for name, bench in benchmarks.objectives.items():
-        for obs in bench.observables:
+    for name, bench in sorted(benchmarks.objectives.items()):
+        for obs in sorted(bench.observables):
             owners.setdefault(obs, []).append(name)
     notes = [
         f"{obs} is scored in {', '.join(objs)}; these objectives are not independent"
