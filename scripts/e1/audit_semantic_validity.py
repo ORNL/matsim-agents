@@ -10,11 +10,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from benchmarks.e1.protocol import assess_semantic_validity
+# benchmarks/ is a repository directory, not part of the installed package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from benchmarks.e1.protocol import assess_semantic_validity  # noqa: E402
 
 AUDIT_VERSION = "e1-semantic-audit-v1"
 

@@ -7,12 +7,15 @@ import hashlib
 import json
 import os
 import re
+import sys
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from benchmarks.e1.protocol import (
+# benchmarks/ is a repository directory, not part of the installed package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmarks.e1.protocol import (  # noqa: E402
     CURRENT_PROMPT_VARIANT,
     E1DevelopmentManifest,
     run_e1_development,
