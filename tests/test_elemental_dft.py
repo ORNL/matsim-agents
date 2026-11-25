@@ -571,6 +571,22 @@ def test_qe_molecular_settings_reach_generated_input(setup_references):
     assert "1 1 1" in text
 
 
+def test_site_magnetization_reaches_static_job_and_cache_key(setup_references):
+    setup = setup_references
+    phase = setup.plan.phases[0]  # si-a, two sites
+    before = elemental_dft._static_cache_key(phase, "p", "g", "m", "e")
+    phase.magnetic_state = "antiferromagnetic"
+    phase.qe_site_starting_magnetization = (0.5, -0.5)
+    assert elemental_dft._static_cache_key(phase, "p", "g", "m", "e") != before
+    _prepare(setup, dft_approved=True)
+    spec = next(spec for _, spec in setup.calls if spec.job_id == "si-a")
+    assert spec.magnetic_config.qe_starting_magnetization == (0.5, -0.5)
+    assert spec.magnetic_config.mode == "antiferromagnetic"
+    assert list(spec.atoms.get_array("atom_id")) == [0, 1]
+    other = next(spec for _, spec in setup.calls if spec.job_id == "si-b")
+    assert other.magnetic_config is None
+
+
 def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monkeypatch):
     from matsim_agents.backends.dft import qe_relax
 

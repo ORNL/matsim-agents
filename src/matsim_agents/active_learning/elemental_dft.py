@@ -51,6 +51,10 @@ class ElementalPhaseSpec(BaseModel):
     )
     relaxation_max_steps: int = Field(default=200, gt=0)
     qe_magnetic_settings: dict[str, int | float] = Field(default_factory=dict)
+    # One QE starting_magnetization per site, in structure order (e.g. [0.5, -0.5]
+    # for two-site antiferromagnetic bcc Cr). Sites with different values become
+    # separate QE species.
+    qe_site_starting_magnetization: tuple[float, ...] | None = None
     vasp_magnetic_settings: dict[str, str] = Field(default_factory=dict)
     kpts: tuple[int, int, int] | None = None
 
@@ -66,6 +70,14 @@ class ElementalPhaseSpec(BaseModel):
             raise ValueError("Only declared VASP spin/magnetization overrides are allowed")
         if not all(np.isfinite(value) for value in self.qe_magnetic_settings.values()):
             raise ValueError("QE magnetic settings must be finite")
+        sites = self.qe_site_starting_magnetization
+        if sites is not None:
+            if self.qe_magnetic_settings:
+                raise ValueError(
+                    "qe_site_starting_magnetization replaces qe_magnetic_settings; give one"
+                )
+            if not sites or not all(np.isfinite(v) and abs(v) <= 1 for v in sites):
+                raise ValueError("QE site starting magnetizations must be finite, in [-1, 1]")
         if self.kpts is not None and any(value < 1 for value in self.kpts):
             raise ValueError("Reference k-point dimensions must be positive")
         if self.relax_cell and self.kind == "molecule":
@@ -221,7 +233,9 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
                         f"{phase.phase_id}: elemental cell relaxation requires "
                         "zero external pressure"
                     )
-        if cfg.qe.pw_template is not None and phase.qe_magnetic_settings:
+        if cfg.qe.pw_template is not None and (
+            phase.qe_magnetic_settings or phase.qe_site_starting_magnetization
+        ):
             raise ValueError("QE template ignores magnetic overrides; use generated inputs")
         cfg.qe.extra_system.update(phase.qe_magnetic_settings)
         if phase.kpts is not None:
@@ -233,7 +247,7 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
             raise ValueError("Reference QE protocol must pin cutoffs, k-points, and occupations")
     else:
         assert cfg.vasp is not None
-        if phase.qe_magnetic_settings:
+        if phase.qe_magnetic_settings or phase.qe_site_starting_magnetization:
             raise ValueError(f"{phase.phase_id}: QE overrides supplied for VASP")
         if phase.kpts is not None:
             raise ValueError("VASP k-points must be declared in its shared DFT configuration")
@@ -257,6 +271,42 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
                             f"{phase.phase_id}: VASP INCAR template sets nonzero PSTRESS"
                         )
     return cfg
+
+
+def _no_site_moments(phase: ElementalPhaseSpec) -> bool:
+    # Omitted from cache keys when unset so existing reference caches stay valid.
+    return phase.qe_site_starting_magnetization is None
+
+
+def _site_magnetism(phase: ElementalPhaseSpec, atoms: Atoms):
+    """Return ``(atoms with atom_id, MagneticConfiguration)`` for per-site QE moments."""
+    sites = phase.qe_site_starting_magnetization
+    if sites is None:
+        return atoms, None
+    from matsim_agents.discovery.magnetism.config import MAGNETIC_MODES, MagneticConfiguration
+
+    if len(sites) != len(atoms):
+        raise ValueError(
+            f"{phase.phase_id}: {len(sites)} site magnetizations for {len(atoms)} atoms"
+        )
+    atoms = atoms.copy()
+    atoms.set_array("atom_id", np.arange(len(atoms), dtype=int))
+    labels = {0.0: "zero"}
+    config = MagneticConfiguration(
+        structure_id=phase.phase_id,
+        config_id=phase.phase_id,
+        mode=phase.magnetic_state if phase.magnetic_state in MAGNETIC_MODES else "custom_collinear",
+        atom_ids=tuple(range(len(atoms))),
+        species=tuple(atoms.get_chemical_symbols()),
+        group_labels=tuple(
+            labels.get(v, "up" if v > 0 else "down") + f"_{abs(v):g}".replace(".", "p")
+            for v in sites
+        ),
+        spin_polarized=True,
+        qe_starting_magnetization=tuple(sites),
+        generation_method="elemental_phase_plan",
+    )
+    return atoms, config
 
 
 def _relaxes_cell(phase: ElementalPhaseSpec) -> bool:
@@ -284,7 +334,8 @@ def _relaxation_key(
         "execution_signature": execution_signature,
         "phase": phase.model_dump(
             mode="json",
-            exclude={"structure_path", "phase_id", "geometry_status"},
+            exclude={"structure_path", "phase_id", "geometry_status"}
+            | ({"qe_site_starting_magnetization"} if _no_site_moments(phase) else set()),
         ),
         "backend": "qe-or-vasp-relaxation",
     }
@@ -331,7 +382,14 @@ def _run_reference_relaxation(
             extra_cell={} if not do_cell else {"cell_dofree": "all"},
         )
         input_path = work_dir / "pw.in"
-        write_pw_input(atoms, settings, str(input_path), outdir=str(work_dir / "tmp"))
+        id_atoms, magnetic_config = _site_magnetism(phase, atoms)
+        write_pw_input(
+            id_atoms,
+            settings,
+            str(input_path),
+            outdir=str(work_dir / "tmp"),
+            magnetic_config=magnetic_config,
+        )
         log_path = work_dir / "pw.out"
         argv = [
             "bash",
@@ -541,6 +599,10 @@ def _static_cache_key(
         },
         "protocol": protocol,
     }
+    if not _no_site_moments(phase):
+        static_identity["phase"]["qe_site_starting_magnetization"] = list(
+            phase.qe_site_starting_magnetization
+        )
     return hashlib.sha256(json.dumps(static_identity, sort_keys=True).encode()).hexdigest()
 
 
@@ -813,8 +875,15 @@ def _compute_reference(
             budget.reserve()
             work_dir = entry / f"dft-{uuid.uuid4().hex}"
             log.info("Calculating elemental DFT reference %s (%s)", phase.phase_id, static_key)
+            id_atoms, magnetic_config = _site_magnetism(phase, atoms_for_static)
             result = make_backend(cfg).run_one(
-                DFTJobSpec(phase.phase_id, atoms_for_static, str(work_dir), launch=launch)
+                DFTJobSpec(
+                    phase.phase_id,
+                    id_atoms,
+                    str(work_dir),
+                    launch=launch,
+                    magnetic_config=magnetic_config,
+                )
             )
             if (
                 not result.converged

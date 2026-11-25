@@ -123,6 +123,24 @@ def al_init_campaign(
     reference_kpts: tuple[int, int, int] | None = typer.Option(
         None, help="k-point mesh for the primitive bulk reference cells (QE)."
     ),
+    reference_kspacing: float | None = typer.Option(
+        None,
+        help="Max k-point spacing (2*pi/A) for each bulk reference cell (QE); "
+        "alternative to --reference-kpts.",
+    ),
+    kspacing_from_mesh: tuple[float, int] | None = typer.Option(
+        None,
+        help="Match the spacing of a mesh on a cubic supercell: SIDE_A KPTS "
+        "(e.g. 25.28 3 for 3x3x3 on an 8x8x8 bcc cell).",
+    ),
+    force_tolerance: float | None = typer.Option(
+        None, help="Reference relaxation max-force tolerance, eV/A."
+    ),
+    dft_settings: Path | None = typer.Option(
+        None,
+        help="YAML mapping merged into the generated dft.<backend> block "
+        "(e.g. pseudopotentials, degauss_ry, extra_electrons).",
+    ),
     ecutwfc_ry: float | None = typer.Option(None, help="QE wavefunction cutoff, Ry."),
     ecutrho_ry: float | None = typer.Option(None, help="QE charge-density cutoff, Ry."),
     kpts: tuple[int, int, int] | None = typer.Option(None, help="QE k-points for labelled cells."),
@@ -133,6 +151,20 @@ def al_init_campaign(
 
     if dft_backend not in {"qe", "vasp"}:
         fail("--dft-backend must be qe or vasp", code=2)
+    if kspacing_from_mesh is not None:
+        from matsim_agents.active_learning.campaign_init import kspacing_of_mesh
+
+        if reference_kspacing is not None:
+            fail("Give --reference-kspacing or --kspacing-from-mesh, not both", code=2)
+        side, n = kspacing_from_mesh
+        reference_kspacing = kspacing_of_mesh([side] * 3, [n] * 3)
+    settings = None
+    if dft_settings is not None:
+        import yaml
+
+        settings = yaml.safe_load(dft_settings.read_text())
+        if not isinstance(settings, dict):
+            fail(f"{dft_settings}: expected a mapping", code=2)
     try:
         proposal = write_campaign(
             campaign_dir,
@@ -143,9 +175,12 @@ def al_init_campaign(
             extra_elements=extra_elements,
             stress_tolerance_eV_per_A3=stress_tolerance,
             reference_kpts=reference_kpts,
+            reference_kspacing_inv_A=reference_kspacing,
+            relaxation_force_tolerance_eV_per_A=force_tolerance,
             ecutwfc_ry=ecutwfc_ry,
             ecutrho_ry=ecutrho_ry,
             kpts=kpts,
+            dft_settings=settings,
             preset=preset,
         )
     except (OSError, ValueError) as error:

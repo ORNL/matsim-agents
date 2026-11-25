@@ -520,6 +520,8 @@ def _fortran(v: Any) -> str:
         return f"{v:.8e}".replace("e", "d")
     if isinstance(v, (list, tuple)):
         return " ".join(_fortran(x) for x in v)
+    if isinstance(v, str) and not (len(v) >= 2 and v[0] == v[-1] and v[0] in "'\""):
+        return f"'{v}'"
     return str(v)
 
 

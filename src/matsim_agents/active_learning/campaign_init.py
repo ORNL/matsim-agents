@@ -11,6 +11,7 @@ or any DFT.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,10 +30,14 @@ _BULK_SYMMETRIES = {"bcc", "fcc", "hcp", "diamond"}
 # Ferromagnetic starting guesses for the 3d ferromagnets. The DFT result, not
 # this guess, decides the final moment.
 _FERROMAGNETS = {"Fe", "Co", "Ni"}
-# Ground states the phase-plan overrides cannot express (one starting
-# magnetization per species, so no antiferromagnetic order).
-_ANTIFERROMAGNETS = {"Cr": "bcc Cr is antiferromagnetic (spin-density wave)"}
+# Commensurate collinear antiferromagnetic approximations: a two-site cubic cell
+# with antiparallel starting moments. The real ground state of Cr is an
+# incommensurate spin-density wave.
+_ANTIFERROMAGNETS = {"Cr": "bcc Cr ground state is an incommensurate spin-density wave"}
+_AFM_QE_STARTING_MAGNETIZATION = 0.5
+_AFM_VASP_MOMENT_MUB = 1.0
 _F_BLOCK = set(range(57, 72)) | set(range(89, 104))
+_NOBLE_GASES = {"He", "Ne", "Ar", "Kr", "Xe"}
 TEMPLATE_DIRS = ("examples",)
 
 
@@ -57,14 +62,31 @@ def elements_of(seed_paths: Iterable[Path] = (), compositions: Iterable[str] = (
     return elements
 
 
+def kpts_for_spacing(atoms: Atoms, spacing_inv_A: float) -> list[int]:
+    """Smallest Monkhorst-Pack mesh with spacing <= ``spacing_inv_A`` (2*pi/A included)."""
+    if not spacing_inv_A > 0:
+        raise ValueError("k-point spacing must be positive")
+    lengths = 2 * math.pi * (atoms.cell.reciprocal() ** 2).sum(axis=1) ** 0.5
+    return [max(1, math.ceil(length / spacing_inv_A - 1e-9)) for length in lengths]
+
+
+def kspacing_of_mesh(cell_lengths_A: Iterable[float], kpts: Iterable[int]) -> float:
+    """Largest k-point spacing (2*pi/A) of a mesh on an orthogonal cell."""
+    return max(2 * math.pi / length / n for length, n in zip(cell_lengths_A, kpts, strict=True))
+
+
 def propose_reference_phases(
     elements: Iterable[str],
     *,
     backend: str,
     stress_tolerance_eV_per_A3: float,
     reference_kpts: tuple[int, int, int] | None = None,
+    reference_kspacing_inv_A: float | None = None,
+    relaxation_force_tolerance_eV_per_A: float | None = None,
 ) -> ReferenceProposal:
     """Propose one declared condensed phase per element, or flag it as unresolved."""
+    if reference_kpts is not None and reference_kspacing_inv_A is not None:
+        raise ValueError("Give reference k-points or a reference k-spacing, not both")
     proposal = ReferenceProposal()
     for element in sorted(elements):
         number = atomic_numbers.get(element)
@@ -79,17 +101,35 @@ def propose_reference_phases(
             continue
         if symmetry in _BULK_SYMMETRIES:
             _propose_bulk(proposal, element, symmetry, backend, stress_tolerance_eV_per_A3)
+            phase = proposal.phases[-1]
             if reference_kpts is not None:
-                proposal.phases[-1]["kpts"] = list(reference_kpts)
+                phase["kpts"] = list(reference_kpts)
+            elif reference_kspacing_inv_A is not None:
+                phase["kpts"] = kpts_for_spacing(
+                    proposal.structures[phase["structure_path"]], reference_kspacing_inv_A
+                )
         elif symmetry == "diatom":
             _propose_diatom(proposal, element, backend)
+        elif symmetry == "atom" and element in _NOBLE_GASES:
+            _propose_atom(proposal, element, backend)
         else:
             proposal.unresolved[element] = (
                 f"ASE reference state {symmetry!r} has no generated prototype; "
                 "supply the structure and declare the phase"
             )
+            continue
+        if relaxation_force_tolerance_eV_per_A is not None:
+            proposal.phases[-1]["relaxation_force_tolerance_eV_per_A"] = (
+                relaxation_force_tolerance_eV_per_A
+            )
+    if reference_kspacing_inv_A is not None and backend == "qe":
+        proposal.review.append(
+            f"Bulk phase k-meshes give a spacing <= {reference_kspacing_inv_A:.4f} 2pi/A on "
+            "the unrelaxed prototype cells; not convergence-tested."
+        )
     if (
         reference_kpts is None
+        and reference_kspacing_inv_A is None
         and backend == "qe"
         and any(phase["kind"] == "bulk" for phase in proposal.phases)
     ):
@@ -132,14 +172,28 @@ def _propose_bulk(
         proposal.review.append(
             f"{phase_id}: ferromagnetic starting guess; confirm the converged moment."
         )
+    atoms = bulk(element)
     if element in _ANTIFERROMAGNETS:
+        atoms = bulk(element, cubic=True)
+        if len(atoms) != 2:
+            raise ValueError(f"{element}: expected a two-site cubic cell for AFM order")
+        phase_id = f"{element.lower()}-{symmetry}-afm"
+        phase["phase_id"] = phase_id
+        phase["structure_path"] = f"references/{element}-{symmetry}-afm.extxyz"
+        phase["magnetic_state"] = "antiferromagnetic"
+        if backend == "qe":
+            m = _AFM_QE_STARTING_MAGNETIZATION
+            phase["qe_site_starting_magnetization"] = [m, -m]
+        else:
+            m = _AFM_VASP_MOMENT_MUB
+            phase["vasp_magnetic_settings"] = {"ISPIN": "2", "MAGMOM": f"{m:g} {-m:g}"}
         proposal.review.append(
-            f"{phase_id}: {_ANTIFERROMAGNETS[element]}. Phase overrides cannot declare "
-            "antiferromagnetic order, so this phase is nonmagnetic. Replace it with a "
-            "declared antiferromagnetic phase or record this approximation."
+            f"{phase_id}: commensurate collinear AFM approximation of Cr "
+            f"({_ANTIFERROMAGNETS[element]}); confirm the converged moments are "
+            "antiparallel and nonzero."
         )
     proposal.phases.append(phase)
-    proposal.structures[phase["structure_path"]] = bulk(element)
+    proposal.structures[phase["structure_path"]] = atoms
 
 
 def _propose_diatom(proposal: ReferenceProposal, element: str, backend: str) -> None:
@@ -171,11 +225,50 @@ def _propose_diatom(proposal: ReferenceProposal, element: str, backend: str) -> 
     proposal.structures[phase["structure_path"]] = atoms
 
 
+def _propose_atom(proposal: ReferenceProposal, element: str, backend: str) -> None:
+    phase_id = f"{element.lower()}-atom"
+    atoms = Atoms(element, cell=[15.0, 15.0, 15.0], pbc=True)
+    atoms.center()
+    phase: dict = {
+        "phase_id": phase_id,
+        "element": element,
+        "structure_path": f"references/{element}-atom-vacuum.extxyz",
+        "kind": "molecule",
+        "geometry_status": "verified_converged",
+        "magnetic_state": "closed_shell",
+    }
+    if backend == "qe":
+        phase["kpts"] = [1, 1, 1]
+    proposal.review.append(
+        f"{phase_id}: an isolated closed-shell atom in a 15 A box, not a condensed phase; "
+        "check the vacuum and whether this reference suits your hull."
+    )
+    proposal.phases.append(phase)
+    proposal.structures[phase["structure_path"]] = atoms
+
+
 def _placeholder(name: str, message: str) -> str:
     return f"${{{name}:?{message}}}"
 
 
 def _dft_block(
+    backend: str,
+    ecutwfc_ry: float | None,
+    ecutrho_ry: float | None,
+    kpts: tuple[int, int, int] | None,
+    settings: dict | None = None,
+) -> dict:
+    block = _default_dft_block(backend, ecutwfc_ry, ecutrho_ry, kpts)
+    for key, value in (settings or {}).items():
+        current = block[backend].get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            block[backend][key] = {**current, **value}
+        else:
+            block[backend][key] = value
+    return block
+
+
+def _default_dft_block(
     backend: str,
     ecutwfc_ry: float | None,
     ecutrho_ry: float | None,
@@ -224,9 +317,12 @@ def write_campaign(
     extra_elements: Iterable[str] = (),
     stress_tolerance_eV_per_A3: float = 0.01,
     reference_kpts: tuple[int, int, int] | None = None,
+    reference_kspacing_inv_A: float | None = None,
+    relaxation_force_tolerance_eV_per_A: float | None = None,
     ecutwfc_ry: float | None = None,
     ecutrho_ry: float | None = None,
     kpts: tuple[int, int, int] | None = None,
+    dft_settings: dict | None = None,
     preset: str | None = None,
 ) -> ReferenceProposal:
     """Write ``al.yaml``, ``elemental-phases.yaml`` and reference structures; never overwrite."""
@@ -242,6 +338,8 @@ def write_campaign(
         backend=dft_backend,
         stress_tolerance_eV_per_A3=stress_tolerance_eV_per_A3,
         reference_kpts=reference_kpts,
+        reference_kspacing_inv_A=reference_kspacing_inv_A,
+        relaxation_force_tolerance_eV_per_A=relaxation_force_tolerance_eV_per_A,
     )
     if not proposal.phases:
         raise ValueError(f"No reference phase could be proposed: {proposal.unresolved}")
@@ -266,7 +364,7 @@ def write_campaign(
         "mlip": mlip_document["mlip"],
         "md": {"seed_source": seed_source},
         "acquisition": {"strategy": "random", "n_select": 32},
-        "dft": _dft_block(dft_backend, ecutwfc_ry, ecutrho_ry, kpts),
+        "dft": _dft_block(dft_backend, ecutwfc_ry, ecutrho_ry, kpts, dft_settings),
         "trainer": {
             "enabled": True,
             "training_references": {
