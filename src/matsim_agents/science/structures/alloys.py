@@ -20,6 +20,7 @@ functions never share draws.
 from __future__ import annotations
 
 import math
+import os
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -82,6 +83,45 @@ class UnitCell(BaseModel):
         if (distance < 1e-6).any():
             raise ValueError("unit cell has coincident sites")
         return self
+
+    @classmethod
+    def from_atoms(cls, atoms: Atoms) -> tuple[UnitCell, float]:
+        """Unit cell and length scale (the first cell-vector length, in angstrom) of ``atoms``.
+
+        Species are ignored: the sites become the substitutional sites of the parent lattice.
+        """
+        if not atoms.pbc.all():
+            raise ValueError("a reference structure must be periodic in all three directions")
+        cell = np.array(atoms.cell.array, dtype=float)
+        scale = float(np.linalg.norm(cell[0]))
+        if not np.isfinite(scale) or scale <= 0:
+            raise ValueError("reference structure has no valid cell")
+        frac = atoms.get_scaled_positions(wrap=True)
+        unit = cls(
+            cell=tuple(tuple(float(x) for x in row) for row in cell / scale),
+            scaled_positions=tuple(tuple(float(x) for x in row) for row in frac),
+        )
+        return unit, scale
+
+
+def reference_atoms(reference: object) -> Atoms:
+    """Coerce an ASE ``Atoms``, a pymatgen ``Structure`` or a structure file to ``Atoms``."""
+    if isinstance(reference, Atoms):
+        return reference.copy()
+    if isinstance(reference, (str, os.PathLike)):
+        from ase.io import read
+
+        return read(os.fspath(reference))
+    try:
+        from pymatgen.core import Structure
+        from pymatgen.io.ase import AseAtomsAdaptor
+    except ImportError as error:  # pragma: no cover - pymatgen is a hard dependency
+        raise TypeError(f"unsupported reference structure {type(reference)!r}") from error
+    if isinstance(reference, Structure):
+        return AseAtomsAdaptor.get_atoms(reference)
+    raise TypeError(
+        f"reference must be ase.Atoms, pymatgen Structure or a file path, got {type(reference)!r}"
+    )
 
 
 def _repeats_matrix(repeats: Repeats) -> np.ndarray:
@@ -154,6 +194,31 @@ class AlloySpec(BaseModel):
                 f"supercell has {sites} sites"
             )
         return self
+
+    @classmethod
+    def from_reference(
+        cls,
+        reference: object,
+        *,
+        counts: Mapping[str, int],
+        repeats: Repeats,
+        seed: int,
+    ) -> AlloySpec:
+        """Alloy on the lattice of any reference crystal (ASE, pymatgen, CIF or other file).
+
+        The reference supplies geometry only (cell and site positions, any space group, any
+        number of sites per cell). Its species are discarded; ``counts`` and ``seed`` set the
+        occupation. ``repeats`` is a triple or an integer supercell matrix of the reference cell.
+        """
+        unit, scale = UnitCell.from_atoms(reference_atoms(reference))
+        return cls(
+            crystal_structure="custom",
+            unit_cell=unit,
+            lattice_parameter=scale,
+            counts=counts,
+            repeats=repeats,
+            seed=seed,
+        )
 
     @property
     def sites_per_unit_cell(self) -> int:
