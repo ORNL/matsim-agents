@@ -73,6 +73,9 @@ module load "${ROCM_MODULE}"
 module load cray-fftw
 set -e
 
+# The default /opt/cray/pe/lib64 GTL now needs ROCm 7; use the one matching this mpich.
+[[ -n "${CRAY_MPICH_ROOTDIR:-}" ]] && export LD_LIBRARY_PATH="${CRAY_MPICH_ROOTDIR}/gtl/lib:${LD_LIBRARY_PATH:-}"
+
 export MPICH_GPU_SUPPORT_ENABLED=1
 export OMP_TARGET_OFFLOAD="${OMP_TARGET_OFFLOAD:-DEFAULT}"
 
