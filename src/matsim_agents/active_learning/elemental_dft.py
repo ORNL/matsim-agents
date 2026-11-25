@@ -297,6 +297,8 @@ def _run_reference_relaxation(
     """Relax positions (and optionally a bulk cell) using the reference DFT method."""
     work_dir.mkdir(parents=True)
     if cfg.backend == "qe":
+        from ase import units as ase_units
+
         from matsim_agents.backends.dft.qe_relax import (
             parse_pw_stdout,
             recommend_settings,
@@ -319,7 +321,8 @@ def _run_reference_relaxation(
             koffset=qe.koffset or (0, 0, 0),
             nstep=phase.relaxation_max_steps,
             forc_conv_thr_ry_au=(
-                phase.relaxation_force_tolerance_eV_per_A / (25.711043 * np.sqrt(3))
+                phase.relaxation_force_tolerance_eV_per_A
+                / ((ase_units.Ry / ase_units.Bohr) * np.sqrt(3))
             ),
             pseudopotentials=qe.pseudopotentials,
             extra_control=dict(qe.extra_control),

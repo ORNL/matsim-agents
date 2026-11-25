@@ -352,13 +352,15 @@ def _dft_stage(
             **allocation,
         )
 
+    from ase import units
+
     from matsim_agents.backends.dft.qe_relax import QESettings, run_pw, write_pw_input
 
     settings = QESettings(
         calculation=calculation,
         pseudo_dir=dft.pseudo_dir or "",
         nstep=cfg.max_steps,
-        forc_conv_thr_ry_au=cfg.force_tolerance_eV_per_A / 25.71104309541616,
+        forc_conv_thr_ry_au=cfg.force_tolerance_eV_per_A / (units.Ry / units.Bohr),
         **dft.settings,
     )
     input_file = write_pw_input(atoms, settings, str(work_dir / "pw.in"))
@@ -376,11 +378,7 @@ def _dft_stage(
         write(optimized, final_atoms)
     except Exception:  # output remains available for diagnosis
         pass
-    force = (
-        result.final_max_force_ry_au * 25.71104309541616
-        if result.final_max_force_ry_au is not None
-        else None
-    )
+    force = result.final_max_force_eV_per_A
     stdout = _read_text(result.stdout_path)
     return RelaxationStageResult(
         stage="dft_relaxation",

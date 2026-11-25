@@ -609,7 +609,7 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
         lambda *args, **kwargs: SimpleNamespace(
             converged=True,
             return_code=0,
-            final_max_force_ry_au=0.0212 / 25.711043,
+            final_max_force_eV_per_A=0.0212,
             final_energy_ev=-12.0,
             bfgs_steps=5,
         ),
@@ -623,7 +623,7 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
     assert steps == 5
     assert stress is None
     assert observed["forc_conv_thr_ry_au"] == pytest.approx(
-        phase.relaxation_force_tolerance_eV_per_A / (25.711043 * np.sqrt(3))
+        phase.relaxation_force_tolerance_eV_per_A / (25.711033545 * np.sqrt(3))
     )
 
 
@@ -651,7 +651,7 @@ def test_qe_cell_relaxation_checks_bulk_stress_tolerance(
         lambda *args, **kwargs: SimpleNamespace(
             converged=True,
             return_code=0,
-            final_max_force_ry_au=0.0002,
+            final_max_force_eV_per_A=0.005,
             final_energy_ev=-10.0,
             bfgs_steps=5,
         ),
