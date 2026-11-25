@@ -10,7 +10,6 @@ from ase import Atoms
 from ase.io import read, write
 from pydantic import ValidationError
 
-from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.mlip.config import (
     HydraGNNConfig,
     MACEConfig,
@@ -51,6 +50,7 @@ from matsim_agents.science.thermodynamics.unary_references import (
     relax_unary_references,
     unary_cache_directory,
 )
+from matsim_agents.workflows.active_learning.config import ALConfig
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -495,7 +495,7 @@ def test_surrogate_hull_scales_compound_reference_from_loaded_structure(tmp_path
 
 def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
     import matsim_agents.campaign.formula_execution as execution
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -542,7 +542,7 @@ def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, mon
 def test_cross_model_scores_records_ranking_disagreement(tmp_path):
     from ase.calculators.calculator import Calculator, all_changes
 
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -605,7 +605,7 @@ def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path,
     from ase.calculators.calculator import Calculator, all_changes
 
     import matsim_agents.campaign.formula_execution as execution
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -668,7 +668,7 @@ def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path,
 
 def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
     import matsim_agents.campaign.formula_execution as execution
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -720,7 +720,7 @@ def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
 
 
 def test_perturbation_robustness_records_each_seed(tmp_path):
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")

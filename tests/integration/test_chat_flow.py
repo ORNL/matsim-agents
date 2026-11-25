@@ -22,13 +22,13 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
-from matsim_agents.core.composition import Composition
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.orchestration.interactive_chat import (
+from matsim_agents.agents.interactive_chat import (
     DiscoveryChatConfig,
     DiscoveryChatSession,
     chat_once,
 )
+from matsim_agents.core.composition import Composition
+from matsim_agents.discovery.wrapper import CompositionExplorationResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ def _make_session(
     monkeypatch,
 ) -> tuple[DiscoveryChatSession, MagicMock]:
     """Build a DiscoveryChatSession with a fake LLM and mocked _kickoff_exploration."""
-    import matsim_agents.orchestration.interactive_chat as chat_mod
+    import matsim_agents.agents.interactive_chat as chat_mod
 
     fake_llm = FakeListChatModel(responses=responses)
 
@@ -194,7 +194,7 @@ class TestLLMOnly:
     def test_prompt_matches_session_capabilities_after_clear(
         self, monkeypatch, custom_prompt, tmp_path
     ):
-        from matsim_agents.orchestration.interactive_chat import (
+        from matsim_agents.agents.interactive_chat import (
             ATOMISTIC_EXPLORATION_GUIDANCE,
             LLM_ONLY_MODE_INSTRUCTION,
         )
@@ -240,7 +240,7 @@ class TestLLMOnly:
         ],
     )
     def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch, tmp_path):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         cfg = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path))
         session = DiscoveryChatSession(config=cfg)
@@ -263,7 +263,7 @@ class TestExplorationErrors:
     """Errors during _kickoff_exploration propagate (no silent catch in chat_once)."""
 
     def test_exploration_error_propagates(self, discovery_config, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         fake_llm = FakeListChatModel(
             responses=[
@@ -298,7 +298,7 @@ class TestExplorationErrors:
     def test_an_interrupted_exploration_is_offered_again_on_resume(
         self, discovery_config, monkeypatch
     ):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         session, _ = _make_session(
             discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
@@ -403,7 +403,7 @@ class TestResumableSession:
     def test_resume_uses_the_current_capabilities(
         self, discovery_config, monkeypatch, saved_llm_only
     ):
-        from matsim_agents.orchestration.interactive_chat import LLM_ONLY_MODE_INSTRUCTION
+        from matsim_agents.agents.interactive_chat import LLM_ONLY_MODE_INSTRUCTION
 
         llm_only = DiscoveryChatConfig(llm_only=True, output_dir=discovery_config.output_dir)
         saved, current = (
@@ -432,7 +432,7 @@ class TestResumableSession:
         import shlex
         from dataclasses import replace
 
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         _make_session(discovery_config, responses=["Hello."], monkeypatch=monkeypatch)
         printed = []
@@ -450,7 +450,7 @@ class TestResumableSession:
 
 class TestDefaultScientificChatState:
     def test_scientific_revisions_resume_with_prior_state_and_evidence(self, tmp_path, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         first = {
             "response": "The cathode claim remains a testable proposal.",
@@ -532,7 +532,7 @@ class TestDefaultScientificChatState:
         assert session.scientific_hypotheses == prior_state
 
     def test_scientific_reply_must_not_fall_back_to_plain_text(self, tmp_path, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         class InvalidModel:
             def invoke(self, _messages):
@@ -551,7 +551,7 @@ class TestDefaultScientificChatState:
         assert not any(isinstance(message, AIMessage) for message in session.messages)
 
     def test_scientific_reply_in_one_json_fence_is_accepted(self, tmp_path, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         reply = {
             "response": "Li2MnO3 is a plausible cathode candidate.",
@@ -581,7 +581,7 @@ class TestDefaultScientificChatState:
     def test_default_scientific_turn_cites_measured_tool_output(
         self, discovery_config, monkeypatch
     ):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         monkeypatch.setattr(
             chat_mod,
@@ -623,7 +623,7 @@ class TestHypothesisDebate:
     def test_invalid_state_keeps_prompt_and_raw_reply_without_success(
         self, discovery_config, monkeypatch
     ):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         class InvalidModel:
             def invoke(self, messages):
@@ -643,7 +643,7 @@ class TestHypothesisDebate:
         assert not any(isinstance(message, AIMessage) for message in session.messages)
 
     def test_single_critic_revision_round(self, discovery_config, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         cfg = discovery_config
         cfg.enable_hypothesis_debate = True
@@ -676,7 +676,7 @@ class TestHypothesisDebate:
         assert models["critic-model"].invoke_count == 1
 
     def test_multi_critic_panel_with_cross_critique(self, discovery_config, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         cfg = discovery_config
         cfg.enable_hypothesis_debate = True
@@ -714,7 +714,7 @@ class TestHypothesisDebate:
 
 class TestTranscript:
     def test_session_transcript_records_every_message(self, discovery_config, monkeypatch):
-        import matsim_agents.orchestration.interactive_chat as chat_mod
+        import matsim_agents.agents.interactive_chat as chat_mod
 
         cfg = discovery_config
         cfg.enable_hypothesis_debate = True

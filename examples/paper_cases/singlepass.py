@@ -19,8 +19,8 @@ from ase.io import read
 
 from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
 from matsim_agents.backends.mlip.config import MLIPConfig
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState
+from matsim_agents.agents.objective_graph import build_graph
+from matsim_agents.agents.state import MatSimState
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SEED_ROOT = Path(__file__).resolve().parent / "seeds"

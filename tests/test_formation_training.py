@@ -11,7 +11,7 @@ from ase.io import read, write
 
 from matsim_agents.core.energy_conventions import FORMATION_ENERGY_REFERENCE
 from matsim_agents.core.energy_references import load_elemental_reference_manifest
-from matsim_agents.datasets.formation_training import prepare_formation_training_dataset
+from matsim_agents.data.formation_training import prepare_formation_training_dataset
 
 
 def _dataset(tmp_path, elemental_manifest, dataset_method_sidecar, *, role="training_pool"):
@@ -124,7 +124,7 @@ def test_rejects_formation_marked_frames_under_a_native_sidecar(
 def test_constrained_frames_preserve_raw_force_labels(
     tmp_path, elemental_manifest, dataset_method_sidecar
 ):
-    from matsim_agents.training.finetune_hydragnn import _reference_forces
+    from matsim_agents.backends.mlip.training.finetune_hydragnn import _reference_forces
 
     dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
     atoms = read(dataset)

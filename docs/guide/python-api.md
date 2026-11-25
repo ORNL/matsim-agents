@@ -70,8 +70,8 @@ result = explore_composition(
 
 ```python
 import uuid
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState
+from matsim_agents.agents.objective_graph import build_graph
+from matsim_agents.agents.state import MatSimState
 
 graph = build_graph()
 final = graph.invoke(
@@ -91,7 +91,7 @@ print(final["analysis"])
 ### Run the supervisor LangGraph workflow
 
 ```python
-from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
+from matsim_agents.agents.composition_graph import SupervisorConfig, run_supervisor
 
 final = run_supervisor(SupervisorConfig(
   composition="Li2MnO3",
@@ -107,7 +107,7 @@ print(final.get("summary"))
 ### Embed the chat loop in your own app
 
 ```python
-from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
+from matsim_agents.agents.interactive_chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 
 session = DiscoveryChatSession(config=DiscoveryChatConfig(
     mlip=mlip,

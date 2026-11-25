@@ -45,7 +45,7 @@ E_formation = E_DFT - sum over elements (N_element * e_element_reference)
 
 `e_element_reference` is the lowest DFT energy per atom among the declared
 phases of that element (bulk crystals, or a declared molecule such as triplet
-O2), computed by `matsim_agents.active_learning.elemental_dft` and frozen in a
+O2), computed by `matsim_agents.workflows.active_learning.elemental_dft` and frozen in a
 hash-bound manifest. QE and VASP references are never mixed.
 
 Condensed phases are used because they are the endpoints of convex-hull

@@ -14,25 +14,25 @@ from pathlib import Path
 import pytest
 import yaml
 
-from matsim_agents.integrations.external.spectra_pka import adapter, availability
-from matsim_agents.integrations.external.spectra_pka.availability import Status
-from matsim_agents.integrations.external.spectra_pka.config import (
+from matsim_agents.backends.external.spectra_pka import adapter, availability
+from matsim_agents.backends.external.spectra_pka.availability import Status
+from matsim_agents.backends.external.spectra_pka.config import (
     CampaignSpec,
     ConfigError,
     load_config_file,
 )
-from matsim_agents.integrations.external.spectra_pka.input_writer import (
+from matsim_agents.backends.external.spectra_pka.input_writer import (
     build_input_text,
     stage_inputs,
 )
-from matsim_agents.integrations.external.spectra_pka.parser import (
+from matsim_agents.backends.external.spectra_pka.parser import (
     BlockKind,
     ParseError,
     parse_number,
     parse_output_text,
     to_pka_spectrum,
 )
-from matsim_agents.integrations.external.spectra_pka.validation import validate_output
+from matsim_agents.backends.external.spectra_pka.validation import validate_output
 from matsim_agents.science.irradiation.contracts import (
     ContractError,
     DefectStatus,
@@ -467,8 +467,8 @@ def test_timeout_is_reported(tmp_path, campaign):
 
 
 def test_slurm_mode_submits_once_via_slurm_jobs(tmp_path, mock_exe, campaign, monkeypatch):
+    from matsim_agents.backends.external.spectra_pka import runner
     from matsim_agents.execution.slurm_jobs import CommandResult
-    from matsim_agents.integrations.external.spectra_pka import runner
 
     calls = []
 

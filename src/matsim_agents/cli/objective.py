@@ -146,8 +146,8 @@ def run(
 
     When to use: you have a written objective and want it planned and executed end to end.
     """
-    from matsim_agents.orchestration.objective_graph import build_graph
-    from matsim_agents.orchestration.state import MatSimState
+    from matsim_agents.agents.objective_graph import build_graph
+    from matsim_agents.agents.state import MatSimState
 
     mlip = load_mlip_option(mlip_config)
     graph = build_graph()
@@ -200,8 +200,8 @@ def plan(
 
     When to use: preview what ``run`` would do for an objective before executing anything.
     """
-    from matsim_agents.orchestration.agents.planner import planner_node
-    from matsim_agents.orchestration.state import MatSimState
+    from matsim_agents.agents.roles.planner import planner_node
+    from matsim_agents.agents.state import MatSimState
 
     state = MatSimState(objective=objective)
     out = planner_node(state)

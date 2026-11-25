@@ -29,8 +29,17 @@ from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning import trainer as trainer_mod
-from matsim_agents.active_learning.config import (
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+from matsim_agents.data.governance import (
+    DatasetValidationSummary,
+    structure_identity,
+    write_dataset_manifest,
+)
+from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.workflows.active_learning import trainer as trainer_mod
+from matsim_agents.workflows.active_learning.config import (
     AcquisitionConfig,
     ALConfig,
     LoopConfig,
@@ -38,21 +47,15 @@ from matsim_agents.active_learning.config import (
     SeedSourceConfig,
     TrainerConfig,
 )
-from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
-from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
-from matsim_agents.datasets.governance import (
-    DatasetValidationSummary,
-    structure_identity,
-    write_dataset_manifest,
+from matsim_agents.workflows.active_learning.evaluate import (
+    PromotionDecision,
+    _apply_model_override,
 )
-from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
 
 
 def _campaign_elemental_manifest(cfg, elemental_manifest):
-    from matsim_agents.active_learning.loop import _dft_method_signature
+    from matsim_agents.workflows.active_learning.loop import _dft_method_signature
 
     path = elemental_manifest({"Si": -1.0})
     manifest = json.loads(path.read_text())
@@ -63,7 +66,7 @@ def _campaign_elemental_manifest(cfg, elemental_manifest):
 
 
 def test_missing_elemental_manifest_fails_before_training(tmp_path):
-    from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.workflows.active_learning.loop import run_active_learning
 
     cfg = _make_cfg(tmp_path)
     cfg.trainer.enabled = True
@@ -76,7 +79,7 @@ def test_missing_elemental_manifest_fails_before_training(tmp_path):
 
 @pytest.mark.parametrize("manifest_kind", ["missing", "invalid"])
 def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, manifest_kind):
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.trainer.compare_after_training = True
@@ -111,7 +114,7 @@ def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, ma
 
 @pytest.mark.parametrize("fails", [False, True])
 def test_iteration_assessment_is_required_before_final_commit(tmp_path, monkeypatch, fails):
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     _patch_runtime(loop_mod, monkeypatch)
@@ -295,7 +298,7 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     cfg = _make_cfg(tmp_path)
 
     # Patch the heavy components inside `loop` (where they are imported).
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(loop_mod, monkeypatch)
 
@@ -349,7 +352,7 @@ def test_external_sampler_and_measured_error_gate(
 
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     class AuditCalc(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -431,7 +434,7 @@ def test_loop_records_cumulative_label_scope_for_training_and_validation(
     oxygen_potcar_dir.mkdir()
     (oxygen_potcar_dir / "POTCAR").write_text("O test potential")
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(loop_mod, monkeypatch)
     oxygen = Candidate(
@@ -465,7 +468,7 @@ def test_dft_calculation_cap_truncates_selected_batch(
 ) -> None:
     cfg = _make_cfg(tmp_path)
     cfg.loop.max_dft_calculations = 1
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(loop_mod, monkeypatch)
     loop_mod.run_active_learning(cfg)
@@ -496,7 +499,7 @@ def test_nonempty_unsigned_dataset_cannot_be_appended(
         validation=DatasetValidationSummary(accepted=1),
     )
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(loop_mod, monkeypatch)
 
@@ -517,7 +520,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     cfg.trainer.validation_fraction = 0.25
     cfg.random_seed = 2
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(loop_mod, monkeypatch)
     calls = 0
@@ -569,7 +572,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
 def test_promotion_preflights_validation_method_before_campaign_work(
     tmp_path, monkeypatch, elemental_manifest, dataset_method_sidecar, defect
 ):
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     validation_set = tmp_path / "held-out.extxyz"
@@ -632,7 +635,7 @@ def test_promotion_decision_controls_model_activation(
         incumbent_metrics={"force_mae_eV_per_A": 0.08},
     )
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(
         loop_mod,
@@ -681,7 +684,7 @@ def test_retraining_starts_from_the_configured_start_point(
     trained_model = tmp_path / "candidate-model"
     trained_model.mkdir()
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(
         loop_mod,
@@ -727,7 +730,7 @@ def test_holdout_split_compares_candidate_without_promotion(
         incumbent_metrics={"force_mae_eV_per_A": 0.1},
     )
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     _patch_runtime(
         loop_mod,
@@ -792,7 +795,7 @@ def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path
 def test_small_batches_accumulate_fixed_partitions_before_training(
     tmp_path, monkeypatch, elemental_manifest, backend, batch_size
 ):
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     if backend == "uma":
@@ -873,7 +876,7 @@ def test_small_batches_accumulate_fixed_partitions_before_training(
 
 
 def test_cumulative_split_never_moves_existing_frames():
-    from matsim_agents.active_learning.loop import _split_training_validation_frames
+    from matsim_agents.workflows.active_learning.loop import _split_training_validation_frames
 
     assert _split_training_validation_frames(
         [],
@@ -905,7 +908,7 @@ def test_cumulative_split_never_moves_existing_frames():
 def test_holdout_split_keeps_each_trajectory_in_one_partition():
     from types import SimpleNamespace
 
-    from matsim_agents.active_learning.loop import _split_training_validation_frames
+    from matsim_agents.workflows.active_learning.loop import _split_training_validation_frames
 
     frames = [
         SimpleNamespace(atoms=SimpleNamespace(info={"trajectory_id": f"t{index // 3}"}))
@@ -941,7 +944,7 @@ def test_retried_iteration_keeps_trajectories_on_their_persisted_side(tmp_path):
     from ase import Atoms
     from ase.io import read, write
 
-    from matsim_agents.active_learning.loop import (
+    from matsim_agents.workflows.active_learning.loop import (
         _split_training_validation_frames,
         _trajectory_ids,
     )
@@ -976,7 +979,7 @@ def test_resuming_a_framewise_split_requires_repartitioning(
 ):
     from ase.io import read
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.trainer = TrainerConfig(
@@ -1018,7 +1021,7 @@ def test_external_validation_frames_never_enter_training(
 ):
     from ase.calculators.singlepoint import SinglePointCalculator
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.acquisition.n_select = 3
@@ -1050,8 +1053,8 @@ def test_fraction_holdout_real_evaluation_and_resume(
 ):
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.active_learning.loop as loop_mod
     import matsim_agents.backends.mlip.calculator as calculator_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
     from matsim_agents.core.energy_references import validate_dataset_reference_method
 
     class ConstantCalculator(Calculator):
@@ -1136,7 +1139,7 @@ def test_fraction_holdout_real_evaluation_and_resume(
 def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: Path) -> None:
     import json
 
-    from matsim_agents.active_learning.loop import _scan_resume
+    from matsim_agents.workflows.active_learning.loop import _scan_resume
 
     promoted = tmp_path / "promoted-model"
     promoted.mkdir()
@@ -1162,7 +1165,7 @@ def test_resume_applies_last_promoted_model_for_all_backends(
 ) -> None:
     import json
 
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     promoted = tmp_path / ("promoted.model" if backend == "mace" else f"promoted-{backend}")
@@ -1209,10 +1212,10 @@ def test_benchmark_sets_give_a_learning_curve_after_each_decision(
     elemental_manifest,
     dataset_method_sidecar,
 ) -> None:
-    import matsim_agents.active_learning.loop as loop_mod
-    from matsim_agents.active_learning.config import BenchmarkSet
-    from matsim_agents.active_learning.eval_report import learning_curve
-    from matsim_agents.active_learning.evaluate import EvalMetrics
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+    from matsim_agents.workflows.active_learning.config import BenchmarkSet
+    from matsim_agents.workflows.active_learning.eval_report import learning_curve
+    from matsim_agents.workflows.active_learning.evaluate import EvalMetrics
 
     cfg = _make_cfg(tmp_path)
     cfg.loop.n_iterations = 2
@@ -1268,7 +1271,7 @@ def test_benchmark_sets_give_a_learning_curve_after_each_decision(
 
 
 def test_benchmark_sets_need_elemental_references(tmp_path: Path) -> None:
-    from matsim_agents.active_learning.config import BenchmarkSet
+    from matsim_agents.workflows.active_learning.config import BenchmarkSet
 
     cfg = _make_cfg(tmp_path)
     benchmark = tmp_path / "benchmark.extxyz"
@@ -1282,7 +1285,7 @@ def test_benchmark_sets_need_elemental_references(tmp_path: Path) -> None:
 def test_resume_rejects_a_different_root_seed_before_writing_seed_structures(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.loop.resume = True
@@ -1297,7 +1300,7 @@ def test_resume_rejects_a_different_root_seed_before_writing_seed_structures(
 
 
 def test_resume_rejects_legacy_iterations_without_a_recorded_seed(tmp_path: Path) -> None:
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.loop.resume = True
@@ -1313,7 +1316,7 @@ def test_resume_rejects_legacy_iterations_without_a_recorded_seed(tmp_path: Path
 def test_resume_rejects_unseeded_partial_iterations_before_recording_a_seed(
     tmp_path: Path,
 ) -> None:
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.loop.resume = True
@@ -1325,7 +1328,7 @@ def test_resume_rejects_unseeded_partial_iterations_before_recording_a_seed(
 
 
 def test_fresh_run_rejects_an_existing_run_directory(tmp_path: Path) -> None:
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     cfg.loop.resume = False

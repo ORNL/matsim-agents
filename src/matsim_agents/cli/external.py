@@ -38,7 +38,7 @@ def _fail(message: str) -> typer.Exit:
 
 
 def _load(config: Path):
-    from matsim_agents.integrations.external.spectra_pka.config import (
+    from matsim_agents.backends.external.spectra_pka.config import (
         ConfigError,
         load_config_file,
     )
@@ -55,7 +55,7 @@ def check(
     no_probe: bool = typer.Option(False, "--no-probe", help="Do not start the executable."),
 ) -> None:
     """Report installation, data and readiness. READY is tool readiness, not qualification."""
-    from matsim_agents.integrations.external.spectra_pka.availability import check_availability
+    from matsim_agents.backends.external.spectra_pka.availability import check_availability
 
     parsed = _load(config)
     result = check_availability(
@@ -67,7 +67,7 @@ def check(
 @spka_app.command("prepare")
 def prepare(config: Path = CONFIG_OPTION) -> None:
     """Stage the native input file and links to the user's data; execute nothing."""
-    from matsim_agents.integrations.external.spectra_pka import adapter
+    from matsim_agents.backends.external.spectra_pka import adapter
 
     parsed = _load(config)
     if parsed.campaign is None:
@@ -87,7 +87,7 @@ def run(
     ),
 ) -> None:
     """Dry run by default. With --execute: run, parse and validate the output."""
-    from matsim_agents.integrations.external.spectra_pka import adapter
+    from matsim_agents.backends.external.spectra_pka import adapter
 
     parsed = _load(config)
     if parsed.campaign is None:
@@ -115,7 +115,7 @@ def run(
 @spka_app.command("status")
 def status(config: Path = CONFIG_OPTION) -> None:
     """Show the state of a staged or finished run."""
-    from matsim_agents.integrations.external.spectra_pka import adapter
+    from matsim_agents.backends.external.spectra_pka import adapter
 
     parsed = _load(config)
     if parsed.campaign is None:
@@ -128,7 +128,7 @@ def status(config: Path = CONFIG_OPTION) -> None:
 @spka_app.command("import")
 def import_results(config: Path = CONFIG_OPTION) -> None:
     """Parse and validate existing raw output in the run directory (no execution)."""
-    from matsim_agents.integrations.external.spectra_pka import adapter
+    from matsim_agents.backends.external.spectra_pka import adapter
 
     parsed = _load(config)
     if parsed.campaign is None:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from matsim_agents.backends.external.spectra_pka.config import SpectraPKAConfig
 from matsim_agents.campaign import radiation_properties as rp
 from matsim_agents.campaign.budget import BudgetLedger
 from matsim_agents.campaign.property_acquisition import (
@@ -13,7 +14,6 @@ from matsim_agents.campaign.property_acquisition import (
     plan_property_acquisition,
 )
 from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
 from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,

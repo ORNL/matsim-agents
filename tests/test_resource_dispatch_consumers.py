@@ -10,11 +10,11 @@ import yaml
 from ase.build import bulk
 from pydantic import ValidationError
 
-from matsim_agents.active_learning.config import ALConfig, TrainerConfig
-from matsim_agents.active_learning.dft_protocol import dft_execution_signature
 from matsim_agents.backends.dft.base import DFTJobSpec
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig, VASPConfig
 from matsim_agents.execution.placement import ProcessLaunch
+from matsim_agents.workflows.active_learning.config import ALConfig, TrainerConfig
+from matsim_agents.workflows.active_learning.dft_protocol import dft_execution_signature
 from matsim_agents.workflows.relaxation import DFTBackendConfig, ScientificRelaxationConfig
 
 LAUNCH = ProcessLaunch(

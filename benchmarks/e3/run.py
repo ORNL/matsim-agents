@@ -30,10 +30,10 @@ from ase import Atoms
 from ase.io import read, write
 
 from benchmarks.e4.aurora_dft.prepare_stage1 import _lattice_occupations
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.active_learning.config import AcquisitionConfig
-from matsim_agents.active_learning.uncertainty import select_candidates
-from matsim_agents.datasets.splits import SplitConfig, make_split
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.config import AcquisitionConfig
+from matsim_agents.workflows.active_learning.uncertainty import select_candidates
+from matsim_agents.data.splits import SplitConfig, make_split
 from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     CostRecord,
@@ -1302,7 +1302,7 @@ def round1_material(
     if not all(len(rows) == len(ids) for rows in committee.values()):
         raise RuntimeError(f"{material}: committee predictions missing")
 
-    from matsim_agents.active_learning.uncertainty import score_ensemble
+    from matsim_agents.workflows.active_learning.uncertainty import score_ensemble
 
     started = time.perf_counter()
     candidates = [Candidate(cid, a, cid, 0) for cid, a in zip(ids, pool_atoms, strict=True)]

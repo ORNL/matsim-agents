@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.training.finetune_mace import MACE_MODELS
+from matsim_agents.backends.mlip.training.finetune_mace import MACE_MODELS
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEBENCH = ROOT / "benchmarks" / "codabench"

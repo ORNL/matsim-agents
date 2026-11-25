@@ -11,7 +11,7 @@ from ase import Atoms
 from ase.io import read, write
 
 from matsim_agents.core.seeding import stream_seed
-from matsim_agents.datasets.energy_alignment import (
+from matsim_agents.data.energy_alignment import (
     ENERGY_ALIGNMENT_FILE,
     energy_alignment,
     recorded_alignment,
@@ -77,7 +77,7 @@ def test_alignment_needs_references_for_every_element(references):
 
 def test_uma_loss_is_per_atom_and_the_best_epoch_is_kept(monkeypatch):
     torch = pytest.importorskip("torch")
-    from matsim_agents.training import finetune_uma
+    from matsim_agents.backends.mlip.training import finetune_uma
 
     class Model(torch.nn.Module):
         def __init__(self):
@@ -120,7 +120,7 @@ def test_uma_loss_is_per_atom_and_the_best_epoch_is_kept(monkeypatch):
 
 
 def test_split_keeps_at_least_one_validation_frame():
-    from matsim_agents.training.finetune_uma import split_indices
+    from matsim_agents.backends.mlip.training.finetune_uma import split_indices
 
     train, val = split_indices(3, val_fraction=0.1, seed=0)
     assert len(val) == 1 and sorted(train + val) == [0, 1, 2]
@@ -128,7 +128,7 @@ def test_split_keeps_at_least_one_validation_frame():
 
 
 def test_mace_trains_on_aligned_energies_with_foundation_atomic_energies(tmp_path, monkeypatch):
-    from matsim_agents.training import finetune_mace
+    from matsim_agents.backends.mlip.training import finetune_mace
 
     frames = []
     for index in range(3):
@@ -212,7 +212,7 @@ def test_placement_knows_whether_pools_share_devices():
 
 @pytest.fixture
 def surrogate(monkeypatch):
-    import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     loads, releases, pools = [], [], []
 
@@ -287,7 +287,7 @@ def test_dropout_models_are_not_reused_for_promotion(tmp_path, surrogate):
 
 
 def test_promotion_comparison_uses_the_loaded_incumbent(monkeypatch):
-    from matsim_agents.active_learning import evaluate
+    from matsim_agents.workflows.active_learning import evaluate
 
     loaded = object()
     monkeypatch.setattr(
@@ -338,8 +338,8 @@ def test_alignment_is_found_for_fairchem_nested_checkpoints(tmp_path, references
 def test_mace_reads_dft_stress_from_extxyz(tmp_path):
     from ase.calculators.singlepoint import SinglePointCalculator
 
-    from matsim_agents.training.finetune_mace import _write_xyz_splits
-    from matsim_agents.training.finetune_uma import _load_labeled_frames
+    from matsim_agents.backends.mlip.training.finetune_mace import _write_xyz_splits
+    from matsim_agents.backends.mlip.training.finetune_uma import _load_labeled_frames
 
     frames = []
     for index in range(3):
@@ -370,7 +370,7 @@ def _labelled_nb(path, n=2):
 
 
 def test_mace_cli_takes_the_elemental_references(tmp_path, references, dataset_method_sidecar):
-    from matsim_agents.training import finetune_mace
+    from matsim_agents.backends.mlip.training import finetune_mace
 
     path = tmp_path / "labels.extxyz"
     _labelled_nb(path)
@@ -402,8 +402,8 @@ def test_mace_cli_takes_the_elemental_references(tmp_path, references, dataset_m
 def test_finetune_training_inputs_are_gated(
     tmp_path, references, dataset_method_sidecar, defect, error
 ):
+    from matsim_agents.backends.mlip.training.finetune_uma import _load_training_frames
     from matsim_agents.core.energy_conventions import FORMATION_ENERGY_REFERENCE
-    from matsim_agents.training.finetune_uma import _load_training_frames
 
     path = tmp_path / "labels.extxyz"
     frames = _labelled_nb(path)
@@ -428,7 +428,7 @@ def test_finetune_training_inputs_are_gated(
 def test_finetune_training_inputs_accept_a_verified_native_dataset(
     tmp_path, references, dataset_method_sidecar, minimal
 ):
-    from matsim_agents.training.finetune_uma import _load_training_frames
+    from matsim_agents.backends.mlip.training.finetune_uma import _load_training_frames
 
     path = tmp_path / "labels.extxyz"
     _labelled_nb(path)

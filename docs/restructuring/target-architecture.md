@@ -71,8 +71,9 @@ Sublayers inside a row may not import each other unless listed.
 | --- | --- |
 | 0 | `core` |
 | 1 | `execution`, `data` |
-| 2 | `backends.llm`, `backends.dft`, `backends.mlip`, `backends.mcp`, `backends.external` |
+| 2 | `backends.llm`, `backends.dft`, `backends.mlip`, `backends.mcp` |
 | 3 | `science.*` (`structures` < `thermodynamics` < `defects`, `neb`, `magnetism`, `properties` < `kinetics`, `irradiation` < `uq` < `acquisition`, `characterization`) |
+| 3b | `backends.external` (adapters that emit `science` contracts) |
 | 4 | `workflows` |
 | 5 | `agents` |
 | 6 | `cli` |

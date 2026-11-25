@@ -12,7 +12,7 @@
 # matsim-agents: one fine-tune + evaluation run of one MLIP on one dataset, on a
 # single Perlmutter GPU.
 #
-# Runs matsim_agents.active_learning.finetune_eval, which fine-tunes the
+# Runs matsim_agents.workflows.active_learning.finetune_eval, which fine-tunes the
 # selected foundation model and reports the baseline ("before") and fine-tuned
 # ("after") models on the declared validation/test partitions, plus a cost.json
 # with wall time / GPU hours.
@@ -146,7 +146,7 @@ cd "${REPO}"
 [[ "${MLIP_CONFIG}" -ef "${OUT_DIR}/mlip.yaml" ]] || cp "${MLIP_CONFIG}" "${OUT_DIR}/mlip.yaml"
 [[ "${EVALUATION_CONFIG}" -ef "${OUT_DIR}/evaluation.yaml" ]] \
   || cp "${EVALUATION_CONFIG}" "${OUT_DIR}/evaluation.yaml"
-python -m matsim_agents.active_learning.finetune_eval \
+python -m matsim_agents.workflows.active_learning.finetune_eval \
   --mlip-config "${MLIP_CONFIG}" \
   --evaluation-config "${EVALUATION_CONFIG}" \
   --dataset "${DATASET}" \

@@ -8,13 +8,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.mlip.config import (
     HydraGNNConfig,
     MACEConfig,
     UMAConfig,
     parse_mlip_config,
 )
+from matsim_agents.workflows.active_learning.config import ALConfig
 
 
 def _base_blocks(tmp_path) -> dict:
@@ -110,7 +110,7 @@ def test_ensemble_strategy_requires_members(tmp_path) -> None:
     [
         (
             {"backend": "hydragnn", "logdir": "logdir"},
-            "matsim_agents.training.finetune_hydragnn",
+            "matsim_agents.backends.mlip.training.finetune_hydragnn",
         ),
         (
             {
@@ -118,10 +118,10 @@ def test_ensemble_strategy_requires_members(tmp_path) -> None:
                 "logdir": "logdir",
                 "fine_tuner": "finetune_hydragnn_newhead",
             },
-            "matsim_agents.training.finetune_hydragnn_newhead",
+            "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead",
         ),
-        ({"backend": "uma"}, "matsim_agents.training.finetune_uma"),
-        ({"backend": "mace"}, "matsim_agents.training.finetune_mace"),
+        ({"backend": "uma"}, "matsim_agents.backends.mlip.training.finetune_uma"),
+        ({"backend": "mace"}, "matsim_agents.backends.mlip.training.finetune_mace"),
     ],
 )
 def test_enabled_trainer_uses_the_mlip_blocks_fine_tuner(tmp_path, mlip, module) -> None:

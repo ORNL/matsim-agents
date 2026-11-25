@@ -19,10 +19,10 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from matsim_agents.active_learning import ALConfig
-from matsim_agents.active_learning.loop import _dft_method_signature
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig
 from matsim_agents.execution.allocation import Allocation
+from matsim_agents.workflows.active_learning import ALConfig
+from matsim_agents.workflows.active_learning.loop import _dft_method_signature
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_nb2o5_qe_mace_example_config(nb2o5_qe_mace_example):
     assert cfg.trainer.validation_fraction == 0
     assert cfg.trainer.validation_set.is_file()
     assert cfg.trainer.validation_reference_set.is_file()
-    assert cfg.mlip.fine_tuner_module == "matsim_agents.training.finetune_mace"
+    assert cfg.mlip.fine_tuner_module == "matsim_agents.backends.mlip.training.finetune_mace"
     assert cfg.trainer.train_launcher is None
     assert cfg.loop.n_iterations == 3
     assert cfg.acquisition.n_select * cfg.loop.n_iterations == cfg.loop.max_dft_calculations == 12

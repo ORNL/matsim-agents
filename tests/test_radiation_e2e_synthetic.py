@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.integrations.external.spectra_pka import adapter
+from matsim_agents.backends.external.spectra_pka import adapter
 from matsim_agents.science.acquisition.pka_acquisition import PKACandidate, select_pka_informed
 from matsim_agents.science.defects.gas import GasComplexSpec, GasPlacement, generate_gas_complex
 from matsim_agents.science.irradiation.contracts import (

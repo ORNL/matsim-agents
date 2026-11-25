@@ -10,7 +10,6 @@ import yaml
 from pydantic import TypeAdapter, ValidationError
 from typer.testing import CliRunner
 
-from matsim_agents.active_learning import ALConfig
 from matsim_agents.backends.mlip.config import (
     MLIP_BACKENDS,
     HydraGNNConfig,
@@ -22,6 +21,7 @@ from matsim_agents.backends.mlip.config import (
     parse_mlip_config,
 )
 from matsim_agents.cli import app
+from matsim_agents.workflows.active_learning import ALConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 SELECTIONS = sorted((ROOT / "examples/mlip").glob("*.yaml"))
@@ -149,7 +149,9 @@ def test_fine_tuning_recipe_belongs_to_the_mlip_block(tmp_path):
 @pytest.mark.parametrize("path", SELECTIONS, ids=lambda path: path.stem)
 def test_selected_model_brings_its_own_fine_tuner(path, tmp_path, hydragnn_env):
     cfg = ALConfig.from_yaml(_al_yaml(tmp_path), mlip=load_mlip_config(path))
-    assert cfg.mlip.fine_tuner_module == f"matsim_agents.training.{cfg.mlip.fine_tuner}"
+    assert (
+        cfg.mlip.fine_tuner_module == f"matsim_agents.backends.mlip.training.{cfg.mlip.fine_tuner}"
+    )
     assert cfg.mlip.fine_tuner.startswith(f"finetune_{cfg.mlip.backend}")
 
 

@@ -174,7 +174,7 @@ replacement backend interfaces.
 Each module has exactly one import path. The former aliases
 (`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
 `matsim_agents.supervisor`, the `matsim_agents.tools` package, the top-level
-`matsim_agents.agents` package (now `matsim_agents.orchestration.agents`),
-`matsim_agents.chat` (now `matsim_agents.orchestration.interactive_chat`),
-and `matsim_agents.active_learning.backends`) have been removed; import from the
+`matsim_agents.agents` package (now `matsim_agents.agents.roles`),
+`matsim_agents.chat` (now `matsim_agents.agents.interactive_chat`),
+and `matsim_agents.workflows.active_learning.backends`) have been removed; import from the
 canonical packages listed above.

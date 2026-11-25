@@ -123,7 +123,7 @@ class MLIPBackendConfig(BaseModel, ABC):
     model_config = ConfigDict(extra="forbid")
 
     backend: str
-    # Name of the built-in fine-tuning module (matsim_agents.training.<fine_tuner>).
+    # Name of the built-in fine-tuning module (matsim_agents.backends.mlip.training.<fine_tuner>).
     fine_tuner: str
     device: Literal["cuda", "cpu", "xpu"] = "cuda"
     precision: str | None = None
@@ -201,7 +201,7 @@ class MLIPBackendConfig(BaseModel, ABC):
     @property
     def fine_tuner_module(self) -> str:
         """Module run as ``python -m <module>`` to fine-tune this model."""
-        return f"matsim_agents.training.{self.fine_tuner}"
+        return f"matsim_agents.backends.mlip.training.{self.fine_tuner}"
 
     @abstractmethod
     def fine_tune_args(

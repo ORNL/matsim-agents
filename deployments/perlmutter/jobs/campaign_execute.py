@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from matsim_agents.active_learning.config import ALConfig  # noqa: E402
+from matsim_agents.workflows.active_learning.config import ALConfig  # noqa: E402
 from matsim_agents.backends.mlip.arguments import (  # noqa: E402
     add_mlip_arguments,
     mlip_config_from_args,

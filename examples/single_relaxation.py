@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState
+from matsim_agents.agents.objective_graph import build_graph
+from matsim_agents.agents.state import MatSimState
 
 
 def main() -> None:

@@ -185,7 +185,7 @@ an example, not a scientifically qualified recommendation.
 For standalone energy evaluation:
 
 ```bash
-python -m matsim_agents.active_learning.evaluate \
+python -m matsim_agents.workflows.active_learning.evaluate \
   --al-config /path/to/al-config.yaml \
   --test-set /path/to/held-out.extxyz \
   --elemental-reference-manifest /path/to/elemental_references.json \

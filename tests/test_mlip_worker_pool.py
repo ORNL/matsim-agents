@@ -359,8 +359,8 @@ def test_close_drops_local_models_and_restarts_lazily(monkeypatch):
 
 
 def test_chat_releases_exploration_models_only_for_real_active_learning(monkeypatch):
-    from matsim_agents.orchestration import interactive_chat
-    from matsim_agents.orchestration.interactive_chat import (
+    from matsim_agents.agents import interactive_chat
+    from matsim_agents.agents.interactive_chat import (
         DiscoveryChatConfig,
         DiscoveryChatSession,
     )

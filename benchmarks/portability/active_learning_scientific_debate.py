@@ -4,7 +4,7 @@
 Closes the gap between two separately-tested portability tracks:
 
 * Real active learning: UMA MD sampling -> acquisition -> QE DFT labelling
-  of the benchmark Si cell (:mod:`matsim_agents.active_learning.loop`).
+  of the benchmark Si cell (:mod:`matsim_agents.workflows.active_learning.loop`).
 * Real all-model debate: every first-class local LLM debates one hypothesis
   (:mod:`benchmarks.portability.all_model_scientific_debate`).
 
@@ -34,8 +34,8 @@ from benchmarks.portability.all_model_scientific_debate import (  # noqa: E402
     DEFAULT_MODELS_ROOT,
     execute_all_model_scientific_debate,
 )
-from matsim_agents.active_learning.config import ALConfig  # noqa: E402
-from matsim_agents.active_learning.loop import run_active_learning  # noqa: E402
+from matsim_agents.workflows.active_learning.config import ALConfig  # noqa: E402
+from matsim_agents.workflows.active_learning.loop import run_active_learning  # noqa: E402
 from matsim_agents.backends.llm.provider import get_chat_model  # noqa: E402
 
 DEFAULT_AL_CONFIG = (

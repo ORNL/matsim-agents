@@ -6,7 +6,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from ase import Atoms
 
-from matsim_agents.training import finetune_uma
+from matsim_agents.backends.mlip.training import finetune_uma
 
 torch = pytest.importorskip("torch")
 

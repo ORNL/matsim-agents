@@ -1,0 +1,788 @@
+"""Fine-tune a UMA (fairchem) foundation model on an AL-collected DFT dataset.
+
+This turns an extended-XYZ dataset (as written by
+:func:`matsim_agents.workflows.active_learning.trainer.append_frames_to_extxyz`) into a
+fine-tuned ``inference_ckpt.pt`` that
+:func:`matsim_agents.backends.mlip.calculator.build_uma_calculator` can load
+via ``load_predict_unit``.
+
+Approach (matches allaffa/HydraGNN_GFM_FineTuning4Materials @ ``uma-sota-comparison``)
+------------------------------------------------------------------------------------
+UMA exposes a *conservative* energy-and-force head: forces are obtained as the
+autograd gradient of the predicted energy w.r.t. atomic positions *inside* the
+forward pass. We therefore fine-tune with a small custom PyTorch loop that runs
+the model directly, rather than fairchem's ``create_yaml`` / normalizer /
+element-reference config pipeline (which trains the *direct*-force head and
+re-fits an output normalizer -- rescaling the heads and inflating forces on the
+small AL datasets).
+
+Concretely:
+
+* ``pu = load_predict_unit(ckpt, device=device, inference_settings="traineval")``
+  -- the ``"traineval"`` profile keeps MOLE unmerged and avoids ``torch.compile``,
+  preserving the autograd graph for the double-backprop the conservative head needs.
+* ``model = pu.model.module`` is the trainable ``HydraModel``.
+* ``model.train()`` is *required* so the force head sets ``create_graph=True``;
+  otherwise the energy graph is freed by the internal force autograd and the
+  outer ``loss.backward()`` fails.
+* Loss per sample is ``(E_err / N_atoms)^2 + force_weight * F_MSE``
+  (``force_weight=10`` by default), optimised with Adam (``lr=1e-4``). No
+  normalizer / element-reference re-fitting is performed; raw head outputs are
+  denormalized and element-referenced with the checkpoint's own task objects,
+  exactly as ``MLIPPredictUnit`` does at inference, so the loss is in eV.
+* Energy labels are first put on the base model's energy scale with the
+  elemental DFT references (:mod:`matsim_agents.data.energy_alignment`):
+  DFT totals from another code or setup differ from UMA's pretraining energies
+  by large per-element constants that the heads must not be trained to absorb.
+* A held-out fraction of the frames (10% by default, at least one) is scored
+  after every epoch and the weights of the best epoch are kept.
+
+The fine-tuned weights are written back into a
+:class:`~fairchem.core.units.mlip_unit.api.inference.MLIPInferenceCheckpoint`
+(reusing the base checkpoint's ``model_config`` / ``tasks_config``), so the
+resulting ``.pt`` reloads through the ordinary ``load_predict_unit`` path.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+from pathlib import Path
+from typing import get_args
+
+import numpy as np
+from ase import Atoms
+from ase.io import read as ase_read
+
+from matsim_agents.backends.mlip.config import UMAConfig, UMATask
+from matsim_agents.backends.mlip.training.cost import CostReport, GpuMemorySampler, track_cost
+from matsim_agents.core.energy_references import (
+    load_elemental_reference_manifest,
+    validate_dataset_reference_method,
+)
+from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.seeding import numpy_rng, seed_process
+from matsim_agents.data.energy_alignment import energy_alignment
+from matsim_agents.data.governance import load_training_manifest, reject_formation_frames
+
+log = logging.getLogger(__name__)
+
+# UMA task heads: omat (inorganic bulk), omol (molecules/MOFs), oc20, odac, omc.
+_UMA_TASKS = set(get_args(UMATask))
+
+
+# --------------------------------------------------------------------------- #
+# Dataset helpers                                                             #
+# --------------------------------------------------------------------------- #
+
+
+def _reference_energy(atoms: Atoms) -> float | None:
+    """Ground-truth (DFT) total energy from ``info`` or an attached calculator."""
+    for key in ("REF_energy", "energy"):
+        if key in atoms.info:
+            return float(atoms.info[key])
+    try:
+        return float(atoms.get_potential_energy())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _reference_forces(atoms: Atoms) -> np.ndarray | None:
+    """Ground-truth (DFT) forces from ``arrays`` or an attached calculator."""
+    for key in ("REF_forces", "forces"):
+        if key in atoms.arrays:
+            return np.asarray(atoms.arrays[key], dtype=float)
+    try:
+        return np.asarray(atoms.get_forces(), dtype=float)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def split_indices(n: int, *, val_fraction: float, seed: int) -> tuple[list[int], list[int]]:
+    """Random ``(train, validation)`` frame indices; validation gets at least one frame."""
+    rng = numpy_rng(seed)
+    order = rng.permutation(n)
+    n_val = min(max(1, int(round(val_fraction * n))), n - 1) if val_fraction > 0 else 0
+    return sorted(order[n_val:].tolist()), sorted(order[:n_val].tolist())
+
+
+def _load_labeled_frames(dataset_path: str | Path, *, minimum: int = 2) -> list[Atoms]:
+    """Read frames that carry both an energy and a forces label."""
+    raw = ase_read(str(dataset_path), index=":")
+    frames = [raw] if isinstance(raw, Atoms) else list(raw)
+    usable: list[Atoms] = []
+    for a in frames:
+        if _reference_energy(a) is not None and _reference_forces(a) is not None:
+            usable.append(a)
+    if len(usable) < minimum:
+        raise ValueError(
+            f"Only {len(usable)}/{len(frames)} frames in {dataset_path} carry both "
+            f"energy and forces labels; need >={minimum}."
+        )
+    return usable
+
+
+def _load_training_frames(
+    dataset_path: str | Path, elemental_reference_manifest: str | Path, *, minimum: int = 2
+) -> list[Atoms]:
+    """Labelled frames of a manifest-verified native-total-energy DFT dataset.
+
+    The dataset must declare the elemental references' DFT backend and method;
+    frames already marked as formation energies are refused.
+    """
+    load_training_manifest(dataset_path)
+    reference, _, _ = load_elemental_reference_manifest(
+        elemental_reference_manifest, required_elements=set()
+    )
+    validate_dataset_reference_method(
+        dataset_path,
+        reference_backend=reference["backend"],
+        reference_method_signature=reference["method_signature"],
+        reference_base_method_signature=reference.get("base_method_signature"),
+        reference_element_method_signatures=reference.get("element_method_signatures"),
+        require_sidecar=True,
+    )
+    frames = _load_labeled_frames(dataset_path, minimum=minimum)
+    reject_formation_frames(frames)
+    return frames
+
+
+# --------------------------------------------------------------------------- #
+# UMA model loading + differentiable forward pass                             #
+# --------------------------------------------------------------------------- #
+
+
+def _resolve_base_checkpoint(base_model: str) -> str:
+    """Resolve a UMA model *name* (or local path) to a checkpoint file path."""
+    import os
+
+    if os.path.isfile(base_model):
+        return base_model
+    from matsim_agents.backends.mlip.uma_artifacts import resolve_uma_artifact_bundle
+
+    bundle = resolve_uma_artifact_bundle(base_model)
+    if bundle is not None:
+        return str(bundle.checkpoint)
+    from fairchem.core.calculate.pretrained_mlip import (
+        pretrained_checkpoint_path_from_name,
+    )
+
+    return str(pretrained_checkpoint_path_from_name(base_model))
+
+
+def load_trainable_uma(base_model: str, task_name: str, device: str):
+    """Load a UMA checkpoint exposing a trainable ``HydraModel``.
+
+    Returns ``(predict_unit, calculator, model)`` where ``model`` is
+    ``predict_unit.model.module`` -- the module whose parameters are updated
+    in-place by the training loop and read back at inference time.
+    """
+    from fairchem.core import FAIRChemCalculator, pretrained_mlip
+
+    ckpt = _resolve_base_checkpoint(base_model)
+    # Fairchem's traineval profile keeps MOLE unmerged and avoids torch.compile,
+    # preserving the autograd graph needed by the conservative force head.
+    pu = pretrained_mlip.load_predict_unit(ckpt, device=device, inference_settings="traineval")
+    calc = FAIRChemCalculator(pu, task_name=task_name)
+    model = pu.model.module  # trainable HydraModel
+    return pu, calc, model
+
+
+def uma_energy_forces(model, calc, atoms: Atoms, task_name: str):
+    """Differentiable forward pass returning ``(energy[1], forces[N, 3])`` tensors.
+
+    ``atoms`` must have ``info["charge"]`` / ``info["spin"]`` for the ``omol``
+    head (defaults to 0 / 1 if missing).
+    """
+    import torch
+
+    atoms.info.setdefault("charge", 0)
+    atoms.info.setdefault("spin", 1)
+
+    param = next(model.parameters())
+    data = calc.a2g(atoms).to(param.device)
+    # Match the model's working dtype on all floating tensors.
+    for key, val in data:
+        if torch.is_tensor(val) and val.is_floating_point():
+            data[key] = val.to(param.dtype)
+
+    out = model(data)
+    energy = _physical_output(model, data, out, f"{task_name}_energy")
+    forces = _physical_output(model, data, out, f"{task_name}_forces")
+    return energy, forces
+
+
+def _physical_output(model, data, out, name: str):
+    """Head output on the scale ``FAIRChemCalculator`` reports.
+
+    Mirrors fairchem's ``MLIPPredictUnit._process_outputs``: the raw head is
+    normalized and, for energies, referenced to per-element constants. Training
+    against DFT labels on any other scale would fit a different quantity from
+    the one inference returns.
+    """
+    task = model.tasks[name]
+    value = task.normalizer.denorm(out[name][task.property])
+    if task.element_references is not None:
+        value = task.element_references.undo_refs(data, value)
+    return value
+
+
+def uma_energy(model, calc, atoms: Atoms, task_name: str) -> float:
+    """Total energy of ``atoms`` predicted by ``model`` (for the elemental references)."""
+    energy, _forces = uma_energy_forces(model, calc, atoms, task_name)
+    return float(energy.detach().reshape(-1)[0])
+
+
+# --------------------------------------------------------------------------- #
+# LoRA support for UMA backbone scalar linear layers                          #
+# --------------------------------------------------------------------------- #
+#
+# Mirrors utils/uma_finetune.py in
+# allaffa/HydraGNN_GFM_FineTuning4Materials @ uma-sota-comparison: low-rank
+# adapters are injected into the *invariant* scalar linear layers only
+# (``scalar_mlp`` / ``rad_func.net``); the equivariant SO2/SO3 linears are left
+# untouched so rotational equivariance is preserved.
+
+# Module paths whose ``nn.Linear`` layers receive a LoRA adapter.
+_LORA_TARGET_SUBSTRINGS = ("scalar_mlp", "rad_func.net")
+
+
+def apply_lora_to_backbone(
+    backbone,
+    r: int = 8,
+    alpha: float = 16.0,
+    target_substrings: tuple = _LORA_TARGET_SUBSTRINGS,
+) -> int:
+    """Replace targeted backbone ``nn.Linear`` layers with LoRA adapters.
+
+    The adapter computes ``base(x) + scaling * lora_B @ lora_A @ x`` with
+    ``scaling = alpha / r``. ``lora_B`` is initialised to zero so the adapter is
+    transparent at start (the base model is preserved). Returns the number of
+    layers replaced.
+    """
+    import math
+
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    class LoRALinear(nn.Module):
+        def __init__(self, linear: nn.Linear, rank: int, scale_alpha: float):
+            super().__init__()
+            self.r = rank
+            self.scaling = scale_alpha / rank
+            self.base = linear
+            for p in self.base.parameters():
+                p.requires_grad_(False)
+            in_f, out_f = linear.in_features, linear.out_features
+            w = linear.weight
+            self.lora_A = nn.Parameter(torch.zeros(rank, in_f, dtype=w.dtype, device=w.device))
+            self.lora_B = nn.Parameter(torch.zeros(out_f, rank, dtype=w.dtype, device=w.device))
+            nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+
+        def forward(self, x):
+            return self.base(x) + F.linear(F.linear(x, self.lora_A), self.lora_B) * self.scaling
+
+    replaced = 0
+    for full_name, module in list(backbone.named_modules()):
+        if not isinstance(module, nn.Linear):
+            continue
+        if not any(sub in full_name for sub in target_substrings):
+            continue
+        parent = backbone
+        child = full_name
+        if "." in full_name:
+            head, child = full_name.rsplit(".", 1)
+            for part in head.split("."):
+                parent = getattr(parent, part)
+        setattr(parent, child, LoRALinear(module, r, alpha))
+        replaced += 1
+    return replaced
+
+
+def merge_lora_into_backbone(backbone) -> int:
+    """Fold LoRA adapters back into their base ``nn.Linear`` weights.
+
+    After merging, the backbone's ``state_dict`` matches the original
+    (adapter-free) architecture, so the fine-tuned weights reload through the
+    ordinary ``load_predict_unit`` path. Returns the number of adapters merged.
+    """
+    import torch
+
+    merged = 0
+    for full_name, module in list(backbone.named_modules()):
+        if not (
+            hasattr(module, "lora_A") and hasattr(module, "lora_B") and hasattr(module, "base")
+        ):
+            continue
+        with torch.no_grad():
+            delta = (module.lora_B @ module.lora_A) * module.scaling
+            module.base.weight.add_(delta.to(module.base.weight.dtype))
+        parent = backbone
+        child = full_name
+        if "." in full_name:
+            head, child = full_name.rsplit(".", 1)
+            for part in head.split("."):
+                parent = getattr(parent, part)
+        setattr(parent, child, module.base)
+        merged += 1
+    return merged
+
+
+# --------------------------------------------------------------------------- #
+# Training loop                                                               #
+# --------------------------------------------------------------------------- #
+
+
+def _sample_loss(model, calc, atoms: Atoms, target, *, task_name: str, force_weight: float):
+    """``(E_err / N_atoms)^2 + force_weight * F_MSE`` for one labelled frame."""
+    e_true, f_true = target
+    e_pred, f_pred = uma_energy_forces(model, calc, atoms, task_name)
+    e_loss = ((e_pred.squeeze() - e_true) / len(atoms)) ** 2
+    f_loss = (f_pred - f_true).pow(2).mean()
+    return e_loss + force_weight * f_loss
+
+
+def _train_uma(
+    model,
+    calc,
+    train_atoms: list[Atoms],
+    train_energies: list[float],
+    *,
+    val_atoms: list[Atoms],
+    val_energies: list[float],
+    task_name: str,
+    epochs: int,
+    lr: float,
+    batch_size: int,
+    force_weight: float,
+    freeze_backbone: bool,
+    weight_decay: float,
+    seed: int,
+    lora: bool = False,
+    lora_r: int = 8,
+    lora_alpha: float = 16.0,
+) -> dict[str, object]:
+    """Custom PyTorch fine-tune loop on UMA's conservative energy/force head.
+
+    Loss per sample is ``(E_err / N_atoms)^2 + force_weight * F_MSE`` against the
+    given (aligned) energies and the frames' forces. Gradients are accumulated
+    over ``batch_size`` samples before each optimiser step. After every epoch the
+    validation frames are scored and the weights of the best epoch are restored
+    at the end (the last epoch when there are no validation frames).
+
+    With ``lora=True`` low-rank adapters are injected into the backbone scalar
+    linears and only those adapters (plus the output heads) are trained; with
+    ``freeze_backbone=True`` the whole backbone is frozen and only the heads
+    train. The two options are mutually exclusive (``lora`` takes precedence).
+    Returns the per-epoch train and validation losses and the best epoch.
+    """
+    import torch
+
+    param = next(model.parameters())
+    device, dtype = param.device, param.dtype
+
+    if lora and hasattr(model, "backbone"):
+        n_lora = apply_lora_to_backbone(model.backbone, r=lora_r, alpha=lora_alpha)
+        log.info("UMA LoRA: injected %d adapters (r=%d, alpha=%.1f)", n_lora, lora_r, lora_alpha)
+        # Freeze all backbone params except the LoRA adapters; leave heads trainable.
+        for name, p in model.backbone.named_parameters():
+            if "lora_A" not in name and "lora_B" not in name:
+                p.requires_grad_(False)
+    elif freeze_backbone and hasattr(model, "backbone"):
+        for p in model.backbone.parameters():
+            p.requires_grad_(False)
+    params = [p for p in model.parameters() if p.requires_grad]
+    if not params:
+        raise ValueError("No trainable parameters after freezing; check freeze_backbone.")
+
+    opt = torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+
+    def targets(frames: list[Atoms], energies: list[float]):
+        return [
+            (
+                torch.as_tensor(energy, dtype=dtype, device=device),
+                torch.as_tensor(_reference_forces(atoms), dtype=dtype, device=device),
+            )
+            for atoms, energy in zip(frames, energies, strict=True)
+        ]
+
+    train_targets = targets(train_atoms, train_energies)
+    val_targets = targets(val_atoms, val_energies)
+    loss_args = {"task_name": task_name, "force_weight": force_weight}
+
+    rng = numpy_rng(seed, "batch-order")
+    n = len(train_atoms)
+    train_history: list[float] = []
+    val_history: list[float] = []
+    best: tuple[float, int, dict] | None = None
+
+    for epoch in range(epochs):
+        # model.train() -> conservative force head uses create_graph=True (double backprop).
+        model.train()
+        order = rng.permutation(n)
+        opt.zero_grad()
+        epoch_loss = 0.0
+        pending = 0
+        for idx in order:
+            loss = _sample_loss(
+                model, calc, train_atoms[int(idx)], train_targets[int(idx)], **loss_args
+            )
+            (loss / batch_size).backward()
+            epoch_loss += float(loss.detach())
+            pending += 1
+            if pending == batch_size:
+                opt.step()
+                opt.zero_grad()
+                pending = 0
+        if pending > 0:  # flush the final partial batch
+            opt.step()
+            opt.zero_grad()
+        train_history.append(epoch_loss / n)
+        if val_atoms:
+            model.eval()
+            val_loss = sum(
+                float(_sample_loss(model, calc, atoms, target, **loss_args).detach())
+                for atoms, target in zip(val_atoms, val_targets, strict=True)
+            ) / len(val_atoms)
+            val_history.append(val_loss)
+            if best is None or val_loss < best[0]:
+                state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+                best = (val_loss, epoch, state)
+        log.info(
+            "UMA fine-tune epoch %d/%d: train loss=%.6f%s",
+            epoch + 1,
+            epochs,
+            train_history[-1],
+            f", validation loss={val_history[-1]:.6f}" if val_history else "",
+        )
+
+    if best is not None:
+        model.load_state_dict(best[2])
+        log.info("UMA fine-tune: kept epoch %d (validation loss %.6f)", best[1] + 1, best[0])
+    model.eval()
+    return {
+        "train_loss": train_history,
+        "validation_loss": val_history,
+        "best_epoch": (best[1] + 1) if best is not None else epochs,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Checkpoint persistence                                                      #
+# --------------------------------------------------------------------------- #
+
+
+def _save_finetuned_checkpoint(pu, base_model: str, out_ckpt: Path) -> None:
+    """Write the fine-tuned weights into a reloadable ``MLIPInferenceCheckpoint``.
+
+    ``load_predict_unit`` reconstructs the model as an ``AveragedModel`` and
+    loads ``ema_state_dict`` for inference, so we persist the trained
+    ``AveragedModel`` state dict (``module.*`` + ``n_averaged``) as the EMA
+    weights (and the bare module state dict as the non-EMA weights), reusing the
+    base checkpoint's ``model_config`` / ``tasks_config``.
+    """
+    import torch
+
+    base_ckpt_path = _resolve_base_checkpoint(base_model)
+    ckpt = torch.load(base_ckpt_path, map_location="cpu", weights_only=False)
+
+    ema_sd = {k: v.detach().cpu().clone() for k, v in pu.model.state_dict().items()}
+    model_sd = {k: v.detach().cpu().clone() for k, v in pu.model.module.state_dict().items()}
+    ckpt.ema_state_dict = ema_sd
+    ckpt.model_state_dict = model_sd
+
+    out_ckpt.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(ckpt, out_ckpt)
+    log.info("Saved fine-tuned UMA checkpoint -> %s", out_ckpt)
+
+
+# --------------------------------------------------------------------------- #
+# Public entry point                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def finetune_uma(
+    dataset_path: str | Path,
+    output_dir: str | Path,
+    *,
+    elemental_reference_manifest: str | Path,
+    base_model: str | None = None,
+    task_name: str | None = None,
+    epochs: int = 20,
+    batch_size: int = 4,
+    lr: float = 1e-4,
+    force_weight: float = 10.0,
+    freeze_backbone: bool = False,
+    weight_decay: float = 0.0,
+    seed: int,
+    device: str | None = None,
+    run: bool = True,
+    lora: bool = False,
+    lora_r: int = 8,
+    lora_alpha: float = 16.0,
+    val_fraction: float = 0.1,
+    validation_dataset: str | Path | None = None,
+) -> Path:
+    """Fine-tune ``base_model`` on ``dataset_path`` and return the checkpoint path.
+
+    The returned ``inference_ckpt.pt`` reloads through
+    :func:`fairchem.core.units.mlip_unit.load_predict_unit` (and hence
+    :func:`matsim_agents.backends.mlip.calculator.build_uma_calculator`).
+    Energy labels are aligned to the base model's scale with the elemental DFT
+    references of ``elemental_reference_manifest``; the alignment is written to
+    ``energy-alignment.json`` beside the checkpoint. The best epoch is chosen on
+    ``validation_dataset`` when given, otherwise on ``val_fraction`` of the frames.
+
+    When ``run`` is False the model and dataset are loaded/validated but no
+    training or checkpoint write occurs (dry-run); the intended checkpoint path
+    is still returned.
+    """
+    import torch
+
+    if task_name is not None and task_name not in _UMA_TASKS:
+        raise ValueError(f"task_name must be one of {sorted(_UMA_TASKS)}, got {task_name!r}")
+    selection = UMAConfig(
+        **{
+            key: value
+            for key, value in {"model_name": base_model, "task_name": task_name}.items()
+            if value is not None
+        }
+    )
+    base_model, task_name = selection.model_name, selection.task_name
+
+    seed_process(seed, "training")
+    output_dir = Path(output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest_ckpt = output_dir / "inference_ckpt.pt"
+
+    # Normalise device string ("CUDA"/"CPU" from callers -> torch form).
+    dev = (device or ("cuda" if torch.cuda.is_available() else "cpu")).lower()
+    if dev.startswith("cuda") and not torch.cuda.is_available():
+        log.warning("CUDA requested but unavailable; falling back to CPU.")
+        dev = "cpu"
+
+    frames = _load_training_frames(dataset_path, elemental_reference_manifest)
+    if validation_dataset is not None:
+        # The validation partition of a dataset split (datasets.splits) replaces
+        # the random hold-out of training frames.
+        validation = _load_training_frames(
+            validation_dataset, elemental_reference_manifest, minimum=1
+        )
+        train_index = list(range(len(frames)))
+        val_index = list(range(len(frames), len(frames) + len(validation)))
+        frames = frames + validation
+    else:
+        train_index, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
+    train_atoms = [frames[i] for i in train_index]
+    val_atoms = [frames[i] for i in val_index]
+    log.info(
+        "UMA fine-tune: %d train / %d validation frames (task=%s, base=%s, device=%s)",
+        len(train_atoms),
+        len(val_atoms),
+        task_name,
+        base_model,
+        dev,
+    )
+
+    pu, calc, model = load_trainable_uma(base_model, task_name, dev)
+    model.eval()
+    alignment = energy_alignment(
+        elemental_reference_manifest,
+        {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()},
+        lambda atoms: uma_energy(model, calc, atoms, task_name),
+        base_model=base_model,
+    )
+    alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    alignment.finetune = {
+        "backend": "uma",
+        "base_model": base_model,
+        "task_name": task_name,
+        "protocol": "conservative-head-finetune",
+        "pretrained_heads": [f"{task_name}_energy", f"{task_name}_forces"],
+        "head_output": "denormalized_element_referenced",
+        "lora": bool(lora),
+        "freeze_backbone": bool(freeze_backbone),
+    }
+    energies = [alignment.aligned_energy(atoms, _reference_energy(atoms)) for atoms in frames]
+
+    if not run:
+        log.info("run=False; loaded model + %d frames (training skipped)", len(frames))
+        return dest_ckpt
+
+    report = CostReport(
+        model_backend="uma",
+        dataset_label=Path(dataset_path).parent.name or Path(dataset_path).stem,
+        base_model=base_model,
+        dataset_path=str(Path(dataset_path).resolve()),
+        n_train_frames=len(train_atoms),
+        n_val_frames=len(val_atoms),
+        epochs=int(epochs),
+        num_gpus=1 if dev.startswith("cuda") else 0,
+        device=dev.upper(),
+        extra={
+            "task_name": task_name,
+            "protocol": "conservative-head-finetune",
+            "lr": float(lr),
+            "force_weight": float(force_weight),
+            "batch_size": int(batch_size),
+            "freeze_backbone": bool(freeze_backbone),
+            "weight_decay": float(weight_decay),
+            "lora": bool(lora),
+            "lora_r": int(lora_r) if lora else None,
+            "lora_alpha": float(lora_alpha) if lora else None,
+            "energy_loss": "per_atom",
+            "validation": str(validation_dataset) if validation_dataset else "random_hold_out",
+            "energy_alignment": alignment.convention,
+        },
+    )
+    sampler = GpuMemorySampler(enabled=dev.startswith("cuda"))
+    with sampler, track_cost(report):
+        history = _train_uma(
+            model,
+            calc,
+            [frames[i] for i in train_index],
+            [energies[i] for i in train_index],
+            val_atoms=val_atoms,
+            val_energies=[energies[i] for i in val_index],
+            task_name=task_name,
+            epochs=int(epochs),
+            lr=float(lr),
+            batch_size=int(batch_size),
+            force_weight=float(force_weight),
+            freeze_backbone=bool(freeze_backbone),
+            weight_decay=float(weight_decay),
+            seed=int(seed),
+            lora=bool(lora),
+            lora_r=int(lora_r),
+            lora_alpha=float(lora_alpha),
+        )
+    if sampler.peak_gb:
+        report.peak_gpu_mem_gb = round(sampler.peak_gb, 3)
+    if history["train_loss"]:
+        report.extra["final_train_loss"] = round(history["train_loss"][-1], 6)
+    if history["validation_loss"]:
+        report.extra["best_validation_loss"] = round(min(history["validation_loss"]), 6)
+    report.extra["best_epoch"] = history["best_epoch"]
+    report.write(output_dir / "cost.json")
+
+    # Fold LoRA adapters back into the base linears so the saved checkpoint
+    # matches the original (adapter-free) architecture for reloading.
+    if lora and hasattr(model, "backbone"):
+        n_merged = merge_lora_into_backbone(model.backbone)
+        log.info("UMA LoRA: merged %d adapters into base weights before save", n_merged)
+
+    _save_finetuned_checkpoint(pu, base_model, dest_ckpt)
+    alignment.write(output_dir)
+    log.info(
+        "UMA fine-tune complete -> %s (%.1fs, %.4f GPU-h)",
+        dest_ckpt,
+        report.wall_time_s,
+        report.gpu_hours,
+    )
+    return dest_ckpt
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
+    parser.add_argument("--output-dir", required=True, help="Work/output directory.")
+    parser.add_argument(
+        "--elemental-reference-manifest",
+        required=True,
+        help="Elemental DFT references that put the labels on the base model's energy scale.",
+    )
+    parser.add_argument(
+        "--base-model", default=None, help="Base UMA model name or path (default: UMAConfig's)."
+    )
+    parser.add_argument(
+        "--task-name",
+        default=None,
+        choices=sorted(_UMA_TASKS),
+        help="UMA task (omat: inorganic bulk, omol: molecules/MOFs, ...).",
+    )
+    parser.add_argument("--epochs", type=int, default=20, help="Number of fine-tune epochs.")
+    parser.add_argument(
+        "--batch-size", type=int, default=4, help="Gradient-accumulation batch size."
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-4,
+        help="Adam learning rate (reference UMA fine-tune recipe: 1e-4).",
+    )
+    parser.add_argument(
+        "--force-weight",
+        type=float,
+        default=10.0,
+        help="Weight on the force MSE term relative to the energy MSE term.",
+    )
+    parser.add_argument(
+        "--freeze-backbone",
+        action="store_true",
+        help="Freeze the backbone and train only the output head.",
+    )
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="LoRA fine-tuning of backbone scalar linear layers (preserves equivariance).",
+    )
+    parser.add_argument("--lora-r", type=int, default=8, help="LoRA rank (default: 8).")
+    parser.add_argument(
+        "--lora-alpha", type=float, default=16.0, help="LoRA alpha scaling (default: 16.0)."
+    )
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.0,
+        help="Adam weight decay (default 0, matching the reference recipe).",
+    )
+    parser.add_argument(
+        "--val-fraction",
+        type=float,
+        default=0.1,
+        help="Frames held out to keep the best epoch (at least one; 0 disables).",
+    )
+    parser.add_argument(
+        "--validation-dataset",
+        default=None,
+        help="Validation partition for choosing the best epoch (replaces --val-fraction).",
+    )
+    parser.add_argument("--seed", type=int, required=True, help="Seed of every random stream.")
+    parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Load model + dataset but do not train / write a checkpoint.",
+    )
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    ckpt = finetune_uma(
+        args.dataset,
+        args.output_dir,
+        elemental_reference_manifest=args.elemental_reference_manifest,
+        base_model=args.base_model,
+        task_name=args.task_name,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        force_weight=args.force_weight,
+        freeze_backbone=args.freeze_backbone,
+        weight_decay=args.weight_decay,
+        seed=args.seed,
+        device=args.device,
+        run=not args.dry_run,
+        lora=args.lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        val_fraction=args.val_fraction,
+        validation_dataset=args.validation_dataset,
+    )
+    print(ckpt)
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -11,12 +11,12 @@ from ase.build import bulk
 from ase.calculators.emt import EMT
 from ase.io import write
 
-from matsim_agents.active_learning import md_sampler as candidates_module
-from matsim_agents.active_learning.config import MDConfig, SeedSourceConfig
-from matsim_agents.active_learning.md_sampler import _SeedTask, sample_md_candidates
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import WorkerOutcome
 from matsim_agents.core.seeding import numpy_rng
+from matsim_agents.workflows.active_learning import md_sampler as candidates_module
+from matsim_agents.workflows.active_learning.config import MDConfig, SeedSourceConfig
+from matsim_agents.workflows.active_learning.md_sampler import _SeedTask, sample_md_candidates
 
 
 def _seeds(tmp_path: Path) -> list[Path]:

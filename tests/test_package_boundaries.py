@@ -23,12 +23,12 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
 # layers (or from itself); units in the same layer must not import each other.
 LAYERS: list[set[str]] = [
     {"core"},
-    {"execution", "datasets"},
+    {"execution", "data"},
     {"backends.llm", "backends.dft", "backends.mlip", "backends.mcp"},
-    {"science", "training"},
-    {"integrations", "discovery"},
-    {"active_learning", "workflows"},
-    {"orchestration", "campaign"},
+    {"science"},
+    {"backends.external", "discovery"},
+    {"workflows"},
+    {"agents", "campaign"},
     {"fusion"},
     {"cli"},
 ]
@@ -110,19 +110,19 @@ def _layer_violations() -> list[str]:
 @pytest.mark.parametrize(
     ("module", "is_package", "code"),
     [
-        ("matsim_agents.datasets.governance", False, "from ..orchestration.state import X"),
-        ("matsim_agents.datasets.governance", False, "from .. import orchestration"),
-        ("matsim_agents.datasets", True, "from ..campaign import state"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import orchestration"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import execution, cli"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import MatSimState"),
+        ("matsim_agents.data.governance", False, "from ..agents.state import X"),
+        ("matsim_agents.data.governance", False, "from .. import agents"),
+        ("matsim_agents.data", True, "from ..campaign import state"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import agents"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import execution, cli"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import MatSimState"),
         ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
         ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
         ("matsim_agents.science.structures.seed_structures", False, "from ...workflows import e1"),
         (
             "matsim_agents.science.structures.seed_structures",
             False,
-            "import matsim_agents.orchestration.state",
+            "import matsim_agents.agents.state",
         ),
     ],
 )
@@ -133,9 +133,9 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
 @pytest.mark.parametrize(
     ("module", "is_package", "code"),
     [
-        ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
-        ("matsim_agents.datasets.formation_training", False, "from . import governance"),
-        ("matsim_agents.datasets", True, "from .governance import DatasetManifest"),
+        ("matsim_agents.data.formation_training", False, "from .governance import x"),
+        ("matsim_agents.data.formation_training", False, "from . import governance"),
+        ("matsim_agents.data", True, "from .governance import DatasetManifest"),
         ("matsim_agents.execution.ledger", False, "from ..core.hashing import sha256_file"),
         (
             "matsim_agents.science.structures.seed_structures",
@@ -150,9 +150,13 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
         (
             "matsim_agents.science.structures.seed_structures",
             False,
-            "from matsim_agents import datasets",
+            "from matsim_agents import data",
         ),
-        ("matsim_agents.campaign.state", False, "from ..active_learning.config import ALConfig"),
+        (
+            "matsim_agents.campaign.state",
+            False,
+            "from ..workflows.active_learning.config import ALConfig",
+        ),
         ("matsim_agents.backends.mlip.config", False, "from . import results"),
     ],
 )
@@ -195,12 +199,17 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.active_learning.candidates",
         "matsim_agents.discovery.seeds",
         "matsim_agents.discovery.selection",
-        "matsim_agents.datasets.energy_references",
+        "matsim_agents.data.energy_references",
         "matsim_agents.discovery.composition",
         "matsim_agents.execution.contracts",
         "matsim_agents.execution.launchers",
-        "matsim_agents.orchestration.policies",
+        "matsim_agents.agents.policies",
         "matsim_agents.seeding",
+        "matsim_agents.datasets",
+        "matsim_agents.training",
+        "matsim_agents.orchestration",
+        "matsim_agents.active_learning",
+        "matsim_agents.integrations",
         "matsim_agents.irradiation",
         "matsim_agents.kinetics",
         "matsim_agents.discovery.alloys",

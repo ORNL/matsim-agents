@@ -7,14 +7,14 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.evaluate import (
+from matsim_agents.backends.mlip.config import UMAConfig
+from matsim_agents.workflows.active_learning.config import TrainerConfig
+from matsim_agents.workflows.active_learning.evaluate import (
     EvalMetrics,
     assess_promotion,
     evaluate_frames,
     evaluate_promotion_candidate,
 )
-from matsim_agents.backends.mlip.config import UMAConfig
 
 
 def _metrics(
@@ -305,7 +305,7 @@ def test_promotion_rejects_rotated_reordered_translated_molecule(tmp_path, with_
 
 
 def test_parity_subsample_keeps_cartesian_components_balanced() -> None:
-    from matsim_agents.active_learning.evaluate import _subsample
+    from matsim_agents.workflows.active_learning.evaluate import _subsample
 
     forces = np.tile([1.0, 2.0, 3.0], 19_999)
     kept = _subsample({"f_ref_eV_per_A": forces, "f_pred_eV_per_A": forces}, 20_000, seed=0)
@@ -317,7 +317,7 @@ def test_parity_subsample_keeps_cartesian_components_balanced() -> None:
 
 
 def test_parity_subsample_does_not_alias_alternating_species() -> None:
-    from matsim_agents.active_learning.evaluate import _subsample
+    from matsim_agents.workflows.active_learning.evaluate import _subsample
 
     # 13,331 atoms alternating between two species; evenly spaced indices would
     # keep only the even (first-species) atoms.

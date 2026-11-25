@@ -23,6 +23,7 @@ import pytest
 
 pytest.importorskip("mcp")
 
+from matsim_agents.agents.state import MatSimState, TaskSpec  # noqa: E402
 from matsim_agents.backends.mcp.config import MCPConfig  # noqa: E402
 from matsim_agents.backends.mcp.records import (  # noqa: E402
     MAX_CONTENT_CHARS,
@@ -31,7 +32,6 @@ from matsim_agents.backends.mcp.records import (  # noqa: E402
     sha256_json,
 )
 from matsim_agents.backends.mcp.session import MCPSessionManager  # noqa: E402
-from matsim_agents.orchestration.state import MatSimState, TaskSpec  # noqa: E402
 
 SERVER = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_test_server.py"
 
@@ -610,7 +610,7 @@ def _scripted_planner(monkeypatch, tasks, captured=None):
 
 
 def test_planner_sees_only_permitted_tools_as_untrusted_data(manager_factory, monkeypatch):
-    from matsim_agents.orchestration.agents.planner import planner_node
+    from matsim_agents.agents.roles.planner import planner_node
 
     manager = manager_factory(_stdio("a", allowed_tools=["add"]))
     captured: list = []
@@ -629,7 +629,7 @@ def test_planner_sees_only_permitted_tools_as_untrusted_data(manager_factory, mo
 
 
 def test_planner_prompt_unchanged_without_mcp(monkeypatch):
-    from matsim_agents.orchestration.agents.planner import _SYSTEM_PROMPT, planner_node
+    from matsim_agents.agents.roles.planner import _SYSTEM_PROMPT, planner_node
 
     captured: list = []
     _scripted_planner(monkeypatch, [], captured)
@@ -640,7 +640,7 @@ def test_planner_prompt_unchanged_without_mcp(monkeypatch):
 def test_objective_graph_executes_mcp_tasks_without_mlip_config(
     manager_factory, monkeypatch, tmp_path
 ):
-    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.agents.objective_graph import build_graph
 
     monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
     manager = manager_factory(
@@ -675,7 +675,7 @@ def test_checkpoints_hold_redacted_arguments_while_the_tool_gets_live_ones(
 ):
     from langgraph.checkpoint.memory import MemorySaver
 
-    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.agents.objective_graph import build_graph
 
     secret = "live-token-value-123"
     manager = manager_factory(_stdio("a", allowed_tools=["token_length"]))
@@ -704,7 +704,7 @@ def test_denied_resource_uri_credentials_stay_out_of_checkpoints_and_audit(
 ):
     from langgraph.checkpoint.memory import MemorySaver
 
-    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.agents.objective_graph import build_graph
 
     manager = manager_factory(_stdio("a", allowed_resources=["test://notes"]))
     uri = "https://u:pw-live-9@h/r?%74oken=tk-live-9"
@@ -810,7 +810,7 @@ def test_cli_plan_json_redacts_mcp_arguments(monkeypatch):
 
 
 def test_relax_task_still_requires_mlip_config_with_mcp_enabled(manager_factory, monkeypatch):
-    from matsim_agents.orchestration.agents.executor import executor_node
+    from matsim_agents.agents.roles.executor import executor_node
 
     monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
     manager = manager_factory(_stdio("a", allowed_tools=["add"]))
@@ -880,9 +880,9 @@ def test_runs_without_mcp_config_never_import_the_sdk():
     code = (
         "import sys\n"
         "import matsim_agents.cli\n"
-        "from matsim_agents.orchestration.objective_graph import build_graph\n"
-        "from matsim_agents.orchestration.agents.executor import executor_node\n"
-        "from matsim_agents.orchestration.state import MatSimState, TaskSpec\n"
+        "from matsim_agents.agents.objective_graph import build_graph\n"
+        "from matsim_agents.agents.roles.executor import executor_node\n"
+        "from matsim_agents.agents.state import MatSimState, TaskSpec\n"
         "build_graph()\n"
         "out = executor_node(MatSimState(pending_tasks=[TaskSpec(kind='mcp_tool', "
         "mcp_server='a', mcp_tool='t')]))\n"
@@ -1001,7 +1001,7 @@ def _catalog_reading_model():
 def test_real_planner_selects_permitted_tool_from_discovered_schema(manager_factory, monkeypatch):
     """Planner (real structured-output parsing) -> executor -> real MCP server."""
     import matsim_agents.backends.llm.provider as llm_mod
-    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.agents.objective_graph import build_graph
 
     monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
     model = _catalog_reading_model()

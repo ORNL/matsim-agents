@@ -73,7 +73,7 @@ def supervisor_run(
     When to use: one composition, MLIP exploration, then an optional hand-off to DFT active
     learning when the uncertainty gate says the MLIP is unreliable.
     """
-    from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
+    from matsim_agents.agents.composition_graph import SupervisorConfig, run_supervisor
 
     cfg = SupervisorConfig(
         composition=composition,

@@ -10,7 +10,7 @@ this repository: no source, no binaries, no nuclear data.
 
 ## 1. What this interface is
 
-A thin adapter in `matsim_agents.integrations.external.spectra_pka`:
+A thin adapter in `matsim_agents.backends.external.spectra_pka`:
 
 | Module | Role |
 | --- | --- |

@@ -13,10 +13,10 @@ import time
 from pathlib import Path
 
 from benchmarks.e3 import production as e3
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.dft_protocol import path_identity, scientific_dft_payload
-from matsim_agents.active_learning.loop import IterationState, run_active_learning
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.dft_protocol import path_identity, scientific_dft_payload
+from matsim_agents.workflows.active_learning.loop import IterationState, run_active_learning
 from matsim_agents.backends.mlip.config import MACEConfig
 from matsim_agents.execution.locking import exclusive_lock
 
@@ -440,8 +440,8 @@ def main(argv: list[str] | None = None) -> int:
                 "benchmarks/e3/feasibility.py",
                 "benchmarks/e3/profiles.py",
                 "benchmarks/e3/scientific-objectives.yaml",
-                "src/matsim_agents/active_learning/loop.py",
-                "src/matsim_agents/active_learning/config.py",
+                "src/matsim_agents/workflows/active_learning/loop.py",
+                "src/matsim_agents/workflows/active_learning/config.py",
                 "src/matsim_agents/core/seeding.py",
                 "src/matsim_agents/backends/llm/hypotheses.py",
                 "benchmarks/e3/hypothesis_tracking.py",

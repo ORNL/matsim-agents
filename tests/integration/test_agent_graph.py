@@ -17,8 +17,8 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 
+from matsim_agents.agents.state import MatSimState, TaskSpec
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ class TestPlannerNode:
     """planner_node() produces a plan from the objective."""
 
     def test_empty_objective_produces_empty_plan(self):
-        from matsim_agents.orchestration.agents.planner import planner_node
+        from matsim_agents.agents.roles.planner import planner_node
 
         result = planner_node(_state())
         assert result["plan"] == []
@@ -42,7 +42,7 @@ class TestPlannerNode:
 
     def test_fallback_plan_when_llm_unavailable(self, si_vasp):
         """When the LLM raises, planner falls back to a file-based plan."""
-        from matsim_agents.orchestration.agents.planner import planner_node
+        from matsim_agents.agents.roles.planner import planner_node
 
         # Point at a provider that will fail to import
         state = _state(
@@ -77,7 +77,7 @@ class TestPlannerNode:
             llm_provider="vllm",
             llm_model="test-model",
         )
-        from matsim_agents.orchestration.agents.planner import planner_node
+        from matsim_agents.agents.roles.planner import planner_node
 
         result = planner_node(state)
         assert len(result["plan"]) == 1
@@ -96,7 +96,7 @@ class TestPlannerNode:
         monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: fake_llm)
 
         state = _state(objective=f"Relax {si_vasp}", llm_provider="vllm")
-        from matsim_agents.orchestration.agents.planner import planner_node
+        from matsim_agents.agents.roles.planner import planner_node
 
         result = planner_node(state)
         assert len(result["messages"]) == 1
@@ -110,13 +110,13 @@ class TestAnalystNode:
     """analyst_node() summarizes results deterministically and via LLM."""
 
     def test_no_results_returns_message(self):
-        from matsim_agents.orchestration.agents.analyst import analyst_node
+        from matsim_agents.agents.roles.analyst import analyst_node
 
         result = analyst_node(_state())
         assert "No relaxation results" in result["analysis"]
 
     def test_deterministic_summary_picks_best(self, fake_relaxation_result):
-        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
+        from matsim_agents.agents.roles.analyst import _deterministic_summary
 
         # Two results; summary should pick the lower energy one
         worse = RelaxationResult(
@@ -138,7 +138,7 @@ class TestAnalystNode:
         from ase import Atoms
         from ase.io import write
 
-        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
+        from matsim_agents.agents.roles.analyst import _deterministic_summary
 
         def result(name, atoms, energy):
             path = tmp_path / f"{name}.extxyz"
@@ -176,7 +176,7 @@ class TestAnalystNode:
         monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: fake_llm)
 
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
-        from matsim_agents.orchestration.agents.analyst import analyst_node
+        from matsim_agents.agents.roles.analyst import analyst_node
 
         result = analyst_node(state)
         assert result["analysis"] == "LLM-generated analysis."
@@ -190,7 +190,7 @@ class TestAnalystNode:
 
         monkeypatch.setattr(llm_mod, "get_chat_model", _fail)
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
-        from matsim_agents.orchestration.agents.analyst import analyst_node
+        from matsim_agents.agents.roles.analyst import analyst_node
 
         result = analyst_node(state)
         # Should fall back to deterministic summary silently
@@ -198,7 +198,7 @@ class TestAnalystNode:
         assert "-5.432" in result["analysis"]
 
     def test_deterministic_summary_includes_handoff_events(self, fake_relaxation_result):
-        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
+        from matsim_agents.agents.roles.analyst import _deterministic_summary
 
         state = _state(
             results=[fake_relaxation_result],
@@ -218,7 +218,7 @@ def test_graph_nodes_receive_the_run_configuration():
     dropped --mlip-config/--output-dir (executor) and the MCP client (planner)."""
     import warnings
 
-    from matsim_agents.orchestration.objective_graph import build_graph
+    from matsim_agents.agents.objective_graph import build_graph
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -228,8 +228,8 @@ def test_graph_nodes_receive_the_run_configuration():
 
 def test_executor_uses_mlip_selection_from_run_configuration(monkeypatch, si_vasp):
     """The graph passes the run's configurable mlip block to the executor."""
-    import matsim_agents.orchestration.agents.executor as executor_mod
-    from matsim_agents.orchestration.objective_graph import build_graph
+    import matsim_agents.agents.roles.executor as executor_mod
+    from matsim_agents.agents.objective_graph import build_graph
 
     monkeypatch.delenv("MATSIM_MLIP_CONFIG", raising=False)
     seen = {}
@@ -239,7 +239,7 @@ def test_executor_uses_mlip_selection_from_run_configuration(monkeypatch, si_vas
         raise RuntimeError("stop after MLIP selection")
 
     monkeypatch.setattr(executor_mod, "_mlip_config", fake_mlip_config)
-    import matsim_agents.orchestration.objective_graph as graph_mod
+    import matsim_agents.agents.objective_graph as graph_mod
 
     monkeypatch.setattr(
         graph_mod,
@@ -258,19 +258,19 @@ class TestGraphRouting:
     """The conditional edge routes correctly based on pending_tasks/iteration."""
 
     def test_routes_to_executor_when_pending(self):
-        from matsim_agents.orchestration.objective_graph import _route_after_executor
+        from matsim_agents.agents.objective_graph import _route_after_executor
 
         state = _state(pending_tasks=[TaskSpec(structure_path="a.vasp")], iteration=0)
         assert _route_after_executor(state) == "executor"
 
     def test_routes_to_uq_gate_when_no_pending(self):
-        from matsim_agents.orchestration.objective_graph import _route_after_executor
+        from matsim_agents.agents.objective_graph import _route_after_executor
 
         state = _state(pending_tasks=[], iteration=0)
         assert _route_after_executor(state) == "uq_gate"
 
     def test_routes_to_uq_gate_when_max_iterations_hit(self):
-        from matsim_agents.orchestration.objective_graph import _route_after_executor
+        from matsim_agents.agents.objective_graph import _route_after_executor
 
         state = _state(
             pending_tasks=[TaskSpec(structure_path="a.vasp")],
@@ -316,11 +316,11 @@ class TestFullGraphEndToEnd:
                 "messages": [AIMessage(content="[executor] fake relaxation done.")],
             }
 
-        from matsim_agents.orchestration import objective_graph as graph_mod
+        from matsim_agents.agents import objective_graph as graph_mod
 
         monkeypatch.setattr(graph_mod, "executor_node", _fake_executor)
 
-        from matsim_agents.orchestration.objective_graph import build_graph
+        from matsim_agents.agents.objective_graph import build_graph
 
         return build_graph()
 
@@ -366,7 +366,7 @@ class TestFullGraphEndToEnd:
 
         call_count = {"n": 0}
 
-        import matsim_agents.orchestration.objective_graph as graph_mod
+        import matsim_agents.agents.objective_graph as graph_mod
 
         def _counting_executor(state: MatSimState, config=None):
             call_count["n"] += 1
@@ -381,7 +381,7 @@ class TestFullGraphEndToEnd:
 
         monkeypatch.setattr(graph_mod, "executor_node", _counting_executor)
 
-        from matsim_agents.orchestration.objective_graph import build_graph
+        from matsim_agents.agents.objective_graph import build_graph
 
         graph = build_graph()
         initial = _state(

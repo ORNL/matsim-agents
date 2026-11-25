@@ -27,13 +27,13 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from matsim_agents.campaign.gas_qe_campaign import GasExample
-from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.integrations.external.spectra_pka.availability import (
+from matsim_agents.backends.external.spectra_pka.availability import (
     Status,
     check_availability,
 )
-from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.backends.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.campaign.gas_qe_campaign import GasExample
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
 from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,

@@ -8,18 +8,21 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.evaluate import evaluate_frames, evaluate_promotion_candidate
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.core.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
     validate_dataset_reference_method,
 )
+from matsim_agents.workflows.active_learning.config import TrainerConfig
+from matsim_agents.workflows.active_learning.evaluate import (
+    evaluate_frames,
+    evaluate_promotion_candidate,
+)
 
 
 def _random_frame():
-    from matsim_agents.active_learning.finetune_eval import EvaluationConfig
+    from matsim_agents.workflows.active_learning.finetune_eval import EvaluationConfig
 
     return EvaluationConfig.model_validate(
         {
@@ -247,7 +250,7 @@ def test_component_method_validation_rejects_omitted_dataset_species(tmp_path):
 def test_energy_comparison_rejects_unverified_method_before_inference(
     tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch, entrypoint, defect
 ):
-    from matsim_agents.active_learning import finetune_eval
+    from matsim_agents.workflows.active_learning import finetune_eval
 
     dataset = tmp_path / "held-out.extxyz"
     frames = [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)]
@@ -297,7 +300,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
 def test_finetune_split_preserves_verified_method(
     tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch, reuse_defect
 ):
-    from matsim_agents.active_learning import finetune_eval
+    from matsim_agents.workflows.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
     # Distinct geometries: identical frames in train and test are rejected as leakage.
@@ -360,7 +363,7 @@ def test_finetune_split_preserves_verified_method(
 def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
     tmp_path, elemental_manifest, monkeypatch, backend
 ):
-    from matsim_agents.active_learning import finetune_eval
+    from matsim_agents.workflows.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
     # Distinct geometries: identical frames in train and test are rejected as leakage.
@@ -450,7 +453,7 @@ def test_multiple_reference_geometries_are_rejected(elemental_manifest):
 def test_finetune_campaign_checks_reference_coverage_before_training(
     tmp_path, elemental_manifest, monkeypatch
 ):
-    from matsim_agents.active_learning import finetune_eval
+    from matsim_agents.workflows.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
     # Distinct geometries: identical frames in train and test are rejected as leakage.

@@ -16,10 +16,6 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.loop import run_active_learning
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import (
@@ -53,6 +49,10 @@ from matsim_agents.science.thermodynamics.stability import (
     score_stability,
 )
 from matsim_agents.science.thermodynamics.surrogate_hull import evaluate_surrogate_hull
+from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.loop import run_active_learning
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.uncertainty import select_candidates
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,

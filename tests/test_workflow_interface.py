@@ -590,7 +590,7 @@ def test_al_resume_requires_native_loop_setting(tmp_path, native_process, monkey
     run = _saved_invocation(tmp_path, "al")
     monkeypatch.setattr("matsim_agents.cli.workflows._check", lambda cfg: [])
     monkeypatch.setattr(
-        "matsim_agents.active_learning.ALConfig.from_yaml",
+        "matsim_agents.workflows.active_learning.ALConfig.from_yaml",
         lambda path: SimpleNamespace(loop=SimpleNamespace(resume=False)),
     )
     result = CliRunner().invoke(app, ["workflow", "resume", str(run.path)])

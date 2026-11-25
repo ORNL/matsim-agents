@@ -35,7 +35,7 @@ CONFIG_KINDS: dict[str, tuple[str, str, str]] = {
         "matsim-agents llm-check {path}",
     ),
     "al": (
-        "matsim_agents.active_learning.config:ALConfig",
+        "matsim_agents.workflows.active_learning.config:ALConfig",
         "examples/active_learning/al_config.example.yaml",
         "matsim-agents al validate-config {path}",
     ),

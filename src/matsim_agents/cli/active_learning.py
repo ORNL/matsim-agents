@@ -23,8 +23,8 @@ TEMPLATE_ENV = "MATSIM_ALLOW_TEMPLATE_CONFIG"
 
 def _guard_template(config: Path, allow_template: bool) -> None:
     """Refuse to run a repository example unless the caller opts in explicitly."""
-    from matsim_agents.active_learning.campaign_init import is_repo_template
     from matsim_agents.cli.config_tools import REPO
+    from matsim_agents.workflows.active_learning.campaign_init import is_repo_template
 
     if not is_repo_template(config, REPO):
         return
@@ -56,8 +56,8 @@ def al_run(
     """Run the active-learning loop end-to-end."""
     import logging
 
-    from matsim_agents.active_learning import ALConfig
-    from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.workflows.active_learning import ALConfig
+    from matsim_agents.workflows.active_learning.loop import run_active_learning
 
     _guard_template(config, allow_template)
     logging.basicConfig(
@@ -74,13 +74,13 @@ def al_validate_config(
     mlip_config: Path | None = opt_mlip_config(),
 ):
     """Validate an AL YAML config without running anything."""
-    from matsim_agents.active_learning import ALConfig
-    from matsim_agents.active_learning.campaign_init import (
+    from matsim_agents.cli.config_tools import REPO
+    from matsim_agents.workflows.active_learning import ALConfig
+    from matsim_agents.workflows.active_learning.campaign_init import (
         check_reference_coverage,
         elements_of,
         is_repo_template,
     )
-    from matsim_agents.cli.config_tools import REPO
 
     cfg = ALConfig.from_yaml(config, mlip=load_mlip_option(mlip_config))
     seeds = cfg.md.seed_source
@@ -147,12 +147,12 @@ def al_init_campaign(
     preset: str | None = typer.Option(None, help="Facility resource preset (e.g. frontier)."),
 ):
     """Create your campaign's AL config and its elemental reference phase plan."""
-    from matsim_agents.active_learning.campaign_init import write_campaign
+    from matsim_agents.workflows.active_learning.campaign_init import write_campaign
 
     if dft_backend not in {"qe", "vasp"}:
         fail("--dft-backend must be qe or vasp", code=2)
     if kspacing_from_mesh is not None:
-        from matsim_agents.active_learning.campaign_init import kspacing_of_mesh
+        from matsim_agents.workflows.active_learning.campaign_init import kspacing_of_mesh
 
         if reference_kspacing is not None:
             fail("Give --reference-kspacing or --kspacing-from-mesh, not both", code=2)

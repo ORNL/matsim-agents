@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from ase import Atoms
 
-from matsim_agents.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
+from matsim_agents.workflows.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
 
 
 def _frame(backend: str) -> LabelledFrame:

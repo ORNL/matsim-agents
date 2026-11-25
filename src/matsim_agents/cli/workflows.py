@@ -175,7 +175,7 @@ def _check(cfg: WorkflowConfig) -> list[str]:
 
             load_contract(cfg.config)
         elif cfg.workflow == "al":
-            from matsim_agents.active_learning import ALConfig
+            from matsim_agents.workflows.active_learning import ALConfig
 
             ALConfig.from_yaml(cfg.config)
         else:
@@ -588,7 +588,7 @@ def resume(
                 raise ValueError("Use --native-run for resume, not a stored --resume argument")
             command = [*_command(cfg, approved=False), "--resume", str(native_run)]
         elif cfg.workflow == "al":
-            from matsim_agents.active_learning import ALConfig
+            from matsim_agents.workflows.active_learning import ALConfig
 
             if not ALConfig.from_yaml(cfg.config).loop.resume:
                 raise ValueError("Native AL configuration must enable loop.resume")

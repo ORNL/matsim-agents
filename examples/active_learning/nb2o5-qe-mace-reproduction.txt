@@ -30,7 +30,7 @@ An iteration need not train or promote if insufficient valid labels exist.
 
 The repository supplies:
   examples/active_learning/nb2o5_qe_mace.yaml
-  src/matsim_agents/training/finetune_mace.py
+  src/matsim_agents/backends/mlip/training/finetune_mace.py
   deployments/perlmutter/launchers/_qe-step-perlmutter.sh
 
 You supply:

@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-from matsim_agents.core.contracts import EvidenceLevel
-from matsim_agents.integrations.external.transport import (
+from matsim_agents.backends.external.transport import (
     INGEST_FORMAT,
     SOMMERFELD_LORENZ,
     TransportStatus,
@@ -16,6 +15,7 @@ from matsim_agents.integrations.external.transport import (
     ingest_transport_record,
     wiedemann_franz,
 )
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
