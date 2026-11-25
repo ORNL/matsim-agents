@@ -60,6 +60,7 @@ from matsim_agents.data.governance import (
     write_dataset_manifest,
 )
 from matsim_agents.execution.placement import Placement
+from matsim_agents.science.neb.contracts import NebResult, NebTransition
 from matsim_agents.workflows.active_learning.campaign_init import (
     check_reference_coverage,
     elements_of,
@@ -68,6 +69,8 @@ from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import (
     ALConfig,
     MDSamplingStrategy,
+    NebEscalationConfig,
+    NebSamplingConfig,
     NEBSamplingStrategy,
     SamplingStrategy,
 )
@@ -118,6 +121,8 @@ class IterationState:
     n_selected: int = 0
     n_dft_converged: int = 0
     n_dft_failed: int = 0
+    n_dft_neb_runs: int = 0
+    neb_pathways: list[dict[str, Any]] = field(default_factory=list)
     dft_backend: str | None = None
     score_min: float | None = None
     score_max: float | None = None
@@ -952,6 +957,7 @@ def run_active_learning(
                     _apply_model_override(cfg, str(resumed_logdir))
 
         completed_dft = _completed_dft_count(cfg, root)
+        completed_dft_neb = _completed_dft_neb_count(root)
         models = _SurrogateModels(
             placement, keep=not placement.shares_devices("mlip", ("dft", "training"))
         )
@@ -967,6 +973,7 @@ def run_active_learning(
                 root=root,
                 start_iter=start_iter,
                 completed_dft=completed_dft,
+                completed_dft_neb=completed_dft_neb,
                 seed_paths=seed_paths,
                 dataset_path=dataset_path,
                 validation_dataset_path=validation_dataset_path,
@@ -1039,6 +1046,143 @@ def _sampling_strategies(cfg: ALConfig) -> list[SamplingStrategy]:
     return [MDSamplingStrategy(method="md", parameters=cfg.md)]
 
 
+def _completed_dft_neb_count(root: Path) -> int:
+    """Count reserved full DFT NEB runs so the configured cap survives resume."""
+    completed = 0
+    for path in root.glob("iteration_*/state.json"):
+        state = json.loads(path.read_text(encoding="utf-8"))
+        count = state.get("n_dft_neb_runs", 0)
+        if not isinstance(count, int) or count < 0:
+            raise ValueError(f"Invalid n_dft_neb_runs in {path}")
+        completed += count
+    return completed
+
+
+def _apply_neb_escalation(
+    policy: NebEscalationConfig | None,
+    outcome,
+    iteration_dir: Path,
+    pathway_directory: Path,
+    state: IterationState,
+    completed_dft_neb: int,
+) -> tuple[dict[str, Any], bool]:
+    result = outcome.result
+    uncertainty = result.pathway_uncertainty_eV
+    record: dict[str, Any] = {
+        "transition_id": result.provenance.get("transition_id"),
+        "mlip_result": result.model_dump(mode="json"),
+        "decision": "not_configured",
+    }
+    if policy is None:
+        return record, False
+
+    acceptable = (
+        result.state == "converged_unqualified"
+        and uncertainty is not None
+        and uncertainty <= (policy.max_pathway_uncertainty_eV or -1.0)
+    )
+    run_dft = policy.policy == "always_dft_neb" or (
+        policy.policy == "uncertainty_gated" and not acceptable
+    )
+    if not run_dft:
+        record["decision"] = "accepted_mlip" if acceptable else "not_accepted"
+        return record, False
+
+    if completed_dft_neb >= policy.max_dft_neb_runs:
+        raise RuntimeError(
+            "full DFT NEB escalation required, but escalation.max_dft_neb_runs is exhausted"
+        )
+    transition = outcome.transition
+    if transition is None:
+        raise ValueError("full DFT NEB escalation requires typed transition metadata")
+    if policy.dft_neb is None:
+        raise ValueError("full DFT NEB escalation has no QE NEB configuration")
+
+    state.n_dft_neb_runs += 1
+    record["decision"] = "dispatching_dft_neb"
+    state.neb_pathways.append(record)
+    _write_state(iteration_dir, state)
+
+    from matsim_agents.science.neb.endpoints import MigrationPair
+    from matsim_agents.workflows.neb import run_neb_workflow
+
+    pair = MigrationPair(
+        initial=outcome.images[0].copy(),
+        final=outcome.images[-1].copy(),
+        transition=transition,
+        final_config=None,
+    )
+    dft_outcome = run_neb_workflow(
+        pair,
+        policy.dft_neb,
+        pathway_directory / f"{transition.transition_id}-dft-neb",
+        dispatch=True,
+        allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
+    )
+    if dft_outcome.plan.status != "planned" or dft_outcome.result is None:
+        raise RuntimeError(
+            "QE NEB escalation did not produce a result: " + "; ".join(dft_outcome.plan.reasons)
+        )
+    record["decision"] = "dft_neb_complete"
+    record["dft_result"] = dft_outcome.result.model_dump(mode="json")
+    record["dft_run_directory"] = dft_outcome.plan.directory
+    if dft_outcome.result.state not in ("converged_unqualified", "qualified"):
+        record["decision"] = "dft_neb_unconverged"
+    return record, True
+
+
+def _write_neb_kinetics(
+    parameters: NebSamplingConfig,
+    transition: NebTransition | None,
+    result,
+    directory: Path,
+) -> Path:
+    """Attach an accepted barrier to the existing exploratory-kinetics contracts."""
+    from matsim_agents.science.kinetics.contracts import NetworkProvenance
+    from matsim_agents.science.kinetics.evidence import attach_neb_result
+    from matsim_agents.science.kinetics.graph import TransitionNetwork
+    from matsim_agents.science.kinetics.rates import event_rate
+    from matsim_agents.science.kinetics.transitions import add_candidate_transition
+    from matsim_agents.science.kinetics.validation import validate_network
+
+    kinetics = parameters.kinetics
+    if kinetics is None or transition is None:
+        raise ValueError("NEB kinetics output requires typed transition and rate assumptions")
+    network = TransitionNetwork(
+        NetworkProvenance(
+            network_id=f"al-{transition.transition_id}",
+            parent_id=transition.initial.parent_id,
+            parent_ordering_id=transition.initial.parent_ordering_id,
+            notes=("NEB barrier attached by active learning",),
+        )
+    )
+    events = add_candidate_transition(network, transition)
+    attach_neb_result(
+        network,
+        transition,
+        result,
+        attempt_frequency_hz=kinetics.attempt_frequency_hz,
+        prefactor_note=kinetics.prefactor_note,
+    )
+    rates = [
+        event_rate(event, kinetics.temperature_K, require="exploratory").model_dump(mode="json")
+        for event in network.events
+    ]
+    report = validate_network(network, events[0].source_id)
+    target = directory / "kinetics-evidence.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "network_provenance": network.provenance.model_dump(mode="json"),
+        "states": [state.model_dump(mode="json") for state in network.states],
+        "events": [event.model_dump(mode="json") for event in network.events],
+        "rates": rates,
+        "report": report.model_dump(mode="json"),
+        "neb_result": result.model_dump(mode="json"),
+    }
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    return target
+
+
 def _run_iterations(
     cfg: ALConfig,
     placement: Placement,
@@ -1047,6 +1191,7 @@ def _run_iterations(
     root: Path,
     start_iter: int,
     completed_dft: int,
+    completed_dft_neb: int,
     seed_paths: list,
     dataset_path: Path,
     validation_dataset_path: Path,
@@ -1080,39 +1225,51 @@ def _run_iterations(
             if candidate_sampler is not None:
                 candidates = candidate_sampler(cfg, i, it_dir)
             else:
-                candidates = []
-                for strategy_index, strategy in enumerate(_sampling_strategies(cfg)):
-                    if isinstance(strategy, MDSamplingStrategy):
-                        with models.md_pool() as md_pool:
-                            candidates.extend(
-                                sample_md_candidates(
-                                    strategy.parameters,
-                                    primary_calc,
-                                    it_dir / "md",
-                                    seed_paths=seed_paths,
-                                    random_seed=stream_seed(
-                                        cfg.random_seed, "md", i, strategy_index
-                                    ),
-                                    mlip_pool=md_pool,
-                                    mlip_cfg=cfg.mlip,
-                                    enable_mc_dropout=enable_drop,
-                                )
-                            )
-                    elif isinstance(strategy, NEBSamplingStrategy):
-                        from matsim_agents.workflows.active_learning.neb_sampler import (
-                            sample_neb_candidates,
-                        )
+                from matsim_agents.workflows.active_learning.sampling import sample_strategies
 
-                        outcome = sample_neb_candidates(
-                            strategy.parameters,
-                            primary_calc,
-                            it_dir / "neb",
-                            iteration=i,
-                            model_id=cfg.mlip.model_reference,
-                            mlip_config=cfg.mlip,
-                            uncertainty_calculators=ensemble_calcs or (),
-                        )
-                        candidates.extend(outcome.candidates)
+                batch = sample_strategies(
+                    _sampling_strategies(cfg),
+                    primary_calc,
+                    it_dir,
+                    random_seed=cfg.random_seed,
+                    iteration=i,
+                    seed_paths=seed_paths,
+                    mlip_config=cfg.mlip,
+                    acquisition=cfg.acquisition,
+                    ensemble_calculators=ensemble_calcs or (),
+                    md_pool_factory=models.md_pool,
+                    md_sampler=sample_md_candidates,
+                )
+                candidates = batch.candidates
+                for pathway in batch.neb_pathways:
+                    outcome = pathway.outcome
+                    pathway_record, dft_neb_dispatched = _apply_neb_escalation(
+                        cfg.escalation,
+                        outcome,
+                        it_dir,
+                        pathway.directory,
+                        state,
+                        completed_dft_neb,
+                    )
+                    if pathway.parameters.kinetics is not None:
+                        kinetics_result = None
+                        if pathway_record["decision"] == "accepted_mlip":
+                            kinetics_result = outcome.result
+                        elif pathway_record["decision"] == "dft_neb_complete":
+                            kinetics_result = NebResult.model_validate(pathway_record["dft_result"])
+                        if kinetics_result is not None:
+                            kinetics_artifact = _write_neb_kinetics(
+                                pathway.parameters,
+                                outcome.transition,
+                                kinetics_result,
+                                pathway.directory / str(pathway_record["transition_id"]),
+                            )
+                            pathway_record["kinetics_artifact"] = str(kinetics_artifact)
+                    if dft_neb_dispatched:
+                        completed_dft_neb += 1
+                        state.neb_pathways[-1] = pathway_record
+                    else:
+                        state.neb_pathways.append(pathway_record)
             state.n_candidates = len(candidates)
             state.timings_sec["sampling"] = time.time() - t0
             log.info("Iter %d: produced %d candidates", i, len(candidates))

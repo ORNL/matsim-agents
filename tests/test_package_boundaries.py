@@ -463,3 +463,10 @@ def test_phase_exploration_api_is_public() -> None:
     assert callable(PhaseExplorationPolicy)
     assert callable(PhaseExplorationWorkflowResult)
     assert callable(run_phase_exploration)
+
+
+def test_standalone_sampling_api_is_public() -> None:
+    from matsim_agents.workflows import SamplingRunConfig, run_sampling
+
+    assert callable(SamplingRunConfig)
+    assert callable(run_sampling)

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 # Submodules import LLM and graph stacks; load them only when a name is used.
 _EXPORTS = {
+    "active_learning.config": ("SamplingRunConfig",),
+    "active_learning.standalone_sampling": ("run_sampling",),
     "debate": (
         "DebateParticipant",
         "ScientificDebateConfig",
@@ -73,6 +75,7 @@ __all__ = [
     "ScientificHypothesis",
     "ScientificRelaxationConfig",
     "ScientificRelaxationResult",
+    "SamplingRunConfig",
     "SingleLLMDiscussionConfig",
     "build_hypothesis_from_discussion",
     "check_exploration",
@@ -83,6 +86,7 @@ __all__ = [
     "run_llm_check",
     "run_phase_exploration",
     "run_relaxation",
+    "run_sampling",
     "run_scientific_debate",
     "summarize_exploration",
 ]
@@ -103,6 +107,8 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from matsim_agents.workflows.active_learning.config import SamplingRunConfig
+    from matsim_agents.workflows.active_learning.standalone_sampling import run_sampling
     from matsim_agents.workflows.debate import (
         DebateParticipant,
         ScientificDebateConfig,

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from ase import Atoms
@@ -35,6 +36,18 @@ from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import AcquisitionConfig
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PathwayUncertainty:
+    """Uncertainty of forward and reverse barriers evaluated on one fixed path."""
+
+    forward_barrier_eV: float
+    reverse_barrier_eV: float
+
+    @property
+    def pathway_eV(self) -> float:
+        return max(self.forward_barrier_eV, self.reverse_barrier_eV)
 
 
 # --------------------------------------------------------------------------- #
@@ -59,6 +72,92 @@ def score_ensemble(candidates: Sequence[Candidate], calculators: Sequence) -> np
         std = per_model.std(axis=0)
         out[i] = float(np.sqrt(np.mean(std**2)))
     return out
+
+
+def score_ensemble_pathway(images: Sequence[Atoms], calculators: Sequence) -> PathwayUncertainty:
+    """Score barrier uncertainty from correlated per-model energies on a fixed path."""
+    if len(images) < 2:
+        raise ValueError("pathway scoring needs at least two images")
+    if len(calculators) < 2:
+        raise ValueError("ensemble pathway scoring needs >=2 calculators")
+
+    forward, reverse = [], []
+    for calculator in calculators:
+        energies = []
+        for image in images:
+            atoms = image.copy()
+            atoms.calc = calculator
+            energies.append(float(atoms.get_potential_energy()))
+        if not np.isfinite(energies).all():
+            raise ValueError("ensemble returned non-finite pathway energies")
+        peak = max(energies)
+        forward.append(peak - energies[0])
+        reverse.append(peak - energies[-1])
+    return PathwayUncertainty(
+        forward_barrier_eV=float(np.std(forward)),
+        reverse_barrier_eV=float(np.std(reverse)),
+    )
+
+
+def score_mc_dropout_pathway(
+    images: Sequence[Atoms],
+    calculator,
+    passes: int,
+    p: float,
+    *,
+    seed: int,
+) -> PathwayUncertainty:
+    """Score fixed-path barrier uncertainty with a shared dropout draw per pass."""
+    if len(images) < 2:
+        raise ValueError("pathway scoring needs at least two images")
+    if passes < 2:
+        raise ValueError("MC-dropout pathway scoring needs at least two passes")
+    if not 0.0 < p < 1.0:
+        raise ValueError("MC-dropout probability must be between 0 and 1")
+    if not hasattr(calculator, "model"):
+        raise AttributeError(
+            "MC-dropout pathway scoring requires a calculator exposing `.model`; got "
+            + type(calculator).__name__
+        )
+
+    import torch
+    import torch.nn as nn
+
+    model = calculator.model
+    for module in model.modules():
+        if isinstance(module, (nn.Dropout, nn.Dropout1d, nn.Dropout2d, nn.Dropout3d)):
+            module.p = float(p)
+    devices = {parameter.device for parameter in model.parameters()}
+    forward, reverse = [], []
+    try:
+        for pass_index in range(passes):
+            with seeded_torch(seed, "mc-dropout-pathway", pass_index, devices=devices):
+                cpu_state = torch.random.get_rng_state()
+                cuda_devices = [device for device in devices if device.type == "cuda"]
+                cuda_states = {device: torch.cuda.get_rng_state(device) for device in cuda_devices}
+                energies = []
+                for image in images:
+                    torch.random.set_rng_state(cpu_state)
+                    for device, state in cuda_states.items():
+                        torch.cuda.set_rng_state(state, device)
+                    enable_dropout(model)
+                    reset = getattr(calculator, "reset", None)
+                    if callable(reset):
+                        reset()
+                    atoms = image.copy()
+                    atoms.calc = calculator
+                    energies.append(float(atoms.get_potential_energy()))
+            if not np.isfinite(energies).all():
+                raise ValueError("MC-dropout returned non-finite pathway energies")
+            peak = max(energies)
+            forward.append(peak - energies[0])
+            reverse.append(peak - energies[-1])
+    finally:
+        model.eval()
+    return PathwayUncertainty(
+        forward_barrier_eV=float(np.std(forward)),
+        reverse_barrier_eV=float(np.std(reverse)),
+    )
 
 
 def score_mc_dropout(

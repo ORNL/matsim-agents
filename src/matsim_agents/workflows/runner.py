@@ -356,6 +356,59 @@ def _al_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) ->
     return Outcome("complete", None, {"note": "see the active-learning run directory"})
 
 
+def _sampling_config(path: Path, options: RunOptions):
+    from matsim_agents.workflows.active_learning import SamplingRunConfig
+
+    return SamplingRunConfig.from_yaml(path, mlip=_mlip_override(options))
+
+
+def _sampling_preflight(path: Path, options: RunOptions) -> Preflight:
+    from matsim_agents.workflows.active_learning.config import (
+        MDSamplingStrategy,
+        NEBSamplingStrategy,
+    )
+
+    cfg = _sampling_config(path, options)
+    blockers = backend_blockers([cfg.mlip.backend])
+    for strategy in cfg.sampling.strategies:
+        if isinstance(strategy, NEBSamplingStrategy):
+            for endpoint in (strategy.parameters.initial_path, strategy.parameters.final_path):
+                if not endpoint.is_file():
+                    blockers.append(f"NEB endpoint {endpoint} does not exist")
+        elif isinstance(strategy, MDSamplingStrategy):
+            source = strategy.parameters.seed_source
+            if source.kind == "paths":
+                blockers.extend(
+                    f"MD seed structure {seed} does not exist"
+                    for seed in source.paths
+                    if not seed.is_file()
+                )
+    return Preflight(
+        {
+            "mlip": cfg.mlip.backend,
+            "sampling_methods": [strategy.method for strategy in cfg.sampling.strategies],
+            "active_learning": False,
+        },
+        blockers,
+    )
+
+
+def _sampling_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.active_learning.standalone_sampling import run_sampling
+
+    result = run_sampling(_sampling_config(path, options), run.path / "sampling")
+    return Outcome(
+        "complete",
+        str(run.path / "sampling"),
+        {
+            "n_candidates": result["n_candidates"],
+            "n_neb_pathways": len(result["neb_pathways"]),
+            "candidate_file": result["candidate_file"],
+            "note": "MLIP sampling only; no DFT labels or active-learning updates were run",
+        },
+    )
+
+
 # --- NEB --------------------------------------------------------------------------------
 
 _NEB_KEYS = {"parent", "defect", "lattice_parameter", "qe", "images", "method_id"}
@@ -562,6 +615,7 @@ def _investigation_execute(path: Path, run: ScientificRunDirectory, options: Run
 HANDLERS: dict[str, Handler] = {
     "application": Handler(_application_preflight, _application_execute),
     "al": Handler(_al_preflight, _al_execute),
+    "sampling": Handler(_sampling_preflight, _sampling_execute),
     "neb": Handler(_neb_preflight, _neb_execute),
     "external": Handler(_external_preflight, _external_execute),
     "relax": Handler(_relax_preflight, _relax_execute),
@@ -612,6 +666,10 @@ def detect_kind(path: str | Path) -> str:
         (lambda k: "contract_id" in k, "characterize"),
         (lambda k: {"mode", "structure_path"} <= k, "relax"),
         (lambda k: {"parent", "defect"} <= k, "neb"),
+        (
+            lambda k: {"random_seed", "mlip", "sampling"} <= k and "dft" not in k,
+            "sampling",
+        ),
         (
             lambda k: {"random_seed", "acquisition"} <= k and ("md" in k or "sampling" in k),
             "al",

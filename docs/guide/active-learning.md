@@ -146,6 +146,10 @@ use `sampling.strategies`; each method writes candidates into the same
 uncertainty selection, DFT single-point labeling, dataset, and optional
 retraining pipeline. NEB endpoints must have compatible cells, periodic
 boundaries, species, and stable integer `atom_id` arrays.
+Endpoint constraints and per-atom magnetic moments must also match and remain
+unchanged through relaxation. With a typed transition, the workflow rejects
+relaxation that collapses the declared moving-atom displacement; without typed
+mechanism metadata, that check is unavailable.
 
 ```yaml
 sampling:
@@ -170,21 +174,116 @@ Add a second strategy with `method: md` and its normal `MDConfig` under
 `parameters:` to sample both methods in one AL iteration. A legacy `md:` block
 can also be combined with a `sampling:` list containing NEB strategies. NEB
 optimization uses ASE and the configured MLIP; it can optionally relax
-endpoints through the shared MLIP structure-relaxation workflow. The stored
-barrier uncertainty is the ensemble spread evaluated on the fixed optimized
-path, not uncertainty in the minimum-energy path location. Missing ensemble
-uncertainty is recorded as unavailable, never as low uncertainty. At most two
-images per transition are selected by default (`acquisition.max_per_neb_pathway`).
+endpoints through the shared MLIP structure-relaxation workflow. Forward and
+reverse barrier uncertainty are computed from per-model energy differences on
+the same fixed path, using the configured ensemble or MC-dropout method. The
+dropout estimate shares each stochastic draw across all path images and never
+drives the NEB forces. This does not measure uncertainty in the location of the
+minimum-energy path. Missing uncertainty is recorded as unavailable, never as
+low uncertainty. At most two images per transition are selected by default
+(`acquisition.max_per_neb_pathway`).
+When typed endpoint metadata marks structures as relaxed, the recorded MLIP
+method must match the active model to reuse them; otherwise set
+`relax_endpoints: true`.
 NEB trajectory snapshots are recorded every ten optimizer steps by default;
 `record_every` configures this interval while restart checkpoints are refreshed
 each step.
+Independent NEB strategies run concurrently when the `mlip` resource pool
+provides multiple worker devices; results remain ordered by the configuration.
+Without worker devices, the same strategies run serially with one cached model.
 
-The shared AL escalation labels selected NEB images with single-point DFT and
-may retrain/promote the common MLIP. This does **not** make those labels a
-DFT-optimized NEB barrier; use the existing specialized `neb` workflow when a
-full DFT NEB calculation is required. Both the standard
-`matsim-agents run CONFIG.yaml` entry point and the backward-compatible
-`al run` command execute the active-learning config.
+For an optional two-stage path, use a standard NEB first and add a climbing-image
+refinement:
+
+```yaml
+        climbing_image: false
+        fmax_eV_per_A: 0.05
+        max_steps: 1000
+        refinement_stage:
+          climbing_image: true
+          optimizer: FIRE
+          fmax_eV_per_A: 0.02
+          max_steps: 200
+```
+
+The refinement stage runs only after the initial stage converges and has its own
+trajectory and restart checkpoint.
+
+The shared AL loop labels selected NEB images with DFT single points and may
+retrain/promote the common MLIP. This does **not** make those labels a
+DFT-optimized NEB barrier. An optional top-level `escalation:` policy can
+accept a converged MLIP barrier only when its configured uncertainty is
+available and below the threshold, or escalate an excessive/missing estimate
+to the existing QE NEB workflow. `mlip_only` never dispatches DFT and leaves
+ineligible paths explicitly unaccepted. Full DFT escalation requires a typed
+`transition:` for each NEB strategy, `dft.backend: qe`, a complete existing
+`QENebConfig` under `escalation.dft_neb`, and a positive
+`escalation.max_dft_neb_runs` budget. Generated endpoints are not dispatched
+unless `allow_unrelaxed_endpoints` is explicitly enabled. Full DFT results
+retain the qualification status produced by the QE workflow; escalation does
+not imply scientific qualification.
+
+For example, MLIP-only acceptance uses:
+
+```yaml
+escalation:
+  policy: mlip_only
+  max_pathway_uncertainty_eV: 0.25
+```
+
+`uncertainty_gated` uses the same threshold plus `dft_neb` and
+`max_dft_neb_runs`; missing uncertainty triggers escalation rather than being
+treated as zero. Each iteration records the decision, any QE NEB result, and
+the consumed run budget in its `state.json`.
+
+To pass an accepted barrier into the existing exploratory-kinetics contracts,
+put a validated typed `transition:` and explicit assumptions under that NEB
+strategy:
+
+```yaml
+kinetics:
+  attempt_frequency_hz: 1.0e13
+  temperature_K: 600
+  prefactor_note: user-supplied attempt frequency
+```
+
+The generated `kinetics-evidence.json` preserves the MLIP/DFT result and
+marks unqualified evidence as exploratory; it does not invent an attempt
+frequency or promote MLIP evidence to DFT.
+
+### Standalone sampling without active learning
+
+Use the same `matsim-agents run CONFIG.yaml` interface with `random_seed`,
+`mlip`, `sampling`, and `resources`, omitting active-learning and DFT fields:
+
+```yaml
+random_seed: 17
+mlip:
+  backend: mace
+  family: mace_mp
+  model: medium
+sampling:
+  strategies:
+    - method: neb
+      parameters:
+        initial_path: /campaign/initial.extxyz
+        final_path: /campaign/final.extxyz
+        n_images: 7
+resources:
+  pools:
+    mlip:
+      nodes: 1
+      devices: all
+```
+
+Replace the NEB strategy with an `md` strategy to run MD only, or list both to
+run them together. `acquisition:` is optional and, when present, supplies the
+same shared uncertainty method; standalone sampling does not select DFT labels,
+update a dataset, or retrain. The standardized runner stores candidate frames
+and method-specific results under its run directory.
+
+Both the standard `matsim-agents run CONFIG.yaml` entry point and the
+backward-compatible `al run` command execute active-learning configs.
 
 ### Random seed
 

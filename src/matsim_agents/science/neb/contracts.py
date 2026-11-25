@@ -319,6 +319,8 @@ class NebResult(BaseModel):
     optimization_steps: StrictInt | None = Field(default=None, ge=0)
     max_force_eV_per_A: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     pathway_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    forward_barrier_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    reverse_barrier_uncertainty_eV: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     endpoints_qualified: bool = False
     climbing_image_used: bool = False
     warnings: tuple[str, ...] = ()
