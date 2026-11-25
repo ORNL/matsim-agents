@@ -442,9 +442,25 @@ def _external_execute(path: Path, run: ScientificRunDirectory, options: RunOptio
     )
 
 
+# --- application ------------------------------------------------------------------------
+
+
+def _application_preflight(path: Path, options: RunOptions) -> Preflight:
+    from matsim_agents.workflows import application_runner
+
+    return application_runner.preflight(path, options)
+
+
+def _application_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows import application_runner
+
+    return application_runner.execute(path, run, options)
+
+
 # --- registry ---------------------------------------------------------------------------
 
 HANDLERS: dict[str, Handler] = {
+    "application": Handler(_application_preflight, _application_execute),
     "al": Handler(_al_preflight, _al_execute),
     "neb": Handler(_neb_preflight, _neb_execute),
     "external": Handler(_external_preflight, _external_execute),

@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4, "hcp": 2, "diamond": 8}
 
+ApplicationMode = Literal["validate", "generate", "mlip_relax", "dft_relax"]
+
 
 class SupercellTarget(BaseModel):
     """A fixed-composition supercell of a parent lattice, checked for consistency."""
@@ -78,6 +80,11 @@ class ApplicationConfig(BaseModel):
     properties: tuple[str, ...] = ()
     policy: Path | None = None
     workflow_config: Path | None = None
+    mode: ApplicationMode = "validate"
+    relaxation: Path | None = Field(
+        default=None,
+        description="Relaxation config; structure_path is filled in per candidate.",
+    )
     parameters: dict[str, Any] = Field(default_factory=dict)
     source: Path | None = Field(default=None, exclude=True)
 
@@ -89,6 +96,8 @@ class ApplicationConfig(BaseModel):
             missing = sorted(set(self.target.elements) - set(self.species))
             if missing:
                 raise ValueError(f"species must include every target element; missing {missing}")
+        if self.mode.endswith("_relax") and self.relaxation is None:
+            raise ValueError(f"mode {self.mode!r} needs a relaxation config")
         return self
 
     def resolve(self, path: Path | None) -> Path | None:
@@ -105,7 +114,7 @@ def load_application(path: str | os.PathLike[str]) -> ApplicationConfig:
     if not isinstance(data, dict):
         raise ValueError(f"{source} does not contain a mapping")
     app = ApplicationConfig.model_validate({**data, "source": source})
-    for field in ("policy", "workflow_config"):
+    for field in ("policy", "workflow_config", "relaxation"):
         resolved = app.resolve(getattr(app, field))
         if resolved is not None and not resolved.is_file():
             raise FileNotFoundError(f"{field} {resolved} referenced by {source} does not exist")
