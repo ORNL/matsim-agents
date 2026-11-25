@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
 from matsim_agents.backends.mlip.relaxation import RelaxationSettings, RelaxStructureInput
-from matsim_agents.discovery.seeds import SeedGenerationAction
+from matsim_agents.discovery.seed_structures import SeedGenerationAction
 from matsim_agents.execution.ledger import file_sha256
 
 

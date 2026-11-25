@@ -87,6 +87,8 @@ case "$CASE" in
     ;;
 esac
 AL_CONFIG="$REPO/examples/paper_cases/$YAML_NAME"
+# This job reproduces a repository example on purpose (`al run` refuses examples otherwise).
+export MATSIM_ALLOW_TEMPLATE_CONFIG=1
 if [[ ! -f "$AL_CONFIG" ]]; then
   echo "ERROR: AL config not found: $AL_CONFIG" >&2
   exit 2

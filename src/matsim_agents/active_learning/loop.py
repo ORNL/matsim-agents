@@ -39,7 +39,7 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.active_learning.candidates import Candidate, sample_md_candidates
+from matsim_agents.active_learning.campaign_init import check_reference_coverage, elements_of
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
@@ -53,6 +53,7 @@ from matsim_agents.active_learning.evaluate import (
     evaluate_frames,
     evaluate_promotion_candidate,
 )
+from matsim_agents.active_learning.md_sampler import Candidate, sample_md_candidates
 from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
@@ -863,6 +864,7 @@ def run_active_learning(
             else []
         )
         log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
+        check_reference_coverage(cfg.trainer, elements_of(seed_paths))
 
         # The configured model, before a resume points cfg.mlip at the last promoted one.
         foundation_mlip = cfg.mlip.model_copy(deep=True)

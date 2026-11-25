@@ -16,9 +16,9 @@ from ase.io import write
 
 from benchmarks.e3 import production as e3
 from benchmarks.e3.qe_active_learning import E3Sampler, check_resume, main, validate_config
-from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig, TrainerConfig
 from matsim_agents.active_learning.loop import _audit_force_errors
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.execution.allocation import Allocation
 
 ROOT = Path(__file__).resolve().parents[1]

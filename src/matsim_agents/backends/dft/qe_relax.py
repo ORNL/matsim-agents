@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from ase import units
 
 from matsim_agents.backends.dft.process import run_launcher
 from matsim_agents.execution.devices import apply_mask_environment
@@ -361,9 +362,12 @@ def write_pw_input(
     prefix: str = "pwscf",
     outdir: str = "./tmp",
     title: str | None = None,
+    magnetic_config=None,
 ) -> str:
     """Write a ``pw.x`` input file for ``atoms`` using ``settings``.
 
+    ``magnetic_config`` (a ``MagneticConfiguration``) switches on per-atom collinear
+    magnetic types; ``None`` keeps the historical one-type-per-element behaviour.
     Returns the absolute path of the file that was written.
     """
     settings = _fill_defaults(atoms, settings)
@@ -381,6 +385,16 @@ def write_pw_input(
 
     nat = len(atoms)
     ntyp = len(symbols_unique)
+    mtypes = None
+    if magnetic_config is not None:
+        from matsim_agents.backends.dft.qe_magnetic import (
+            build_magnetic_types,
+            reject_contradictory_settings,
+        )
+
+        reject_contradictory_settings(settings.extra_system, "extra_system")
+        mtypes = build_magnetic_types(atoms, magnetic_config, settings.pseudopotentials)
+        ntyp = mtypes.ntyp
 
     control = {
         "calculation": f"'{settings.calculation}'",
@@ -407,6 +421,8 @@ def write_pw_input(
     if settings.occupations == "smearing":
         system["smearing"] = f"'{settings.smearing}'"
         system["degauss"] = _fortran(settings.degauss_ry)
+    if mtypes is not None:
+        system.update({k: _fortran(v) for k, v in mtypes.system_entries().items()})
     system.update({k: _fortran(v) for k, v in settings.extra_system.items()})
 
     electrons = {
@@ -433,9 +449,12 @@ def write_pw_input(
         parts.append(_namelist("CELL", cell))
 
     parts.append("ATOMIC_SPECIES")
-    for sym in symbols_unique:
-        mass = _ATOMIC_MASS.get(sym, 1.0)
-        parts.append(f"  {sym}  {mass:.4f}  {settings.pseudopotentials[sym]}")
+    if mtypes is not None:
+        parts.extend(mtypes.species_lines())
+    else:
+        for sym in symbols_unique:
+            mass = _ATOMIC_MASS.get(sym, 1.0)
+            parts.append(f"  {sym}  {mass:.4f}  {settings.pseudopotentials[sym]}")
     parts.append("")
 
     parts.append("CELL_PARAMETERS angstrom")
@@ -444,8 +463,11 @@ def write_pw_input(
     parts.append("")
 
     parts.append("ATOMIC_POSITIONS angstrom")
-    for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
-        parts.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
+    if mtypes is not None:
+        parts.extend(mtypes.position_lines(atoms))
+    else:
+        for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
+            parts.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
     parts.append("")
 
     nk = settings.kpts or (1, 1, 1)
@@ -498,6 +520,8 @@ def _fortran(v: Any) -> str:
         return f"{v:.8e}".replace("e", "d")
     if isinstance(v, (list, tuple)):
         return " ".join(_fortran(x) for x in v)
+    if isinstance(v, str) and not (len(v) >= 2 and v[0] == v[-1] and v[0] in "'\""):
+        return f"'{v}'"
     return str(v)
 
 
@@ -506,7 +530,9 @@ def _fortran(v: Any) -> str:
 # --------------------------------------------------------------------------- #
 
 
-_RY_TO_EV = 13.605693122994
+# ase.units (CODATA 2014). pw.x itself prints Ry and Ry/Bohr; convert exactly once here.
+_RY_TO_EV = units.Ry
+_RY_PER_BOHR_TO_EV_PER_A = units.Ry / units.Bohr
 
 
 @dataclass
@@ -519,7 +545,11 @@ class PWResult:
     scf_iterations_per_step: list[int]
     final_energy_ry: float
     final_energy_ev: float
-    final_max_force_ry_au: float | None
+    # pw.x "Total force": the norm of all force components, NOT a per-atom maximum.
+    final_total_force_ry_au: float | None
+    # From the last per-atom "Forces acting on atoms" block; None if pw.x printed none.
+    final_forces_eV_per_A: list[list[float]] | None
+    final_max_force_eV_per_A: float | None
     converged: bool
     job_done: bool
     wall_time_sec: float | None
@@ -533,7 +563,9 @@ class PWResult:
             "scf_iterations_per_step": list(self.scf_iterations_per_step),
             "final_energy_ry": self.final_energy_ry,
             "final_energy_ev": self.final_energy_ev,
-            "final_max_force_ry_au": self.final_max_force_ry_au,
+            "final_total_force_ry_au": self.final_total_force_ry_au,
+            "final_forces_eV_per_A": self.final_forces_eV_per_A,
+            "final_max_force_eV_per_A": self.final_max_force_eV_per_A,
             "converged": self.converged,
             "job_done": self.job_done,
             "wall_time_sec": self.wall_time_sec,
@@ -545,13 +577,40 @@ _RE_TOTAL_ENERGY = re.compile(r"!\s*total energy\s*=\s*(-?\d+\.\d+)\s*Ry")
 _RE_ITER = re.compile(r"iteration #\s*(\d+)\s+ecut")
 _RE_FINAL_COORDINATES = re.compile(r"End final coordinates")
 _RE_BFGS_CONV = re.compile(r"bfgs converged in\s*(\d+)\s*scf cycles")
-_RE_FORCE_MAX = re.compile(r"Total force\s*=\s*(-?\d+\.\d+)\s*Total SCF correction")
+_RE_TOTAL_FORCE = re.compile(r"Total force\s*=\s*(-?\d+\.\d+)\s*Total SCF correction")
+_RE_FORCES_HEADER = re.compile(r"Forces acting on atoms \(cartesian axes, Ry/au\):")
+_RE_ATOM_FORCE = re.compile(r"^\s*atom\s+\d+\s+type\s+\d+\s+force\s*=\s*(\S+)\s+(\S+)\s+(\S+)\s*$")
 _RE_WALL = re.compile(r"PWSCF\s*:.*?CPU\s+(?:[\d:.h ms]+)\s+WALL")
 _RE_WALL_SEC = re.compile(
     r"PWSCF\s*:.*?CPU\s+(?P<w>(?:\d+h\s*)?(?:\d+m\s*)?\d+(?:\.\d+)?s)\s+WALL",
     re.IGNORECASE,
 )
 _RE_JOB_DONE = re.compile(r"JOB DONE\.")
+
+
+def _last_atomic_forces_ry_au(text: str) -> np.ndarray | None:
+    """Per-atom total forces (Ry/Bohr) of the last force block, or None.
+
+    Only the lines right after the header are the total forces; the
+    contribution breakdowns that may follow are separated by a text line.
+    """
+    headers = list(_RE_FORCES_HEADER.finditer(text))
+    if not headers:
+        return None
+    rows: list[list[float]] = []
+    for line in text[headers[-1].end() :].splitlines():
+        if not line.strip():
+            if rows:
+                break
+            continue
+        match = _RE_ATOM_FORCE.match(line)
+        if match is None:
+            break
+        rows.append([float(v) for v in match.groups()])
+    if not rows:
+        return None
+    forces = np.asarray(rows, dtype=float)
+    return forces if np.isfinite(forces).all() else None
 
 
 def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
@@ -574,8 +633,16 @@ def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
     energies_ry = [float(m.group(1)) for m in _RE_TOTAL_ENERGY.finditer(text)]
     final_e_ry = energies_ry[-1] if energies_ry else float("nan")
 
-    forces = [float(m.group(1)) for m in _RE_FORCE_MAX.finditer(text)]
-    final_force = forces[-1] if forces else None
+    totals = [float(m.group(1)) for m in _RE_TOTAL_FORCE.finditer(text)]
+    final_total_force = totals[-1] if totals else None
+    atomic_ry_au = _last_atomic_forces_ry_au(text)
+    if atomic_ry_au is None:
+        final_forces = None
+        final_max_force = None
+    else:
+        forces_ev_a = atomic_ry_au * _RY_PER_BOHR_TO_EV_PER_A
+        final_forces = forces_ev_a.tolist()
+        final_max_force = float(np.linalg.norm(forces_ev_a, axis=1).max())
 
     bfgs_done = _RE_BFGS_CONV.search(text)
 
@@ -615,7 +682,9 @@ def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
         scf_iterations_per_step=scf_per_step,
         final_energy_ry=final_e_ry,
         final_energy_ev=final_e_ry * _RY_TO_EV if not math.isnan(final_e_ry) else float("nan"),
-        final_max_force_ry_au=final_force,
+        final_total_force_ry_au=final_total_force,
+        final_forces_eV_per_A=final_forces,
+        final_max_force_eV_per_A=final_max_force,
         converged=converged,
         job_done=job_done,
         wall_time_sec=wall_sec,

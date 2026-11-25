@@ -19,7 +19,7 @@ from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.composition import Composition, parse_composition
-from matsim_agents.discovery.seeds import (
+from matsim_agents.discovery.seed_structures import (
     PhaseCandidate,
     SeedGenerationAction,
     generate_seed_action,

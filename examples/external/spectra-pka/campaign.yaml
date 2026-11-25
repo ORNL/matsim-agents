@@ -1,0 +1,38 @@
+# Template for the optional SPECTRA-PKA interface. Every path below is a placeholder:
+# SPECTRA-PKA and its nuclear data are installed separately by you (GPL-3.0 software; data
+# from your FISPACT-II / NJOY-GROUPR PKA matrices). Nothing here is downloaded or bundled.
+#
+#   matsim-agents external spectra-pka check -c campaign.yaml
+#   matsim-agents external spectra-pka run   -c campaign.yaml            # dry run
+#   matsim-agents external spectra-pka run   -c campaign.yaml --execute  # real run
+#
+# The composition below is an invented two-element example, not a study result. A real
+# campaign lists one channel per isotope you have a PKA matrix file for, with isotope atom
+# fractions that add up, per element, to that element's composition fraction.
+external_tools:
+  spectra_pka:
+    enabled: true
+    executable: ${SPECTRA_PKA_EXECUTABLE_PATH}   # replace with the real path to the binary
+    nuclear_data_root: ${PKA_DATA_DIRECTORY}      # replace with your PKA matrix directory
+    workdir: outputs/external/spectra-pka
+    execution:
+      mode: local            # or slurm (requires account; submitted via execution.slurm_jobs)
+      timeout_seconds: 3600
+
+campaign:
+  scenario_id: example-w-ta
+  parent_alloy_id: W0.9Ta0.1-example
+  composition: {W: 0.9, Ta: 0.1}
+  nuclear_data_identity: REPLACE-WITH-YOUR-DATA-LIBRARY-AND-VERSION
+  results_stub: example_w_ta
+  flux:
+    file: ${NEUTRON_SPECTRUM_FILE}               # SPECTRA-PKA flux file (see the upstream manual)
+    identity: REPLACE-WITH-SPECTRUM-NAME
+    normalization: "n cm^-2 s^-1 per group (flux_norm_type 2)"
+    norm_type: 2
+  channels:
+    # TENDL-2017 matrices are named <El><AAA>s.asc. On Frontier, extract them from
+    # /lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/pkas.zip
+    # (commands: docs/external/spectra-pka.md, section 2, and SOURCE.txt there).
+    - {pka_file: "${PKA_DATA_DIRECTORY}/W182s.asc", parent_ele: W, parent_num: 182, atom_fraction: 0.9}
+    - {pka_file: "${PKA_DATA_DIRECTORY}/Ta181s.asc", parent_ele: Ta, parent_num: 181, atom_fraction: 0.1}

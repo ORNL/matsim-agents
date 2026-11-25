@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -228,3 +229,238 @@ def update_adaptive_lambda(
     updated = current + policy.update_rate * (exploit_yield - explore_yield)
     state.lambda_value = min(policy.lambda_maximum, max(policy.lambda_minimum, updated))
     return state.lambda_value
+
+
+# ---------------------------------------------------------------------------
+# Candidate-level (calculation) acquisition for the hierarchical campaign
+# ---------------------------------------------------------------------------
+
+CandidateDecision = Literal["selected", "rejected", "not_selected"]
+CANDIDATE_POLICY_VERSION = "candidate-acquisition-v1"
+NOT_YET_ESTABLISHED = "NOT_YET_ESTABLISHED"
+
+
+class CandidateAcquisitionInputs(BaseModel):
+    """Evidence about one proposed calculation; every score field is normalised to [0, 1]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str
+    calculation_id: str
+    region: str = "default"
+    relevance: float = Field(0.0, ge=0.0, le=1.0)
+    newly_covered: frozenset[str] = frozenset()
+    uncertainty: float = Field(0.0, ge=0.0, le=1.0)
+    transfer_gain: float | None = Field(None, ge=0.0, le=1.0)
+    diversity: float = Field(0.0, ge=0.0, le=1.0)
+    magnetic_relevance: float = Field(0.0, ge=0.0, le=1.0)
+    defect_relevance: float = Field(0.0, ge=0.0, le=1.0)
+    connectivity: float = Field(1.0, ge=0.0, le=1.0)
+    compatible: bool = True
+    incompatibility_reason: str = ""
+    cost_node_hours: float = Field(..., gt=0.0)
+
+
+class CandidateAcquisitionWeights(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relevance: float = Field(0.20, ge=0.0)
+    missing_interaction: float = Field(0.20, ge=0.0)
+    uncertainty: float = Field(0.15, ge=0.0)
+    transfer_gain: float = Field(0.20, ge=0.0)
+    diversity: float = Field(0.10, ge=0.0)
+    magnetic_relevance: float = Field(0.075, ge=0.0)
+    defect_relevance: float = Field(0.075, ge=0.0)
+
+
+class CandidateAcquisitionPolicy(BaseModel):
+    """Cost-aware, deterministic selection of calculations; value is never cost alone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    batch_size: int = Field(8, ge=1)
+    max_batch_node_hours: float | None = Field(None, gt=0.0)
+    cost_floor_node_hours: float = Field(1.0, gt=0.0)
+    # A candidate must carry at least this fraction of the best value to be chosen on cost.
+    min_value_fraction: float = Field(0.25, ge=0.0, le=1.0)
+    saturation_limit: int = Field(25, ge=1)
+    min_connectivity: float = Field(0.2, ge=0.0, le=1.0)
+    diversity_penalty: float = Field(0.5, ge=0.0, le=1.0)
+    weights: CandidateAcquisitionWeights = Field(default_factory=CandidateAcquisitionWeights)
+
+
+class CandidateScore(BaseModel):
+    candidate_id: str
+    calculation_id: str
+    decision: CandidateDecision
+    reason: str
+    value: float = 0.0
+    value_per_node_hour: float = 0.0
+    cost_node_hours: float
+    basis: str = "transfer-guided"
+    components: dict[str, float] = Field(default_factory=dict)
+    newly_covered: list[str] = Field(default_factory=list)
+    rank: int | None = None
+
+
+class CandidateSelection(BaseModel):
+    policy_version: str = CANDIDATE_POLICY_VERSION
+    selected: list[str]
+    total_node_hours: float
+    scores: list[CandidateScore]
+
+    def by_id(self) -> dict[str, CandidateScore]:
+        return {s.candidate_id: s for s in self.scores}
+
+
+def expected_transfer_gain(
+    registry_status: str, relative_gain: float | None = None, scale: float = 1.0
+) -> float | None:
+    """Map a transfer verdict to [0, 1]; unknown evidence stays ``None`` (never invented)."""
+    if registry_status == NOT_YET_ESTABLISHED or registry_status == "pending":
+        return None
+    if registry_status == "unsupported":
+        return 0.0
+    if registry_status == "validated" and relative_gain is not None:
+        return float(min(1.0, max(0.0, relative_gain / max(scale, 1e-12))))
+    return None
+
+
+def _candidate_value(
+    item: CandidateAcquisitionInputs,
+    policy: CandidateAcquisitionPolicy,
+    covered_in_batch: set[str],
+    region_counts: dict[str, int],
+    n_missing: int,
+) -> tuple[float, str, dict[str, float]]:
+    w = policy.weights
+    marginal = len(item.newly_covered - covered_in_batch)
+    coverage = marginal / n_missing if n_missing else 0.0
+    components = {
+        "relevance": item.relevance,
+        "missing_interaction": min(1.0, coverage),
+        "uncertainty": item.uncertainty,
+        "diversity": item.diversity
+        * (1.0 - policy.diversity_penalty) ** region_counts.get(item.region, 0),
+        "magnetic_relevance": item.magnetic_relevance,
+        "defect_relevance": item.defect_relevance,
+    }
+    weights = {
+        "relevance": w.relevance,
+        "missing_interaction": w.missing_interaction,
+        "uncertainty": w.uncertainty,
+        "diversity": w.diversity,
+        "magnetic_relevance": w.magnetic_relevance,
+        "defect_relevance": w.defect_relevance,
+    }
+    if item.transfer_gain is None:
+        # Unknown gain: its weight moves, visibly, onto coverage and uncertainty.
+        weights["missing_interaction"] += w.transfer_gain / 2.0
+        weights["uncertainty"] += w.transfer_gain / 2.0
+        basis = "coverage+uncertainty fallback"
+    else:
+        components["transfer_gain"] = item.transfer_gain
+        weights["transfer_gain"] = w.transfer_gain
+        basis = "transfer-guided"
+    total = sum(weights.values())
+    value = sum(weights[k] * components[k] for k in weights) / total if total else 0.0
+    return value, basis, components
+
+
+def select_candidate_batch(
+    candidates: Sequence[CandidateAcquisitionInputs],
+    policy: CandidateAcquisitionPolicy | None = None,
+    *,
+    existing_calculation_ids: Iterable[str] = (),
+    region_counts: Mapping[str, int] | None = None,
+    missing_interactions: Iterable[str] = (),
+) -> CandidateSelection:
+    """Greedy, deterministic selection by value per node-hour with explicit rejections."""
+    policy = policy or CandidateAcquisitionPolicy()
+    seen = set(existing_calculation_ids)
+    regions: dict[str, int] = dict(region_counts or {})
+    n_missing = len(set(missing_interactions))
+    scores: dict[str, CandidateScore] = {}
+    eligible: list[CandidateAcquisitionInputs] = []
+    for item in sorted(candidates, key=lambda c: c.candidate_id):
+        reason = ""
+        if item.calculation_id in seen:
+            reason = "duplicate_calculation"
+        elif not item.compatible:
+            reason = f"incompatible: {item.incompatibility_reason or 'unspecified'}"
+        elif item.connectivity < policy.min_connectivity:
+            reason = "poorly_connected"
+        elif regions.get(item.region, 0) >= policy.saturation_limit:
+            reason = "saturated_region"
+        if reason:
+            scores[item.candidate_id] = CandidateScore(
+                candidate_id=item.candidate_id,
+                calculation_id=item.calculation_id,
+                decision="rejected",
+                reason=reason,
+                cost_node_hours=item.cost_node_hours,
+            )
+            continue
+        seen.add(item.calculation_id)
+        eligible.append(item)
+
+    selected: list[str] = []
+    covered: set[str] = set()
+    spent = 0.0
+    best_value: float | None = None
+    remaining = list(eligible)
+    while remaining and len(selected) < policy.batch_size:
+        scored = []
+        for item in remaining:
+            value, basis, comps = _candidate_value(item, policy, covered, regions, n_missing)
+            per_hour = value / max(item.cost_node_hours, policy.cost_floor_node_hours)
+            scored.append((per_hour, value, basis, comps, item))
+        if best_value is None:
+            best_value = max(s[1] for s in scored)
+        floor = policy.min_value_fraction * best_value
+        viable = [s for s in scored if s[1] >= floor and s[1] > 0.0]
+        if policy.max_batch_node_hours is not None:
+            viable = [
+                s for s in viable if spent + s[4].cost_node_hours <= policy.max_batch_node_hours
+            ]
+        if not viable:
+            break
+        per_hour, value, basis, comps, item = min(
+            viable, key=lambda s: (-s[0], -s[1], s[4].candidate_id)
+        )
+        fresh = sorted(item.newly_covered - covered)
+        selected.append(item.candidate_id)
+        spent += item.cost_node_hours
+        covered |= item.newly_covered
+        regions[item.region] = regions.get(item.region, 0) + 1
+        scores[item.candidate_id] = CandidateScore(
+            candidate_id=item.candidate_id,
+            calculation_id=item.calculation_id,
+            decision="selected",
+            reason="highest value per node-hour",
+            value=value,
+            value_per_node_hour=per_hour,
+            cost_node_hours=item.cost_node_hours,
+            basis=basis,
+            components=comps,
+            newly_covered=fresh,
+            rank=len(selected),
+        )
+        remaining = [r for r in remaining if r.candidate_id != item.candidate_id]
+
+    for item in remaining:
+        value, basis, comps = _candidate_value(item, policy, covered, regions, n_missing)
+        below = best_value is not None and value < policy.min_value_fraction * best_value
+        scores[item.candidate_id] = CandidateScore(
+            candidate_id=item.candidate_id,
+            calculation_id=item.calculation_id,
+            decision="not_selected",
+            reason="below_value_floor" if below else "batch_or_budget_limit",
+            value=value,
+            value_per_node_hour=value / max(item.cost_node_hours, policy.cost_floor_node_hours),
+            cost_node_hours=item.cost_node_hours,
+            basis=basis,
+            components=comps,
+        )
+    ordered = [scores[c.candidate_id] for c in sorted(candidates, key=lambda c: c.candidate_id)]
+    return CandidateSelection(selected=selected, total_node_hours=spent, scores=ordered)

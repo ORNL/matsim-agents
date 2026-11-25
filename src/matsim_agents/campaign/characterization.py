@@ -44,6 +44,13 @@ from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.backends.dft.vasp_relax import VASPSettings
 from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
 from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.campaign.property_recipes import (
+    PROPERTY_RECIPES,
+    BackendContext,
+    assess_property_recipe,
+    load_property_evidence,
+)
+from matsim_agents.campaign.property_recipes import RECIPES as PROPERTY_RECIPE_SPECS
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.defects import MAGNETISM_LIMITATION
@@ -77,6 +84,7 @@ from matsim_agents.execution.ledger import (
     software_versions,
 )
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
+from matsim_agents.execution.properties import PropertyConditions
 from matsim_agents.execution.recovery import (
     DEFAULT_POLICY,
     FailureClass,
@@ -95,7 +103,15 @@ from matsim_agents.workflows.relaxation import (
 
 log = logging.getLogger(__name__)
 
-Recipe = Literal["relaxation", "energy_ranking", "thermodynamic_stability"]
+Recipe = Literal[
+    "relaxation",
+    "energy_ranking",
+    "thermodynamic_stability",
+    "mechanical_elasticity",
+    "electrical_transport",
+    "thermal_transport",
+    "multiproperty_characterization",
+]
 RECIPE_OBSERVABLES: dict[str, list[tuple[str, str, EvidenceLevel]]] = {
     "relaxation": [
         ("relaxed_structure", "structure", EvidenceLevel.MLIP_RELAXATION),
@@ -109,6 +125,10 @@ RECIPE_OBSERVABLES: dict[str, list[tuple[str, str, EvidenceLevel]]] = {
         ("formation_energy_per_atom", "eV/atom", EvidenceLevel.CONVERGED_DFT),
         ("energy_above_hull", "eV/atom", EvidenceLevel.CONVERGED_DFT),
     ],
+    **{
+        name: [(n, u, level) for n, u, level in recipe.observables]
+        for name, recipe in PROPERTY_RECIPE_SPECS.items()
+    },
 }
 # DFT settings the relaxation workflow sets itself, per backend.
 _WORKFLOW_SETTINGS = {
@@ -209,6 +229,17 @@ class CharacterizationContract(BaseModel):
     reference_energies: Path | None = Field(
         None, description="ReferenceEnergySet JSON (thermodynamic_stability)."
     )
+    property_evidence: list[Path] = Field(
+        default_factory=list,
+        description="JSON files of PropertyEvidence records (property recipes).",
+    )
+    conditions: PropertyConditions = Field(
+        default_factory=PropertyConditions,
+        description="Operating conditions the property recipes must be evaluated at.",
+    )
+    mlip_supports_stress: bool = False
+    transport_executables: dict[str, str] = Field(default_factory=dict)
+    node_hours_per_calculation: float | None = Field(None, gt=0)
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
     dft_approved: bool = False
@@ -243,7 +274,8 @@ class CharacterizationContract(BaseModel):
         unreachable = [
             r.name
             for r in self.observables
-            if not at_least(MAX_RECIPE_EVIDENCE, r.minimum_evidence_level)
+            if self.recipe not in PROPERTY_RECIPES
+            and not at_least(MAX_RECIPE_EVIDENCE, r.minimum_evidence_level)
         ]
         if unreachable:
             raise ValueError(
@@ -283,6 +315,13 @@ class CharacterizationContract(BaseModel):
                         f"{dft.backend} otherwise chooses them per composition, and the "
                         "references and the material must share one method"
                     )
+        absent = [str(p) for p in self.property_evidence if not p.is_file()]
+        if absent:
+            raise ValueError(f"property_evidence files do not exist: {absent}")
+        if self.recipe in PROPERTY_RECIPES and self.recipe != "mechanical_elasticity":
+            t = self.conditions.temperature_K
+            if t is None or t <= 0:
+                raise ValueError(f"the {self.recipe} recipe needs conditions.temperature_K > 0")
         if self.recipe == "energy_ranking" and len(self.structures) < 2:
             raise ValueError("an energy ranking needs at least two structures")
         if self.needs_dft() and self.methods.dft is None:
@@ -326,7 +365,7 @@ class CharacterizationContract(BaseModel):
         Budget, approvals, and output_root are excluded, so raising a budget or
         approving DFT resumes the same run.
         """
-        inputs = [*self.structures]
+        inputs = [*self.structures, *self.property_evidence]
         if self.reference_energies is not None:
             inputs.append(self.reference_energies)
         payload = {
@@ -355,7 +394,13 @@ class RecipeStep(BaseModel):
 
 
 def plan_recipe(contract: CharacterizationContract) -> list[RecipeStep]:
-    """The ordered task graph of a contract's recipe (deterministic)."""
+    """The ordered task graph of a contract's recipe (deterministic).
+
+    Property recipes have no relaxation graph: they assess existing evidence
+    and report the calculations that are missing.
+    """
+    if contract.recipe in PROPERTY_RECIPES:
+        return []
     fidelity: Literal["mlip", "dft"] = "dft" if contract.needs_dft() else "mlip"
     relax = [
         RecipeStep(
@@ -1096,6 +1141,10 @@ def _execute(
     contract: CharacterizationContract, run: _Run, relax: Relax, ledger: EvidenceLedger
 ) -> CharacterizationReport:
     problem = _preflight(contract)
+    if problem is None and contract.recipe in PROPERTY_RECIPES:
+        report = _assess_properties(contract)
+        (run.directory / REPORT_FILE).write_text(report.model_dump_json(indent=2) + "\n")
+        return report
     if problem is not None:
         status, missing = problem
         report = CharacterizationReport(
@@ -1152,6 +1201,30 @@ def _execute(
         # Assessed from complete inputs, whatever the answer: not repeated on resume.
         run.record(final, {"status": "done", "characterization_status": report.status.value})
     return report
+
+
+def _assess_properties(contract: CharacterizationContract) -> CharacterizationReport:
+    """Reuse compatible property evidence; report what is missing otherwise."""
+    levels = {r.name: r.minimum_evidence_level for r in contract.observables}
+    return assess_property_recipe(
+        contract_id=contract.contract_id,
+        contract_sha256=contract.digest(),
+        recipe_name=contract.recipe,
+        structures=list(contract.structures),
+        composition=contract.formula,
+        conditions=contract.conditions,
+        evidence=load_property_evidence(list(contract.property_evidence)),
+        minimum_levels=levels,
+        backend=BackendContext(
+            mlip_supports_stress=contract.mlip_supports_stress,
+            dft_backend=contract.methods.dft.backend if contract.methods.dft else None,
+            executables=contract.transport_executables,
+            calculation_cost_node_hours=contract.node_hours_per_calculation,
+            remaining_node_hours=contract.budget.max_node_hours,
+        ),
+        approved=contract.dft_approved,
+        recipe_properties=[r.name for r in contract.observables],
+    )
 
 
 def _verify_completed_artifacts(run: _Run, steps: list[RecipeStep]) -> None:

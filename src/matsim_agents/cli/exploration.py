@@ -14,7 +14,12 @@ from matsim_agents.cli._app import app, console
 if TYPE_CHECKING:
     from matsim_agents.workflows.exploration import ExplorationConfig, ExplorationSummary
 
-explore_app = typer.Typer(help="Check, run, and inspect a bounded MLIP-only phase search.")
+explore_app = typer.Typer(
+    help=(
+        "Check, run, and inspect a bounded MLIP-only phase search. "
+        "When to use: a checkpointed, resumable search that never submits scheduler jobs."
+    )
+)
 app.add_typer(explore_app, name="explore")
 
 

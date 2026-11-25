@@ -1,0 +1,47 @@
+diff --git a/PW/src/buffers.f90 b/PW/src/buffers.f90
+index 76b7639d1..2a355c65c 100644
+--- a/PW/src/buffers.f90
++++ b/PW/src/buffers.f90
+@@ -330,14 +330,28 @@ MODULE buiol
+     !! (or copied from CPU to GPU after buiol_read_record is called).
+     !! Better solution: copy from GPU to CPU (or vice versa) here?
+     !
+-    !$omp workshare
+-    CURSOR%index(nrec)%data = DATA
+-    !$omp end workshare
++    CALL buiol_copy_z(recl, CURSOR%index(nrec)%data, DATA)
+     ierr = 0
+     RETURN
+     !
+   END FUNCTION
+   ! \/o\________\\\_________________________________________/^>
++  SUBROUTINE buiol_copy_z(n, dst, src)
++    !! Explicit-shape OpenMP copy. Cray ftn (cce 18-20) miscompiles an array
++    !! assignment to a pointer component of a derived type inside an OpenMP
++    !! WORKSHARE (orphaned or PARALLEL WORKSHARE) and segfaults in pw.x.
++    IMPLICIT NONE
++    INTEGER,INTENT(in) :: n
++    COMPLEX(dp),INTENT(out) :: dst(n)
++    COMPLEX(dp),INTENT(in) :: src(n)
++    INTEGER :: i
++    !$omp parallel do
++    DO i = 1, n
++       dst(i) = src(i)
++    END DO
++    !$omp end parallel do
++  END SUBROUTINE buiol_copy_z
++  ! \/o\________\\\_________________________________________/^>
+   FUNCTION buiol_read_record(unit, recl, nrec, DATA) RESULT (ierr)
+     IMPLICIT NONE
+     INTEGER,INTENT(in) :: unit, recl, nrec
+@@ -377,9 +391,7 @@ MODULE buiol
+        RETURN
+     END IF
+     !! See comment in buiol_write_record
+-    !$omp workshare
+-    DATA = CURSOR%index(nrec)%data
+-    !$omp end workshare
++    CALL buiol_copy_z(recl, DATA, CURSOR%index(nrec)%data)
+     ierr = 0
+     RETURN
+     !

@@ -25,7 +25,8 @@ LAYERS: list[set[str]] = [
     {"seeding"},
     {"execution", "datasets"},
     {"backends.llm", "backends.dft", "backends.mlip", "backends.mcp"},
-    {"discovery", "training"},
+    {"discovery", "training", "irradiation"},
+    {"kinetics", "integrations"},
     {"active_learning", "workflows"},
     {"orchestration", "campaign"},
     {"cli"},
@@ -116,8 +117,12 @@ def _layer_violations() -> list[str]:
         ("matsim_agents.datasets.governance", False, "from matsim_agents import MatSimState"),
         ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
         ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
-        ("matsim_agents.discovery.seeds", False, "from ..training import cost"),
-        ("matsim_agents.discovery.seeds", False, "import matsim_agents.orchestration.state"),
+        ("matsim_agents.discovery.seed_structures", False, "from ..training import cost"),
+        (
+            "matsim_agents.discovery.seed_structures",
+            False,
+            "import matsim_agents.orchestration.state",
+        ),
     ],
 )
 def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_package, code) -> None:
@@ -130,9 +135,13 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
         ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
         ("matsim_agents.datasets.formation_training", False, "from . import governance"),
         ("matsim_agents.datasets", True, "from .governance import sha256_file"),
-        ("matsim_agents.discovery.seeds", False, "from ..backends.mlip import config"),
-        ("matsim_agents.discovery.seeds", False, "from matsim_agents.backends import llm, mlip"),
-        ("matsim_agents.discovery.seeds", False, "from matsim_agents import datasets"),
+        ("matsim_agents.discovery.seed_structures", False, "from ..backends.mlip import config"),
+        (
+            "matsim_agents.discovery.seed_structures",
+            False,
+            "from matsim_agents.backends import llm, mlip",
+        ),
+        ("matsim_agents.discovery.seed_structures", False, "from matsim_agents import datasets"),
         ("matsim_agents.campaign.state", False, "from ..active_learning.config import ALConfig"),
         ("matsim_agents.backends.mlip.config", False, "from . import results"),
     ],
@@ -211,6 +220,23 @@ def test_vasp_backend_satisfies_dft_protocol() -> None:
 
     for attr in ("name", "run_one"):
         assert hasattr(VASPBackend, attr)
+
+
+def test_vasp_backend_rejects_magnetic_config(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from ase import Atoms
+
+    from matsim_agents.backends.dft.base import DFTJobSpec
+    from matsim_agents.backends.dft.vasp import VASPBackend
+
+    backend = VASPBackend(SimpleNamespace(timeout_sec=1))
+    spec = DFTJobSpec(
+        job_id="j", atoms=Atoms("Fe"), work_dir=str(tmp_path), magnetic_config=object()
+    )
+    with pytest.raises(NotImplementedError, match="magnetic_config"):
+        backend.run_one(spec)
+    assert not any(tmp_path.iterdir())
 
 
 # ── Interface 2: MLIP backend ─────────────────────────────────────────────── #

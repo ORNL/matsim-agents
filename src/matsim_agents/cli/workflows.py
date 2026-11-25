@@ -38,7 +38,12 @@ from matsim_agents.execution.workflow_record import (
 )
 from matsim_agents.execution.workflow_runner import run_native_command
 
-workflow_app = typer.Typer(help="Check/run/status/summary/resume for native scientific workflows.")
+workflow_app = typer.Typer(
+    help=(
+        "Check/run/status/summary/resume for native scientific workflows. "
+        "When to use: a named, pre-defined workflow with a config file, not a free-text objective."
+    )
+)
 app.add_typer(workflow_app, name="workflow")
 REPO = Path(__file__).resolve().parents[3]
 SUBMIT_BATCH = REPO / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"

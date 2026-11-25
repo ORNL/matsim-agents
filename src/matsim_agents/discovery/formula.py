@@ -1,6 +1,6 @@
 """Element-set -> formula enumeration for multi-composition campaigns.
 
-Single-composition discovery (:mod:`matsim_agents.discovery.seeds`,
+Single-composition discovery (:mod:`matsim_agents.discovery.seed_structures`,
 :mod:`matsim_agents.discovery.stability`) already covers AFLOW prototype
 matching, pyXtal random generation, relaxation, and hull ranking for one
 target formula. What is missing for a campaign spanning a whole element set

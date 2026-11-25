@@ -16,7 +16,7 @@ from matsim_agents.campaign.registry import (
     structure_content_hash,
 )
 from matsim_agents.discovery.composition import parse_composition
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seed_structures import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 
 

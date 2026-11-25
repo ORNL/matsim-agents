@@ -142,7 +142,10 @@ def run(
         help="JSONL path for MCP audit records (default: <output-dir>/mcp/mcp_audit.jsonl).",
     ),
 ):
-    """Run the planner -> executor -> analyst graph for a given objective."""
+    """Run the planner -> executor -> analyst graph for a given objective.
+
+    When to use: you have a written objective and want it planned and executed end to end.
+    """
     from matsim_agents.orchestration.objective_graph import build_graph
     from matsim_agents.orchestration.state import MatSimState
 
@@ -193,7 +196,10 @@ def plan(
     objective: str,
     as_json: bool = typer.Option(False, "--json", help="Print the task list as JSON."),
 ):
-    """Run the planner only and print the proposed task list."""
+    """Run the planner only and print the proposed task list.
+
+    When to use: preview what ``run`` would do for an objective before executing anything.
+    """
     from matsim_agents.orchestration.agents.planner import planner_node
     from matsim_agents.orchestration.state import MatSimState
 

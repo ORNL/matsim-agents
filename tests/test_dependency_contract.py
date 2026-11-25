@@ -22,7 +22,7 @@ def test_hydragnn_main_dependency_contract() -> None:
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
     } <= set(project["classifiers"])
-    assert {"ase==3.26.0", "numpy==2.4.6", "scipy==1.17.1"} <= set(project["dependencies"])
+    assert {"ase==3.29.0", "numpy==2.4.6", "scipy==1.17.1"} <= set(project["dependencies"])
     assert {
         "e3nn==0.5.1",
         "torch-ema==0.3",

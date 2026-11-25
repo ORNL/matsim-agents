@@ -27,8 +27,9 @@ Concretely:
   outer ``loss.backward()`` fails.
 * Loss per sample is ``(E_err / N_atoms)^2 + force_weight * F_MSE``
   (``force_weight=10`` by default), optimised with Adam (``lr=1e-4``). No
-  normalizer / element-reference re-fitting is performed -- the model's native
-  heads are used as-is.
+  normalizer / element-reference re-fitting is performed; raw head outputs are
+  denormalized and element-referenced with the checkpoint's own task objects,
+  exactly as ``MLIPPredictUnit`` does at inference, so the loss is in eV.
 * Energy labels are first put on the base model's energy scale with the
   elemental DFT references (:mod:`matsim_agents.datasets.energy_alignment`):
   DFT totals from another code or setup differ from UMA's pretraining energies
@@ -176,9 +177,24 @@ def uma_energy_forces(model, calc, atoms: Atoms, task_name: str):
             data[key] = val.to(param.dtype)
 
     out = model(data)
-    energy = out[f"{task_name}_energy"]["energy"]
-    forces = out[f"{task_name}_forces"]["forces"]
+    energy = _physical_output(model, data, out, f"{task_name}_energy")
+    forces = _physical_output(model, data, out, f"{task_name}_forces")
     return energy, forces
+
+
+def _physical_output(model, data, out, name: str):
+    """Head output on the scale ``FAIRChemCalculator`` reports.
+
+    Mirrors fairchem's ``MLIPPredictUnit._process_outputs``: the raw head is
+    normalized and, for energies, referenced to per-element constants. Training
+    against DFT labels on any other scale would fit a different quantity from
+    the one inference returns.
+    """
+    task = model.tasks[name]
+    value = task.normalizer.denorm(out[name][task.property])
+    if task.element_references is not None:
+        value = task.element_references.undo_refs(data, value)
+    return value
 
 
 def uma_energy(model, calc, atoms: Atoms, task_name: str) -> float:

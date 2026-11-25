@@ -278,6 +278,10 @@ matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash 
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
 matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
+matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
+matsim-agents radiation-damage run|status|report|capabilities ...  # vacancy-hop recovery, exploratory and unqualified; dry run unless --dispatch
+matsim-agents external spectra-pka check|prepare|run|status|import ...  # optional interface to externally installed SPECTRA-PKA; dry run by default
+matsim-agents campaign check|inventory|coverage|transferability|preview|cost|approve|monitor|review ...  # hierarchical transfer campaign; see docs/hierarchical-transfer-campaign.md
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
@@ -288,6 +292,9 @@ matsim-agents coordination init|add|claim|heartbeat|complete|fail ...  # manage 
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml [--mlip-config FILE]  # active-learning loop (MLIP <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
+matsim-agents active-learning run|validate-config ...  # same commands as `al`
+matsim-agents explore-and-learn COMPOSITION [options]  # discovery followed by active learning
+matsim-agents magnetic generate|policies|show ...  # collinear magnetic starting states for QE
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
 matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan's LLM servers are up

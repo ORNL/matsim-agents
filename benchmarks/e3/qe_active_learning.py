@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from benchmarks.e3 import production as e3
-from matsim_agents.active_learning.candidates import Candidate
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import path_identity, scientific_dft_payload
 from matsim_agents.active_learning.loop import IterationState, run_active_learning

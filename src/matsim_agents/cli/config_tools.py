@@ -91,6 +91,12 @@ def init(
         markup=False,
     )
     console.print(f"Next: edit it, then run `{command.format(path=output)}`", markup=False)
+    if kind == "al":
+        console.print(
+            "For a real campaign, prefer `matsim-agents al init-campaign`: it also proposes "
+            "the elemental reference phases for your elements.",
+            markup=False,
+        )
 
 
 @config_app.command("schema")

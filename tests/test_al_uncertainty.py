@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import AcquisitionConfig
+from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.active_learning.uncertainty import (
     greedy_farthest_point,
     score_ensemble,

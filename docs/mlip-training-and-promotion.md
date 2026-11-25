@@ -5,7 +5,9 @@ compare energies through elemental DFT references. This page describes those
 references, how each MLIP backend is fine-tuned, and when a candidate model may
 replace the incumbent. The surrounding workflow contracts are described in
 [scientific workflow contracts](scientific-workflows.md), and the active-learning
-configuration in [active learning](guide/active-learning.md).
+configuration in [active learning](guide/active-learning.md). The label and
+reference conventions of each backend are summarized in
+[MLIP and DFT energy conventions](mlip-energy-conventions.md).
 
 ## Training references
 

@@ -246,6 +246,22 @@ def check_all(
     return [check(c, environ) for c in CAPABILITIES if wanted is None or c.kind in wanted]
 
 
+# External scientific applications are separate from the engines above: they are installed and
+# licensed by the user, never required, never bundled, and never auto-installed.
+EXTERNAL_APPLICATIONS: tuple[tuple[str, str, str, str, str], ...] = (
+    (
+        "SPECTRA-PKA",
+        "GPL-3.0, external Fortran executable",
+        "PKA recoil spectra per species from a neutron spectrum and PKA matrices",
+        "`matsim-agents external spectra-pka check|prepare|run|status|import`",
+        "Optional interface only. Statuses NOT_INSTALLED, INSTALLED, INPUTS_MISSING, READY, "
+        "EXECUTION_FAILED describe tool readiness, not scientific qualification. Output is "
+        "NOT_VALIDATED until compared with an independent reference; PKA production is not "
+        "surviving-defect production. See docs/external/spectra-pka.md.",
+    ),
+)
+
+
 def render_markdown() -> str:
     """The static capability matrix as a markdown document."""
     lines = [
@@ -277,11 +293,22 @@ def render_markdown() -> str:
             c.notes or "-",
         )
         lines.append("| " + " | ".join(cells) + " |")
+    lines += [
+        "",
+        "## External scientific applications",
+        "",
+        "Installed and licensed separately by the user; optional and never bundled.",
+        "",
+        "| Application | Kind | Provides | Interface | Notes |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    lines += ["| " + " | ".join(row) + " |" for row in EXTERNAL_APPLICATIONS]
     return "\n".join(lines) + "\n"
 
 
 __all__ = [
     "CAPABILITIES",
+    "EXTERNAL_APPLICATIONS",
     "BackendCapability",
     "BackendKind",
     "CapabilityCheck",

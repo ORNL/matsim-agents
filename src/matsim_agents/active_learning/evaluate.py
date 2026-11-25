@@ -16,6 +16,9 @@ YAML (its ``mlip`` block selects the backend). ``--model-path`` overrides the
 active checkpoint so the *same* config can be pointed at each AL iteration's
 fine-tuned model (HydraGNN logdir or UMA model name/checkpoint dir).
 
+For a pass/fail verdict with confidence bounds on these errors, see
+:mod:`matsim_agents.workflows.mlip_dft_validation`.
+
 Example::
 
     python -m matsim_agents.active_learning.evaluate \\

@@ -11,8 +11,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.discovery.seeds import PhaseCandidate
-from matsim_agents.discovery.selection import CandidateSelection
+from matsim_agents.discovery.seed_structures import PhaseCandidate
+from matsim_agents.discovery.structural_screening import CandidateSelection
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.ledger import file_sha256
 from matsim_agents.execution.run_directory import ScientificRunDirectory

@@ -23,11 +23,16 @@ the framework.
 - [Choosing a scientific workflow](guide/workflows.md)
 - [Run a workflow or E3 campaign](workflows/run-campaigns.md)
 - [Scientific workflow contracts](scientific-workflows.md)
+- [Radiation-damage extension status](radiation-damage-status.md)
+- [External SPECTRA-PKA interface](external/spectra-pka.md)
+- [Hierarchical transfer campaign (W-Ta-Cr-V-Hf-Mo)](hierarchical-transfer-campaign.md)
 - [Characterization contracts](characterization.md)
+- [Multi-property characterization, selection, and hypothesis revision](multiproperty-selection.md)
 - [Scientific hypothesis debate](scientific-debate.md)
 - [Hypothesis-driven discovery chat](guide/discovery-chat.md)
 - [Active learning (MLIP and DFT)](guide/active-learning.md)
 - [MLIP training references and model promotion](mlip-training-and-promotion.md)
+- [MLIP and DFT energy conventions](mlip-energy-conventions.md): labels, references and units for each MLIP
 - [Competing-phase reference hulls](reference-hulls.md)
 
 ## 4. Read results and restart safely

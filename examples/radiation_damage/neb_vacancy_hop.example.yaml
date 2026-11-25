@@ -1,0 +1,23 @@
+# Dry-run input for `matsim-agents neb prepare`. Endpoints are generated, not relaxed.
+parent:
+  counts: {Mo: 4, Ta: 4, W: 8}
+  repeats: [2, 2, 2]
+  seed: 1
+lattice_parameter: 3.16
+defect:
+  mechanism: vacancy_hop
+  site: 0
+images:
+  min_distance: 1.0
+  max_step: 1.0
+qe:
+  n_images: 6
+  species: [Mo, Ta, W]
+  pseudo_dir: /path/to/pseudopotentials
+  pseudopotentials: {Mo: Mo.upf, Ta: Ta.upf, W: W.upf}
+  ecutwfc_ry: 50.0
+  ecutrho_ry: 400.0
+  occupations: smearing
+  degauss_ry: 0.02
+  kpts: [2, 2, 2]
+  nspin: 1

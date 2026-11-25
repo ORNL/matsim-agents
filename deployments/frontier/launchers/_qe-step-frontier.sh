@@ -53,6 +53,7 @@ fi
 ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
 
 module reset
+module load "${CPE_MODULE:-cpe/24.11}"   # pw.x was built under cpe/24.11 (rocm 6.2.4, mpich 8.1.31)
 module load PrgEnv-cray
 module load cce
 module load craype-accel-amd-gfx90a

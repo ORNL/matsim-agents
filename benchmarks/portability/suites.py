@@ -113,7 +113,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
     import numpy as np
     from ase.io import read
 
-    from matsim_agents.active_learning.candidates import Candidate
+    from matsim_agents.active_learning.md_sampler import Candidate
     from matsim_agents.active_learning.config import ALConfig
     from matsim_agents.active_learning.loop import run_active_learning
     from matsim_agents.backends.dft.base import DFTResult
@@ -271,7 +271,7 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
 def phase_exploration_contract(output: Path) -> dict[str, Any]:
     """Execute the independent phase workflow rather than the LLM investigation."""
 
-    from matsim_agents.discovery.seeds import PhaseCandidate
+    from matsim_agents.discovery.seed_structures import PhaseCandidate
     from matsim_agents.workflows.phase_exploration import (
         PhaseExplorationPolicy,
         run_phase_exploration,
@@ -307,7 +307,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
 
 def _phase_result(composition: str, output_dir: str):
     from matsim_agents.discovery.composition import parse_composition
-    from matsim_agents.discovery.seeds import PhaseCandidate
+    from matsim_agents.discovery.seed_structures import PhaseCandidate
     from matsim_agents.discovery.wrapper import CompositionExplorationResult
     from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 

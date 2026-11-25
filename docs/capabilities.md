@@ -15,3 +15,11 @@ Run `matsim-agents capabilities check` to see what is available locally.
 | llm | `openai` | chat | hypothesis | - | no | `langchain_openai`, `$OPENAI_API_KEY` | - |
 | llm | `anthropic` | chat | hypothesis | - | no | `langchain_anthropic`, `$ANTHROPIC_API_KEY` | - |
 | llm | `huggingface` | chat | hypothesis | - | no | `langchain_huggingface`, `transformers`, `accelerate`, `torch` | In-process transformers pipeline. |
+
+## External scientific applications
+
+Installed and licensed separately by the user; optional and never bundled.
+
+| Application | Kind | Provides | Interface | Notes |
+| --- | --- | --- | --- | --- |
+| SPECTRA-PKA | GPL-3.0, external Fortran executable | PKA recoil spectra per species from a neutron spectrum and PKA matrices | `matsim-agents external spectra-pka check|prepare|run|status|import` | Optional interface only. Statuses NOT_INSTALLED, INSTALLED, INPUTS_MISSING, READY, EXECUTION_FAILED describe tool readiness, not scientific qualification. Output is NOT_VALIDATED until compared with an independent reference; PKA production is not surviving-defect production. See docs/external/spectra-pka.md. |
