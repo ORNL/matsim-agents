@@ -74,6 +74,8 @@ the framework.
 - [Configuration reference](guide/configuration.md), including the `mlip:` block
 - [Architecture and capabilities](guide/architecture.md) and
   [package architecture](architecture.md)
+- Restructuring in progress: [architectural audit](restructuring/audit.md)
+  and [target architecture](restructuring/target-architecture.md)
 - Workflow diagrams: [page](workflows/agentic-ai-workflow.md),
   [slides](workflows/agentic-ai-workflow-slides.md)
 
