@@ -12,6 +12,8 @@ set -uo pipefail
 REPO="${PROJECT_ROOT:-/lustre/orion/lrn110/proj-shared/matsim-agents}"
 PW_BIN="${PW_BIN:-${REPO}/external/quantum-espresso/install-gpu/bin/pw.x}"
 KCONV_DIR="${KCONV_DIR:?set KCONV_DIR to the prepared test directory}"
+# Absolute, so the per-mesh cd below cannot invalidate a relative path.
+KCONV_DIR="$(cd "${KCONV_DIR}" && pwd)" || { echo "KCONV_DIR not found: ${KCONV_DIR}" >&2; exit 2; }
 
 [[ -x "${PW_BIN}" ]] || { echo "pw.x not found: ${PW_BIN}" >&2; exit 2; }
 

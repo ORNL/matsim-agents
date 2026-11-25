@@ -181,3 +181,15 @@ def test_template_with_inline_ntyp_is_updated(tmp_path):
     text = _render(tmp_path, atoms, _polar(gen.bcc_afm(atoms, "s", A, {"Fe": 2.0})), body)
     system = text.split("&SYSTEM")[1].split("&ELECTRONS")[0]
     assert re.search(r"ntyp\s*=\s*2\b", system) and not re.search(r"ntyp\s*=\s*1\b", system)
+
+
+def test_compact_system_terminator_keeps_entries_in_system(tmp_path):
+    atoms = _atoms()
+    body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40 ! Ry, not eV/atom").replace(
+        "  degauss = 0.01\n/\n&ELECTRONS", "  degauss = 0.01 /\n&ELECTRONS"
+    )
+    text = _render(tmp_path, atoms, _polar(gen.bcc_afm(atoms, "s", A, {"Fe": 2.0})), body)
+    system, electrons = text.split("&SYSTEM")[1].split("&ELECTRONS")
+    assert "nspin = 2" in system and "starting_magnetization(2)" in system
+    assert "nspin" not in electrons and "starting_magnetization" not in electrons
+    assert system.rstrip().endswith("/")

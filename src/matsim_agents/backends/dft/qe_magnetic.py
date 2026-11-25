@@ -118,15 +118,19 @@ def inject_system_entries(text: str, entries: Mapping[str, object], where: str) 
     """Insert ``entries`` into the &SYSTEM namelist of a template, before its closing ``/``."""
     if not entries:
         return text
-    match = re.search(r"^\s*&system\b.*?^\s*/\s*$", text, re.I | re.M | re.S)
-    if match is None:
+    # Blank out strings and comments (same length) so offsets map back onto ``text``; the
+    # namelist ends at the first unquoted, uncommented ``/``, even on an assignment line.
+    code = _QUOTED_OR_COMMENT_RE.sub(lambda m: " " * len(m.group(0)), text)
+    start = re.search(r"&system\b", code, re.I)
+    if start is None:
         raise ValueError(f"template {where} has no &SYSTEM namelist to extend")
+    slash = code.find("/", start.end())
+    if slash < 0:
+        raise ValueError(f"template {where} has an unterminated &SYSTEM namelist")
     from matsim_agents.backends.dft.qe_relax import _fortran  # noqa: PLC2701
 
     lines = "\n".join(f"  {key} = {_fortran(value)}" for key, value in entries.items())
-    block = match.group(0)
-    head, _, _tail = block.rpartition("/")
-    return text[: match.start()] + head.rstrip("\n") + "\n" + lines + "\n/" + text[match.end() :]
+    return text[:slash].rstrip() + "\n" + lines + "\n" + text[slash:]
 
 
 def _label(element: str, ordinal: int, count: int) -> str:

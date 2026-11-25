@@ -299,6 +299,19 @@ def test_validation_ok_and_failures():
     assert not validate_output(overlap, end_marker_seen=True).ok
 
 
+def test_validation_rejects_truncated_global_matrix():
+    truncated = parse_output_text(
+        SYNTHETIC_OUT.replace(" 1.0E-06 2.0E-06 3.0E-03 1.0E+00 1.0E+00\n", "")
+    )
+    w182 = next(
+        b for b in truncated.blocks if b.kind is not BlockKind.CHANNEL and "W182" in b.title
+    )
+    assert len(w182.rows) == 1 and w182.rows[-1][4] == 0.5
+    report = validate_output(truncated, end_marker_seen=True)
+    assert not report.ok
+    assert any("truncated" in e for e in report.errors)
+
+
 def test_to_spectrum_requires_global_blocks():
     only = SYNTHETIC_OUT.split("### index 3")[0]
     parsed = parse_output_text(only)

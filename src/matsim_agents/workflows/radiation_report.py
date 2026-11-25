@@ -95,7 +95,7 @@ def read_report(directory: str | os.PathLike) -> dict[str, Any]:
         data = json.loads(path.read_text())
     except FileNotFoundError:
         raise FileNotFoundError(f"{path} does not exist; run the workflow first") from None
-    if data.get("schema") != REPORT_SCHEMA:
+    if not isinstance(data, dict) or data.get("schema") != REPORT_SCHEMA:
         raise ValueError(f"{path} is not a {REPORT_SCHEMA} report")
     return data
 

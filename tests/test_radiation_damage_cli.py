@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -111,3 +112,10 @@ def test_report_with_wrong_schema_is_refused(tmp_path):
         assert "not a" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+@pytest.mark.parametrize("body", ["[]", "null", '"text"', "3"])
+def test_report_that_is_not_a_mapping_is_refused(tmp_path, body):
+    (tmp_path / REPORT_FILE).write_text(body)
+    with pytest.raises(ValueError, match="not a"):
+        read_report(tmp_path)

@@ -16,6 +16,17 @@ from matsim_agents.irradiation.contracts import ValidationStatus
 
 FLUX_SUM_RTOL = 1e-3
 NORM_SUM_SLACK = 1e-6
+# Global matrices write ``cumulative = SUM(1:j) / SUM(all)`` (global_sums.f90) as ES11.4, so the
+# last row is 1 to four decimals. Anything else means the matrix was truncated.
+CUMULATIVE_END_ATOL = 1e-3
+_GLOBAL_KINDS = frozenset(
+    {
+        BlockKind.GLOBAL_ISOTOPE,
+        BlockKind.GLOBAL_ELEMENT,
+        BlockKind.GLOBAL_TOTAL,
+        BlockKind.GLOBAL_MT,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -81,6 +92,13 @@ def validate_output(
             norm_col = [r[3] for r in block.rows]
             if any(v > 1.0 + NORM_SUM_SLACK for v in norm_col):
                 warnings.append(f"{block.title[:50]!r}: norm_sum exceeds 1")
+        if block.kind in _GLOBAL_KINDS and block.rows:
+            final = block.rows[-1][4]
+            if abs(final - 1.0) > CUMULATIVE_END_ATOL:
+                errors.append(
+                    f"{block.title[:50]!r}: final cumulative fraction is {final:.6g}, not 1; "
+                    "the matrix is truncated"
+                )
         if block.kind is BlockKind.INPUT_SPECTRUM and "total_flux" in block.footer:
             total = math.fsum(r[2] for r in block.rows)
             stated = block.footer["total_flux"]
