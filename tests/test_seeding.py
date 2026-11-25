@@ -99,7 +99,9 @@ def test_seeded_torch_touches_only_the_given_accelerators_and_restores_on_error(
         if device_type == "xpu":
             yield
             return
-        with real_fork(devices=devices, device_type=device_type, **kwargs):
+        if device_type is not None:
+            kwargs["device_type"] = device_type
+        with real_fork(devices=devices, **kwargs):
             yield
 
     current = {"index": None}
