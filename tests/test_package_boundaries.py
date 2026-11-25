@@ -29,6 +29,7 @@ LAYERS: list[set[str]] = [
     {"kinetics", "integrations"},
     {"active_learning", "workflows"},
     {"orchestration", "campaign"},
+    {"fusion"},
     {"cli"},
 ]
 LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}

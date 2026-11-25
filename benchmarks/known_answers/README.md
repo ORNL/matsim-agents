@@ -41,9 +41,18 @@ On the replay tier the launcher is replaced by
 if the `pw.in` the pipeline wrote matches the recorded input exactly. If input
 generation changes, the replay tier fails instead of grading stale output.
 
+Changing a number by even one digit in the written `pw.in` breaks every replay.
+This includes unit constants. The eV/Å to Ry/bohr factor `25.71104309541616` in
+`workflows/relaxation.py` is fixed on purpose. Do not replace it with
+`ase.units.Ry / ase.units.Bohr`, because that changes `forc_conv_thr` in the
+last digits. Upgrading ASE or QE, or editing `qe_relax.py`, can have the same
+effect. Run `tests/test_known_answers.py` after any such change. If it fails,
+re-record the suite as described below.
+
 ## Re-recording
 
-Re-record after changing a contract, structure, or the QE input writer:
+Re-record after changing a contract, structure, the QE input writer, or a
+constant that feeds into `pw.in`:
 
 ```bash
 export MPICH_GPU_SUPPORT_ENABLED=0 OMP_NUM_THREADS=8

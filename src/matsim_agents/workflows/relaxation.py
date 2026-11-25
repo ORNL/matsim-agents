@@ -352,15 +352,14 @@ def _dft_stage(
             **allocation,
         )
 
-    from ase import units
-
     from matsim_agents.backends.dft.qe_relax import QESettings, run_pw, write_pw_input
 
     settings = QESettings(
         calculation=calculation,
         pseudo_dir=dft.pseudo_dir or "",
         nstep=cfg.max_steps,
-        forc_conv_thr_ry_au=cfg.force_tolerance_eV_per_A / (units.Ry / units.Bohr),
+        # Recorded known-answer pw.in files depend on this exact factor.
+        forc_conv_thr_ry_au=cfg.force_tolerance_eV_per_A / 25.71104309541616,
         **dft.settings,
     )
     input_file = write_pw_input(atoms, settings, str(work_dir / "pw.in"))

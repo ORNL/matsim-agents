@@ -176,7 +176,11 @@ class _FakeDFTBackend:
 def _make_cfg(tmp_path: Path) -> ALConfig:
     """Build a synthetic but pydantic-valid ALConfig (paths exist as stubs)."""
     seed = tmp_path / "seed.vasp"
-    seed.write_text("dummy\n")
+    ase_write(
+        seed,
+        Atoms("Si2", positions=[[0, 0, 0], [1.36, 1.36, 1.36]], cell=[5.43] * 3, pbc=True),
+        format="vasp",
+    )
     vasp_bin = tmp_path / "vasp_std"
     vasp_bin.write_text("#!/bin/bash\n")
     wrapper = tmp_path / "wrap.sh"
@@ -749,10 +753,15 @@ def test_holdout_split_compares_candidate_without_promotion(
             "retrain_hydragnn",
             lambda *_args, **_kwargs: training_calls.append(True),
         )
-        with pytest.raises(ValueError, match="coverage|different DFT methods"):
+        with pytest.raises(ValueError, match="coverage|do not cover|different DFT methods"):
             loop_mod.run_active_learning(cfg)
         assert training_calls == []
-        state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+        state_path = cfg.loop.out_dir / "iteration_0000/state.json"
+        if reference_defect == "coverage":
+            # Seed-element coverage is checked before the first iteration starts.
+            assert not state_path.exists()
+            return
+        state = json.loads(state_path.read_text())
         assert state["status"] == "failed"
         assert not state["model_promoted"]
         return

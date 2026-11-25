@@ -281,6 +281,7 @@ matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent 
 matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
 matsim-agents radiation-damage run|status|report|capabilities ...  # vacancy-hop recovery, exploratory and unqualified; dry run unless --dispatch
 matsim-agents external spectra-pka check|prepare|run|status|import ...  # optional interface to externally installed SPECTRA-PKA; dry run by default
+matsim-agents materials validate|score|report|pareto|sensitivity|packet-export|import ...  # eight-objective fusion PFC scoring of existing evidence; runs no calculation
 matsim-agents campaign check|inventory|coverage|transferability|preview|cost|approve|monitor|review ...  # hierarchical transfer campaign; see docs/hierarchical-transfer-campaign.md
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
