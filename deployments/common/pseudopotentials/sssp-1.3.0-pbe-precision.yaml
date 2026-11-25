@@ -1,5 +1,5 @@
 library_id: sssp-1.3.0-pbe-precision
-library_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/sssp-1.3.0-pbe-precision
+library_dir: ${MATSIM_SSSP_PSEUDO_DIR}
 provenance:
   source_url: https://archive.materialscloud.org/records/gvag2-y0636
   doi: 10.24435/materialscloud:eg-28
