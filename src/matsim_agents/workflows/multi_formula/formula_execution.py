@@ -28,10 +28,10 @@ from matsim_agents.backends.mlip.relaxation import (
     RelaxStructureInput,
     relax_with_mlip,
 )
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.execution.placement import Placement
 from matsim_agents.science.thermodynamics.stability import (

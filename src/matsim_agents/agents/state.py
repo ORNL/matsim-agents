@@ -10,7 +10,7 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from matsim_agents.backends.mcp.records import MCPCallRecord, redact, redact_uri
-from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.core.relaxation import RelaxationResult
 
 
 class TaskSpec(BaseModel):

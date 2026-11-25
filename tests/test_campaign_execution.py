@@ -16,9 +16,9 @@ from matsim_agents.backends.mlip.config import (
     UMAConfig,
     parse_mlip_config,
 )
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.science.structures.formula import FormulaGenerationPolicy
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry

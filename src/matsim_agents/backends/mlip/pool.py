@@ -33,7 +33,7 @@ from matsim_agents.execution.devices import (
 
 if TYPE_CHECKING:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
     from matsim_agents.execution.placement import Placement
 
 log = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ class MLIPWorkerPool:
         """Relax structures concurrently; each successful value is a ``RelaxationResult``."""
 
         from matsim_agents.backends.mlip.relaxation import CalculatorCache, relax_with_mlip
-        from matsim_agents.backends.mlip.results import RelaxationResult
+        from matsim_agents.core.relaxation import RelaxationResult
 
         if not self.slots:
             if self._local_calculators is None:

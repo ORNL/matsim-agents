@@ -6,9 +6,9 @@ from ase import Atoms
 from ase.io import write
 
 from matsim_agents.backends.mlip.config import UMAConfig
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import ComputeBudget
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.data.governance import (
     structure_identity,
     validate_labelled_frames,

@@ -91,13 +91,13 @@ def relax_structure(
     from ase.io import read, write
     from ase.optimize import FIRE
 
-    from matsim_agents.backends.mlip.relaxation import _NumericalStressCalculator
+    from matsim_agents.core.stress import NumericalStressCalculator
 
     atoms = read(str(structure_path))
     atoms.calc = calculator
     optimizable: Any = atoms
     if relax_cell and bool(np.all(atoms.pbc)):
-        atoms.calc = _NumericalStressCalculator(calculator)
+        atoms.calc = NumericalStressCalculator(calculator)
         optimizable = ExpCellFilter(atoms)
     optimizer = FIRE(optimizable, logfile=str(log_path), maxstep=maxstep_A)
     converged = bool(optimizer.run(fmax=fmax_eV_per_A, steps=max_steps))

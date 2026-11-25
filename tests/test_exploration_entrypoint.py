@@ -413,7 +413,7 @@ def test_cli_check_run_and_summary(config_path, emt_workflow):
 def test_nonconvergence_is_not_presented_as_successful_science(
     config_path, emt_workflow, monkeypatch
 ):
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
 
     def unconverged(request, **kwargs):
         output = Path(request.output_dir)

@@ -1,4 +1,4 @@
-"""Result types produced by MLIP relaxations."""
+"""Backend-neutral result of an atomistic structure relaxation."""
 
 from __future__ import annotations
 

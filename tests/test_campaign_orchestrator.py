@@ -7,9 +7,9 @@ import pytest
 from ase import Atoms
 from ase.io import write
 
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.core.seeding import stream_seed
 from matsim_agents.execution.ledger import (
     REVIEW_ACTION,

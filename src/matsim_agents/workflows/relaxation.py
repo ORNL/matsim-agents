@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.contracts import (
     ApprovalPolicy,
     EvidenceLevel,
@@ -26,6 +25,7 @@ from matsim_agents.core.contracts import (
     ValidationRecord,
     WorkflowStatus,
 )
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.execution.placement import ProcessLaunch, ResourcePlan
 from matsim_agents.execution.recovery import is_input_diagnostic
 from matsim_agents.execution.run_directory import ScientificRunDirectory

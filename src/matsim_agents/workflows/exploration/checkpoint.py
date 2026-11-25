@@ -10,9 +10,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.core.hashing import sha256_file as file_sha256
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.science.structures.screening import CandidateSelection
 from matsim_agents.science.structures.seed_structures import PhaseCandidate

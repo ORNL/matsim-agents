@@ -6,8 +6,6 @@ import importlib.util
 import os
 from pathlib import Path
 
-_DEFAULT_FT_REPO = "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN_GFM_FineTuning4Materials"
-
 
 def load_update_model(ft_repo: str | Path | None = None):
     """Import ORNL's ``utils/update_model.py`` by file path.
@@ -15,11 +13,10 @@ def load_update_model(ft_repo: str | Path | None = None):
     The module name ``utils`` collides with HydraGNN's own ``utils`` on
     ``sys.path``, so we load it directly from the repo file to avoid shadowing.
     """
-    repo = (
-        Path(ft_repo or os.environ.get("HYDRAGNN_FT_REPO") or _DEFAULT_FT_REPO)
-        .expanduser()
-        .resolve()
-    )
+    source = ft_repo or os.environ.get("HYDRAGNN_FT_REPO")
+    if not source:
+        raise ValueError("Set ft_repo or HYDRAGNN_FT_REPO to the fine-tuning repository")
+    repo = Path(source).expanduser().resolve()
     path = repo / "utils" / "update_model.py"
     if not path.is_file():
         raise FileNotFoundError(

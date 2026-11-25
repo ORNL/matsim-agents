@@ -880,7 +880,7 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     from ase.io import read, write
 
     import matsim_agents.backends.mlip.relaxation as relaxation
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
 
     source = tmp_path / "input.extxyz"
     write(source, bulk("Cu", "fcc", a=3.8, cubic=True))

@@ -18,7 +18,7 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 
 from matsim_agents.agents.state import MatSimState, TaskSpec
-from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.core.relaxation import RelaxationResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

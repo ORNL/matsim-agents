@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field
 from matsim_agents.backends.mlip.config import MLIPConfig, parse_mlip_config
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import Composition, parse_composition
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.science.structures.seed_structures import (
     PhaseCandidate,
     SeedGenerationAction,

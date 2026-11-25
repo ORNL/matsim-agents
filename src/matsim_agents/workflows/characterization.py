@@ -43,7 +43,6 @@ from pydantic import BaseModel, Field, model_validator
 from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.backends.dft.vasp_relax import VASPSettings
 from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
@@ -58,6 +57,7 @@ from matsim_agents.core.contracts import (
     at_least,
 )
 from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,

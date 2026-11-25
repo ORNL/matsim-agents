@@ -4,8 +4,8 @@ import numpy as np
 from ase import Atoms
 from ase.io import write
 
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.composition import parse_composition
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.workflows.candidate_registry import (
     CandidateRegistry,

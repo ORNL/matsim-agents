@@ -68,15 +68,10 @@ _HEAD_PARAM_RE = re.compile(r"heads_NN\.\d+\.branch-(\d+)\.")
 
 def _resolve_hydragnn_paths(hydragnn_root: str | Path | None) -> tuple[Path, Path]:
     """Return ``(hydragnn_root, example_dir)`` and put both on ``sys.path``."""
-    root = (
-        Path(
-            hydragnn_root
-            or os.environ.get("HYDRAGNN_ROOT")
-            or "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN"
-        )
-        .expanduser()
-        .resolve()
-    )
+    source = hydragnn_root or os.environ.get("HYDRAGNN_ROOT")
+    if not source:
+        raise ValueError("Set hydragnn_root or HYDRAGNN_ROOT to the HydraGNN checkout")
+    root = Path(source).expanduser().resolve()
     if not (root / "hydragnn").is_dir():
         raise FileNotFoundError(f"hydragnn package not found under {root}")
     example_dir = root / "examples" / "multidataset_hpo_sc26"

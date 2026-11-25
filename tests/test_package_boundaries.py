@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 from pathlib import Path
 
 import pytest
@@ -184,6 +185,85 @@ def test_imports_only_point_to_lower_layers() -> None:
     assert _layer_violations() == []
 
 
+# ── Framework/application separation ──────────────────────────────────────── #
+
+APPLICATION_TREES = ("examples", "benchmarks", "research", "deployments", "scripts")
+# Campaign identifiers, allocations and facility paths belong to applications
+# and deployments, never to the framework.
+FORBIDDEN_LITERALS = re.compile(r"W640|lrn110|m5216|/lustre/|/gpfs/|/global/cfs/", re.IGNORECASE)
+# Facility profiles describe where a templated ``{account}`` directory lives.
+LITERAL_ALLOWLIST = {"execution/iri.py"}
+CAMPAIGN_NAME = re.compile(r"(^|[-_ ])(e1|e2|e3|e4|nbtao5|fusion|pfc|w640)([-_ ]|$)", re.IGNORECASE)
+
+
+def _src_modules() -> list[tuple[Path, ast.Module]]:
+    return [(p, ast.parse(p.read_text())) for p in sorted(PACKAGE_ROOT.rglob("*.py"))]
+
+
+def test_science_does_not_import_backends() -> None:
+    violations = []
+    for path, tree in _src_modules():
+        rel = path.relative_to(PACKAGE_ROOT.parent)
+        if rel.parts[1] != "science":
+            continue
+        module = ".".join(rel.with_suffix("").parts).removesuffix(".__init__")
+        for node in ast.walk(tree):
+            units = _import_target_units(module, path.name == "__init__.py", node)
+            if any(unit and unit.startswith("backends") for unit in units):
+                violations.append(f"{rel}:{node.lineno}")
+    assert violations == []
+
+
+def test_framework_does_not_import_applications() -> None:
+    violations = []
+    for path, tree in _src_modules():
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level:
+                names = [node.module or ""]
+            if any(name.split(".")[0] in APPLICATION_TREES for name in names):
+                violations.append(f"{path.relative_to(PACKAGE_ROOT)}:{node.lineno}")
+    assert violations == []
+
+
+def test_framework_has_no_campaign_or_facility_literals() -> None:
+    violations = [
+        f"{path.relative_to(PACKAGE_ROOT)}:{lineno}"
+        for path in sorted(PACKAGE_ROOT.rglob("*.py"))
+        if path.relative_to(PACKAGE_ROOT).as_posix() not in LITERAL_ALLOWLIST
+        for lineno, line in enumerate(path.read_text().splitlines(), 1)
+        if FORBIDDEN_LITERALS.search(line)
+    ]
+    assert violations == []
+
+
+def test_framework_module_names_are_campaign_neutral() -> None:
+    names = [
+        p.relative_to(PACKAGE_ROOT).as_posix()
+        for p in PACKAGE_ROOT.rglob("*")
+        if p.name != "__pycache__" and CAMPAIGN_NAME.search(p.stem)
+    ]
+    assert names == []
+
+
+def test_cli_command_names_are_campaign_neutral() -> None:
+    from typer.main import get_command
+
+    from matsim_agents.cli._app import app
+    from matsim_agents.cli.tools import TOOLS
+
+    def walk(command, prefix: str = "") -> list[str]:
+        names = []
+        for name, sub in getattr(command, "commands", {}).items():
+            names += [prefix + name, *walk(sub, f"{prefix}{name} ")]
+        return names
+
+    names = walk(get_command(app)) + list(TOOLS)
+    assert [n for n in names if CAMPAIGN_NAME.search(n)] == []
+
+
 # ── Removed legacy paths ──────────────────────────────────────────────────── #
 
 
@@ -231,6 +311,10 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.cli.radiation_damage",
         "matsim_agents.cli.e1",
         "matsim_agents.cli.composition",
+        "matsim_agents.workflows.e1",
+        "matsim_agents.workflows.warmstart_benchmark_qe",
+        "matsim_agents.workflows.warmstart_benchmark_vasp",
+        "matsim_agents.backends.mlip.results",
     ],
 )
 def test_legacy_alias_modules_are_removed(module: str) -> None:

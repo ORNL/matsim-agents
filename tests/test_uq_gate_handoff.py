@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from matsim_agents.agents.objective_graph import uq_gate_node
 from matsim_agents.agents.state import MatSimState
-from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.core.relaxation import RelaxationResult
 
 
 def _result(base_path: str, top_weight: float | None) -> RelaxationResult:

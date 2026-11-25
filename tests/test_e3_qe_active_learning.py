@@ -334,7 +334,7 @@ def test_geometry_worker_uses_and_records_promoted_checkpoint(tmp_path, monkeypa
     from ase.calculators.emt import EMT
 
     from matsim_agents.backends.mlip import relaxation
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
 
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     checkpoint = tmp_path / "promoted.model"

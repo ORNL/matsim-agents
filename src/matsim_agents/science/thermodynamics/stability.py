@@ -31,8 +31,8 @@ from itertools import combinations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.core.contracts import DFT_EVIDENCE, EvidenceLevel
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 
 
