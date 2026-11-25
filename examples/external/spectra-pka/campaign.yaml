@@ -8,7 +8,7 @@
 #
 # The composition below is an invented two-element example, not a study result. A real
 # campaign needs a PKA matrix file for every isotope of every element (fetch them with
-# scripts/spectra_pka_fetch_data.py --composition ...).
+# `matsim-agents external spectra-pka fetch-data --composition ...`).
 external_tools:
   spectra_pka:
     enabled: true
@@ -26,7 +26,9 @@ campaign:
   nuclear_data_identity: REPLACE-WITH-YOUR-DATA-LIBRARY-AND-VERSION
   results_stub: example_w_ta
   flux:
-    file: ${NEUTRON_SPECTRUM_FILE}               # SPECTRA-PKA flux file (see the upstream manual)
+    # Exactly one of: `file` (native SPECTRA-PKA flux file) or `spectrum_file` (CSV e_low,e_high,flux,
+    # with energy_units, flux_units, value_kind and absolute declared).
+    file: ${NEUTRON_SPECTRUM_FILE}
     identity: REPLACE-WITH-SPECTRUM-NAME
     normalization: "n cm^-2 s^-1 per group (flux_norm_type 2)"
     norm_type: 2

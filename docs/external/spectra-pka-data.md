@@ -16,7 +16,11 @@ folder, linked from the "Data download for SPECTRA-PKA" table at
 ## Layout (observed)
 
 - `pkas.zip` stores (method 0, no ZIP compression) one tarball per library, for example
-  `TENDL2023n-pka.tar.bz2`. Despite the name it is **gzip**, not bzip2.
+  `TENDL2023n-pka.tar.bz2`. The `.bz2` suffix is not reliable: five members are **gzip**
+  (`TENDL2023n`, `TENDL2023p`, `TENDL2019-n`, `TENDL2017data-p`, `TENDL2017data-a`) and two are
+  real **bzip2** (`TENDL2015data-n`, `TENDL2017data-n`). The extractor reads the magic bytes of
+  each member. Real bzip2 is much slower to decompress: `W184s.asc` from `TENDL2017data-n`
+  took 8m43s, against about 3 minutes for six matrices from `TENDL2023n`.
 - Each tarball holds `pka/<El><AAA>s.asc`, one file per target isotope (`W184s.asc`,
   `Fe056s.asc`, `Cu063s.asc`). Mass numbers are zero-padded to three digits. Files are
   roughly 20-90 MB each, so a full library is several GB.
@@ -32,8 +36,9 @@ archive cannot be sampled. It must be streamed once from the start.
 
 ## Extracting only what a material needs
 
+`matsim-agents external spectra-pka fetch-data` takes the same options as
 `scripts/spectra_pka_fetch_data.py` (library code in
-`matsim_agents.backends.external.spectra_pka.data_fetch`) streams the archive, skips every
+`matsim_agents.backends.external.spectra_pka.data_fetch`). It streams the archive, skips every
 other library, and writes only the requested files. It works for any material: the isotope
 list comes from the elements you name (all natural isotopes, NIST/IUPAC abundances through
 `mendeleev`), from a composition, or from explicit nuclides. Nothing is specific to a campaign.
@@ -57,8 +62,11 @@ python scripts/spectra_pka_fetch_data.py --dest $DATA --library TENDL2023n \
 python scripts/spectra_pka_fetch_data.py --dest $DATA --archive /path/pkas.zip --elements W
 ```
 
-Options: `--library` is a substring of the archive member name (`TENDL2023n`, `TENDL2019n`,
-`TENDL2017p`, ...), default `TENDL2023n`. `--force` re-extracts. `--allow-missing` returns 0
+Options: `--library` must name exactly one archive member, with or without `-pka`,
+case-insensitive (`TENDL2023n`, `TENDL2019-n`, `TENDL2017data-n`, ...), default `TENDL2023n`;
+an unknown name is an error, not a partial match. A file already on disk is reused only when
+its manifest entry has the same byte size and SHA-256, otherwise it is extracted again.
+`--force` re-extracts. `--allow-missing` returns 0
 when isotopes are absent. Exit code 2 means some isotopes are not in that library.
 
 ## Result on disk
@@ -106,10 +114,12 @@ Workflow when MATSIM-AGENTS is deployed for a damage study:
 
    For `W0.9Ta0.1` this needs `W180 W182 W183 W184 W186 Ta181`. If any are absent from the
    library the command exits 2 and lists them; do not substitute another release.
-3. **Supply a neutron spectrum** (`flux.file`). SPECTRA-PKA does not provide one. The upstream
-   `manual/test/fluxes_specter.dat` PWR spectrum is for build checks only. The group structure
-   must match what the binary expects; `matsim_agents.backends.external.spectra_pka.spectrum`
-   validates, converts units and rebins a user spectrum (CSV or JSON) before it is written.
+3. **Supply a neutron spectrum.** SPECTRA-PKA does not provide one. The upstream
+   `manual/test/fluxes_specter.dat` PWR spectrum is for build checks only. Give either
+   `flux.file` (a native SPECTRA-PKA flux file, linked unchanged) or `flux.spectrum_file` (CSV
+   `e_low,e_high,flux` with declared energy and flux units). The latter is validated by
+   `matsim_agents.backends.external.spectra_pka.spectrum` and written as a native itype-2 file;
+   the binary collapses it onto the library grid itself, so no pre-rebinning is needed.
 4. **Point the campaign at the data.** Set `PKA_DATA_DIRECTORY=$DATA/TENDL2023n-pka` and keep
    `derive_channels: true` in `examples/external/spectra-pka/campaign.yaml`, then run
    `matsim-agents external spectra-pka check`, `run`, `run --execute`.
@@ -146,3 +156,8 @@ and `W182s.asc` and `W184s.asc` were byte-identical to the network-extracted cop
 archive is read sequentially from the start, so it is faster than the network but not instant.
 `matsim-agents external spectra-pka check` on the derived-channel example then reported
 `data_coverage` ok for all six isotopes.
+
+A local `run --execute` on those six matrices with the upstream PWR sample spectrum (build
+check only) finished in 21 s: SPECTRA-PKA read 56 matrices on the 1026-group grid, reached its
+end marker, and the result was `STRUCTURALLY_VALID` with `NOT_VALIDATED`. An identical second
+`run --execute` was a cache hit and did not re-run the binary.
