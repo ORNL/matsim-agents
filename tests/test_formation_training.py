@@ -110,6 +110,19 @@ def test_rejects_double_conversion(tmp_path, elemental_manifest, dataset_method_
         prepare_formation_training_dataset(formed, reference, tmp_path / "second")
 
 
+def test_rejects_formation_marked_frames_under_a_native_sidecar(
+    tmp_path, elemental_manifest, dataset_method_sidecar
+):
+    dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
+    frames = read(dataset, index=":")
+    frames[1].info["energy_convention"] = FORMATION_ENERGY_REFERENCE
+    write(dataset, frames)
+    dataset_method_sidecar(dataset, reference)
+    with pytest.raises(ValueError, match="frame 1 is already marked"):
+        prepare_formation_training_dataset(dataset, reference, tmp_path / "snapshot")
+    assert not (tmp_path / "snapshot").exists()
+
+
 def test_constrained_frames_preserve_raw_force_labels(
     tmp_path, elemental_manifest, dataset_method_sidecar
 ):

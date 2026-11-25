@@ -382,6 +382,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
                 "sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
                 "dft_backend": "qe",
                 "method_signature": "synthetic-dft",
+                "energy_reference": "qe:native_total_energy",
             }
         )
     )

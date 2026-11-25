@@ -17,13 +17,13 @@ from matsim_agents.datasets.energy_references import (
     validate_dataset_reference_method,
 )
 from matsim_agents.datasets.governance import (
-    DatasetManifest,
+    FORMATION_ENERGY_REFERENCE,
     DatasetValidationSummary,
+    load_training_manifest,
+    reject_formation_frames,
     sha256_file,
     write_dataset_manifest,
 )
-
-FORMATION_ENERGY_REFERENCE = "dft:declared_elemental_formation_energy"
 
 
 def prepare_formation_training_dataset(
@@ -42,16 +42,11 @@ def prepare_formation_training_dataset(
         raise ValueError(f"Formation training snapshot already exists: {output}")
     if source == output or output in source.parents:
         raise ValueError("Formation training output must not contain the source dataset")
-    metadata_path = source.with_suffix(source.suffix + ".manifest.json")
-    metadata = DatasetManifest.model_validate_json(metadata_path.read_text())
-    if metadata.energy_reference != f"{metadata.dft_backend}:native_total_energy":
-        raise ValueError("Formation conversion requires native DFT total-energy labels")
-    source_bytes = source.read_bytes()
-    if hashlib.sha256(source_bytes).hexdigest() != metadata.sha256:
-        raise ValueError("DFT dataset manifest hash does not match the training data")
+    metadata = load_training_manifest(source)
     frames = list(read(source, index=":"))
     if not frames:
         raise ValueError("Formation training requires a nonempty dataset")
+    reject_formation_frames(frames)
     required_elements = {symbol for frame in frames for symbol in frame.get_chemical_symbols()}
     manifest, reference_bytes, references = load_elemental_reference_manifest(
         elemental_reference_manifest, required_elements=required_elements
@@ -70,10 +65,6 @@ def prepare_formation_training_dataset(
     for index, atoms in enumerate(frames):
         if not len(atoms):
             raise ValueError(f"Training frame {index} is empty")
-        if atoms.info.get("energy_convention") == FORMATION_ENERGY_REFERENCE:
-            raise ValueError(
-                f"Training frame {index} is already marked as a formation-energy label"
-            )
         if atoms.info.get("dft_backend", metadata.dft_backend) != metadata.dft_backend:
             raise ValueError(f"Training frame {index} has incompatible DFT backend")
         total_energy = (
