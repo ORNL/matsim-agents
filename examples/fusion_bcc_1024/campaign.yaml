@@ -57,3 +57,10 @@ slurm:
   walltime: "02:00:00"
   job_name: qe-1024-validation
   max_concurrent_jobs: 1
+transmutation:
+  # Synthetic W -> Re/Os substitutions for the radiation campaign (counts are not an inventory).
+  host: W
+  examples:
+    - {name: Re5, products: {Re: 5}, seed: 1}
+    - {name: Re3Os2, products: {Re: 3, Os: 2}, seed: 2}
+    - {name: Re2Os1, products: {Re: 2, Os: 1}, seed: 3, with_vacancy_he: true}

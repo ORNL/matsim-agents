@@ -69,11 +69,12 @@ def test_ten_examples_with_exact_atom_counts(examples, cfg):
 
 def test_transmutation_examples_keep_the_site_count_and_cap(examples):
     for e in examples:
-        if e.n_re or e.n_os:
+        if e.products:
             symbols = e.atoms.get_chemical_symbols()
-            assert symbols.count("Re") == e.n_re
-            assert symbols.count("Os") == e.n_os
-            assert (e.n_re + e.n_os) / 1024 <= 0.01
+            for el, n in e.products.items():
+                assert symbols.count(el) == n
+            assert sum(e.products.values()) / 1024 <= 0.01
+    assert {e.calc_id for e in examples if e.products} == {"Re5", "Re3Os2", "Re2Os1_V1He1"}
 
 
 def test_missing_gas_and_transmutation_pseudos_block_input(cfg, examples, tmp_path):

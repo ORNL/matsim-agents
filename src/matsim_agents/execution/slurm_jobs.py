@@ -105,7 +105,7 @@ class JobSpec(BaseModel):
     time_limit: str = "00:15:00"
     gpus: int = Field(default=0, ge=0)
     nodes: int = 1
-    account: str = "LRN110"
+    account: str = Field(min_length=1)
     qos: str = "debug"
     partition: str = "batch"
     cwd: str | None = None

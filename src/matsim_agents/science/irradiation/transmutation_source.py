@@ -2,12 +2,12 @@
 
 Nuclear reaction rates, cross sections and decay chains are *inputs*: they come from a
 documented external calculation or a user table and are never computed or guessed here (DFT
-cannot predict them). Re and Os need not rise monotonically (Re can decay to Os, intermediate
-radioactive isotopes exist), so no direct W -> Re -> Os rate model is assumed; the table is
-interpolated as given.
+cannot predict them). Products need not rise monotonically (in W, Re can decay to Os and
+intermediate radioactive isotopes exist), so no rate model is assumed; the table is
+interpolated as given. The host and its products are inputs, not constants of this module.
 
 Three processes stay separate and are not modeled by this module: the nuclear inventory (this
-module), atomic chemical redistribution, and defect-assisted solute migration or Re/Os
+module), atomic chemical redistribution, and defect-assisted solute migration or product
 clustering. ``atoms per lattice site`` is the only concentration basis; ``appm`` inputs are
 converted. Interpolation is linear in time, never extrapolated, and uncertainty (when given) is
 interpolated the same way, which is an approximation the user must justify.
@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
+from ase.data import chemical_symbols
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from matsim_agents.science.irradiation.transmutation import TransmutationScenario
@@ -28,7 +29,6 @@ from matsim_agents.science.irradiation.transmutation import TransmutationScenari
 SourceKind = Literal["external_calculation", "user_table", "synthetic"]
 Units = Literal["atom_fraction", "appm"]
 _UNIT_SCALE = {"atom_fraction": 1.0, "appm": 1e-6}
-_ROW_FIELDS = ("re", "os", "h", "he", "sigma_re", "sigma_os", "temperature_k")
 
 
 class InventorySourceError(ValueError):
@@ -64,18 +64,37 @@ class InventoryProvenance(BaseModel):
 
 
 class InventoryRow(BaseModel):
-    """Composition at one exposure time; ``h``/``he`` are optional gas-production inventories."""
+    """Species amounts at one exposure time (products and optional gas inventories)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     time_s: float = Field(ge=0, allow_inf_nan=False)
-    re: float = Field(ge=0, allow_inf_nan=False)
-    os: float = Field(ge=0, allow_inf_nan=False)
-    h: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    he: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    sigma_re: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    sigma_os: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    amounts: dict[str, float]
+    sigma: dict[str, float] = Field(default_factory=dict)
     temperature_k: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _valid(self) -> InventoryRow:
+        for name, table in (("amount", self.amounts), ("uncertainty", self.sigma)):
+            for species, value in table.items():
+                if species not in chemical_symbols[1:]:
+                    raise ValueError(f"{species!r} is not an element symbol")
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError(f"{species} {name} must be finite and non-negative")
+        return self
+
+    @classmethod
+    def from_flat(cls, raw: dict[str, float]) -> InventoryRow:
+        """``{"time_s", "temperature_k", "<El>", "sigma_<El>"}`` as in the CSV table."""
+        amounts, sigma, extra = {}, {}, {}
+        for key, value in raw.items():
+            if key in ("time_s", "temperature_k"):
+                extra[key] = value
+            elif key.startswith("sigma_"):
+                sigma[key.removeprefix("sigma_")] = value
+            else:
+                amounts[key] = value
+        return cls(amounts=amounts, sigma=sigma, **extra)
 
 
 class SampledInventory(BaseModel):
@@ -86,7 +105,7 @@ class SampledInventory(BaseModel):
     source_id: str
     time_s: float
     n_lattice_sites: int
-    fractions: dict[str, float]  # atoms per lattice site, keys re/os/h/he (present ones)
+    fractions: dict[str, float]  # atoms per lattice site, keyed by species
     sigma_fractions: dict[str, float]
     counts: dict[str, int]
     rounding_error_atoms: dict[str, float]  # integer count - exact expected count
@@ -95,11 +114,17 @@ class SampledInventory(BaseModel):
 
 
 class TransmutationInventory(BaseModel):
-    """Time-dependent Re/Os (and optional H/He) inventory with provenance."""
+    """Time-dependent product (and optional gas) inventory of one host, with provenance.
+
+    ``products`` substitute ``host`` atoms and count against the scenario cap; every other
+    species in the table (for example H, He) is a gas inventory reported alongside.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     provenance: InventoryProvenance
+    host: str = Field(min_length=1)
+    products: tuple[str, ...] = Field(min_length=1)
     units: Units = "atom_fraction"
     parent_alloy_id: str | None = None
     rows: tuple[InventoryRow, ...] = Field(min_length=2)
@@ -118,13 +143,22 @@ class TransmutationInventory(BaseModel):
             r.temperature_k is None for r in self.rows
         ):
             raise ValueError("source requires a temperature history but a row has none")
-        for name in ("h", "he", "sigma_re", "sigma_os", "temperature_k"):
-            present = {getattr(r, name) is not None for r in self.rows}
-            if len(present) > 1:
-                raise ValueError(f"column {name!r} is given for only some rows")
-        total = [(r.re + r.os) * _UNIT_SCALE[self.units] for r in self.rows]
-        if any(t > 1.0 for t in total):
-            raise ValueError("Re + Os exceeds one atom per lattice site")
+        if self.host in self.products:
+            raise ValueError("the host cannot also be a product")
+        first = self.rows[0]
+        for r in self.rows:
+            if set(r.amounts) != set(first.amounts):
+                raise ValueError("a species column is given for only some rows")
+            if set(r.sigma) != set(first.sigma):
+                raise ValueError("an uncertainty column is given for only some rows")
+            if (r.temperature_k is None) != (first.temperature_k is None):
+                raise ValueError("column 'temperature_k' is given for only some rows")
+        missing = set(self.products) - set(first.amounts)
+        if missing:
+            raise ValueError(f"inventory has no amounts for products {sorted(missing)}")
+        scale = _UNIT_SCALE[self.units]
+        if any(sum(r.amounts[p] for p in self.products) * scale > 1.0 for r in self.rows):
+            raise ValueError("the products exceed one atom per lattice site")
         return self
 
     @property
@@ -135,13 +169,13 @@ class TransmutationInventory(BaseModel):
     def t_max(self) -> float:
         return self.rows[-1].time_s
 
-    def _interp(self, t: float, name: str) -> float | None:
-        if getattr(self.rows[0], name) is None:
+    def _interp(self, t: float, get) -> float | None:
+        if get(self.rows[0]) is None:
             return None
         for lo, hi in zip(self.rows, self.rows[1:], strict=False):
             if lo.time_s <= t <= hi.time_s:
                 w = (t - lo.time_s) / (hi.time_s - lo.time_s)
-                return (1 - w) * getattr(lo, name) + w * getattr(hi, name)
+                return (1 - w) * get(lo) + w * get(hi)
         raise AssertionError("time not bracketed")  # guarded by sample()
 
     def sample(
@@ -150,7 +184,7 @@ class TransmutationInventory(BaseModel):
         n_lattice_sites: int,
         *,
         parent_alloy_id: str | None = None,
-        w_atoms: int | None = None,
+        host_atoms: int | None = None,
     ) -> SampledInventory:
         """Linear interpolation at ``time_s`` mapped to atom counts; no extrapolation."""
         if not math.isfinite(time_s) or not self.t_min <= time_s <= self.t_max:
@@ -170,23 +204,20 @@ class TransmutationInventory(BaseModel):
         scale = _UNIT_SCALE[self.units]
         fractions: dict[str, float] = {}
         sigmas: dict[str, float] = {}
-        for key in ("re", "os", "h", "he"):
-            value = self._interp(time_s, key)
-            if value is not None:
-                fractions[key] = value * scale
-        for key in ("re", "os"):
-            sigma = self._interp(time_s, f"sigma_{key}")
-            if sigma is not None:
-                sigmas[key] = sigma * scale
+        for key in self.rows[0].amounts:
+            fractions[key] = self._interp(time_s, lambda r, k=key: r.amounts[k]) * scale
+        for key in self.rows[0].sigma:
+            sigmas[key] = self._interp(time_s, lambda r, k=key: r.sigma[k]) * scale
         counts, errors = {}, {}
         for key, frac in fractions.items():
             exact = frac * n_lattice_sites
             counts[key] = round(exact)
             errors[key] = counts[key] - exact
-        if w_atoms is not None and counts["re"] + counts["os"] > w_atoms:
+        needed = sum(counts[p] for p in self.products)
+        if host_atoms is not None and needed > host_atoms:
             raise InventorySourceError(
-                f"inventory needs {counts['re'] + counts['os']} Re/Os atoms but only "
-                f"{w_atoms} W atoms exist (only W is transmuted)"
+                f"inventory needs {needed} product atoms but only {host_atoms} "
+                f"{self.host} atoms exist (only {self.host} is transmuted)"
             )
         return SampledInventory(
             source_id=self.provenance.source_id,
@@ -197,7 +228,7 @@ class TransmutationInventory(BaseModel):
             counts=counts,
             rounding_error_atoms=errors,
             evidence_level="synthetic" if self.provenance.kind == "synthetic" else "predicted",
-            temperature_k=self._interp(time_s, "temperature_k"),
+            temperature_k=self._interp(time_s, lambda r: r.temperature_k),
         )
 
     def scenario_at(
@@ -209,17 +240,17 @@ class TransmutationInventory(BaseModel):
         n_lattice_sites: int,
         seed: int,
         distribution: str = "random",
-        w_atoms: int | None = None,
+        host_atoms: int | None = None,
         max_solute_fraction: float | None = None,
         limit_justification: str | None = None,
     ) -> tuple[TransmutationScenario, SampledInventory]:
-        """Scenario realizing the inventory at ``time_s``; the Re/Os cap is not relaxed silently.
+        """Scenario realizing the inventory at ``time_s``; the product cap is not relaxed silently.
 
         Exposure times whose counts exceed the campaign cap require an explicit
         ``max_solute_fraction`` with ``limit_justification`` (the inventory is then the source).
         """
         sampled = self.sample(
-            time_s, n_lattice_sites, parent_alloy_id=parent_alloy_id, w_atoms=w_atoms
+            time_s, n_lattice_sites, parent_alloy_id=parent_alloy_id, host_atoms=host_atoms
         )
         kwargs = {}
         if max_solute_fraction is not None:
@@ -231,8 +262,8 @@ class TransmutationInventory(BaseModel):
             scenario_id=scenario_id,
             parent_alloy_id=parent_alloy_id,
             exposure_scenario=f"{self.provenance.source_id}@t={time_s:g}s",
-            n_re=sampled.counts["re"],
-            n_os=sampled.counts["os"],
+            host=self.host,
+            products={p: sampled.counts[p] for p in self.products},
             distribution=distribution,
             seed=seed,
             inventory_source=self.provenance.source_id,
@@ -246,52 +277,62 @@ def load_inventory(
     path: str | Path,
     provenance: InventoryProvenance,
     *,
+    host: str,
+    products: Sequence[str],
     units: Units = "atom_fraction",
     parent_alloy_id: str | None = None,
 ) -> TransmutationInventory:
-    """Read a CSV table (columns ``time_s,re,os`` plus optional ``h,he,sigma_*,temperature_k``)."""
+    """Read a CSV table: ``time_s``, one column per species (element symbol), optional
+    ``sigma_<El>`` uncertainties and ``temperature_k``. Every product needs a column."""
     path = Path(path)
     if not path.is_file():
         raise InventorySourceError(f"inventory file not found: {path}")
     with path.open(newline="") as handle:
         reader = csv.DictReader(handle)
         names = set(reader.fieldnames or ())
-        missing = {"time_s", "re", "os"} - names
+        missing = {"time_s", *products} - names
         if missing:
             raise InventorySourceError(f"inventory is missing columns: {sorted(missing)}")
-        unknown = names - {"time_s", *_ROW_FIELDS}
+        species = {n.removeprefix("sigma_") for n in names - {"time_s", "temperature_k"}}
+        unknown = sorted(n for n in species if n not in chemical_symbols[1:])
         if unknown:
-            raise InventorySourceError(f"unrecognized inventory columns: {sorted(unknown)}")
+            raise InventorySourceError(f"unrecognized inventory columns: {unknown}")
         try:
-            rows = [
-                InventoryRow(
-                    **{k: float(v) for k, v in raw.items() if v not in (None, "") and k in names}
-                )
+            raw_rows = [
+                {k: float(v) for k, v in raw.items() if v not in (None, "") and k in names}
                 for raw in reader
             ]
         except ValueError as exc:
             raise InventorySourceError(f"invalid inventory row: {exc}") from exc
-    return _build(provenance, units, parent_alloy_id, rows)
+    return inventory_from_rows(
+        raw_rows,
+        provenance,
+        host=host,
+        products=products,
+        units=units,
+        parent_alloy_id=parent_alloy_id,
+    )
 
 
 def inventory_from_rows(
     rows: Sequence[dict[str, float]],
     provenance: InventoryProvenance,
     *,
+    host: str,
+    products: Sequence[str],
     units: Units = "atom_fraction",
     parent_alloy_id: str | None = None,
 ) -> TransmutationInventory:
+    """Rows in the flat CSV layout: ``{"time_s": t, "<El>": amount, "sigma_<El>": ...}``."""
     try:
-        parsed = [InventoryRow(**row) for row in rows]
-    except ValueError as exc:
-        raise InventorySourceError(f"invalid inventory row: {exc}") from exc
-    return _build(provenance, units, parent_alloy_id, parsed)
-
-
-def _build(provenance, units, parent_alloy_id, rows) -> TransmutationInventory:
-    try:
+        parsed = tuple(InventoryRow.from_flat(dict(row)) for row in rows)
         return TransmutationInventory(
-            provenance=provenance, units=units, parent_alloy_id=parent_alloy_id, rows=tuple(rows)
+            provenance=provenance,
+            host=host,
+            products=tuple(products),
+            units=units,
+            parent_alloy_id=parent_alloy_id,
+            rows=parsed,
         )
     except ValueError as exc:
         raise InventorySourceError(str(exc)) from exc

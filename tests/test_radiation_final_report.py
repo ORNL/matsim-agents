@@ -24,7 +24,9 @@ from tests.test_radiation_damage_workflow import _config
 
 
 def _job(state="SUBMITTED", gpus=1, job_id="1"):
-    spec = JobSpec(name="smoke", command=("python", "-c", "print('hi there')"), gpus=gpus)
+    spec = JobSpec(
+        name="smoke", command=("python", "-c", "print('hi there')"), gpus=gpus, account="ACCOUNT"
+    )
     return JobEntry(
         spec_hash=spec.spec_hash,
         spec=spec,

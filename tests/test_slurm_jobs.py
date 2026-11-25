@@ -38,7 +38,12 @@ class FakeScheduler:
 
 
 def _spec(name="smoke", gpus=1, **kw):
-    return JobSpec(name=name, command=("python", "-c", "print('hi there')"), gpus=gpus, **kw)
+    return JobSpec(
+        name=name,
+        command=("python", "-c", "print('hi there')"),
+        gpus=gpus,
+        **{"account": "ACCOUNT", **kw},
+    )
 
 
 def test_manifest_is_not_created_before_a_submission(tmp_path):
@@ -53,7 +58,7 @@ def test_submit_builds_a_safe_non_blocking_command(tmp_path):
     argv = sched.calls[0]
     assert submitted and entry.job_id == "1001" and entry.state == "SUBMITTED"
     assert argv[:2] == ["sbatch", "--parsable"]
-    assert argv[argv.index("-A") + 1] == "LRN110" and argv[argv.index("-q") + 1] == "debug"
+    assert argv[argv.index("-A") + 1] == "ACCOUNT" and argv[argv.index("-q") + 1] == "debug"
     assert argv[argv.index("-t") + 1] == "00:15:00"
     assert "--gpus-per-node=1" in argv and "--gpu-bind=closest" in argv
     assert argv[-2] == "--wrap" and argv[-1] == "python -c 'print('\"'\"'hi there'\"'\"')'"
@@ -176,7 +181,7 @@ def test_invalid_specs_are_rejected(kwargs):
 
 def test_empty_command_is_rejected():
     with pytest.raises(ValueError):
-        JobSpec(name="x", command=())
+        JobSpec(name="x", command=(), account="ACCOUNT")
 
 
 def test_time_parsing():

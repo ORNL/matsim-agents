@@ -37,8 +37,8 @@ def _chain(tmp_path):
             scenario_id="s",
             parent_alloy_id="W640Ta128Cr64V96Hf32Mo64",
             exposure_scenario="synthetic-illustration",
-            n_re=8,
-            n_os=2,
+            host="W",
+            products={"Re": 8, "Os": 2},
             seed=5,
         ),
     )

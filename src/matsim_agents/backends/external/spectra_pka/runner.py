@@ -144,7 +144,7 @@ def submit_slurm(
         command=(str(executable), input_name),
         time_limit=cfg.time_limit or "00:30:00",
         gpus=0,
-        account=cfg.account or "",
+        account=cfg.account,
         qos=cfg.qos or "debug",
         partition=cfg.partition or "batch",
         cwd=str(run_dir),

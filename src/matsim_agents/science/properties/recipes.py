@@ -178,7 +178,7 @@ RECIPES: dict[str, PropertyRecipe] = {
         "Small-strain elastic stiffness tensor, moduli, and mechanical stability.",
         _obs(*_ELASTIC),
         ("stress_strain_dft", "stress_strain_mlip", "existing_data"),
-        "Relaxed structures of one composition (production DFT: the 1,024-site parent).",
+        "Relaxed structures of one composition (production DFT: the full parent supercell).",
         ("temperature_K optional (0 K elasticity by default)",),
         (
             "residual stress",
@@ -206,7 +206,7 @@ RECIPES: dict[str, PropertyRecipe] = {
         ("epw.x or a configured Kubo-Greenwood executable",),
         (
             "An electronic band structure, a DOS, or sigma/tau is not an absolute conductivity.",
-            "Disordered 1,024-site cells may exceed the allocation.",
+            "Large disordered supercells may exceed the allocation.",
         ),
         ("band_gap", "density_of_states", "formation_energy_per_atom"),
     ),

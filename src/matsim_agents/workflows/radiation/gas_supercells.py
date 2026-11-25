@@ -1,4 +1,4 @@
-"""Full-size (1,024-site) QE campaign for transmutation and H/He vacancy-complex configurations.
+"""Full-parent-supercell QE campaign for transmutation and H/He vacancy-complex configurations.
 
 Every configuration starts from the full parent supercell. Its atom count follows
 ``N_atoms = N_parent - N_vac + N_He + N_H`` (transmutation substitutes and keeps the count). A cell
@@ -84,8 +84,7 @@ class GasExample:
     n_vacancies: int
     n_he: int
     n_h: int
-    n_re: int = 0
-    n_os: int = 0
+    products: Mapping[str, int] = field(default_factory=dict)
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
     @property
@@ -112,7 +111,7 @@ def _gas(parent: Atoms, a: float, calc_id: str, parent_id: str, spec: GasComplex
 
 
 def build_gas_examples(cfg: FullSupercellCampaign) -> list[GasExample]:
-    """Ten example configurations on the full parent: gas complexes and Re/Os transmutation."""
+    """Gas complexes on the full parent plus the configured transmutation examples."""
     parent = build_parent(cfg)
     a = cfg.parent_supercell.lattice_parameter
     parent_id = f"{cfg.campaign_id}-parent"
@@ -161,67 +160,54 @@ def build_gas_examples(cfg: FullSupercellCampaign) -> list[GasExample]:
         ),
     ]
 
-    def transmuted(scenario_id: str, n_re: int, n_os: int, seed: int):
+    trans = cfg.transmutation
+    for item in trans.examples if trans else ():
         scenario = TransmutationScenario(
-            scenario_id=scenario_id,
+            scenario_id=item.name.lower(),
             parent_alloy_id=parent_id,
             exposure_scenario="synthetic-example",
-            n_re=n_re,
-            n_os=n_os,
-            seed=seed,
+            host=trans.host,
+            products=dict(item.products),
+            seed=item.seed,
         )
-        atoms, record = apply_transmutation(parent, parent_id, scenario, lattice_parameter=a)
-        return atoms, record
-
-    re5, rec = transmuted("re5", 5, 0, 1)
-    out.append(
-        GasExample(
-            calc_id="Re5",
-            atoms=re5,
-            config_id=f"transmutation-{rec.geometry_fingerprint[:12]}",
-            notation="Re5",
-            n_vacancies=0,
-            n_he=0,
-            n_h=0,
-            n_re=5,
-            provenance={"scenario": rec.scenario.scenario_id, "evidence_level": "synthetic"},
+        host_atoms, rec = apply_transmutation(parent, parent_id, scenario, lattice_parameter=a)
+        if not item.with_vacancy_he:
+            out.append(
+                GasExample(
+                    calc_id=item.name,
+                    atoms=host_atoms,
+                    config_id=f"transmutation-{rec.geometry_fingerprint[:12]}",
+                    notation=item.name,
+                    n_vacancies=0,
+                    n_he=0,
+                    n_h=0,
+                    products=dict(item.products),
+                    provenance={
+                        "scenario": rec.scenario.scenario_id,
+                        "evidence_level": "synthetic",
+                    },
+                )
+            )
+            continue
+        name = f"{item.name}_V1He1"
+        atoms, config = _gas(parent, a, name, parent_id, spec((0,), he_cav), host_atoms)
+        out.append(
+            GasExample(
+                calc_id=name,
+                atoms=atoms,
+                # The gas-complex id does not see the transmuted host, so the host is appended.
+                config_id=f"{config.config_id}-{rec.geometry_fingerprint[:12]}",
+                notation=f"{item.name}+V1He1",
+                n_vacancies=1,
+                n_he=1,
+                n_h=0,
+                products=dict(item.products),
+                provenance={
+                    "scenario": rec.scenario.scenario_id,
+                    "transmuted_parent_ordering_id": occupation_fingerprint(host_atoms),
+                },
+            )
         )
-    )
-    reos, rec = transmuted("re3os2", 3, 2, 2)
-    out.append(
-        GasExample(
-            calc_id="Re3Os2",
-            atoms=reos,
-            config_id=f"transmutation-{rec.geometry_fingerprint[:12]}",
-            notation="Re3Os2",
-            n_vacancies=0,
-            n_he=0,
-            n_h=0,
-            n_re=3,
-            n_os=2,
-            provenance={"scenario": rec.scenario.scenario_id, "evidence_level": "synthetic"},
-        )
-    )
-    mixed, rec = transmuted("re2os1", 2, 1, 3)
-    atoms, config = _gas(parent, a, "Re2Os1_V1He1", parent_id, spec((0,), he_cav), mixed)
-    out.append(
-        GasExample(
-            calc_id="Re2Os1_V1He1",
-            atoms=atoms,
-            # The gas-complex id does not see the transmuted host, so the host is appended.
-            config_id=f"{config.config_id}-{rec.geometry_fingerprint[:12]}",
-            notation="Re2Os1+V1He1",
-            n_vacancies=1,
-            n_he=1,
-            n_h=0,
-            n_re=2,
-            n_os=1,
-            provenance={
-                "scenario": rec.scenario.scenario_id,
-                "transmuted_parent_ordering_id": occupation_fingerprint(mixed),
-            },
-        )
-    )
     for ex in out:
         want = expected_gas_atoms(n_parent, ex.n_vacancies, ex.n_he, ex.n_h)
         if ex.n_atoms != want:
@@ -299,8 +285,7 @@ def prepare_gas_campaign(
             "n_vacancies": ex.n_vacancies,
             "n_he": ex.n_he,
             "n_h": ex.n_h,
-            "n_re": ex.n_re,
-            "n_os": ex.n_os,
+            "transmutation_products": dict(ex.products),
             "qe_atoms": ex.n_atoms,
             "composition": composition,
             "atom_count_rule": "N_atoms = N_parent - N_vac + N_He + N_H",

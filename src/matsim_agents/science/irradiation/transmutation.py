@@ -1,11 +1,12 @@
-"""Substitutional W -> Re/Os transmutation configurations on a fixed BCC parent.
+"""Substitutional transmutation configurations (host -> products) on a fixed BCC parent.
 
 A transmutation changes the chemical species of a lattice atom and keeps its site identity:
-``atom_id`` and ``lattice_site`` are those of the parent (see :mod:`point_defects`). Only W is
-replaced. This module places already-decided Re/Os counts; the counts themselves come from an
-external nuclear inventory (never from DFT) and enter only through the scenario.
+``atom_id`` and ``lattice_site`` are those of the parent (see :mod:`point_defects`). Only the
+scenario's ``host`` species is replaced. This module places already-decided product counts (for
+example W -> Re, Os); the counts come from an external nuclear inventory (never from DFT) and
+enter only through the scenario.
 
-The default campaign cap ``(N_Re + N_Os) / N_sites <= 0.01`` is a campaign limit, not a physical
+The default cap ``sum(products) / N_sites <= 0.01`` is a campaign limit, not a physical
 bound; a scenario may raise it only with a justification and an inventory source. Sampled
 distributions are initial geometries, not claims about irradiation-induced spatial statistics.
 """
@@ -35,12 +36,8 @@ from matsim_agents.science.structures.alloys import (
 DEFAULT_MAX_SOLUTE_FRACTION = 0.01
 # "Isolated" means no other solute within this many lattice parameters (beyond the 2NN shell).
 ISOLATION_LATTICE_PARAMETERS = 1.2
-PARENT_SPECIES = "W"
-PRODUCT_SPECIES = ("Re", "Os")
 
-Distribution = Literal[
-    "random", "isolated_re", "isolated_os", "re_os_pair", "enriched", "near_defect"
-]
+Distribution = Literal["random", "isolated", "pair", "enriched", "near_defect"]
 EvidenceLevel = Literal[
     "synthetic", "predicted", "numerically_validated", "scientifically_qualified"
 ]
@@ -58,8 +55,10 @@ class TransmutationScenario(BaseModel):
     scenario_id: str = Field(min_length=1)
     parent_alloy_id: str = Field(min_length=1)
     exposure_scenario: str = Field(min_length=1)
-    n_re: StrictInt = Field(ge=0)
-    n_os: StrictInt = Field(ge=0)
+    host: str = Field(min_length=1, description="The species that transmutes.")
+    products: dict[str, StrictInt] = Field(
+        min_length=1, description="Product species -> atom count, in a fixed order."
+    )
     distribution: Distribution = "random"
     seed: StrictInt = Field(ge=0)
     max_solute_fraction: float = Field(
@@ -71,8 +70,12 @@ class TransmutationScenario(BaseModel):
 
     @model_validator(mode="after")
     def _consistent(self) -> TransmutationScenario:
-        if self.n_re + self.n_os < 1:
-            raise ValueError("a transmutation scenario needs at least one Re or Os atom")
+        if any(n < 0 for n in self.products.values()):
+            raise ValueError("product counts must be non-negative")
+        if self.host in self.products:
+            raise ValueError("the host cannot also be a product")
+        if self.n_solutes < 1:
+            raise ValueError("a transmutation scenario needs at least one product atom")
         if self.max_solute_fraction > DEFAULT_MAX_SOLUTE_FRACTION and not (
             self.limit_justification and self.inventory_source
         ):
@@ -80,17 +83,15 @@ class TransmutationScenario(BaseModel):
                 "raising max_solute_fraction above the 0.01 campaign default requires "
                 "limit_justification and inventory_source"
             )
-        if self.distribution == "isolated_re" and (self.n_os or not self.n_re):
-            raise ValueError("isolated_re needs n_re >= 1 and n_os == 0")
-        if self.distribution == "isolated_os" and (self.n_re or not self.n_os):
-            raise ValueError("isolated_os needs n_os >= 1 and n_re == 0")
-        if self.distribution == "re_os_pair" and (self.n_re != self.n_os or not self.n_re):
-            raise ValueError("re_os_pair needs n_re == n_os >= 1 (one Re-Os pair per pair)")
+        if self.distribution == "pair":
+            counts = [n for n in self.products.values() if n]
+            if len(self.products) != 2 or len(counts) != 2 or counts[0] != counts[1]:
+                raise ValueError("pair needs exactly two products with equal positive counts")
         return self
 
     @property
     def n_solutes(self) -> int:
-        return self.n_re + self.n_os
+        return sum(self.products.values())
 
 
 class TransmutedSite(BaseModel):
@@ -118,8 +119,8 @@ class TransmutationRecord(BaseModel):
     n_atoms: StrictInt = Field(gt=0)
     parent_composition: dict[str, int]
     final_composition: dict[str, int]
-    n_re: StrictInt
-    n_os: StrictInt
+    host: str
+    product_counts: dict[str, int]
     solute_fraction: float
     sites: tuple[TransmutedSite, ...]
     geometry_fingerprint: str
@@ -194,7 +195,7 @@ def _select_pairs(
         used += [idx, mate]
         if len(pairs) == n_pairs:
             return pairs
-    raise TransmutationError(f"cannot place {n_pairs} separated Re-Os pairs; placed {len(pairs)}")
+    raise TransmutationError(f"cannot place {n_pairs} separated pairs; placed {len(pairs)}")
 
 
 def _shell_counts(atoms: Atoms, a: float) -> tuple[list[dict[str, int]], list[dict[str, int]]]:
@@ -217,11 +218,11 @@ def apply_transmutation(
     lattice_parameter: float | None = None,
     defect: DefectConfiguration | None = None,
 ) -> tuple[Atoms, TransmutationRecord]:
-    """Replace W atoms of ``parent`` by Re/Os per ``scenario``; atom count and identities kept.
+    """Replace host atoms of ``parent`` by the products of ``scenario``; count and ids kept.
 
     ``parent`` may already hold a defect (then ``defect`` supplies its sites and
-    ``n_lattice_sites`` defaults to ``defect.n_parent_atoms``); only W with a parent ``atom_id``
-    is eligible. The concentration limit is measured against the lattice-site count.
+    ``n_lattice_sites`` defaults to ``defect.n_parent_atoms``); only host atoms with a parent
+    ``atom_id`` are eligible. The concentration limit is measured against the lattice-site count.
     """
     if n_lattice_sites is None:
         n_lattice_sites = defect.n_parent_atoms if defect is not None else len(parent)
@@ -229,21 +230,22 @@ def apply_transmutation(
     limit = math.floor(scenario.max_solute_fraction * n_lattice_sites + 1e-9)
     if scenario.n_solutes > limit:
         raise TransmutationError(
-            f"{scenario.n_solutes} Re/Os atoms exceed the scenario limit {limit} "
+            f"{scenario.n_solutes} product atoms exceed the scenario limit {limit} "
             f"({scenario.max_solute_fraction} of {n_lattice_sites} sites)"
         )
     ids = _atom_ids(parent)
     symbols = parent.get_chemical_symbols()
-    unknown = [s for s in PRODUCT_SPECIES if s in symbols]
+    unknown = [s for s in scenario.products if s in symbols]
     if unknown:
         raise TransmutationError(f"parent already contains transmutation products: {unknown}")
     eligible = np.array(
-        [i for i, s in enumerate(symbols) if s == PARENT_SPECIES and ids[i] < n_lattice_sites],
+        [i for i, s in enumerate(symbols) if s == scenario.host and ids[i] < n_lattice_sites],
         dtype=np.int64,
     )
     if scenario.n_solutes > len(eligible):
         raise TransmutationError(
-            f"{scenario.n_solutes} solutes requested but only {len(eligible)} W atoms available"
+            f"{scenario.n_solutes} solutes requested but only {len(eligible)} "
+            f"{scenario.host} atoms available"
         )
 
     rng = numpy_rng(scenario.seed, "transmutation", scenario.distribution)
@@ -251,14 +253,15 @@ def apply_transmutation(
     dist = scenario.distribution
     if dist == "random":
         picked = [int(i) for i in rng.permutation(eligible)[: scenario.n_solutes]]
-    elif dist in ("isolated_re", "isolated_os"):
+    elif dist == "isolated":
         picked = _select_isolated(parent, eligible, scenario.n_solutes, a, rng)
-    elif dist == "re_os_pair":
-        pairs = _select_pairs(parent, eligible, scenario.n_re, a, rng)
+    elif dist == "pair":
+        first, second = scenario.products
+        pairs = _select_pairs(parent, eligible, scenario.products[first], a, rng)
         picked = []
-        for re_site, os_site in pairs:
-            final_species[re_site], final_species[os_site] = "Re", "Os"
-            picked += [re_site, os_site]
+        for i, j in pairs:
+            final_species[i], final_species[j] = first, second
+            picked += [i, j]
     elif dist == "enriched":
         center = parent.positions[[int(rng.choice(eligible))]]
         picked = [
@@ -273,13 +276,9 @@ def apply_transmutation(
             for i in _ranked_by_distance(parent, eligible, centers, rng)[: scenario.n_solutes]
         ]
     if not final_species:
-        labels = ["Re"] * scenario.n_re + ["Os"] * scenario.n_os
+        labels = [el for el, n in scenario.products.items() for _ in range(n)]
         for idx, label in zip(picked, rng.permutation(labels), strict=True):
             final_species[idx] = str(label)
-        if dist == "isolated_re":
-            final_species = dict.fromkeys(picked, "Re")
-        elif dist == "isolated_os":
-            final_species = dict.fromkeys(picked, "Os")
 
     result = parent.copy()
     result.set_array("atom_id", ids)
@@ -300,10 +299,10 @@ def apply_transmutation(
         )
         for idx in sorted(final_species, key=lambda i: int(ids[i]))
     )
-    n_re = sum(1 for s in sites if s.final_species == "Re")
-    n_os = len(sites) - n_re
-    if (n_re, n_os) != (scenario.n_re, scenario.n_os) or len(result) != len(parent):
-        raise AssertionError("transmutation changed the requested Re/Os counts or atom count")
+    placed = Counter(s.final_species for s in sites)
+    product_counts = {el: placed.get(el, 0) for el in scenario.products}
+    if product_counts != scenario.products or len(result) != len(parent):
+        raise AssertionError("transmutation changed the requested product counts or atom count")
     fingerprint = geometry_fingerprint(result)
     digest = hashlib.sha256(
         json.dumps(
@@ -324,8 +323,8 @@ def apply_transmutation(
         n_atoms=len(result),
         parent_composition=dict(sorted(Counter(symbols).items())),
         final_composition=dict(sorted(Counter(result.get_chemical_symbols()).items())),
-        n_re=n_re,
-        n_os=n_os,
+        host=scenario.host,
+        product_counts=product_counts,
         solute_fraction=scenario.n_solutes / n_lattice_sites,
         sites=sites,
         geometry_fingerprint=fingerprint,

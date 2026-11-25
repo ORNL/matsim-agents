@@ -81,7 +81,7 @@ class DefectSites(BaseModel):
 
     vacancy_site: StrictInt = 0
     interstitial_site: StrictInt = 0
-    interstitial_species: str = "W"
+    interstitial_species: str = Field(min_length=1)
     interstitial_site_type: str = "octahedral"
     frenkel_site: StrictInt = 5
     frenkel_anchor: StrictInt = 40
@@ -113,13 +113,33 @@ class QEControls(BaseModel):
 class SlurmBudget(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    account: str = "LRN110"
+    account: str = Field(min_length=1)
     qos: str = "debug"
     partition: str = "batch"
     nodes: StrictInt = Field(default=8, gt=0)
     walltime: str = "02:00:00"
-    job_name: str = "qe-1024-validation"
+    job_name: str = Field(min_length=1)
     max_concurrent_jobs: StrictInt = Field(default=1, gt=0)
+
+
+class TransmutationExample(BaseModel):
+    """One synthetic substitution of ``host`` atoms by product counts."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(min_length=1)
+    products: dict[str, StrictInt] = Field(min_length=1)
+    seed: StrictInt = 1
+    with_vacancy_he: bool = Field(
+        default=False, description="Also place a V1He1 complex in the transmuted cell."
+    )
+
+
+class TransmutationExamples(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    host: str = Field(min_length=1)
+    examples: tuple[TransmutationExample, ...] = Field(min_length=1)
 
 
 class FullSupercellCampaign(BaseModel):
@@ -128,9 +148,10 @@ class FullSupercellCampaign(BaseModel):
     campaign_id: str = Field(min_length=1)
     parent_supercell: ParentSupercell
     numerical_qualification: NumericalQualification = NumericalQualification()
-    defects: DefectSites = DefectSites()
+    defects: DefectSites
     qe: QEControls
-    slurm: SlurmBudget = SlurmBudget()
+    slurm: SlurmBudget
+    transmutation: TransmutationExamples | None = None
 
     @classmethod
     def from_yaml(cls, path: str | os.PathLike) -> FullSupercellCampaign:

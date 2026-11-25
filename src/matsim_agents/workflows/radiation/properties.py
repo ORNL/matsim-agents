@@ -91,7 +91,7 @@ def state_for_example(
     example: GasExample, irradiation: str, temperature_K: float
 ) -> RadiationState:
     """The radiation state of one gas/transmutation configuration."""
-    transmuted = f"Re{example.n_re}Os{example.n_os}" if example.n_re or example.n_os else None
+    transmuted = "".join(f"{el}{n}" for el, n in example.products.items()) or None
     has_defect = bool(example.n_vacancies or example.n_he or example.n_h)
     return RadiationState(
         irradiation=irradiation,

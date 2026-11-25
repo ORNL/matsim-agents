@@ -25,7 +25,10 @@ from matsim_agents.workflows.exploration.candidates import CandidateManifest, Ca
 
 @dataclass(frozen=True)
 class FacilityProfile:
-    """Scheduler settings for one facility. Unverified profiles refuse to dispatch."""
+    """Scheduler settings for one facility, supplied by the deployment or the application.
+
+    Unverified profiles refuse to dispatch.
+    """
 
     name: str
     account: str
@@ -33,22 +36,6 @@ class FacilityProfile:
     partition: str
     verified: bool
     note: str = ""
-
-
-FACILITIES: dict[str, FacilityProfile] = {
-    "frontier": FacilityProfile("frontier", "LRN110", "debug", "batch", True),
-    "aurora": FacilityProfile(
-        "aurora", "", "debug", "debug", False, "account and queue not verified for this project"
-    ),
-    "perlmutter": FacilityProfile(
-        "perlmutter",
-        "",
-        "debug",
-        "",
-        False,
-        "needs a constraint option that JobSpec cannot express yet; not verified",
-    ),
-}
 
 
 def batches_of(records: Sequence[CandidateRecord], size: int) -> list[tuple[str, ...]]:
