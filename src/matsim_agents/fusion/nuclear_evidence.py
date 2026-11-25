@@ -37,6 +37,7 @@ from matsim_agents.execution.properties import (
     PropertyQualification,
     PropertyStatus,
 )
+from matsim_agents.fusion.scenario import EvidenceContext, FusionEvidence
 from matsim_agents.irradiation.contracts import (
     RATE_BASIS_PER_ATOM_PER_S,
     IrradiationScenario,
@@ -268,8 +269,12 @@ def to_ledger_record(
 
 
 def activation_properties(
-    evidence: ExternalNuclearEvidence, *, composition: str, evidence_id: str
-) -> list[PropertyEvidence]:
+    evidence: ExternalNuclearEvidence,
+    *,
+    composition: str,
+    evidence_id: str,
+    neutron_spectrum: str | None = None,
+) -> list[FusionEvidence]:
     """Activation quantities as property records for scoring.
 
     Inventory-code results are not DFT, so they enter as documented
@@ -278,6 +283,9 @@ def activation_properties(
     """
     if evidence.family != NuclearFamily.ACTIVATION:
         raise NuclearEvidenceError("only activation evidence maps to activation properties")
+    context = EvidenceContext(
+        neutron_spectrum=neutron_spectrum, cooling_time_s=evidence.cooling_time_s
+    )
     out = []
     for q in evidence.quantities:
         if q.name not in PROPERTY_UNITS:
@@ -287,7 +295,7 @@ def activation_properties(
             composition=composition,
             property=q.name,
             unit=q.unit,
-            conditions=PropertyConditions(irradiation=evidence.condition_label()),
+            conditions=PropertyConditions(irradiation=evidence.irradiation_scenario_id),
             method=f"{evidence.external_application} ({evidence.nuclear_data_library})",
             backend=evidence.external_application,
             backend_version=evidence.application_version,
@@ -296,27 +304,25 @@ def activation_properties(
             limitations=["SYNTHETIC demonstration data"] if evidence.synthetic else [],
         )
         if q.uncertainty is None:
-            out.append(
-                PropertyEvidence(
-                    **common,
-                    status=PropertyStatus.MISSING,
-                    reason=f"{q.name} reported without uncertainty; not scoreable",
-                )
-            )
-            continue
-        out.append(
-            PropertyEvidence(
+            prop = PropertyEvidence(
                 **common,
-                status=PropertyStatus.APPROXIMATED,
-                value=q.value,
-                uncertainty=q.uncertainty,
-                evidence_ids=[evidence_id],
-                approximation=(
-                    "external inventory calculation"
-                    + (f" with dose model {evidence.dose_model}" if evidence.dose_model else "")
-                ),
+                status=PropertyStatus.MISSING,
+                reason=f"{q.name} reported without uncertainty; not scoreable",
             )
+            out.append(FusionEvidence(evidence=prop, context=context))
+            continue
+        prop = PropertyEvidence(
+            **common,
+            status=PropertyStatus.APPROXIMATED,
+            value=q.value,
+            uncertainty=q.uncertainty,
+            evidence_ids=[evidence_id],
+            approximation=(
+                "external inventory calculation"
+                + (f" with dose model {evidence.dose_model}" if evidence.dose_model else "")
+            ),
         )
+        out.append(FusionEvidence(evidence=prop, context=context))
     return out
 
 

@@ -136,7 +136,7 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
             ),
             _o("embrittlement_dbtt_shift", "minimize", "DBTT shift at dose."),
         ),
-        compatible_conditions=("temperature_K", "irradiation", "defect_state"),
+        compatible_conditions=("temperature_K", "irradiation", "neutron_spectrum", "defect_state"),
         methods=("object kinetic Monte Carlo", "cluster dynamics", "post-irradiation test"),
         evidence_requirement="defect-evolution model or irradiation experiment at stated dose",
         unsupported_proxies=(_DPA, _PKA),
@@ -162,7 +162,12 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
                 "Loss of conductivity after irradiation.",
             ),
         ),
-        compatible_conditions=("temperature_K", "irradiation", "transmutation_state"),
+        compatible_conditions=(
+            "temperature_K",
+            "irradiation",
+            "transmutation_state",
+            "magnetic_state",
+        ),
         methods=("Boltzmann transport", "Wiedemann-Franz with lattice term", "laser flash"),
         evidence_requirement="transport calculation or measurement at the scenario temperature",
         qualification_note=(
@@ -227,7 +232,7 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
                 "Eroded atoms per incident ion at stated ion species and energy.",
             ),
         ),
-        compatible_conditions=("temperature_K", "loading"),
+        compatible_conditions=("temperature_K", "plasma_ion", "plasma_ion_energy_eV"),
         methods=("binary-collision approximation", "MD cascade", "ion-beam or plasma exposure"),
         evidence_requirement="sputtering yield at the scenario plasma ion and energy",
         unsupported_proxies=(
@@ -253,7 +258,7 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
                 "Onset of recrystallization.",
             ),
         ),
-        compatible_conditions=("irradiation", "transmutation_state"),
+        compatible_conditions=("irradiation", "transmutation_state", "magnetic_state"),
         methods=("free-energy model with entropy", "CALPHAD", "annealing experiment"),
         evidence_requirement="finite-temperature free energy or annealing data",
         unsupported_proxies=(_FORM0K, _EHULL),
@@ -273,7 +278,12 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
             _o("hydrogen_retention_fraction_D", "minimize", "Retained deuterium fraction."),
             _o("hydrogen_retention_fraction_H", "minimize", "Retained protium fraction."),
         ),
-        compatible_conditions=("temperature_K", "irradiation", "defect_state", "loading"),
+        compatible_conditions=(
+            "temperature_K",
+            "irradiation",
+            "defect_state",
+            "plasma_ion_energy_eV",
+        ),
         methods=("rate-equation trapping model", "thermal desorption spectroscopy"),
         evidence_requirement="isotope-specific retention at stated fluence and temperature",
         unsupported_proxies=(
@@ -300,7 +310,7 @@ OBJECTIVES: dict[str, ObjectiveDefinition] = {
             _o("specific_activity", "minimize", "Activity per mass after cooling."),
             _o("decay_heat", "minimize", "Decay heat per mass after cooling."),
         ),
-        compatible_conditions=("irradiation",),
+        compatible_conditions=("irradiation", "neutron_spectrum", "cooling_time_s"),
         methods=("inventory solver with dose model (e.g. FISPACT-II)",),
         evidence_requirement="activation inventory plus dose model at stated cooling time",
         unsupported_proxies=(

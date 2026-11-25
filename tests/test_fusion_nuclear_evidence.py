@@ -109,16 +109,18 @@ def test_activation_rules():
     with pytest.raises(ValidationError, match="dose_model"):
         _base(NuclearFamily.ACTIVATION, [dose], **times)
     ev = _base(NuclearFamily.ACTIVATION, [dose], dose_model="contact gamma", **times)
-    props = activation_properties(ev, composition="W", evidence_id=ev.evidence_id())
-    assert props[0].status == PropertyStatus.APPROXIMATED
-    assert "cooling" in props[0].conditions.irradiation
-    assert props[0].limitations == ["SYNTHETIC demonstration data"]
+    (item,) = activation_properties(ev, composition="W", evidence_id=ev.evidence_id())
+    assert item.evidence.status == PropertyStatus.APPROXIMATED
+    assert item.evidence.conditions.irradiation == "demo-fw"
+    assert item.context.cooling_time_s == 3e8
+    assert item.evidence.limitations == ["SYNTHETIC demonstration data"]
 
 
 def test_activation_without_uncertainty_is_not_scored():
     q = NuclearQuantity(name="decay_heat", value=1.0, unit="W/kg")
     ev = _base(NuclearFamily.ACTIVATION, [q], exposure_time_s=1.0, cooling_time_s=1.0)
-    (p,) = activation_properties(ev, composition="W", evidence_id="x")
+    (item,) = activation_properties(ev, composition="W", evidence_id="x")
+    p = item.evidence
     assert p.status == PropertyStatus.MISSING and p.value is None
 
 
