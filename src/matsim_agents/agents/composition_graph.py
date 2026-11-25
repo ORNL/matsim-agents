@@ -16,14 +16,13 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
 from matsim_agents.backends.mlip.config import MLIPConfig
-from matsim_agents.discovery import (
-    Composition,
-    CompositionExplorationResult,
-    explore_composition,
-    parse_composition,
-)
+from matsim_agents.core.composition import Composition, parse_composition
 from matsim_agents.workflows.active_learning import ALConfig
 from matsim_agents.workflows.active_learning.loop import run_active_learning
+from matsim_agents.workflows.composition_exploration import (
+    CompositionExplorationResult,
+    explore_composition,
+)
 
 
 class SupervisorConfig(BaseModel):

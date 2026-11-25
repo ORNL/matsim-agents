@@ -12,7 +12,7 @@ import yaml
 from matsim_agents.cli._app import app, console
 
 if TYPE_CHECKING:
-    from matsim_agents.workflows.exploration import ExplorationConfig, ExplorationSummary
+    from matsim_agents.workflows.exploration.api import ExplorationConfig, ExplorationSummary
 
 explore_app = typer.Typer(
     help=(
@@ -24,7 +24,7 @@ app.add_typer(explore_app, name="explore")
 
 
 def _exploration() -> ModuleType:
-    from matsim_agents.workflows import exploration
+    from matsim_agents.workflows.exploration import api as exploration
 
     return exploration
 

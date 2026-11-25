@@ -4,7 +4,7 @@ A user chats with an LLM (default Qwen 2.5 via Ollama). After every
 assistant response we inspect the conversation for newly proposed
 chemical compositions; when one is detected the user is asked whether to
 launch a substantial atomistic exploration via
-:func:`matsim_agents.discovery.explore_composition`.
+:func:`matsim_agents.workflows.composition_exploration.explore_composition`.
 
 The REPL is intentionally synchronous and self-contained so it can be
 invoked from notebooks, scripts, or the ``matsim-agents chat`` CLI.
@@ -40,14 +40,13 @@ from matsim_agents.backends.llm.transcript import Contribution, Transcript, prom
 from matsim_agents.backends.mlip.config import MLIPConfig, parse_mlip_config
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.discovery import (
-    Composition,
-    CompositionExplorationResult,
-    explore_composition,
-    extract_compositions,
-)
+from matsim_agents.core.composition import Composition, extract_compositions
 from matsim_agents.execution.placement import Placement, ResourcePlan
 from matsim_agents.execution.run_directory import make_run_id
+from matsim_agents.workflows.composition_exploration import (
+    CompositionExplorationResult,
+    explore_composition,
+)
 
 ATOMISTIC_EXPLORATION_GUIDANCE = """The system will offer the user the option
     to run a surrogate-driven atomistic exploration of crystal phases for

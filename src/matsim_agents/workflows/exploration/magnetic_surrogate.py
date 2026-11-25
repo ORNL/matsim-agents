@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from matsim_agents.discovery.exploration.sampling import Selection, sample_adaptive
+from matsim_agents.workflows.exploration.sampling import Selection, sample_adaptive
 
 MIN_VALIDATION = 10
 

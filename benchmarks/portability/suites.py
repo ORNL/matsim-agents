@@ -289,7 +289,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
         )
     ]
 
-    with patch("matsim_agents.discovery.wrapper.generate_seeds", return_value=candidates):
+    with patch("matsim_agents.workflows.composition_exploration.generate_seeds", return_value=candidates):
         result = run_phase_exploration(
             "Si",
             policy=PhaseExplorationPolicy(relax_structures=False),
@@ -308,7 +308,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
 def _phase_result(composition: str, output_dir: str):
     from matsim_agents.core.composition import parse_composition
     from matsim_agents.science.structures.seed_structures import PhaseCandidate
-    from matsim_agents.discovery.wrapper import CompositionExplorationResult
+    from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
     from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
     parsed = parse_composition(composition)

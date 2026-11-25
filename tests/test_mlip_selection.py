@@ -245,7 +245,7 @@ def test_relaxation_uses_the_configured_charge_and_spin(tmp_path, monkeypatch):
 
 
 def test_discovery_relaxations_keep_the_configured_conditioning(tmp_path, monkeypatch):
-    import matsim_agents.discovery.wrapper as wrapper
+    import matsim_agents.workflows.composition_exploration as wrapper
     from matsim_agents.science.structures.seed_structures import PhaseCandidate
 
     candidate = PhaseCandidate(

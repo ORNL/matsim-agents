@@ -13,11 +13,11 @@ from matsim_agents.data.governance import (
     structure_identity,
     validate_labelled_frames,
 )
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.science.thermodynamics.stability import RankingMode, score_stability
 from matsim_agents.workflows.active_learning.config import TrainerConfig
 from matsim_agents.workflows.active_learning.trainer import LabelledFrame
+from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
@@ -25,7 +25,7 @@ from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 def test_completion_callback_failure_does_not_double_count_candidates(
     tmp_path, monkeypatch, caplog
 ):
-    from matsim_agents.discovery.wrapper import explore_composition
+    from matsim_agents.workflows.composition_exploration import explore_composition
 
     candidates = [
         PhaseCandidate(
@@ -36,11 +36,12 @@ def test_completion_callback_failure_does_not_double_count_candidates(
         for index in range(3)
     ]
     monkeypatch.setattr(
-        "matsim_agents.discovery.wrapper.generate_seeds", lambda *_args, **_kwargs: candidates
+        "matsim_agents.workflows.composition_exploration.generate_seeds",
+        lambda *_args, **_kwargs: candidates,
     )
     ranked = []
     monkeypatch.setattr(
-        "matsim_agents.discovery.wrapper.score_stability",
+        "matsim_agents.workflows.composition_exploration.score_stability",
         lambda _formula, results, **_kwargs: ranked.extend(results),
     )
     completed = []
@@ -163,7 +164,7 @@ def test_deferred_training_skips_reevaluation_without_claiming_promotion(
 def test_relaxation_allowance_preserves_generation_and_counts_failures(
     tmp_path, monkeypatch, allowance
 ):
-    from matsim_agents.discovery.wrapper import explore_composition
+    from matsim_agents.workflows.composition_exploration import explore_composition
 
     candidates = [
         PhaseCandidate(formula="Si", structure_path=str(tmp_path / f"seed-{index}"))
@@ -172,7 +173,7 @@ def test_relaxation_allowance_preserves_generation_and_counts_failures(
     generation = []
     attempts = []
     monkeypatch.setattr(
-        "matsim_agents.discovery.wrapper.generate_seeds",
+        "matsim_agents.workflows.composition_exploration.generate_seeds",
         lambda *_args, **kwargs: generation.append(kwargs["n_random"]) or candidates,
     )
 
@@ -469,7 +470,7 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
     parsed = parse_composition("Si")
     assert parsed is not None
     monkeypatch.setattr(
-        "matsim_agents.discovery.wrapper.generate_seeds",
+        "matsim_agents.workflows.composition_exploration.generate_seeds",
         lambda *args, **kwargs: [
             {"formula": "Si", "source": "prototype", "structure_path": "Si.vasp"}
         ],
@@ -497,9 +498,11 @@ def test_seed_only_phase_runs_the_campaign_generation_action(tmp_path, monkeypat
         calls.append((requested, output_dir))
         return [PhaseCandidate(formula="Si", structure_path="Si.vasp")]
 
-    monkeypatch.setattr("matsim_agents.discovery.wrapper.generate_seed_action", generate)
     monkeypatch.setattr(
-        "matsim_agents.discovery.wrapper.generate_seeds",
+        "matsim_agents.workflows.composition_exploration.generate_seed_action", generate
+    )
+    monkeypatch.setattr(
+        "matsim_agents.workflows.composition_exploration.generate_seeds",
         lambda *a, **k: pytest.fail("the default 50-structure search ran"),
     )
 

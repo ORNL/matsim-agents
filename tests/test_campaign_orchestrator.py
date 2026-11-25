@@ -18,7 +18,6 @@ from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
 from matsim_agents.core.seeding import stream_seed
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.ledger import (
     REVIEW_ACTION,
     CostRecord,
@@ -38,6 +37,7 @@ from matsim_agents.science.thermodynamics.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
+from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 

@@ -5,8 +5,8 @@ Sources, in order of precedence:
 1. **paths**         — explicit list of ASE-readable structure files.
 2. **compositions**  — list of chemical formulas (e.g. ``["Cs2AgBiBr6"]``);
                        expanded into seeds via
-                       :func:`matsim_agents.discovery.generate_seeds` (AFLOW
-                       prototypes + optional pyXtal random search).
+                       :func:`matsim_agents.science.structures.seed_structures.generate_seeds`
+                       (AFLOW prototypes + optional pyXtal random search).
 3. **prompt**        — natural-language prompt sent to an LLM; the LLM is
                        asked to return a JSON list of formulas which is
                        then expanded as in (2).
@@ -145,7 +145,8 @@ def _compositions_to_seed_files(
     flagged ``needs_dft_verification`` upstream). Each formula's random search
     uses its own stream of *random_seed*.
     """
-    from matsim_agents.discovery import generate_seeds, parse_composition
+    from matsim_agents.core.composition import parse_composition
+    from matsim_agents.science.structures.seed_structures import generate_seeds
 
     out_dir.mkdir(parents=True, exist_ok=True)
     seed_paths: list[Path] = []

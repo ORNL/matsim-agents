@@ -114,11 +114,11 @@ def _patch_llm_and_phases(
         return [_PhaseCand(structure_path=str(path), source="prototype")]
 
     monkeypatch.setattr(
-        "matsim_agents.discovery.parse_composition",
+        "matsim_agents.core.composition.parse_composition",
         _fake_parse_composition,
     )
     monkeypatch.setattr(
-        "matsim_agents.discovery.generate_seeds",
+        "matsim_agents.science.structures.seed_structures.generate_seeds",
         _fake_generate_seeds,
     )
 

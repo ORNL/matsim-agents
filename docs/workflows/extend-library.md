@@ -10,11 +10,11 @@ single-round scientific implementation to keep synchronized.
 
 | Change | Start here |
 | --- | --- |
-| Scientific option, YAML validation, relative paths, preflight | [exploration config](../../src/matsim_agents/workflows/exploration_config.py) |
-| Generation/relaxation lifecycle | [round engine](../../src/matsim_agents/workflows/exploration_rounds.py) |
-| Journal invariants, input/result identity, committed artifacts | [checkpoint persistence](../../src/matsim_agents/workflows/exploration_checkpoint.py) |
-| Counts, ranking, readable scientific report | [reporting](../../src/matsim_agents/workflows/exploration_reporting.py) |
-| Public Python entry points | [exploration facade](../../src/matsim_agents/workflows/exploration.py) |
+| Scientific option, YAML validation, relative paths, preflight | [exploration config](../../src/matsim_agents/workflows/exploration/config.py) |
+| Generation/relaxation lifecycle | [round engine](../../src/matsim_agents/workflows/exploration/rounds.py) |
+| Journal invariants, input/result identity, committed artifacts | [checkpoint persistence](../../src/matsim_agents/workflows/exploration/checkpoint.py) |
+| Counts, ranking, readable scientific report | [reporting](../../src/matsim_agents/workflows/exploration/reporting.py) |
+| Public Python entry points | [exploration facade](../../src/matsim_agents/workflows/exploration/api.py) |
 | Terminal presentation and verbs | [exploration CLI](../../src/matsim_agents/cli/exploration.py) |
 
 Add scientific options to the validated config and shared relaxation-request

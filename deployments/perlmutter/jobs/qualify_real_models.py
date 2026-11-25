@@ -23,7 +23,7 @@ from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig
 from matsim_agents.data.governance import structure_identity
-from matsim_agents.discovery.wrapper import explore_composition
+from matsim_agents.workflows.composition_exploration import explore_composition
 from matsim_agents.core.seeding import stream_seed
 
 

@@ -7,7 +7,7 @@ energies used for convex-hull ranking
 (:class:`matsim_agents.science.thermodynamics.stability.ReferenceEnergySet`). Structure
 generation, relaxation, and stability scoring for any one active formula
 reuse the existing single-composition pipeline
-(:mod:`matsim_agents.discovery.wrapper`); this module does not reimplement
+(:mod:`matsim_agents.workflows.composition_exploration`); this module does not reimplement
 any of that.
 """
 

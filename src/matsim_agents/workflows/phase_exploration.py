@@ -19,8 +19,11 @@ from matsim_agents.core.contracts import (
     ProvenanceRecord,
 )
 from matsim_agents.core.hashing import sha256_file as file_sha256
-from matsim_agents.discovery.wrapper import CompositionExplorationResult, explore_composition
 from matsim_agents.execution.run_directory import ScientificRunDirectory
+from matsim_agents.workflows.composition_exploration import (
+    CompositionExplorationResult,
+    explore_composition,
+)
 
 _EXPLORATION_DEFAULTS = {
     name: parameter.default
@@ -229,7 +232,9 @@ def run_phase_exploration(
             raise PermissionError("model promotion requires explicit approval")
 
         if not policy.relax_structures:
-            from matsim_agents.discovery.wrapper import generate_composition_candidates
+            from matsim_agents.workflows.composition_exploration import (
+                generate_composition_candidates,
+            )
 
             if "random_seed" not in kwargs:
                 raise ValueError(

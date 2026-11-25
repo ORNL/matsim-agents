@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from matsim_agents.discovery.exploration.candidates import CandidateManifest
-from matsim_agents.discovery.exploration.demo import (
+from matsim_agents.workflows.exploration.candidates import CandidateManifest
+from matsim_agents.workflows.exploration.demo import (
     compare_strategies,
     evaluate_pending,
     ingest_synthetic_candidates,

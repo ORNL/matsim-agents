@@ -39,11 +39,11 @@ Read the modules in this order:
 | Module | Responsibility |
 | --- | --- |
 | [`cli/exploration.py`](../src/matsim_agents/cli/exploration.py) | Parse commands and present progress, errors, and summaries |
-| [`workflows/exploration.py`](../src/matsim_agents/workflows/exploration.py) | Small public API: check, run, summarize, resume |
-| [`workflows/exploration_config.py`](../src/matsim_agents/workflows/exploration_config.py) | Validate settings, resolve paths, preflight dependencies/checkpoint, build relaxation requests |
-| [`workflows/exploration_rounds.py`](../src/matsim_agents/workflows/exploration_rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
-| [`workflows/exploration_checkpoint.py`](../src/matsim_agents/workflows/exploration_checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
-| [`workflows/exploration_reporting.py`](../src/matsim_agents/workflows/exploration_reporting.py) | Read-only summaries and cumulative relative-energy reports |
+| [`workflows/exploration.py`](../src/matsim_agents/workflows/exploration/api.py) | Small public API: check, run, summarize, resume |
+| [`workflows/exploration_config.py`](../src/matsim_agents/workflows/exploration/config.py) | Validate settings, resolve paths, preflight dependencies/checkpoint, build relaxation requests |
+| [`workflows/exploration_rounds.py`](../src/matsim_agents/workflows/exploration/rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
+| [`workflows/exploration_checkpoint.py`](../src/matsim_agents/workflows/exploration/checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
+| [`workflows/exploration_reporting.py`](../src/matsim_agents/workflows/exploration/reporting.py) | Read-only summaries and cumulative relative-energy reports |
 | [`discovery/structural_screening.py`](../src/matsim_agents/science/structures/screening.py) | Structural equivalence and deterministic diversity selection |
 
 New scientific options belong in the validated configuration and its shared

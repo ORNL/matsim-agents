@@ -28,7 +28,7 @@ from matsim_agents.agents.interactive_chat import (
     chat_once,
 )
 from matsim_agents.core.composition import Composition
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

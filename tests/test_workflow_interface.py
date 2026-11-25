@@ -451,11 +451,11 @@ def test_relative_native_resume_path_is_resolved_in_callers_directory(
     )
     observed = []
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_checkpoint._state",
+        "matsim_agents.workflows.exploration.checkpoint._state",
         lambda directory: SimpleNamespace(config="same"),
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_config.load_exploration_config",
+        "matsim_agents.workflows.exploration.config.load_exploration_config",
         lambda path: "same",
     )
 
@@ -614,11 +614,11 @@ def test_exploration_resume_requires_matching_native_configuration(
     )
     monkeypatch.setattr("matsim_agents.cli.workflows._check", lambda cfg: [])
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_checkpoint._state",
+        "matsim_agents.workflows.exploration.checkpoint._state",
         lambda directory: SimpleNamespace(config="another request"),
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_config.load_exploration_config",
+        "matsim_agents.workflows.exploration.config.load_exploration_config",
         lambda path: "original request",
     )
     result = CliRunner().invoke(

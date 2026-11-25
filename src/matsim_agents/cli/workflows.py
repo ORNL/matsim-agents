@@ -162,7 +162,7 @@ def _check(cfg: WorkflowConfig) -> list[str]:
             raise ValueError("Requested benchmark case IDs are not in the selected suite")
     if cfg.config is not None:
         if cfg.workflow == "explore":
-            from matsim_agents.workflows.exploration import (
+            from matsim_agents.workflows.exploration.api import (
                 check_exploration,
                 load_exploration_config,
             )
@@ -563,8 +563,8 @@ def resume(
                 raise ValueError(
                     "Explore resume requires --native-run with its scientific run directory"
                 )
-            from matsim_agents.workflows.exploration_checkpoint import _state
-            from matsim_agents.workflows.exploration_config import load_exploration_config
+            from matsim_agents.workflows.exploration.checkpoint import _state
+            from matsim_agents.workflows.exploration.config import load_exploration_config
 
             native_state = _state(ScientificRunDirectory.open(native_run))
             if native_state.config != load_exploration_config(cfg.config):

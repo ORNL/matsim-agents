@@ -19,8 +19,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
 from matsim_agents.execution import slurm_jobs as sj
+from matsim_agents.workflows.exploration.candidates import CandidateManifest, CandidateRecord
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,7 @@ from matsim_agents.workflows import (
     run_exploration,
     summarize_exploration,
 )
-from matsim_agents.workflows.exploration_reporting import (
+from matsim_agents.workflows.exploration.reporting import (
     ExplorationSummary,
     write_exploration_report,
 )
@@ -60,7 +60,7 @@ def config_path(tmp_path):
 @pytest.fixture
 def available_dependencies(monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: object()
+        "matsim_agents.workflows.exploration.config.importlib.util.find_spec", lambda name: object()
     )
 
 
@@ -87,7 +87,7 @@ def emt_workflow(monkeypatch, available_dependencies):
         calls["loads"] += 1
         return RelaxCalculator(EMT(), 0, 0, None)
 
-    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.generate_seed_action", generate)
+    monkeypatch.setattr("matsim_agents.workflows.exploration.rounds.generate_seed_action", generate)
     monkeypatch.setattr("matsim_agents.backends.mlip.relaxation._relaxation_calculator", calculator)
     return calls
 
@@ -127,7 +127,7 @@ def _backend_mlip_block(backend: str, root: Path) -> dict:
 
 @pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
 def test_every_mlip_backend_runs_the_same_exploration(tmp_path, emt_workflow, monkeypatch, backend):
-    import matsim_agents.workflows.exploration_rounds as workflow
+    import matsim_agents.workflows.exploration.rounds as workflow
 
     requests = []
     original = workflow.relax_with_mlip
@@ -245,9 +245,9 @@ def test_report_write_failure_preserves_original_interruption(
     def report_failure(*args, **kwargs):
         raise OSError("report storage unavailable")
 
-    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds._generate_round", interrupt)
+    monkeypatch.setattr("matsim_agents.workflows.exploration.rounds._generate_round", interrupt)
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+        "matsim_agents.workflows.exploration.rounds.write_exploration_report", report_failure
     )
     with pytest.raises(KeyboardInterrupt, match="requested stop"):
         run_exploration(load_exploration_config(config_path))
@@ -262,7 +262,7 @@ def test_report_write_failure_after_execution_is_not_silenced(
         raise OSError("report storage unavailable")
 
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+        "matsim_agents.workflows.exploration.rounds.write_exploration_report", report_failure
     )
     with pytest.raises(OSError, match="report storage unavailable"):
         run_exploration(load_exploration_config(config_path))
@@ -304,7 +304,7 @@ def test_preflight_has_no_scientific_side_effects(config_path, available_depende
 
 def test_preflight_reports_wrong_environment_and_missing_checkpoint(config_path, monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: None
+        "matsim_agents.workflows.exploration.config.importlib.util.find_spec", lambda name: None
     )
     cfg = load_exploration_config(config_path)
     Path(cfg.mlip.model).unlink()
@@ -350,8 +350,8 @@ def test_run_uses_existing_engine_budget_cache_and_provenance(config_path, emt_w
 
 
 def test_full_relaxation_options_reach_calculator(config_path, emt_workflow, monkeypatch):
-    import matsim_agents.workflows.exploration_rounds as workflow
-    from matsim_agents.workflows.exploration import ExplorationRelaxationConfig
+    import matsim_agents.workflows.exploration.rounds as workflow
+    from matsim_agents.workflows.exploration.api import ExplorationRelaxationConfig
 
     captured = []
     original = workflow.relax_with_mlip
@@ -434,7 +434,7 @@ def test_nonconvergence_is_not_presented_as_successful_science(
             termination_reason="max_steps",
         )
 
-    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.relax_with_mlip", unconverged)
+    monkeypatch.setattr("matsim_agents.workflows.exploration.rounds.relax_with_mlip", unconverged)
     summary = run_exploration(load_exploration_config(config_path))
     assert summary.status == "completed"
     assert summary.counts["converged"] == 0
@@ -448,7 +448,7 @@ def test_generation_failure_keeps_complete_requested_config(config_path, emt_wor
     def fail(action, output_dir):
         raise ValueError("invalid generator geometry")
 
-    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.generate_seed_action", fail)
+    monkeypatch.setattr("matsim_agents.workflows.exploration.rounds.generate_seed_action", fail)
     cfg = load_exploration_config(config_path)
     with pytest.raises(ValueError, match="invalid generator geometry"):
         run_exploration(cfg)
@@ -462,7 +462,7 @@ def test_generation_failure_keeps_complete_requested_config(config_path, emt_wor
 
 def test_empty_generation_is_a_failure(config_path, emt_workflow, monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_rounds.generate_seed_action", lambda *_args: []
+        "matsim_agents.workflows.exploration.rounds.generate_seed_action", lambda *_args: []
     )
     summary = run_exploration(load_exploration_config(config_path))
     assert summary.status == "failed"
@@ -499,7 +499,9 @@ def test_example_contract_is_valid():
 
 
 def test_public_exploration_imports_remain_available():
-    from matsim_agents.workflows import exploration, exploration_config, exploration_reporting
+    from matsim_agents.workflows.exploration import api as exploration
+    from matsim_agents.workflows.exploration import config as exploration_config
+    from matsim_agents.workflows.exploration import reporting as exploration_reporting
 
     for name in (
         "ExplorationCheck",
@@ -525,7 +527,7 @@ def test_legacy_evidence_is_explicitly_unsupported(tmp_path, action):
 
 
 def test_single_round_cli_resumes_interrupted_work(config_path, emt_workflow, monkeypatch):
-    import matsim_agents.workflows.exploration_rounds as engine
+    import matsim_agents.workflows.exploration.rounds as engine
 
     original = engine.relax_with_mlip
     attempted = []

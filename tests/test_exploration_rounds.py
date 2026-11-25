@@ -18,12 +18,12 @@ from matsim_agents.workflows import (
     run_exploration,
     summarize_exploration,
 )
-from matsim_agents.workflows.exploration_rounds import round_seed
+from matsim_agents.workflows.exploration.rounds import round_seed
 
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    import matsim_agents.workflows.exploration_rounds as workflow
+    import matsim_agents.workflows.exploration.rounds as workflow
 
     checkpoint = tmp_path / "model.model"
     checkpoint.write_text("test-only, not deserialized")
@@ -43,7 +43,7 @@ def setup(tmp_path, monkeypatch):
     )
     calls = {"loads": 0, "seeds": [], "relax": []}
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: object()
+        "matsim_agents.workflows.exploration.config.importlib.util.find_spec", lambda name: object()
     )
 
     def generate(action, output_dir):
@@ -698,6 +698,6 @@ def test_interrupted_journal_write_does_not_publish_uncommitted_attempt(setup, m
 
 
 def test_checkpoint_compatibility_covers_the_seeding_module():
-    from matsim_agents.workflows.exploration_checkpoint import _compatibility
+    from matsim_agents.workflows.exploration.checkpoint import _compatibility
 
     assert "matsim_agents.core.seeding" in _compatibility()

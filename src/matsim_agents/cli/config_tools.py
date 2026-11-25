@@ -40,7 +40,7 @@ CONFIG_KINDS: dict[str, tuple[str, str, str]] = {
         "matsim-agents al validate-config {path}",
     ),
     "explore": (
-        "matsim_agents.workflows.exploration_config:ExplorationConfig",
+        "matsim_agents.workflows.exploration.config:ExplorationConfig",
         "examples/workflows/explore-nb2o5.yaml",
         "matsim-agents explore check {path}",
     ),

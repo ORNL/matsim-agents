@@ -18,7 +18,7 @@ from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.science.structures.screening import select_diverse_candidates
 from matsim_agents.science.structures.seed_structures import generate_seed_action
-from matsim_agents.workflows.exploration_checkpoint import (
+from matsim_agents.workflows.exploration.checkpoint import (
     Attempt,
     Round,
     RoundState,
@@ -28,8 +28,8 @@ from matsim_agents.workflows.exploration_checkpoint import (
     create_run,
     validate_resume,
 )
-from matsim_agents.workflows.exploration_config import ExplorationConfig
-from matsim_agents.workflows.exploration_reporting import (
+from matsim_agents.workflows.exploration.config import ExplorationConfig
+from matsim_agents.workflows.exploration.reporting import (
     ExplorationSummary,
     _write_ranking,
     summarize_rounds,

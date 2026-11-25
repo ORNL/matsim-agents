@@ -8,8 +8,9 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
-from matsim_agents.discovery.exploration.dispatch import (
+from matsim_agents.execution import slurm_jobs as sj
+from matsim_agents.workflows.exploration.candidates import CandidateManifest, CandidateRecord
+from matsim_agents.workflows.exploration.dispatch import (
     FACILITIES,
     FacilityProfile,
     apply_scheduler_states,
@@ -19,7 +20,6 @@ from matsim_agents.discovery.exploration.dispatch import (
     record_result,
     submit_pending_batches,
 )
-from matsim_agents.execution import slurm_jobs as sj
 
 PROFILE = FACILITIES["frontier"]
 

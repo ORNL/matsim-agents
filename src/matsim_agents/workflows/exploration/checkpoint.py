@@ -16,7 +16,7 @@ from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.science.structures.screening import CandidateSelection
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
-from matsim_agents.workflows.exploration_config import ExplorationConfig, check_exploration
+from matsim_agents.workflows.exploration.config import ExplorationConfig, check_exploration
 
 
 class Attempt(BaseModel):
@@ -121,13 +121,11 @@ def _compatibility() -> dict[str, str]:
     from matsim_agents.science.structures import screening as structural_screening
     from matsim_agents.science.structures import seed_structures
     from matsim_agents.science.thermodynamics import stability
-    from matsim_agents.workflows import (
-        exploration,
-        exploration_checkpoint,
-        exploration_config,
-        exploration_reporting,
-        exploration_rounds,
-    )
+    from matsim_agents.workflows.exploration import api as exploration
+    from matsim_agents.workflows.exploration import checkpoint as exploration_checkpoint
+    from matsim_agents.workflows.exploration import config as exploration_config
+    from matsim_agents.workflows.exploration import reporting as exploration_reporting
+    from matsim_agents.workflows.exploration import rounds as exploration_rounds
 
     result = {"python": platform.python_version()}
     for module in (

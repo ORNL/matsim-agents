@@ -37,7 +37,6 @@ from matsim_agents.campaign.formula_execution import (
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.science.structures.formula import FormulaGenerationPolicy
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry
@@ -51,6 +50,7 @@ from matsim_agents.science.thermodynamics.unary_references import (
     unary_cache_directory,
 )
 from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
