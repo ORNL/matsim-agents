@@ -1,8 +1,8 @@
 # Radiation-damage extension: implementation status
 
 This page separates what is implemented and unit-tested from what is scientifically established.
-Nothing here is numerically validated: no production DFT or MLIP result, no real SPECTRA-PKA run,
-and no kinetic prediction exists. Unit tests establish software behaviour only.
+Nothing here is numerically validated: no production DFT or MLIP result, no validated SPECTRA-PKA
+result (one software smoke run only), and no kinetic prediction exists. Unit tests establish software behaviour only.
 
 ## Qualification levels
 
@@ -11,6 +11,7 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
 | `IMPLEMENTED_TESTED` | Code exists and passes synthetic unit tests. |
 | `INPUT_BLOCKED` | Code exists but required external inputs are missing. |
 | `EXTERNAL_UNVERIFIED` | Interface to external software; no real run made. |
+| `EXTERNAL_SMOKE_RUN` | External software installed and run once end to end; output not validated. |
 | `NOT_ESTABLISHED` | No scientific claim is made. |
 
 ## Items
@@ -25,8 +26,8 @@ and no kinetic prediction exists. Unit tests establish software behaviour only.
 | 6 | Mechanism registry and NEB preparation | `kinetics/gas_mechanisms.py` | `IMPLEMENTED_TESTED` | No barriers computed. |
 | 7 | Cluster-dynamics bridge | `kinetics/cluster_dynamics.py` | `IMPLEMENTED_TESTED` | Bubble physics rejected as future work; bubble kinetics `NOT_ESTABLISHED`. |
 | 8 | Transfer-driven gas acquisition | `campaign/gas_transfer.py` | `IMPLEMENTED_TESTED` | Not shown to beat random selection on any real data. |
-| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `INPUT_BLOCKED` | Re/Os/H/He pseudopotentials absent from the Frontier cache; own dispatch, not `slurm_jobs`. |
-| 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_UNVERIFIED` | Not installed here; layout and `columns=` block unverified; index file name unresolved. |
+| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). Cutoffs are not convergence-tested (the Os suggestion of 53.8 Ry exceeds the campaign `ecutwfc`). No QE run with them yet. Own dispatch, not `slurm_jobs`. |
+| 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; TENDL-2017 neutron matrices cached. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
 

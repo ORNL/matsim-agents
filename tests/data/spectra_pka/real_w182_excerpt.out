@@ -1,0 +1,54 @@
+ ### index            0  #####
+ #PQY PALUEL 14000 MWD/Te XMAS TOT=3.25E+14
+ #INPUT SPECTRUM - E(MEV) lower+upper bound  VS.  FLUX
+   1.0000E-11  1.0471E-11  0.0000E+00
+   1.0471E-11  1.0965E-11  0.0000E+00
+   1.0965E-11  1.1482E-11  0.0000E+00
+# TOTAL FLUX =  2.4608E+14  FLUENCE =  2.4608E+14
+
+
+ ### index            1  ##### pka_W182.asc
+ #            (n,np) proton matrix [ H1 ] from [ W182 ]
+ #PKA RECOIL DISTRIBUTIONS
+ #RECOIL energy (MeV low & high)    PKAs   norm_sum
+    1.000000E+00    1.047129E+00 5.7918E-34 8.2403E-10
+    1.096478E+00    1.148154E+00 9.3089E-32 1.3244E-07
+    1.258925E+00    1.318257E+00 1.8554E-32 2.6398E-08
+    1.380384E+00    1.445440E+00 1.3473E-31 1.9169E-07
+    1.584893E+00    1.659587E+00 7.6414E-29 1.0872E-04
+    1.995262E+00    2.089296E+00 3.7864E-28 5.3871E-04
+    2.398833E+00    2.511886E+00 1.2422E-25 1.7674E-01
+    2.884032E+00    3.019952E+00 5.7818E-25 8.2261E-01
+#                    AVERAGE PKA ENERGY =  2.8131E+06 (eV)
+
+
+ ### index           70  ##### ( totals )
+ #  recoil matrix of W182
+ #PKA RECOIL DISTRIBUTIONS - per target atom
+ #RECOIL energy (MeV low & high)  PKAs/s         norm_sum    cumulative sum
+ 1.0000E-11 1.0471E-11 1.6399E-12 3.6581E-04 3.6581E-04
+ 1.0471E-11 1.0965E-11 7.7310E-14 1.7246E-05 3.8306E-04
+ 1.0965E-11 1.1482E-11 8.0900E-14 1.8047E-05 4.0111E-04
+#                    AVERAGE PKA ENERGY =  1.2698E+03 (eV)
+
+
+ ### index           81  ##### ( totals )
+ #  elemental recoil matrix of W
+ #PKA RECOIL DISTRIBUTIONS - per target atom
+ #RECOIL energy (MeV low & high)  PKAs/s         norm_sum    cumulative sum
+ 1.0000E-11 1.0471E-11 1.6399E-12 3.6578E-04 3.6578E-04
+ 1.0471E-11 1.0965E-11 7.7310E-14 1.7245E-05 3.8303E-04
+ 1.0965E-11 1.1482E-11 8.0900E-14 1.8045E-05 4.0107E-04
+#                    AVERAGE PKA ENERGY =  1.2741E+03 (eV)
+
+
+ ### index           82  ##### ( totals )
+ #  total recoil matrix (He+H+unknowns excluded)
+ #PKA RECOIL DISTRIBUTIONS - per target atom
+ #RECOIL energy (MeV low & high)  PKAs/s         norm_sum    cumulative sum
+ 1.0000E-11 1.0471E-11 1.6399E-12 3.6578E-04 3.6578E-04
+ 1.0471E-11 1.0965E-11 7.7310E-14 1.7245E-05 3.8303E-04
+ 1.0965E-11 1.1482E-11 8.0900E-14 1.8045E-05 4.0107E-04
+#                    AVERAGE PKA ENERGY =  1.2742E+03 (eV)
+
+

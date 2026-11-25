@@ -226,6 +226,43 @@ def test_parse_blocks_and_unknown_daughter():
     assert parsed.of_kind(BlockKind.INPUT_SPECTRUM)[0].footer["total_flux"] == 1.0e10
 
 
+REAL_DATA = Path(__file__).parent / "data" / "spectra_pka"
+
+
+def test_parse_real_output_excerpt():
+    """Layout check against an excerpt of a real run (see tests/data/spectra_pka/README.md)."""
+    parsed = parse_output_text(
+        (REAL_DATA / "real_w182_excerpt.out").read_text(),
+        indexes_text=(REAL_DATA / "real_w182_excerpt.indexes").read_text(),
+    )
+    assert [b.kind for b in parsed.blocks] == [
+        BlockKind.INPUT_SPECTRUM,
+        BlockKind.CHANNEL,
+        BlockKind.GLOBAL_ISOTOPE,
+        BlockKind.GLOBAL_ELEMENT,
+        BlockKind.GLOBAL_TOTAL,
+    ]
+    spectrum, channel, iso, elem, _ = parsed.blocks
+    assert spectrum.footer == {"total_flux": 2.4608e14, "fluence": 2.4608e14}
+    assert channel.reaction == "(n,np)"
+    assert (channel.recoil_element, channel.recoil_mass_number) == ("H", 1)
+    assert (channel.parent_element, channel.parent_mass_number) == ("W", 182)
+    assert channel.footer["average_pka_energy_ev"] == 2.8131e6
+    assert (iso.recoil_element, iso.recoil_mass_number) == ("W", 182)
+    assert iso.rows[0] == (1.0e-11, 1.0471e-11, 1.6399e-12, 3.6581e-04, 3.6581e-04)
+    assert elem.recoil_element == "W"
+    assert parsed.indexes[1].description == "(n,np) proton matrix [ H1 ] from [ W182 ]"
+    assert parsed.indexes[1].pka_file == "pka_W182.asc"
+    assert parsed.indexes[2].pka_file is None
+
+
+def test_input_columns_on_one_line(campaign):
+    # read_input.f90 reads the column headers from the value of the columns= label itself.
+    lines = build_input_text(campaign).splitlines()
+    cols = [ln for ln in lines if ln.startswith("columns=")]
+    assert len(cols) == 1 and len(cols[0].split()) > 1
+
+
 def test_parser_rejects_wrong_column_count():
     bad = SYNTHETIC_OUT.replace(
         " 5.0E-07 1.0E-06 2.0E-03 5.0E-01\n", " 5.0E-07 1.0E-06 2.0E-03\n", 1

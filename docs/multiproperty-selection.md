@@ -122,8 +122,8 @@ backends without a benchmark are unmeasured placeholders.
 For the W-Ta-Cr-V-Hf-Mo reference alloy (W640 Ta128 Cr64 V96 Hf32 Mo64, 1,024 sites),
 a radiation property is a supplied matching record, an approximate derivation, or
 `MISSING` with blockers. A record at another dose or structure is never borrowed.
-Blockers include missing Re/Os/H/He pseudopotentials, no SPECTRA-PKA install, and no
-cascade, swelling, or DBTT model.
+Blockers include unconverged cutoffs for the new Re/Os/H/He pseudopotentials, no validated
+SPECTRA-PKA result (installed, one smoke run), and no cascade, swelling, or DBTT model.
 
 ## Example
 
@@ -138,7 +138,8 @@ It demonstrates software behaviour only and says nothing about any real alloy.
 
 1. Resolve the QE segmentation fault (see [radiation-damage-status.md](radiation-damage-status.md)).
 2. Converge k-points and cutoffs for the 1,024-site alloy.
-3. Add Re/Os/H/He pseudopotentials; install and smoke-test SPECTRA-PKA.
+3. Convergence-test cutoffs with the Re/Os/H/He pseudopotentials (added); validate SPECTRA-PKA
+   against an independent reference case (installed and smoke-run).
 4. Configure and benchmark EPW or Kubo-Greenwood, and ShengBTE or almaBTE, to replace
    placeholder costs.
 5. Compare calculated values with measurements before using `QUALIFIED` for a decision.

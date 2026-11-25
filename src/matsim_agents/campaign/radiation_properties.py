@@ -58,6 +58,12 @@ REFERENCE_ALLOY_COUNTS: dict[str, int] = {
 }
 REFERENCE_REPEATS = (8, 8, 8)
 REFERENCE_SITES = 1024
+# Where the inputs come from, for re-acquisition:
+# * UPFs: pslibrary 1.0.0 PBE PAW, https://pseudopotentials.quantum-espresso.org/upf_files/<file>
+#   (Re/Os.pbe-spn-kjpaw_psl.1.0.0.UPF, H/He.pbe-kjpaw_psl.1.0.0.UPF). The Frontier copy is in
+#   /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw with
+#   SOURCE.txt and SHA256SUMS; point MATSIM_PSEUDO_DIR there.
+# * SPECTRA-PKA build and PKA matrices: see docs/external/spectra-pka.md.
 RADIATION_SPECIES = ("Re", "Os", "H", "He")
 
 _MISSING_REASON = {

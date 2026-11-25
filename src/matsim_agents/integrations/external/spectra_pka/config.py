@@ -3,6 +3,18 @@
 Only fields that the adapter actually implements are accepted (``extra="forbid"``).
 SPECTRA-PKA is GPL-3.0 software that the user installs; MATSIM-AGENTS does not
 implement its nuclear physics, bundle its source, or bundle its nuclear data.
+
+Where the external pieces come from (full steps in ``docs/external/spectra-pka.md``):
+
+* Executable: ``git clone https://github.com/fispact/SPECTRA-PKA.git`` into ``external/``, then
+  a serial ``make``. Set ``SPECTRA_PKA_EXECUTABLE_PATH`` to the binary.
+* PKA matrices (``nuclear_data_root``): the "Data download for SPECTRA-PKA" table on
+  https://fispact.github.io/resources/nuclear_data_downloads/ links one Dropbox folder
+  (``pkas.zip``, about 7.9 GB, TENDL-2015/2017/2019/2023). The Frontier copy is under
+  ``/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka`` with SOURCE.txt and
+  SHA256SUMS. Set ``PKA_DATA_DIRECTORY`` to the extracted library directory.
+* Neutron spectrum (``flux.file``): user-supplied. The upstream ``manual/test/fluxes_specter.dat``
+  is a 709-group PWR spectrum for build checks only, not a fusion or campaign spectrum.
 """
 
 from __future__ import annotations

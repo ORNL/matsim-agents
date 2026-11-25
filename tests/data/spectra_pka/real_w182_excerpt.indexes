@@ -1,0 +1,5 @@
+           0  input_spectrum
+           1  (n,np) proton matrix [ H1 ] from [ W182 ]pka_W182.asc
+          70  recoil matrix of W182
+          81  elemental recoil matrix of W
+          82  total recoil matrix (He+H+unknowns excluded)

@@ -23,6 +23,9 @@ defects:
   divacancy_shell: 1
 qe:
   # pslibrary 1.0.0 PBE PAW, downloaded 2026-11-24; checksums in SHA256SUMS next to the files.
+  # Frontier copy: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  # Retrieve: curl -sfS -O https://pseudopotentials.quantum-espresso.org/upf_files/<file>
+  # then `sha256sum -c SHA256SUMS`. Provenance in SOURCE.txt (see docs/radiation-damage-status.md).
   pseudo_dir: ${MATSIM_PSEUDO_DIR}
   pseudopotentials:
     W: W.pbe-spn-kjpaw_psl.1.0.0.UPF
@@ -31,7 +34,13 @@ qe:
     V: V.pbe-spnl-kjpaw_psl.1.0.0.UPF
     Hf: Hf.pbe-spn-kjpaw_psl.1.0.0.UPF
     Mo: Mo.pbe-spn-kjpaw_psl.1.0.0.UPF
+    # Transmutation products and gas species for the radiation campaign.
+    Re: Re.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Os: Os.pbe-spn-kjpaw_psl.1.0.0.UPF
+    H: H.pbe-kjpaw_psl.1.0.0.UPF
+    He: He.pbe-kjpaw_psl.1.0.0.UPF
   # Max of the UPF header suggestions (W 50.4 wfc, V 645 rho), rounded up; not convergence-tested.
+  # Os suggests 53.8 Ry wfc, above this value; Re/Os/H/He cells need a cutoff check first.
   ecutwfc_ry: 51.0
   ecutrho_ry: 650.0
   smearing: mv

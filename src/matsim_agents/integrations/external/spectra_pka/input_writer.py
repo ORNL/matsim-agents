@@ -7,8 +7,7 @@ file never needs long site paths and the originals stay untouched.
 
 The ``columns=`` block carries four columns (file, ratio, element, mass number). The upstream
 examples that also supply the two ``ngamma_*_mass`` columns do so for ``do_ngamma_estimate``,
-which this adapter does not enable. Whether a four-column block is accepted has not been
-checked against a real build; the first real smoke run settles it.
+which this adapter does not enable. The header names go on the ``columns=`` line itself.
 """
 
 from __future__ import annotations
@@ -73,8 +72,9 @@ def build_input_text(spec: CampaignSpec) -> str:
         f'flux_filename="{FLUX_LINK}"',
         f'results_stub="{_check_name(spec.results_stub)}"',
         f"num_columns={len(COLUMNS)}",
-        "columns=",
-        " ".join(COLUMNS),
+        # Headers must share the ``columns=`` line: read_input.f90 takes them from the label's
+        # value and reads the following lines as data rows.
+        "columns= " + " ".join(COLUMNS),
     ]
     total = 0.0
     for ch in spec.channels:

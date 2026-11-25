@@ -1,7 +1,8 @@
 """Parse SPECTRA-PKA result files (``<stub>.out`` and ``<stub>.indexes``).
 
-The layout handled here was read from the upstream Fortran output routines, not from a real
-run. The parser therefore rejects what it does not recognise instead of guessing:
+The layout was first read from the upstream Fortran output routines and then checked against
+a real run (upstream commit fff9e3f, TENDL-2017 W182 matrix, upstream PWR test spectrum). The
+parser rejects what it does not recognise instead of guessing:
 
 * a block starts at a line beginning with ``###``;
 * its ``#`` lines carry the title and column header, its other lines are numeric rows;
@@ -33,10 +34,15 @@ from matsim_agents.irradiation.contracts import (
 
 _EXPONENT_WITHOUT_E = re.compile(r"^([+-]?\d*\.?\d+)([+-]\d{3})$")
 _FLOAT = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eEdD][+-]?\d+)?$")
+# Real upstream form (SPECTRA-PKA fff9e3f): "# (n,np) proton matrix [ H1 ] from [ W182 ]"; the
+# bracketed daughter is the recoiling nuclide. The "<el> [ daughter ] from [ parent ]" form is
+# kept for older outputs.
 _CHANNEL = re.compile(
-    r"^#\s*(?P<pka>[A-Za-z]+)\s*\[\s*(?P<dau>[A-Za-z]+)(?P<dnum>\d*)\s*\]\s*"
+    r"^#\s*(?:\((?P<rxn>[^)]*)\)\s*[A-Za-z]+\s+matrix|(?P<pka>[A-Za-z]+))\s*"
+    r"\[\s*(?P<dau>[A-Za-z]+)(?P<dnum>\d*)\s*\]\s*"
     r"from\s*\[\s*(?P<par>[A-Za-z]+)(?P<pnum>\d+)\s*\]",
 )
+_INDEX_FILE = re.compile(r"(?P<path>[^\s\]]+\.asc)\s*$", re.I)
 _ISOTOPE_MATRIX = re.compile(r"recoil matrix of\s+(?P<el>[A-Za-z]+)(?P<num>\d+)\b", re.I)
 _ELEMENT_MATRIX = re.compile(r"elemental recoil matrix of\s+(?P<el>[A-Za-z]+)\b", re.I)
 _MT_MATRIX = re.compile(r"total recoil matrix of mt\s+(?P<mt>\d+)", re.I)
@@ -75,6 +81,7 @@ class Block:
     parent_element: str | None = None
     parent_mass_number: int | None = None
     daughter: str | None = None
+    reaction: str | None = None
     mt: int | None = None
 
 
@@ -139,12 +146,17 @@ def _classify(comments: list[str]) -> tuple[BlockKind, dict]:
     for line in comments:
         m = _CHANNEL.match(line.strip())
         if m:
-            return BlockKind.CHANNEL, {
-                "recoil_element": _element(m["pka"]),
+            ident = {
+                "recoil_element": _element(m["pka"] or m["dau"]),
                 "daughter": _element(m["dau"]) + m["dnum"],
                 "parent_element": _element(m["par"]),
                 "parent_mass_number": int(m["pnum"]),
             }
+            if m["rxn"] is not None:
+                ident["reaction"] = f"({m['rxn']})"
+                if m["dnum"]:
+                    ident["recoil_mass_number"] = int(m["dnum"])
+            return BlockKind.CHANNEL, ident
     for line in comments:
         m = _ELEMENT_MATRIX.search(line)
         if m:
@@ -224,10 +236,11 @@ def parse_indexes(text: str) -> tuple[IndexEntry, ...]:
             raise ParseError(f"indexes line {number}: expected '<index> <description>'")
         description = parts[1].strip()
         path: str | None = None
-        last = description.rsplit(None, 1)[-1] if description else ""
-        if last.lower().endswith(".asc"):
-            path = last
-            description = description[: len(description) - len(last)].strip()
+        # Upstream writes the file name straight after "]" with no space.
+        fm = _INDEX_FILE.search(description)
+        if fm:
+            path = fm["path"]
+            description = description[: fm.start()].strip()
         entries.append(IndexEntry(int(parts[0]), description, path))
     return tuple(entries)
 

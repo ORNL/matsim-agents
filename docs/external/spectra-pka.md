@@ -44,16 +44,46 @@ make                                                       # serial; produces ./
 * Smoke test (bundled data, no download): `cd manual/test && ../../spectra-pka ZR.in`. The last
   line of output must be `END as expected`, and the new `ZR.indexes` should match
   `example_results/ZR.indexes`. This checks the build only, not any campaign.
-* Production PKA matrices (NJOY/GROUPR recoil matrices, `*.asc`) are separate downloads from the
-  FISPACT-II nuclear-data page linked in the upstream README. `manual/test/example_data` holds
-  only a Zr sample.
 * The program reads `specter.input` by default, or the input file named on the command line.
+
+### PKA matrices (nuclear data)
+
+`manual/test/example_data` holds only a Zr sample. The production matrices (NJOY/GROUPR recoil
+matrices, `*.asc`) come from the "Data download for SPECTRA-PKA" table on
+<https://fispact.github.io/resources/nuclear_data_downloads/>. Every row links the same Dropbox
+folder. Change `dl=0` to `dl=1` to download the whole folder as one zip (`pkas.zip`, about
+7.9 GB):
+
+```bash
+curl -sSL -A "Mozilla/5.0" --retry 5 -C - -o pkas.zip \
+  'https://www.dropbox.com/scl/fo/jqgdshufqxvwea8xzecwf/ACablw3sL4Ru0rgiogr17Xs?rlkey=ryqsvfgjm4u6wzoxaqcmkteip&dl=1'
+unzip -l pkas.zip     # TENDL2023n/p, TENDL2019-n, TENDL2015data-n, TENDL2017data-n/p/a tarballs
+unzip -o pkas.zip TENDL2017data-n-pka.tar.bz2 && tar -xjf TENDL2017data-n-pka.tar.bz2
+# -> njoy_results-n-tendl2017-jc/pka/<El><AAA>s.asc   (e.g. W182s.asc, Ta181s.asc)
+```
+
+The licence and terms of use are those set by FISPACT/TENDL. Do not commit these files.
+
+**On Frontier (lrn110) this is already done.** The cache is
+`/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/`. It holds `pkas.zip`, its
+`SHA256SUMS`, and `SOURCE.txt` (URL, date, fetch/extract/verify commands). The extracted
+TENDL-2017 neutron set is in `njoy_results-n-tendl2017-jc/pka/`: 287 matrices with their own
+`SHA256SUMS`, covering among others Cr, Hf, Mo, Os, Re, Ta, V and W isotopes. The other TENDL
+sets are still inside the zip.
+
+```bash
+export PKA_DATA_DIRECTORY=/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/njoy_results-n-tendl2017-jc/pka
+(cd "$PKA_DATA_DIRECTORY" && sha256sum -c --quiet SHA256SUMS)
+```
+
+The neutron spectrum is always supplied by the user. The upstream `manual/test/fluxes_specter.dat`
+(709-group PWR spectrum) is suitable for build checks only.
 
 Then point the campaign YAML at the build:
 
 ```bash
 export SPECTRA_PKA_EXECUTABLE_PATH=$PWD/spectra-pka
-export PKA_DATA_DIRECTORY=/path/to/pka-matrices
+export PKA_DATA_DIRECTORY=/path/to/pka-matrices   # see above for the Frontier path
 matsim-agents external spectra-pka check -c campaign.yaml
 ```
 
@@ -106,14 +136,25 @@ Only labels documented upstream are written (an unrecognised label makes SPECTRA
 `flux_rescale_value`. SPECTRA-PKA silently renormalises `pka_ratios`, so the adapter requires
 isotope fractions to agree with the stated composition up front.
 
-The column block written has four columns. The upstream examples that also give the two
-`ngamma_*_mass` columns do so for `do_ngamma_estimate`, which is not enabled here. Whether a
-four-column block is accepted has not been checked against a real build.
+The PKA-file table has four columns (`pka_filename pka_ratios parent_ele parent_num`). The upstream examples that also give the two
+`ngamma_*_mass` columns do so for `do_ngamma_estimate`, which is not enabled here. The column
+headers must sit on the same line as the label (`columns= ...`), because `read_input.f90` reads
+them from the label's value. An earlier two-line form made the real binary stop with
+`variable columns not recognised`. The one-line, four-column form ran successfully with the real
+build.
 
 ## 7. Output handling
 
-The layout parsed was read from the upstream output routines, not from a real run. The parser
-accepts only blocks it recognises and column counts it expects, and raises `ParseError`
+The layout was first read from the upstream output routines and then corrected against a real
+run (see section 13). In the real output:
+
+* per-file blocks are titled `(n,np) proton matrix [ H1 ] from [ W182 ]`, where the bracketed
+  daughter is the recoil;
+* global blocks are titled `recoil matrix of W182`, `elemental recoil matrix of W` and
+  `total recoil matrix (He+H+unknowns excluded)`;
+* `<stub>.indexes` lists `<n>  <title>pka_<file>.asc`, with the file name glued to `]`.
+
+The parser accepts only blocks it recognises and column counts it expects, and raises `ParseError`
 otherwise. Zero-PKA bins stay absent, `unknown` daughters are kept, energies are MeV, rates
 are per target atom per second for the global matrices. Raw files and their SHA-256 hashes are
 preserved; parsing never rewrites them. Collection is restartable from the raw files
@@ -152,24 +193,25 @@ the input file and of every staged data file, SHA-256 of the raw outputs, the ru
 ## 12. What is tested
 
 `tests/test_spectra_pka_adapter.py` and `tests/test_spectra_pka_cli.py` use a mock executable
-and invented fixtures. They test file handling, status logic, parsing of the assumed layout,
-contracts, sampling and restartability. **They are not nuclear-physics verification.** No real
-SPECTRA-PKA run has been made by this repository's tests.
+and invented fixtures. They test file handling, status logic, parsing, contracts, sampling and
+restartability. `test_parse_real_output_excerpt` parses a verbatim excerpt of the real run in
+`tests/data/spectra_pka/` (provenance in its README). **None of this is nuclear-physics
+verification.** The tests do not run SPECTRA-PKA.
 
 ## 13. Limitations and open steps
 
-* The output layout and the four-column `columns=` block are unverified against a real build.
+* One real software smoke run exists (Frontier, upstream `fff9e3f`). It used pure W-182, the
+  TENDL-2017 `W182s.asc` matrix and the upstream PWR test spectrum rescaled to 3.25e14. The
+  adapter reported `STRUCTURALLY_VALID` and `NOT_VALIDATED`. This is a software check, not a
+  physical scenario.
 * Real validation (a published or independently computed reference case) is pending.
 * Time-dependent inventories and capture-product parentage are not modelled here.
 * Citations to use when publishing results: J. Nucl. Mater. 467 (2015) 121-134;
   Nucl. Mater. Energy 9 (2016) 576-580; J. Nucl. Mater. 504 (2018) 101-108;
   Nucl. Sci. Eng. (2024) doi:10.1080/00295639.2024.2342506.
-* The index file name is unresolved: the upstream manual names `index_summary.dat`, while
-  reading the source suggested `<stub>.indexes`. The parser does not depend on this file for
-  the spectrum. Confirm against a real build before relying on either name.
-* SPECTRA-PKA was built on Frontier at `external/SPECTRA-PKA` (gitignored), and the bundled Zr
-  test ran to `END as expected`. No campaign run exists and no production PKA matrices are
-  installed.
+* The real build writes the index file as `<stub>.indexes`.
+* SPECTRA-PKA is built on Frontier at `external/SPECTRA-PKA` (gitignored). TENDL-2017 neutron
+  matrices are installed in the shared cache (section 2).
 
 ## 14. PKA-informed ranking and the synthetic chain
 
