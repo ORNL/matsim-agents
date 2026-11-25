@@ -109,7 +109,7 @@ if (( REMAINING_SECONDS <= 300 )); then
   exit 124
 fi
 WORKFLOW_TIMEOUT_SECONDS=$((REMAINING_SECONDS - 300))
-E1_COMMAND=(matsim-agents e1-development "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
+E1_COMMAND=(python -m benchmarks.e1 "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
 FACILITY=aurora RUN_DIR="${RUN_DIR}" \
   timeout --signal=INT --kill-after=120s "${WORKFLOW_TIMEOUT_SECONDS}s" \
   matsim-agents resources serve "${MATSIM_RESOURCES}" \

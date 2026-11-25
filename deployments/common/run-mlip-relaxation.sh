@@ -31,4 +31,4 @@ cfg = {
 Path(os.environ["RELAX_CONFIG"]).write_text(json.dumps(cfg, indent=2) + "\n")
 '
 
-matsim-agents relax "${RELAX_CONFIG}" 2>&1 | tee "${RUN_DIR}/single-relaxation.log"
+matsim-agents run "${RELAX_CONFIG}" --runs-dir "${RUN_DIR}/records" 2>&1 | tee "${RUN_DIR}/single-relaxation.log"

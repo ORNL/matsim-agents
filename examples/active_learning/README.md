@@ -132,12 +132,10 @@ The repository now exposes several connected workflows. This README documents
 the AL kernel itself (`matsim-agents al run`), while the other entry points
 can feed into it:
 
-- `matsim-agents run`: core planner -> executor -> uq_gate -> analyst graph,
+- `matsim-agents objective`: core planner -> executor -> uq_gate -> analyst graph,
   with optional run-path AL handoff on low-confidence relaxations.
 - `matsim-agents chat`: interactive discovery REPL; can optionally escalate to
   AL when UQ is high (`--trigger-al-handoff`, `--al-config`).
-- `matsim-agents supervisor-run`: LangGraph supervisor that runs discovery
-  exploration, evaluates UQ, and conditionally launches AL handoff.
 
 In other words, AL is both a standalone workflow and the downstream execution
 engine for automated escalation from discovery.
@@ -150,12 +148,10 @@ disagreement, and labels them with single-point (frozen-ion) DFT.
 
 ```mermaid
 flowchart LR
-  R[matsim-agents run] --> RU[uq_gate]
+  R[matsim-agents objective] --> RU[uq_gate]
   C[matsim-agents chat] --> CU[chat UQ policy]
-  S[matsim-agents supervisor-run] --> SU[evaluate_uq]
   RU -->|triggered| AL[matsim-agents al run]
   CU -->|triggered| AL
-  SU -->|triggered| AL
 ```
 
 ## Files
@@ -191,6 +187,9 @@ time by `ALConfig.from_yaml`:
 | `${VAR}`                | required; raises if unset                        |
 | `${VAR:-default}`       | falls back to `default` if unset                 |
 | `${VAR:?error message}` | aborts validate-config with `error message`      |
+
+`matsim-agents validate`, `plan` and `run` instead list every unset variable, with its
+`:?` message, as a blocker (exit 3), so one pass shows everything to export.
 
 Values resolve in this order: (1) `os.environ`, (2) the optional top-level
 `vars:` block in the YAML itself. Nested references inside `vars:` are
@@ -240,13 +239,14 @@ in the parsed `ALConfig`.
        deployments/frontier/launchers/run-active-learning-frontier.sh
    ```
 
-### Trigger this same AL flow from supervisor-run
+### Trigger this same AL flow from `run`
 
-If you prefer orchestration with explicit decision nodes, run the supervisor
-graph and let it trigger this AL path when UQ policy thresholds are met:
+Run the agent graph and let it trigger this AL path when UQ policy thresholds
+are met:
 
 ```bash
-matsim-agents supervisor-run Li2MnO3 \
+matsim-agents objective "Find stable phases of Li2MnO3" \
+  --trigger-al-handoff \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-run
@@ -265,14 +265,15 @@ matsim-agents al run examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
-# 3) Run via supervisor orchestration (dry-run handoff)
-matsim-agents supervisor-run Li2MnO3 \
+# 3) Agent graph with UQ-triggered handoff (dry run)
+matsim-agents objective "Find stable phases of Li2MnO3" \
+  --trigger-al-handoff \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
 # 4) Run path with UQ-triggered AL handoff planning
-matsim-agents run \
+matsim-agents objective \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --mlip-config examples/active_learning/al_config.example.yaml \
   --trigger-al-handoff \
@@ -358,7 +359,7 @@ For `kind: prompt` the LLM proposal is persisted as
 `<out_dir>/seeds/llm_proposed_compositions.json` so the run is reproducible.
 For `kind: compositions` and `kind: prompt`, formulas are expanded into
 seed structures via
-[`matsim_agents.discovery.generate_seeds`](../../src/matsim_agents/discovery/seeds.py),
+[`matsim_agents.science.structures.seed_structures.generate_seeds`](../../src/matsim_agents/science/structures/seed_structures.py),
 which enumerates every AFLOW prototype whose stoichiometric signature
 matches the target composition (288 entries from
 `pymatgen.analysis.prototypes`, covering elemental phases, rocksalt/CsCl/

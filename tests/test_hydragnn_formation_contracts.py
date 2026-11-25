@@ -15,17 +15,17 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 from pydantic import ValidationError
 
-from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.trainer import retrain_hydragnn
-from matsim_agents.active_learning.training_references import resolve_training_references
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-from matsim_agents.datasets.energy_references import predict_elemental_references
-from matsim_agents.datasets.formation_training import (
+from matsim_agents.core.energy_references import predict_elemental_references
+from matsim_agents.data.formation_training import (
     prepare_hydragnn_training_frames,
     save_hydragnn_energy_convention,
 )
 from matsim_agents.execution.placement import ProcessLaunch
+from matsim_agents.workflows.active_learning.config import TrainerConfig
+from matsim_agents.workflows.active_learning.trainer import retrain_hydragnn
+from matsim_agents.workflows.active_learning.training_references import resolve_training_references
 
 # Direct (launcher-less) training must be placed on the driver node.
 LAUNCH = ProcessLaunch(
@@ -66,7 +66,7 @@ def _checkpoint(tmp_path, training_inputs):
 
 
 def _bind_output_to_reference_manifest(output, reference_manifest):
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     for path in (
         output / "energy-convention.json",
@@ -100,7 +100,7 @@ class FormationCalculator(Calculator):
 def test_trainers_reject_missing_references_before_model_import(tmp_path, trainer_name):
     from importlib import import_module
 
-    module = import_module(f"matsim_agents.training.{trainer_name}")
+    module = import_module(f"matsim_agents.backends.mlip.training.{trainer_name}")
     kwargs = {"gfm_logdir": tmp_path / "missing-foundation", "seed": 0}
     if trainer_name == "finetune_hydragnn":
         kwargs["branch_mlp_path"] = tmp_path / "missing-mlp"
@@ -115,7 +115,7 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
 ):
     from importlib import import_module
 
-    module = import_module(f"matsim_agents.training.{trainer_name}")
+    module = import_module(f"matsim_agents.backends.mlip.training.{trainer_name}")
     dataset, manifest = training_inputs
     model = tmp_path / "output"
 
@@ -138,8 +138,10 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
 def test_losses_use_physical_energy_without_second_subtraction(routed):
     import torch
 
-    from matsim_agents.training.finetune_hydragnn import _batch_loss
-    from matsim_agents.training.finetune_hydragnn_newhead import _batch_loss_single_head
+    from matsim_agents.backends.mlip.training.finetune_hydragnn import _batch_loss
+    from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import (
+        _batch_loss_single_head,
+    )
 
     batch = SimpleNamespace(
         num_graphs=1,
@@ -178,7 +180,7 @@ def test_losses_use_physical_energy_without_second_subtraction(routed):
 def test_single_head_resume_loads_readout_after_surgery(monkeypatch):
     import torch
 
-    import matsim_agents.training.finetune_hydragnn_newhead as trainer
+    import matsim_agents.backends.mlip.training.finetune_hydragnn_newhead as trainer
 
     trained = torch.nn.Linear(1, 1)
     with torch.no_grad():
@@ -283,7 +285,7 @@ def test_finetune_protocol_is_recorded_and_still_restores(tmp_path, training_inp
     [(None, False, "random"), (0, False, "pretrained"), (None, True, "resumed")],
 )
 def test_newhead_protocol_distinguishes_resumed_readout(tmp_path, head_index, resumed, expected):
-    from matsim_agents.training.finetune_hydragnn_newhead import _finetune_protocol
+    from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import _finetune_protocol
 
     record = _finetune_protocol(
         "lora", head_index, "none", resumed_from=tmp_path if resumed else None
@@ -424,7 +426,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         branch_mlp = model_dir / "branch-mlp.pt"
         branch_mlp.write_text("routing-checkpoint")
         (model_dir / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
-        from matsim_agents.datasets.governance import sha256_file
+        from matsim_agents.core.hashing import sha256_file
 
         save_hydragnn_energy_convention(
             model_dir,
@@ -618,7 +620,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         _bind_output_to_reference_manifest(output, reference_manifest)
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("matsim_agents.active_learning.trainer.subprocess.run", run)
+    monkeypatch.setattr("matsim_agents.workflows.active_learning.trainer.subprocess.run", run)
     built_calculators = []
 
     def mock_build_hydragnn_calculator(cfg, logdir_override=None):
@@ -655,7 +657,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     # The output is verified from its recorded hashes; the promotion comparison
     # is what loads the model.
     assert built_calculators == []
-    module = ["-m", f"matsim_agents.training.{fine_tuner}"]
+    module = ["-m", f"matsim_agents.backends.mlip.training.{fine_tuner}"]
     if launcher:
         assert argv[:7] == ["bash", str(config.train_launcher), "hydragnn", "1", "1", *module]
     else:
@@ -731,7 +733,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
                 stream.write("\n")
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("matsim_agents.active_learning.trainer.subprocess.run", run)
+    monkeypatch.setattr("matsim_agents.workflows.active_learning.trainer.subprocess.run", run)
 
     def unexpected_model_load(*args, **kwargs):
         pytest.fail("replayed bundle must be rejected before model loading")
@@ -751,7 +753,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     different_manifest = elemental_manifest({"Nb": -9, "O": -5})
     config = TrainerConfig(enabled=True, validation_reference_set=different_manifest)
     monkeypatch.setattr(
-        "matsim_agents.active_learning.trainer.subprocess.run",
+        "matsim_agents.workflows.active_learning.trainer.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0),
     )
     monkeypatch.setattr(
@@ -767,7 +769,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
 def test_retrain_rejects_multirank_builtin_before_resolving_references(
     tmp_path, training_inputs, monkeypatch
 ):
-    import matsim_agents.active_learning.training_references as references
+    import matsim_agents.workflows.active_learning.training_references as references
 
     dataset, manifest = training_inputs
     config = TrainerConfig(
@@ -795,7 +797,7 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
 
 
 def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
-    from matsim_agents.datasets.governance import sha256_file
+    from matsim_agents.core.hashing import sha256_file
 
     model = _checkpoint(tmp_path, training_inputs)
     branch_mlp = model / "branch-mlp.pt"
@@ -877,7 +879,7 @@ def test_unknown_fine_tuner_is_rejected(tmp_path, config, fine_tuner):
 
 
 def test_validation_partition_gets_the_same_formation_labels(tmp_path, training_inputs):
-    from matsim_agents.datasets.formation_training import prepare_hydragnn_validation_frames
+    from matsim_agents.data.formation_training import prepare_hydragnn_validation_frames
 
     dataset, manifest = training_inputs
     model = tmp_path / "model"

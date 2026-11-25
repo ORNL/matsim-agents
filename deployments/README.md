@@ -144,7 +144,7 @@ configuration; specialized scaling and paper scripts are not portability gates.
 Facility job files own only scheduler directives, module/venv activation, and
 hardware-specific launcher geometry. They delegate scientific configuration to:
 
-- `common/run-mlip-relaxation.sh` for the typed `matsim-agents relax` contract;
+- `common/run-mlip-relaxation.sh` for the typed `matsim-agents run` (relax config) contract;
 - `common/run-active-learning.sh` for validated `matsim-agents al run` jobs.
 
 The active-learning runner defaults to collecting DFT labels without

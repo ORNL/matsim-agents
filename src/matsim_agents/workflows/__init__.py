@@ -13,7 +13,7 @@ _EXPORTS = {
         "ScientificDebateResult",
         "run_scientific_debate",
     ),
-    "exploration": (
+    "exploration.api": (
         "ExplorationCheck",
         "ExplorationConfig",
         "ExplorationSummary",
@@ -109,7 +109,7 @@ if TYPE_CHECKING:
         ScientificDebateResult,
         run_scientific_debate,
     )
-    from matsim_agents.workflows.exploration import (
+    from matsim_agents.workflows.exploration.api import (
         ExplorationCheck,
         ExplorationConfig,
         ExplorationSummary,

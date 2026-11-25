@@ -13,10 +13,10 @@ from matsim_agents.backends.mlip import relaxation
 from matsim_agents.backends.mlip.config import UMAConfig
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, WorkerOutcome, WorkerSlot
 from matsim_agents.backends.mlip.relaxation import CalculatorCache, RelaxStructureInput
-from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.discovery.seed_structures import PhaseCandidate
+from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.science.structures.seed_structures import PhaseCandidate
 
 
 def _uma_args(model_name: str = "uma-s-1p1", **overrides) -> RelaxStructureInput:
@@ -192,7 +192,7 @@ class _StubPool:
 
 
 def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path, monkeypatch):
-    from matsim_agents.discovery import wrapper
+    from matsim_agents.workflows import composition_exploration as wrapper
 
     candidates = [
         PhaseCandidate(
@@ -239,7 +239,7 @@ def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path
 
 
 def test_exploration_rejects_both_relax_fn_and_pool(tmp_path):
-    from matsim_agents.discovery.wrapper import explore_composition
+    from matsim_agents.workflows.composition_exploration import explore_composition
 
     with pytest.raises(ValueError, match="either relax_fn or mlip_pool"):
         explore_composition(
@@ -359,8 +359,8 @@ def test_close_drops_local_models_and_restarts_lazily(monkeypatch):
 
 
 def test_chat_releases_exploration_models_only_for_real_active_learning(monkeypatch):
-    from matsim_agents.orchestration import interactive_chat
-    from matsim_agents.orchestration.interactive_chat import (
+    from matsim_agents.agents import interactive_chat
+    from matsim_agents.agents.interactive_chat import (
         DiscoveryChatConfig,
         DiscoveryChatSession,
     )

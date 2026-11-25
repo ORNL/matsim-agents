@@ -7,11 +7,11 @@ import sys
 
 import pytest
 
-from matsim_agents.active_learning import trainer as trainer_module
-from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.trainer import _fine_tune_argv, retrain_uma
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.execution.placement import ProcessLaunch
+from matsim_agents.workflows.active_learning import trainer as trainer_module
+from matsim_agents.workflows.active_learning.config import TrainerConfig
+from matsim_agents.workflows.active_learning.trainer import _fine_tune_argv, retrain_uma
 
 # Direct (launcher-less) training must be placed on the driver node.
 LAUNCH = ProcessLaunch(
@@ -57,7 +57,11 @@ align(out, a.dataset, a.elemental_reference_manifest)
     real_run = subprocess.run
 
     def run(argv, **kwargs):
-        assert argv[:3] == [sys.executable, "-m", "matsim_agents.training.finetune_uma"]
+        assert argv[:3] == [
+            sys.executable,
+            "-m",
+            "matsim_agents.backends.mlip.training.finetune_uma",
+        ]
         return real_run([sys.executable, str(script), *argv[3:]], **kwargs)
 
     monkeypatch.setattr(trainer_module.subprocess, "run", run)
@@ -66,7 +70,7 @@ align(out, a.dataset, a.elemental_reference_manifest)
 
 @pytest.fixture
 def references(tmp_path, monkeypatch):
-    from matsim_agents.active_learning import trainer
+    from matsim_agents.workflows.active_learning import trainer
 
     manifest = tmp_path / "elemental-references.json"
     manifest.write_text("{}")
@@ -142,7 +146,7 @@ def test_retrain_rejects_a_model_trained_on_other_data(tmp_path, monkeypatch, re
 
 
 def test_retrain_mace_launcher_gets_references_and_mode(tmp_path, references):
-    from matsim_agents.active_learning.trainer import retrain_mace
+    from matsim_agents.workflows.active_learning.trainer import retrain_mace
 
     dataset = tmp_path / "dataset.extxyz"
     dataset.write_text("frames")
@@ -182,7 +186,7 @@ align(out, a.dataset, a.elemental_reference_manifest)
     )
     assert model == output / "mace_finetuned.model"
     argv = json.loads((output / "argv.json").read_text())
-    assert argv[:2] == ["-m", "matsim_agents.training.finetune_mace"]
+    assert argv[:2] == ["-m", "matsim_agents.backends.mlip.training.finetune_mace"]
     flags = dict(zip(argv[2::2], argv[3::2], strict=False))
     assert flags["--family"] == "mace_mp" and flags["--base-model"] == "medium"
     assert flags["--elemental-reference-manifest"] == str(references)
@@ -190,7 +194,7 @@ align(out, a.dataset, a.elemental_reference_manifest)
 
 
 def test_retrain_mace_requires_the_finetuned_model(tmp_path, references):
-    from matsim_agents.active_learning.trainer import retrain_mace
+    from matsim_agents.workflows.active_learning.trainer import retrain_mace
 
     launcher = tmp_path / "launcher.sh"
     launcher.write_text("exit 0\n", encoding="utf-8")
@@ -209,7 +213,7 @@ def test_retrain_mace_requires_the_finetuned_model(tmp_path, references):
 
 @pytest.mark.parametrize("backend", ["uma", "mace"])
 def test_direct_training_must_be_local_and_single_process(tmp_path, backend):
-    from matsim_agents.active_learning.trainer import retrain_mace
+    from matsim_agents.workflows.active_learning.trainer import retrain_mace
 
     references = tmp_path / "elemental-references.json"
     references.touch()
@@ -252,10 +256,10 @@ def _hydragnn(tmp_path, **extra):
 @pytest.mark.parametrize(
     ("backend", "module"),
     [
-        ("hydragnn", "matsim_agents.training.finetune_hydragnn"),
-        ("hydragnn-newhead", "matsim_agents.training.finetune_hydragnn_newhead"),
-        ("uma", "matsim_agents.training.finetune_uma"),
-        ("mace", "matsim_agents.training.finetune_mace"),
+        ("hydragnn", "matsim_agents.backends.mlip.training.finetune_hydragnn"),
+        ("hydragnn-newhead", "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead"),
+        ("uma", "matsim_agents.backends.mlip.training.finetune_uma"),
+        ("mace", "matsim_agents.backends.mlip.training.finetune_mace"),
     ],
 )
 @pytest.mark.parametrize("launcher", [False, True])
@@ -314,9 +318,9 @@ def test_swapping_the_mlip_block_swaps_the_fine_tuner(tmp_path, references):
         return argv[argv.index("-m") + 1]
 
     hydragnn = _hydragnn(tmp_path)
-    assert module(hydragnn) == "matsim_agents.training.finetune_hydragnn"
-    assert module(UMAConfig()) == "matsim_agents.training.finetune_uma"
-    assert module(MACEConfig()) == "matsim_agents.training.finetune_mace"
+    assert module(hydragnn) == "matsim_agents.backends.mlip.training.finetune_hydragnn"
+    assert module(UMAConfig()) == "matsim_agents.backends.mlip.training.finetune_uma"
+    assert module(MACEConfig()) == "matsim_agents.backends.mlip.training.finetune_mace"
 
 
 def test_routed_hydragnn_fine_tune_requires_a_branch_mlp(tmp_path, references):
@@ -348,7 +352,7 @@ def test_multirank_fine_tunes_are_rejected_before_any_setup(
         pytest.fail("references must not be resolved for a rejected fine-tune")
 
     monkeypatch.setattr(trainer_module, "_references_for_training", unexpected)
-    import matsim_agents.active_learning.training_references as training_references
+    import matsim_agents.workflows.active_learning.training_references as training_references
 
     monkeypatch.setattr(training_references, "resolve_training_references", unexpected)
     two_ranks = LAUNCH.model_copy(update={"ranks_per_node": 2})

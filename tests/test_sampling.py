@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.exploration.sampling import (
+from matsim_agents.workflows.exploration.sampling import (
     CampaignState,
     StopRule,
     record_round,

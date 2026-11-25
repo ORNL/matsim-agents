@@ -3,7 +3,7 @@
 # new trajectories, structures, or compositions. It is what finetune_eval used
 # before split strategies existed (80/20, seeded), now with a validation
 # partition for early stopping and model selection.
-#   python -m matsim_agents.active_learning.finetune_eval \
+#   python -m matsim_agents.workflows.active_learning.finetune_eval \
 #     --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
 #     --dataset dataset.extxyz --elemental-reference-manifest refs.json \
 #     --output-dir runs/uma-random --evaluation-config random-frame-interpolation.yaml \

@@ -516,8 +516,8 @@ def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
     import json
     from types import SimpleNamespace
 
-    from matsim_agents.active_learning.config import ALConfig
-    from matsim_agents.campaign.state import CampaignState
+    from matsim_agents.workflows.active_learning.config import ALConfig
+    from matsim_agents.workflows.multi_formula.state import CampaignState
 
     root = Path(__file__).resolve().parents[1]
     executor_path = root / "deployments/perlmutter/jobs/campaign_execute.py"
@@ -572,7 +572,7 @@ def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
 
 
 def test_bounded_campaign_settings_cover_all_scientific_stages(monkeypatch) -> None:
-    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.config import ALConfig
 
     root = Path(__file__).resolve().parents[1]
     monkeypatch.setenv("PROJECT_ROOT", str(root))

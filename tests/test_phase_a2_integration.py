@@ -6,13 +6,13 @@ from collections import Counter
 
 import numpy as np
 
-from matsim_agents.discovery.alloy_ensemble import (
+from matsim_agents.science.structures.alloy_ensemble import (
     ensemble_sro_statistics,
     find_exact_duplicates,
     find_symmetry_equivalents,
     generate_alloy_ensemble,
 )
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     AlloySpec,
     SROTarget,
     first_neighbor_list,

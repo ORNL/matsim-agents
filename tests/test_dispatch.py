@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.exploration.candidates import CandidateManifest, CandidateRecord
-from matsim_agents.discovery.exploration.dispatch import (
-    FACILITIES,
+from matsim_agents.execution import slurm_jobs as sj
+from matsim_agents.workflows.exploration.candidates import CandidateManifest, CandidateRecord
+from matsim_agents.workflows.exploration.dispatch import (
     FacilityProfile,
     apply_scheduler_states,
     batches_of,
@@ -19,9 +19,9 @@ from matsim_agents.discovery.exploration.dispatch import (
     record_result,
     submit_pending_batches,
 )
-from matsim_agents.execution import slurm_jobs as sj
 
-PROFILE = FACILITIES["frontier"]
+PROFILE = FacilityProfile("test", "ACCOUNT", "debug", "batch", verified=True)
+UNVERIFIED = FacilityProfile("test", "", "debug", "debug", verified=False, note="queue unknown")
 
 
 class FakeScheduler:
@@ -95,7 +95,7 @@ def test_sbatch_arguments_use_profile_and_caps(tmp_path):
         manifest, tmp_path / "j.json", PROFILE, _cmd, batch_size=2, gpus=1, runner=sched
     )
     argv = sched.submissions[0]
-    assert argv[argv.index("-A") + 1] == "LRN110" and "-q" in argv and "debug" in argv
+    assert argv[argv.index("-A") + 1] == "ACCOUNT" and "-q" in argv and "debug" in argv
     assert "--gpus-per-node=1" in argv and argv[argv.index("-N") + 1] == "1"
 
 
@@ -133,7 +133,7 @@ def test_unverified_facility_refuses_to_dispatch(tmp_path):
     sched = FakeScheduler()
     with pytest.raises(sj.SlurmJobError, match="not verified"):
         submit_pending_batches(
-            manifest, tmp_path / "j.json", FACILITIES["aurora"], _cmd, batch_size=1, runner=sched
+            manifest, tmp_path / "j.json", UNVERIFIED, _cmd, batch_size=1, runner=sched
         )
     assert sched.argvs == []
     custom = FacilityProfile("x", "A", "debug", "batch", verified=False)

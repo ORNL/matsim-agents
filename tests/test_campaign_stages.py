@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.stages import (
+from matsim_agents.workflows.hierarchy.stages import (
     CampaignEvidence,
     StageThresholds,
     decide,

@@ -5,10 +5,10 @@ repository is a material property, and no score is a materials claim.
 
 ## Objectives
 
-`matsim_agents.fusion.policy.FUSION_PFC_OBJECTIVES` lists the eight objectives. Each is
+The `objectives` and `definitions` of `examples/fusion_pfc/policy.yaml` list the eight objectives. Each is
 maximized as a desirability $d_i \in [0, 1]$:
 
-| Objective | Scored observables (see `matsim_agents.fusion.objectives`) |
+| Objective | Scored observables (see `definitions` in `examples/fusion_pfc/policy.yaml`) |
 |---|---|
 | radiation_damage_recovery | defect recovery fraction |
 | thermal_conductivity | total thermal conductivity |
@@ -28,7 +28,7 @@ For a candidate with every objective present,
 
 $$S = \sum_i w_i d_i, \qquad d_i = \min_{o \in i} \mathrm{clip}\left(\frac{x_o - x_o^{\mathrm{worst}}}{x_o^{\mathrm{target}} - x_o^{\mathrm{worst}}}, 0, 1\right)$$
 
-The weights come from a versioned `FusionScoringPolicy`, and `digest()` ties every
+The weights come from a versioned `ScoringPolicy`, and `digest()` ties every
 result to its policy. `[S_low, S_high]` propagates the one-sigma bounds of each
 observable.
 
@@ -40,20 +40,20 @@ observable.
 - **Pareto and dominance** are computed on complete objectives. When some candidates
   are incomplete, the front is marked partial.
 - **Sensitivity** scales each weight and reports how the ranking changes.
-- **Scenarios**: `matsim_agents.fusion.scenario.aggregate` normalizes per-scenario
+- **Scenarios**: `matsim_agents.science.decision.scenario.aggregate` normalizes per-scenario
   scores to the declared scenario ids, and refuses scores for undeclared ones.
 
-## Command line
+## Running it
 
-`matsim-agents materials validate|score|report|pareto|sensitivity|packet-export|import`.
-Use `--synthetic` for the A/B/C demo bundle, or pass a YAML bundle with `scenario`,
-`candidates`, optional `constraints` and `benchmarks`. Every command reads evidence
-only. The SYNTHETIC end-to-end demo is
+Scoring has no dedicated CLI command; it is the Python API in
+`matsim_agents.science.decision.scoring`, driven by the application's
+[policy file](../../examples/fusion_pfc/policy.yaml). A bundle has `scenario`,
+`candidates`, optional `constraints` and `benchmarks`. Scoring reads evidence only. The SYNTHETIC end-to-end demo is
 [examples/fusion_pfc/synthetic_demo.py](../../examples/fusion_pfc/synthetic_demo.py).
 
 ## Acquisition advice
 
-`matsim_agents.fusion.acquisition.plan_fusion_acquisition` ranks proposed calculations
+`matsim_agents.science.decision.acquisition.plan_objective_acquisition` ranks proposed calculations
 by expected gain in decision confidence per node-hour. Decision confidence is
 $P(\text{top}) \cdot n_\text{complete}/n_\text{ranked}$.
 
@@ -66,5 +66,4 @@ $P(\text{top}) \cdot n_\text{complete}/n_\text{ranked}$.
 
 Tests: [tests/test_fusion_policy.py](../../tests/test_fusion_policy.py),
 [tests/test_fusion_scoring.py](../../tests/test_fusion_scoring.py),
-[tests/test_fusion_acquisition.py](../../tests/test_fusion_acquisition.py),
-[tests/test_fusion_cli.py](../../tests/test_fusion_cli.py).
+[tests/test_fusion_acquisition.py](../../tests/test_fusion_acquisition.py).

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from matsim_agents.discovery.composition import (
+from matsim_agents.core.composition import (
     extract_compositions,
     parse_composition,
 )

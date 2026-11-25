@@ -33,7 +33,7 @@ The shared formation-label preparation layer is implemented. Given a verified
 native-total-energy dataset sidecar and compatible elemental DFT manifest, run:
 
 ```bash
-python -m matsim_agents.datasets.formation_training \
+python -m matsim_agents.data.formation_training \
   --dataset /path/to/raw-dft.extxyz \
   --elemental-reference-manifest /path/to/elemental-references.json \
   --output-dir /path/to/new-formation-snapshot
@@ -136,7 +136,7 @@ BranchWeightMLP path. Artifact integrity is still verified when loading the
 calculator. Branch-weight confidence is unavailable when fewer than two trained
 branches are active; relaxation reports no `top_branch_weight` in that case.
 
-`matsim_agents.active_learning.elemental_dft` calculates or reuses reference
+`matsim_agents.workflows.active_learning.elemental_dft` calculates or reuses reference
 energies for an approved phase list. Every phase explicitly declares whether its
 input geometry is already verified as converged or requires relaxation. The
 verified path remains a fixed-geometry single point; the other path performs a
@@ -212,7 +212,7 @@ The common compound method signature and each reference's actual method
 signature are both recorded, including the explicit state/sampling exceptions.
 
 ```bash
-python -m matsim_agents.active_learning.elemental_dft \
+python -m matsim_agents.workflows.active_learning.elemental_dft \
   --phase-plan /path/to/approved-phases.yaml \
   --config /path/to/dft-and-resources.yaml \
   --elements Nb Ta O \
@@ -293,7 +293,7 @@ A foundation model's energies follow its pretraining DFT setup (UMA OMat and
 MACE-MP: VASP PBE). Labels from Quantum ESPRESSO, or VASP with other settings,
 differ from it by large per-element constants; training on raw totals would make
 the model absorb them. The UMA and MACE fine-tuners
-(`matsim_agents.training.finetune_uma` / `finetune_mace`, both requiring
+(`matsim_agents.backends.mlip.training.finetune_uma` / `finetune_mace`, both requiring
 `--elemental-reference-manifest`) therefore shift every label by the elemental
 reference offsets:
 

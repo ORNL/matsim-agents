@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.kinetics.contracts import (
+from matsim_agents.science.kinetics.contracts import (
     BarrierEvidence,
     DefectState,
     TransitionEvent,

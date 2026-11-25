@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from matsim_agents.backends.llm.provider import ChatVLLM, get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model, reply_from_message, split_reasoning
-from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 
 

@@ -178,7 +178,7 @@ def _apply_energy_convention(
         cfg.newhead_ft_config = logdir / "newhead.json"
         cfg.inference_head = None
     if "branch_mlp_checkpoint" in convention:
-        from matsim_agents.datasets.governance import sha256_file
+        from matsim_agents.core.hashing import sha256_file
 
         cfg.mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
         cfg.newhead_ft_config = None

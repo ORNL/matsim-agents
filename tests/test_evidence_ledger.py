@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from matsim_agents.cli import app
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     DecisionRecord,
     EvidenceLedger,

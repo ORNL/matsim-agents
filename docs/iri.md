@@ -10,7 +10,18 @@ IRI is an **optional** alternative to manual submission. The existing
 `sbatch`/`qsub` scripts under [`deployments/`](../deployments/README.md) for
 Frontier, Aurora, and Perlmutter are unchanged and remain the default.
 
-## Supported facilities
+## Facility profiles
+
+The package carries no facility endpoints, queues, or filesystem paths. They live in a
+profile file owned by the deployment:
+[`deployments/common/iri-profiles.yaml`](../deployments/common/iri-profiles.yaml). Pass it as
+`IRIPlatform(name, profiles=path)`, or pass an explicit `IRIFacility` object. A profile
+may name the variable holding the run directory (`working_directory_env`, for example
+`OLCF_IRI_WORKDIR`) or give a `working_directory` template (`{account}` filled from
+`account_env`); when neither resolves, `resolved_working_directory()` returns `None` and the
+caller must pass `workdir` explicitly. Naming a facility without a profile file raises `ValueError`.
+
+## Supported facilities (shipped profiles)
 
 | Name | Facility | Base URL | Token variable | Project variable |
 |---|---|---|---|---|
@@ -41,8 +52,8 @@ export ALCF_PROJECT="<project>"
 - Tokens are bearer credentials: never commit them or pass them on the command line.
 - Add the exports to the startup file of the shell you actually use
   (`~/.zshrc` on macOS by default, `~/.bashrc` for bash).
-- The project variable fills the job `account` and, for OLCF, the default
-  working directory (`/lustre/orion/<project>/proj-shared` on Frontier).
+- The project variable fills the job `account`. Export `OLCF_IRI_WORKDIR` for the OLCF
+  profiles; without it the caller passes `workdir`.
 
 ## Basic usage
 
@@ -50,13 +61,13 @@ export ALCF_PROJECT="<project>"
 from matsim_agents.execution import IRIPlatform
 from matsim_agents.execution.resources import ResourceRequest
 
-platform = IRIPlatform("olcf-frontier")
+platform = IRIPlatform("olcf-frontier", profiles="deployments/common/iri-profiles.yaml")
 print(platform.resource_status())  # "up", "down", "degraded", or "unknown"
 
 job_id = platform.submit(
     ["/bin/bash", "-lc", "hostname"],
     resources=ResourceRequest(nodes=1, walltime="00:05:00"),
-    workdir=platform.resolved_working_directory(),
+    workdir=platform.resolved_working_directory() or "/path/to/run/directory",
 )
 record = platform.wait(job_id, timeout=3600)
 print(record["status"])

@@ -3,7 +3,9 @@
 import numpy as np
 import pytest
 
-from matsim_agents.campaign.gas_transfer import (
+from matsim_agents.workflows.candidate_registry import NOT_YET_ESTABLISHED
+from matsim_agents.workflows.hierarchy.transfer import TransferData
+from matsim_agents.workflows.radiation.gas_transfer import (
     CORE_FAMILIES,
     STRATEGY_IDS,
     SYNTHETIC_ONLY,
@@ -16,8 +18,6 @@ from matsim_agents.campaign.gas_transfer import (
     inventory_existing_data,
     split_gas_experiment,
 )
-from matsim_agents.campaign.registry import NOT_YET_ESTABLISHED
-from matsim_agents.campaign.transfer import TransferData
 
 W = np.array([1.0, -2.0, 0.5])
 

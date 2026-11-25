@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.exploration.magnetic_surrogate import (
+from matsim_agents.workflows.exploration.magnetic_surrogate import (
     LabeledExample,
     LeakageError,
     MagneticSurrogate,

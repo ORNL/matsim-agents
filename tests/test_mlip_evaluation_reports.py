@@ -9,13 +9,13 @@ import pytest
 from ase import Atoms
 from ase.io import read
 
-from matsim_agents.active_learning.eval_report import (
+from matsim_agents.workflows.active_learning.eval_report import (
     collect_runs,
     group_report,
     matrix,
     paired_difference,
 )
-from matsim_agents.active_learning.uncertainty import calibrate_uncertainty
+from matsim_agents.workflows.active_learning.uncertainty import calibrate_uncertainty
 
 
 def _parity(values):
@@ -98,8 +98,8 @@ def test_uncertainty_calibration_is_validation_only_and_empirical():
 
 
 def test_finetuners_take_the_validation_partition(tmp_path):
-    from matsim_agents.training.finetune_mace import _write_xyz_splits
-    from matsim_agents.training.finetune_uma import _load_labeled_frames
+    from matsim_agents.backends.mlip.training.finetune_mace import _write_xyz_splits
+    from matsim_agents.backends.mlip.training.finetune_uma import _load_labeled_frames
 
     frames = []
     for index in range(5):

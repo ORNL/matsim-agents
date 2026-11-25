@@ -1204,7 +1204,7 @@ def _structure_valid(path: Path, expected_formula: str) -> tuple[int, list[str]]
 
     from ase.io import read
 
-    from matsim_agents.discovery.composition import parse_composition
+    from matsim_agents.core.composition import parse_composition
 
     atoms = read(path)
     if len(atoms) == 0 or not atoms.pbc.any():

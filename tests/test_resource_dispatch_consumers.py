@@ -10,11 +10,11 @@ import yaml
 from ase.build import bulk
 from pydantic import ValidationError
 
-from matsim_agents.active_learning.config import ALConfig, TrainerConfig
-from matsim_agents.active_learning.dft_protocol import dft_execution_signature
 from matsim_agents.backends.dft.base import DFTJobSpec
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig, VASPConfig
 from matsim_agents.execution.placement import ProcessLaunch
+from matsim_agents.workflows.active_learning.config import ALConfig, TrainerConfig
+from matsim_agents.workflows.active_learning.dft_protocol import dft_execution_signature
 from matsim_agents.workflows.relaxation import DFTBackendConfig, ScientificRelaxationConfig
 
 LAUNCH = ProcessLaunch(
@@ -210,8 +210,8 @@ def test_direct_dft_launcher_runs_on_this_node_with_translated_mask(monkeypatch)
 
 
 def test_saved_workflow_configs_with_null_resources_rerun(tmp_path):
-    from matsim_agents.cli.workflow_commands import _load_workflow_config
     from matsim_agents.workflows.llm_check import LLMCheckConfig
+    from matsim_agents.workflows.runner import load_workflow_config as _load_workflow_config
 
     saved = tmp_path / "resolved_config.json"
     saved.write_text(
@@ -299,13 +299,9 @@ def test_rocm_worker_masks_compose_hip_with_rocr(monkeypatch):
         child_mask_environment({"ROCR_VISIBLE_DEVICES": "0"}, owner="x")
 
 
-@pytest.mark.parametrize("module", ["qe_relax", "vasp_relax"])
-def test_direct_rocm_dft_child_keeps_the_placed_device(monkeypatch, module):
-    import importlib
+def test_direct_rocm_dft_child_keeps_the_placed_device(monkeypatch):
+    from matsim_agents.backends.dft.process import child_environment
 
-    child_environment = importlib.import_module(
-        f"matsim_agents.backends.dft.{module}"
-    )._child_environment
     monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "2,3,6,7")
     monkeypatch.setenv("HIP_VISIBLE_DEVICES", "1,3")
     env = child_environment({"ROCR_VISIBLE_DEVICES": "7", "OMP_NUM_THREADS": "7"})

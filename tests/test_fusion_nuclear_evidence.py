@@ -2,8 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from matsim_agents.execution.ledger import EvidenceLedger
-from matsim_agents.execution.properties import PropertyStatus
-from matsim_agents.fusion.nuclear_evidence import (
+from matsim_agents.science.irradiation.contracts import (
+    RATE_BASIS_PER_ATOM_PER_S,
+    IrradiationScenario,
+    PKASourceProvenance,
+    PKASpectrum,
+    RecoilSpecies,
+    SpeciesSpectrum,
+)
+from matsim_agents.science.irradiation.nuclear_evidence import (
     ExternalNuclearEvidence,
     NuclearEvidenceError,
     NuclearFamily,
@@ -12,14 +19,7 @@ from matsim_agents.fusion.nuclear_evidence import (
     from_pka_spectrum,
     to_ledger_record,
 )
-from matsim_agents.irradiation.contracts import (
-    RATE_BASIS_PER_ATOM_PER_S,
-    IrradiationScenario,
-    PKASourceProvenance,
-    PKASpectrum,
-    RecoilSpecies,
-    SpeciesSpectrum,
-)
+from matsim_agents.science.properties.calculators import PropertyStatus
 
 H = "a" * 64
 

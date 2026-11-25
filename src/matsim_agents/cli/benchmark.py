@@ -42,8 +42,8 @@ def known_answers(
 ):
     """Run the known-answer cases and grade them; exit 1 when any case fails."""
 
-    from matsim_agents.campaign.known_answers import run_known_answers
     from matsim_agents.execution.ledger import EvidenceLedger
+    from matsim_agents.workflows.evaluation.known_answers import run_known_answers
 
     if tier not in {"replay", "live"}:
         raise typer.BadParameter("tier must be 'replay' or 'live'", param_hint="--tier")
@@ -97,7 +97,7 @@ def agent_eval(
 
     import yaml
 
-    from matsim_agents.campaign.agent_eval import AgentEvalConfig, run_agent_eval
+    from matsim_agents.workflows.evaluation.agent_eval import AgentEvalConfig, run_agent_eval
 
     if not (suite / "cases.yaml").is_file():
         raise typer.BadParameter(f"{suite} has no cases.yaml", param_hint="--suite")

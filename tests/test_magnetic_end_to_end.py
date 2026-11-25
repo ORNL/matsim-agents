@@ -10,22 +10,22 @@ import numpy as np
 from ase.build import bulk
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
-from matsim_agents.discovery.magnetism.competition import (
+from matsim_agents.science.magnetism.competition import (
     NOT_GLOBAL_GROUND_STATE,
     StateEvaluation,
     plan_competition,
     rank_states,
     run_pending,
 )
-from matsim_agents.discovery.magnetism.consistency import (
+from matsim_agents.science.magnetism.consistency import (
     MagneticEvidence,
     check_barrier,
     check_formation_energy,
     gate_transition_for_kmc,
 )
-from matsim_agents.discovery.magnetism.defects import derive_defect_configuration
-from matsim_agents.discovery.magnetism.policies import configurations_for_policy, select_policy
-from matsim_agents.discovery.magnetism.results import (
+from matsim_agents.science.magnetism.defects import derive_defect_configuration
+from matsim_agents.science.magnetism.policies import configurations_for_policy, select_policy
+from matsim_agents.science.magnetism.results import (
     classify_moments,
     parse_qe_magnetic_output,
     result_from_moments,

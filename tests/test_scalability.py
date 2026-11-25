@@ -2,11 +2,11 @@
 
 import pytest
 
-from matsim_agents.kinetics.benchmarks import chain_network
-from matsim_agents.kinetics.ensemble import run_ensemble
+from matsim_agents.core.hashing import sha256_json
+from matsim_agents.science.kinetics.benchmarks import chain_network
+from matsim_agents.science.kinetics.ensemble import run_ensemble
 from matsim_agents.workflows.scalability import (
     check_reproducibility,
-    digest,
     environment_record,
     measure_scaling,
 )
@@ -60,7 +60,7 @@ def test_repeats_must_be_at_least_two():
 
 
 def test_digest_is_order_independent_for_dicts():
-    assert digest({"a": 1, "b": 2}) == digest({"b": 2, "a": 1})
+    assert sha256_json({"a": 1, "b": 2}) == sha256_json({"b": 2, "a": 1})
 
 
 def test_environment_without_lock_is_not_pinned(tmp_path):

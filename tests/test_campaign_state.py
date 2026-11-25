@@ -5,17 +5,17 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.orchestrator import run_formula_discovery_stage
-from matsim_agents.campaign.state import CampaignState
-from matsim_agents.discovery.formula import FormulaGenerationPolicy
-from matsim_agents.discovery.stability import (
+from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
+from matsim_agents.science.structures.formula import FormulaGenerationPolicy
+from matsim_agents.science.thermodynamics.stability import (
     PhaseStability,
     RankingMode,
     ReferenceEnergySet,
     StabilityReport,
 )
-from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateVerdict, ScientificDebateResult
+from matsim_agents.workflows.multi_formula.orchestrator import run_formula_discovery_stage
+from matsim_agents.workflows.multi_formula.state import CampaignState
 
 
 def _policy() -> FormulaGenerationPolicy:
@@ -318,7 +318,10 @@ def test_campaign_states_of_other_schema_versions_are_rejected(tmp_path):
 
 
 def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):
-    from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
+    from matsim_agents.workflows.multi_formula.evidence import (
+        open_campaign_ledger,
+        sync_stability_evidence,
+    )
 
     campaign = _campaign()
     campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))

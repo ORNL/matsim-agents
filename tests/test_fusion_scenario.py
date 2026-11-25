@@ -1,15 +1,16 @@
 import pytest
+from fusion_pfc_app import POLICY
 from pydantic import ValidationError
 
-from matsim_agents.execution.contracts import PROPERTY_UNITS
-from matsim_agents.execution.properties import PropertyEvidence, PropertyStatus
-from matsim_agents.fusion.scenario import (
+from matsim_agents.core.contracts import PROPERTY_UNITS
+from matsim_agents.science.decision.scenario import (
     EvaluationScenario,
     EvidenceContext,
-    FusionEvidence,
+    ScenarioEvidence,
     ScenarioSet,
     aggregate,
 )
+from matsim_agents.science.properties.calculators import PropertyEvidence, PropertyStatus
 
 
 def _item(prop, *, temperature=1000.0, irradiation=None, magnetic=None, **ctx):
@@ -28,16 +29,19 @@ def _item(prop, *, temperature=1000.0, irradiation=None, magnetic=None, **ctx):
         },
         evidence_ids=["e"],
     )
-    return FusionEvidence(evidence=ev, context=EvidenceContext(**ctx))
+    return ScenarioEvidence(evidence=ev, context=EvidenceContext(**ctx))
 
 
 def test_temperature_mismatch_reported():
     sc = EvaluationScenario(scenario_id="a", temperature_K=1200.0)
-    problems = sc.mismatches("thermal_conductivity", _item("thermal_conductivity_total"))
+    problems = sc.mismatches(
+        POLICY.definition("thermal_conductivity"), _item("thermal_conductivity_total")
+    )
     assert any("temperature" in p for p in problems)
     assert (
         sc.mismatches(
-            "thermal_conductivity", _item("thermal_conductivity_total", temperature=1200.0)
+            POLICY.definition("thermal_conductivity"),
+            _item("thermal_conductivity_total", temperature=1200.0),
         )
         == []
     )
@@ -48,7 +52,7 @@ def test_irradiation_and_magnetic_state_mismatch():
         scenario_id="a", temperature_K=1000.0, irradiation="fw-1dpa", magnetic_state="PM"
     )
     item = _item("thermal_conductivity_total", magnetic="FM")
-    problems = sc.mismatches("thermal_conductivity", item)
+    problems = sc.mismatches(POLICY.definition("thermal_conductivity"), item)
     assert any("irradiation" in p for p in problems)
     assert any("magnetic_state" in p for p in problems)
 
@@ -58,10 +62,10 @@ def test_plasma_energy_and_ion_mismatch():
         scenario_id="a", temperature_K=1000.0, plasma_ion="D", plasma_ion_energy_eV=100.0
     )
     item = _item("sputtering_yield", plasma_ion="D", plasma_ion_energy_eV=50.0)
-    problems = sc.mismatches("plasma_erosion_resistance", item)
+    problems = sc.mismatches(POLICY.definition("plasma_erosion_resistance"), item)
     assert any("plasma_ion_energy_eV" in p for p in problems)
     ok = _item("sputtering_yield", plasma_ion="D", plasma_ion_energy_eV=100.0)
-    assert sc.mismatches("plasma_erosion_resistance", ok) == []
+    assert sc.mismatches(POLICY.definition("plasma_erosion_resistance"), ok) == []
 
 
 def test_cooling_time_and_spectrum_mismatch():
@@ -75,7 +79,7 @@ def test_cooling_time_and_spectrum_mismatch():
     item = _item(
         "shutdown_dose_rate", irradiation="fw", neutron_spectrum="ITER-FW", cooling_time_s=3.15e7
     )
-    problems = sc.mismatches("low_activation_shutdown_dose", item)
+    problems = sc.mismatches(POLICY.definition("low_activation_shutdown_dose"), item)
     assert any("cooling_time_s" in p for p in problems)
     assert any("neutron_spectrum" in p for p in problems)
 
@@ -91,7 +95,7 @@ def test_incidence_angle_mismatch():
     grazing = _item(
         "sputtering_yield", plasma_ion="D", plasma_ion_energy_eV=100.0, ion_incidence_angle_deg=80
     )
-    problems = sc.mismatches("plasma_erosion_resistance", grazing)
+    problems = sc.mismatches(POLICY.definition("plasma_erosion_resistance"), grazing)
     assert any("ion_incidence_angle_deg" in p for p in problems)
 
 
@@ -106,15 +110,20 @@ def test_dose_geometry_mismatch_only_for_dose_rate():
     )
     ctx = dict(irradiation="fw", neutron_spectrum="S", cooling_time_s=1.0)
     at_1m = _item("shutdown_dose_rate", dose_geometry="1 m", **ctx)
-    problems = sc.mismatches("low_activation_shutdown_dose", at_1m)
+    problems = sc.mismatches(POLICY.definition("low_activation_shutdown_dose"), at_1m)
     assert any("dose_geometry" in p for p in problems)
-    assert sc.mismatches("low_activation_shutdown_dose", _item("decay_heat", **ctx)) == []
+    assert (
+        sc.mismatches(POLICY.definition("low_activation_shutdown_dose"), _item("decay_heat", **ctx))
+        == []
+    )
 
 
 def test_unrequested_irradiation_is_a_mismatch():
     sc = EvaluationScenario(scenario_id="a", temperature_K=1000.0)
     item = _item("thermal_conductivity_total", irradiation="fw-1dpa")
-    assert any("not requested" in p for p in sc.mismatches("thermal_conductivity", item))
+    assert any(
+        "not requested" in p for p in sc.mismatches(POLICY.definition("thermal_conductivity"), item)
+    )
 
 
 def test_multi_scenario_no_average_without_weights():

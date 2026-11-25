@@ -182,7 +182,7 @@ def test_symmetry_matching_recognizes_translated_lifepo4_antisite_cell(tmp_path)
 def test_pyxtal_proposals_scale_with_requested_count(monkeypatch):
     pytest.importorskip("pyxtal")
     from benchmarks.e3 import structure_generation
-    from matsim_agents.discovery import seed_structures as seeds
+    from matsim_agents.science.structures import seed_structures as seeds
 
     captured = {}
 

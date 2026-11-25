@@ -68,11 +68,11 @@ class CapabilityReadiness(BaseModel):
 RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="alloy-generation",
-        summary="Seeded BCC multi-element supercells with exact composition and SRO descriptors.",
+        summary="Seeded alloy supercells on any lattice, exact composition, SRO descriptors.",
         entry_points=(
-            "matsim_agents.discovery.alloys:build_bcc_supercell",
-            "matsim_agents.discovery.alloys:warren_cowley_sro",
-            "matsim_agents.discovery.alloy_ensemble:AlloyEnsemble",
+            "matsim_agents.science.structures.alloys:build_supercell",
+            "matsim_agents.science.structures.alloys:warren_cowley_sro",
+            "matsim_agents.science.structures.alloy_ensemble:AlloyEnsemble",
         ),
         tests=("tests/test_alloys.py", "tests/test_alloy_ensemble.py"),
     ),
@@ -80,9 +80,9 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="defect-generation",
         summary="Vacancies, interstitials, crowdions, Frenkel pairs and divacancies.",
         entry_points=(
-            "matsim_agents.discovery.point_defects:generate_vacancy",
-            "matsim_agents.discovery.bcc_defects:generate_frenkel_pair",
-            "matsim_agents.discovery.defect_mapping:identify_defect_sites",
+            "matsim_agents.science.defects.point_defects:generate_vacancy",
+            "matsim_agents.science.defects.bcc:generate_frenkel_pair",
+            "matsim_agents.science.defects.mapping:identify_defect_sites",
         ),
         tests=("tests/test_point_defects.py", "tests/test_defect_mapping.py"),
     ),
@@ -90,8 +90,8 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="defect-energetics",
         summary="Formation energies and outcome classification from supplied energies.",
         entry_points=(
-            "matsim_agents.discovery.defect_energies:classified_defect_formation_energy",
-            "matsim_agents.discovery.defect_classification:classify_defect_outcome",
+            "matsim_agents.science.defects.energies:classified_defect_formation_energy",
+            "matsim_agents.science.defects.classification:classify_defect_outcome",
         ),
         backends=("qe",),
         tests=(
@@ -138,9 +138,9 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="transition-network",
         summary="Directed transition network with NEB evidence ingestion and validation.",
         entry_points=(
-            "matsim_agents.kinetics.graph:TransitionNetwork",
-            "matsim_agents.kinetics.evidence:attach_neb_result",
-            "matsim_agents.kinetics.validation:validate_network",
+            "matsim_agents.science.kinetics.graph:TransitionNetwork",
+            "matsim_agents.science.kinetics.evidence:attach_neb_result",
+            "matsim_agents.science.kinetics.validation:validate_network",
         ),
         tests=("tests/test_kinetics_graph.py", "tests/test_kinetics_validation.py"),
         caveats="Barriers are only as good as the supplied evidence.",
@@ -149,10 +149,10 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="kinetics",
         summary="HTST rates, seeded CT-KMC, ensembles and uncertainty propagation.",
         entry_points=(
-            "matsim_agents.kinetics.rates:htst_rate",
-            "matsim_agents.kinetics.kmc:run_kmc",
-            "matsim_agents.kinetics.ensemble:run_ensemble",
-            "matsim_agents.kinetics.uncertainty:propagate_uncertainty",
+            "matsim_agents.science.kinetics.rates:htst_rate",
+            "matsim_agents.science.kinetics.kmc:run_kmc",
+            "matsim_agents.science.kinetics.ensemble:run_ensemble",
+            "matsim_agents.science.kinetics.uncertainty:propagate_uncertainty",
         ),
         tests=("tests/test_kinetics_kmc.py", "tests/test_kinetics_ensemble.py"),
         caveats="Outcomes are conditional on the supplied network.",
@@ -177,7 +177,7 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="kinetic-benchmarks",
         summary="KMC and HTST checked against exact first-passage, branching, Arrhenius values.",
-        entry_points=("matsim_agents.kinetics.benchmarks:run_kinetic_benchmarks",),
+        entry_points=("matsim_agents.science.kinetics.benchmarks:run_kinetic_benchmarks",),
         tests=("tests/test_kinetics_benchmarks.py",),
         caveats="Synthetic networks; says nothing about attempt frequencies or real materials.",
     ),

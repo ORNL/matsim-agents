@@ -1,7 +1,7 @@
 # Reproducibility and random seeds
 
 Every random draw in MATSIM-AGENTS comes from one module,
-[`matsim_agents.seeding`](../src/matsim_agents/seeding.py),
+[`matsim_agents.core.seeding`](../src/matsim_agents/core/seeding.py),
 and every seed is a configured value. The same configuration, code checkout,
 and package versions therefore regenerate the same structures, trajectories,
 selections, and splits.

@@ -15,7 +15,6 @@ Nothing site-specific lives here: scheduler and MPI wrappers come in through
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import tempfile
@@ -28,6 +27,7 @@ from pydantic import BaseModel, ConfigDict
 
 from matsim_agents.backends.dft.process import TIMEOUT_RETURN_CODE, run_launcher
 from matsim_agents.backends.dft.qe_neb import QENebConfig
+from matsim_agents.core.hashing import sha256_file as _sha256
 
 RunStatus = Literal["not_started", "exited_zero", "exited_nonzero", "timed_out"]
 RECORD_SUFFIX = ".record.json"
@@ -72,10 +72,6 @@ def build_neb_argv(config: QENebConfig, input_path: str | os.PathLike, cwd: str)
     argv += list(config.extra_args)
     argv += ["-inp", shown]
     return argv
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _now() -> str:

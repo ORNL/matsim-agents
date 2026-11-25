@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from matsim_agents.campaign import gas_qe_campaign as gq
-from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.campaign.qe_plan import ResourceLimits, ResourceRequest
+from matsim_agents.execution.budget import BudgetLedger
 from matsim_agents.workflows import full_supercell_campaign as fsc
+from matsim_agents.workflows.hierarchy.qe_plan import ResourceLimits, ResourceRequest
+from matsim_agents.workflows.radiation import gas_supercells as gq
 
-CONFIG = Path(__file__).parents[1] / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
+CONFIG = Path(__file__).parents[1] / "examples/fusion_bcc_1024/campaign.yaml"
 UPF = (
     '<UPF version="2.0.1">\n<PP_INFO/>\n<PP_HEADER element=" {el}" pseudo_type="PAW" '
     'is_paw="true" has_so="false" core_correction="true" functional=" SLA PW PBX PBC" '
@@ -69,11 +69,12 @@ def test_ten_examples_with_exact_atom_counts(examples, cfg):
 
 def test_transmutation_examples_keep_the_site_count_and_cap(examples):
     for e in examples:
-        if e.n_re or e.n_os:
+        if e.products:
             symbols = e.atoms.get_chemical_symbols()
-            assert symbols.count("Re") == e.n_re
-            assert symbols.count("Os") == e.n_os
-            assert (e.n_re + e.n_os) / 1024 <= 0.01
+            for el, n in e.products.items():
+                assert symbols.count(el) == n
+            assert sum(e.products.values()) / 1024 <= 0.01
+    assert {e.calc_id for e in examples if e.products} == {"Re5", "Re3Os2", "Re2Os1_V1He1"}
 
 
 def test_missing_gas_and_transmutation_pseudos_block_input(cfg, examples, tmp_path):

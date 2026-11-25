@@ -9,7 +9,7 @@ import pytest
 from ase.build import bulk
 from ase.io import write
 
-from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.config import ALConfig
 
 REPO = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -29,7 +29,7 @@ def test_config_roundtrip_and_backend_isolation(tmp_path, backend):
     assert cfg.loop.max_dft_calculations == 6
     assert cfg.acquisition.n_select == 2
     assert cfg.trainer.validation_fraction == 0.2
-    assert cfg.mlip.fine_tuner_module == "matsim_agents.training.finetune_uma"
+    assert cfg.mlip.fine_tuner_module == "matsim_agents.backends.mlip.training.finetune_uma"
     block = getattr(cfg.dft, backend)
     assert block.timeout_sec == 1800
     assert cfg.resources.preset == "perlmutter-gpu"

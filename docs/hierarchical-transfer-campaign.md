@@ -47,22 +47,34 @@ budget: {total_node_hours: 5000}
 execution: {dry_run: true}
 ```
 
-## CLI
+## Python interface
 
-```
-matsim-agents campaign check           CONFIG
-matsim-agents campaign inventory       CONFIG -w DIR   # ingest datasets, check method compatibility
-matsim-agents campaign coverage        CONFIG -w DIR   # covered and missing interactions
-matsim-agents campaign transferability CONFIG -w DIR   # held-out verdicts per property
-matsim-agents campaign preview         CONFIG -w DIR [--acquisition policy|deterministic_baseline]
-matsim-agents campaign cost            CONFIG -w DIR
-matsim-agents campaign approve         CONFIG -w DIR --approved-by NAME   # bounded dispatch
-matsim-agents campaign monitor         CONFIG -w DIR   # charge actual node-hours
-matsim-agents campaign review          CONFIG -w DIR   # report table and next decision
+The hierarchy workflow has no dedicated CLI command; an application drives it
+through `matsim_agents.workflows.hierarchy.engine`. See
+[examples/cantor_fcc_256](../examples/cantor_fcc_256/application.yaml) and
+[examples/fusion_bcc_1024](../examples/fusion_bcc_1024/application.yaml).
+
+```python
+from matsim_agents.core.application import load_application
+import matsim_agents.workflows.hierarchy.engine as engine
+from matsim_agents.workflows.hierarchy.config import load_campaign_config
+
+app = load_application("examples/cantor_fcc_256/application.yaml")
+cfg = load_campaign_config(app.resolve(app.workflow_config))
+ws = engine.CampaignWorkspace("work/cantor", cfg)
+
+engine.inventory(ws)                 # ingest datasets, check method compatibility
+engine.coverage(ws)                  # covered and missing interactions
+engine.transferability(ws)           # held-out verdicts per property
+proposals = engine.load_proposals(cfg.data.candidates)
+engine.plan(ws, proposals)           # preview dispatch and cost; submits nothing
+engine.dispatch(ws, proposals, engine.sbatch_submitter(cfg), approved_by="NAME")
+engine.monitor(ws)                   # charge actual node-hours
+report, next_plan = engine.review(ws, proposals)
 ```
 
-All commands except `approve` and `monitor` never contact the scheduler. `approve` refuses under
-`dry_run` or when `--approved-by` differs from the config. It submits with
+Only `dispatch` and `monitor` contact the scheduler. `dispatch` refuses under
+`dry_run` or when `approved_by` differs from the config. It submits with
 `sbatch --parsable -q <qos> -A <account>`, no shell parsing.
 
 ## Restart safety
@@ -95,7 +107,7 @@ the software behaves correctly on synthetic data, not that real alloys transfer.
 
 - Pseudopotentials (pslibrary 1.0.0 PBE PAW, six elements, checksums and provenance beside the files
   under `/lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw`) are on disk and
-  wired into `deployments/frontier/campaigns/qe-1024/campaign.yaml`. Five full-size SCF inputs and three
+  wired into `examples/fusion_bcc_1024/campaign.yaml`. Five full-size SCF inputs and three
   NEB records now prepare; `pristine_ferromagnetic` stays `INPUT_BLOCKED` until a starting magnetization
   is derived from the UPF valence.
 - The campaign cutoffs (51 / 650 Ry) are the maxima of the UPF-header suggestions (W 50.4 Ry, V 645 Ry

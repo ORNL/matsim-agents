@@ -21,7 +21,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from matsim_agents.discovery.composition import extract_compositions
+from matsim_agents.core.composition import extract_compositions
 from matsim_agents.backends.llm.provider import get_chat_model
 
 

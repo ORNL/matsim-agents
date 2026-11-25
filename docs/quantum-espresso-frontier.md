@@ -184,7 +184,7 @@ The two libraries live side by side under
   convergence tests for this alloy.
 - **QE compatibility (reader level only).** `upfconv.x` from `install-gpu` reads all 10
   files. No pw.x calculation has been run.
-- **Config.** `deployments/frontier/campaigns/qe-1024-sssp-candidate/campaign.yaml`.
+- **Config.** `examples/fusion_bcc_1024/campaign-sssp-candidate.yaml`.
   - It uses its own `MATSIM_SSSP_PSEUDO_DIR` and campaign id.
   - It has an explicit file map, because prefix auto-resolution is ambiguous in the full SSSP
     directory (for example, `H` vs `Hf-sp...`).

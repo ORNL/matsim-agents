@@ -1,0 +1,80 @@
+# QUALIFICATION CANDIDATE ONLY -- NOT the production protocol.
+# Same 1,024-atom W-Ta-Cr-V-Hf-Mo campaign as campaign.yaml, but with
+# SSSP 1.3.0 PBE Precision pseudopotentials. Use it only for the small-cell
+# PSlibrary-vs-SSSP comparison (docs/quantum-espresso-frontier.md, "SSSP candidate").
+# Labels from this config get a different dft_method_signature because the per-file
+# UPF SHA-256 is part of the signature. Never pool them with qe-1024 (pslibrary) labels.
+# Promoting SSSP means creating a new versioned production protocol: update campaign.yaml,
+# the QE configs, elemental references and fine-tuning metadata together.
+campaign_id: wtacrvhfmo-1024-sssp-candidate
+parent_supercell:
+  lattice: bcc
+  conventional_repeats: [8, 8, 8]
+  expected_parent_atoms: 1024
+  lattice_parameter: 3.16
+  ordering: random
+  seed: 1
+  composition: {W: 640, Ta: 128, Cr: 64, V: 96, Hf: 32, Mo: 64}
+numerical_qualification:
+  require_full_parent_supercell: true
+  prohibit_smaller_cell_substitution: true
+defects:
+  vacancy_site: 0
+  interstitial_site: 0
+  interstitial_species: W
+  interstitial_site_type: octahedral
+  frenkel_site: 5
+  frenkel_anchor: 40
+  divacancy_site: 0
+  divacancy_shell: 1
+qe:
+  # SSSP 1.3.0 PBE Precision, https://archive.materialscloud.org/records/gvag2-y0636
+  # (DOI 10.24435/materialscloud:eg-28). Frontier copy (read-only):
+  #   <project-shared>/cache/pseudopotentials/sssp-1.3.0-pbe-precision
+  # Per-file SHA-256, header data and provenance:
+  #   deployments/common/pseudopotentials/sssp-1.3.0-pbe-precision.yaml
+  # Separate env var, so this config never silently resolves to the pslibrary directory.
+  pseudo_dir: ${MATSIM_SSSP_PSEUDO_DIR}
+  # Mixed types: GBRV ultrasoft (W Ta Cr V Re Os), norm-conserving SG15 (Mo H He) and
+  # Dojo (Hf). None is PAW. Explicit map required: prefix auto-resolution is ambiguous
+  # in the full SSSP directory (e.g. "H" vs "Hf-sp...").
+  # Mo, H and He (SG15) have no nonlinear core correction. assess_pseudopotentials flags
+  # them for spin-polarized runs, and qualification has to check Mo magnetism explicitly.
+  pseudopotentials:
+    W: W_pbe_v1.2.uspp.F.UPF
+    Ta: Ta_pbe_v1.uspp.F.UPF
+    Cr: cr_pbe_v1.5.uspp.F.UPF
+    V: v_pbe_v1.4.uspp.F.UPF
+    Hf: Hf-sp.oncvpsp.upf
+    Mo: Mo_ONCV_PBE-1.0.oncvpsp.upf
+    Re: Re_pbe_v1.2.uspp.F.UPF
+    Os: Os_pbe_v1.2.uspp.F.UPF
+    H: H_ONCV_PBE-1.0.oncvpsp.upf
+    He: He_ONCV_PBE-1.0.oncvpsp.upf
+  # SSSP-recommended minimum over these elements: 80 Ry wfc (H), 400 Ry rho (W, Ta).
+  # Dual 8 for the ultrasoft files gives 640 Ry; this matches the AL protocol (80/640).
+  # Not convergence-tested for this alloy.
+  ecutwfc_ry: 80.0
+  ecutrho_ry: 640.0
+  # Apart from the pseudopotentials and cutoffs, these controls match qe-1024.
+  smearing: mv
+  degauss_ry: 0.02
+  kpts: [2, 2, 2]
+  conv_thr_ry: 1.0e-6
+  mixing_beta: 0.2
+  neb_images: 5
+slurm:
+  account: LRN110
+  qos: debug
+  partition: batch
+  nodes: 8
+  walltime: "02:00:00"
+  job_name: qe-1024-sssp-candidate
+  max_concurrent_jobs: 1
+transmutation:
+  # Synthetic W -> Re/Os substitutions for the radiation campaign (counts are not an inventory).
+  host: W
+  examples:
+    - {name: Re5, products: {Re: 5}, seed: 1}
+    - {name: Re3Os2, products: {Re: 3, Os: 2}, seed: 2}
+    - {name: Re2Os1, products: {Re: 2, Os: 1}, seed: 3, with_vacancy_he: true}

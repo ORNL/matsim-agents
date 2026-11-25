@@ -12,33 +12,34 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fusion_bcc_app import COMPOSITION, RADIATION_SPECIES, REPEATS
 
-from matsim_agents.campaign import radiation_properties as rp
-from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.campaign.property_acquisition import (
+from matsim_agents.backends.external.spectra_pka.config import SpectraPKAConfig
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.core.revision import RevisionBudget
+from matsim_agents.execution.budget import BudgetLedger
+from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
+from matsim_agents.science.acquisition.property_acquisition import (
     ProposedCalculation,
     plan_property_acquisition,
     render_plan,
     reserve_approved,
 )
-from matsim_agents.campaign.selection import (
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     SelectionSpec,
     SelectionStatus,
     render_report,
     select,
 )
-from matsim_agents.campaign.selection_revision import revise_selection_hypothesis
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.execution.properties import (
+from matsim_agents.science.acquisition.selection_revision import revise_selection_hypothesis
+from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
     PropertyQualification,
     PropertyStatus,
 )
-from matsim_agents.integrations.external.spectra_pka.config import SpectraPKAConfig
-from matsim_agents.workflows.radiation_hypothesis import RevisionBudget
+from matsim_agents.workflows.radiation import properties as rp
 
 CONFIG = Path(__file__).parents[1] / "examples/characterization/fusion_alloy_selection.yaml"
 NEEDS_T = {"thermal_conductivity_total", "irradiation_swelling"}
@@ -125,8 +126,8 @@ def _proposals(cfg) -> list[ProposedCalculation]:
 
 def test_config_declares_itself_synthetic_and_names_the_reference_alloy(cfg):
     assert cfg["synthetic"] is True
-    assert cfg["reference_alloy"]["composition"] == rp.REFERENCE_ALLOY_COUNTS
-    assert tuple(cfg["reference_alloy"]["repeats"]) == rp.REFERENCE_REPEATS
+    assert cfg["reference_alloy"]["composition"] == COMPOSITION
+    assert tuple(cfg["reference_alloy"]["repeats"]) == REPEATS
 
 
 def test_selection_separates_infeasible_qualified_and_unscored_candidates(cfg):
@@ -206,7 +207,7 @@ def test_reservation_needs_a_named_person_and_an_explicit_selected_id(cfg):
 
 
 def test_radiation_readiness_is_reported_and_no_degradation_is_claimed(cfg, tmp_path):
-    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {})
+    ready = rp.assess_radiation_readiness(SpectraPKAConfig(), tmp_path, {}, RADIATION_SPECIES)
     state = rp.RadiationState(
         irradiation=cfg["irradiation"], temperature_K=cfg["temperature_K"], defect_state="V1He1"
     )

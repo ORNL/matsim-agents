@@ -18,14 +18,15 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     ApprovalPolicy,
     EvidenceLevel,
     ProvenanceRecord,
     ValidationRecord,
     WorkflowStatus,
 )
+from matsim_agents.core.relaxation import RelaxationResult
+from matsim_agents.execution.allocation import short_host
 from matsim_agents.execution.placement import ProcessLaunch, ResourcePlan
 from matsim_agents.execution.recovery import is_input_diagnostic
 from matsim_agents.execution.run_directory import ScientificRunDirectory
@@ -117,8 +118,8 @@ class DFTBackendConfig(BaseModel):
                 f"{self.launch.node_count} node(s) x {self.launch.ranks_per_node} rank(s); use a "
                 "step wrapper with {nodes}, {ranks_per_node}, and {threads_per_rank}"
             )
-        local = socket.gethostname().split(".", 1)[0]
-        hosts = [host.split(".", 1)[0] for host in self.launch.hosts]
+        local = short_host(socket.gethostname())
+        hosts = [short_host(host) for host in self.launch.hosts]
         if hosts != [local]:
             raise ValueError(
                 f"DFT launcher {argv[0]!r} runs directly on this node ({local}), but the dft "

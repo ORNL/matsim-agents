@@ -1,5 +1,5 @@
 # =============================================================================
-# Active-learning configuration (matsim_agents.active_learning.ALConfig)
+# Active-learning configuration (matsim_agents.workflows.active_learning.ALConfig)
 #
 # TEMPLATE / ILLUSTRATION ONLY. Do not run your campaign from this file.
 # Generate a campaign-specific config and elemental reference plan with

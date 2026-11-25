@@ -12,8 +12,8 @@ import yaml
 from matsim_agents.workflows import full_supercell_campaign as fsc
 
 ROOT = Path(__file__).parents[1]
-CANDIDATE = ROOT / "deployments/frontier/campaigns/qe-1024-sssp-candidate/campaign.yaml"
-PRODUCTION = ROOT / "deployments/frontier/campaigns/qe-1024/campaign.yaml"
+CANDIDATE = ROOT / "examples/fusion_bcc_1024/campaign-sssp-candidate.yaml"
+PRODUCTION = ROOT / "examples/fusion_bcc_1024/campaign.yaml"
 MANIFEST = ROOT / "deployments/common/pseudopotentials/sssp-1.3.0-pbe-precision.yaml"
 ELEMENTS = {"W", "Ta", "Cr", "V", "Hf", "Mo", "Re", "Os", "H", "He"}
 

@@ -39,7 +39,7 @@ def test_unresolvable_entry_point_marks_software_unavailable():
     broken = rc.RadiationCapability(
         name="broken",
         summary="x",
-        entry_points=("matsim_agents.kinetics.rates:no_such_name", "no_such_pkg.mod:f"),
+        entry_points=("matsim_agents.science.kinetics.rates:no_such_name", "no_such_pkg.mod:f"),
     )
     result = rc.evaluate_capability(broken)
     assert result.software is rc.SoftwareReadiness.UNAVAILABLE

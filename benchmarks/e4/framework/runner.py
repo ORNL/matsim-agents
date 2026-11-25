@@ -415,7 +415,7 @@ class BenchmarkRun:
         elif error is not None:
             outcome = device_task_outcome(task, attempt_dir, None, error)
         else:
-            from matsim_agents.backends.mlip.results import RelaxationResult
+            from matsim_agents.core.relaxation import RelaxationResult
 
             outcome = mlip_relax_outcome(
                 RelaxationResult.model_validate(value["result"]),

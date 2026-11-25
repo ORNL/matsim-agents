@@ -20,7 +20,7 @@ from unittest.mock import patch
 def relaxation_contract(structure: Path, output: Path) -> dict[str, Any]:
     """Exercise the complete relaxation workflow with a deterministic backend."""
 
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
     from matsim_agents.workflows.relaxation import ScientificRelaxationConfig, run_relaxation
 
     def fake_runner(args):
@@ -59,8 +59,8 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
-    from matsim_agents.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
-    from matsim_agents.datasets.governance import (
+    from matsim_agents.workflows.active_learning.trainer import LabelledFrame, append_frames_to_extxyz
+    from matsim_agents.data.governance import (
         validate_labelled_frames,
         write_dataset_manifest,
     )
@@ -113,9 +113,9 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
     import numpy as np
     from ase.io import read
 
-    from matsim_agents.active_learning.md_sampler import Candidate
-    from matsim_agents.active_learning.config import ALConfig
-    from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.workflows.active_learning.md_sampler import Candidate
+    from matsim_agents.workflows.active_learning.config import ALConfig
+    from matsim_agents.workflows.active_learning.loop import run_active_learning
     from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.execution.allocation import Allocation
 
@@ -171,20 +171,20 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
     )
     with (
         patch(
-            "matsim_agents.active_learning.loop.resolve_seed_structures",
+            "matsim_agents.workflows.active_learning.loop.resolve_seed_structures",
             return_value=[structure],
         ),
-        patch("matsim_agents.active_learning.loop.make_mlip_calculator", return_value=object()),
-        patch("matsim_agents.active_learning.loop.sample_md_candidates", return_value=candidates),
+        patch("matsim_agents.workflows.active_learning.loop.make_mlip_calculator", return_value=object()),
+        patch("matsim_agents.workflows.active_learning.loop.sample_md_candidates", return_value=candidates),
         patch(
-            "matsim_agents.active_learning.loop.select_candidates",
+            "matsim_agents.workflows.active_learning.loop.select_candidates",
             return_value=(candidates[:2], np.asarray([0.9, 0.8, 0.2, 0.1])),
         ),
         patch(
-            "matsim_agents.active_learning.loop.make_backend",
+            "matsim_agents.workflows.active_learning.loop.make_backend",
             return_value=SimpleNamespace(name="qe"),
         ),
-        patch("matsim_agents.active_learning.loop.run_dft_batch", return_value=labelled),
+        patch("matsim_agents.workflows.active_learning.loop.run_dft_batch", return_value=labelled),
         # The loop is mocked; resolve its CPU-only plan on a local allocation so a real
         # Slurm/PBS GPU allocation around the benchmark does not contradict it.
         patch(
@@ -271,7 +271,7 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
 def phase_exploration_contract(output: Path) -> dict[str, Any]:
     """Execute the independent phase workflow rather than the LLM investigation."""
 
-    from matsim_agents.discovery.seed_structures import PhaseCandidate
+    from matsim_agents.science.structures.seed_structures import PhaseCandidate
     from matsim_agents.workflows.phase_exploration import (
         PhaseExplorationPolicy,
         run_phase_exploration,
@@ -289,7 +289,7 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
         )
     ]
 
-    with patch("matsim_agents.discovery.wrapper.generate_seeds", return_value=candidates):
+    with patch("matsim_agents.workflows.composition_exploration.generate_seeds", return_value=candidates):
         result = run_phase_exploration(
             "Si",
             policy=PhaseExplorationPolicy(relax_structures=False),
@@ -306,9 +306,9 @@ def phase_exploration_contract(output: Path) -> dict[str, Any]:
 
 
 def _phase_result(composition: str, output_dir: str):
-    from matsim_agents.discovery.composition import parse_composition
-    from matsim_agents.discovery.seed_structures import PhaseCandidate
-    from matsim_agents.discovery.wrapper import CompositionExplorationResult
+    from matsim_agents.core.composition import parse_composition
+    from matsim_agents.science.structures.seed_structures import PhaseCandidate
+    from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
     from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
     parsed = parse_composition(composition)

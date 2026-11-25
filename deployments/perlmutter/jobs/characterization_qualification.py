@@ -22,13 +22,13 @@ from pathlib import Path
 from ase.build import bulk
 from ase.io import write
 
-from matsim_agents.campaign.characterization import (
+from matsim_agents.workflows.characterization import (
     CharacterizationContract,
     load_contract,
     run_characterization,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
-from matsim_agents.execution.contracts import CharacterizationStatus, EvidenceLevel
+from matsim_agents.science.thermodynamics.stability import ReferenceEnergySet, ReferencePhaseEntry
+from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
 from matsim_agents.workflows.relaxation import run_relaxation
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "characterization"

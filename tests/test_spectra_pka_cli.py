@@ -69,7 +69,7 @@ def test_run_without_install_fails_cleanly(tmp_path):
 
 
 def test_shipped_example_campaign_parses(monkeypatch):
-    from matsim_agents.integrations.external.spectra_pka.config import load_config_file
+    from matsim_agents.backends.external.spectra_pka.config import load_config_file
 
     for var in ("SPECTRA_PKA_EXECUTABLE_PATH", "PKA_DATA_DIRECTORY", "NEUTRON_SPECTRUM_FILE"):
         monkeypatch.setenv(var, "/tmp/placeholder")

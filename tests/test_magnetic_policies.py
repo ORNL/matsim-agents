@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from ase.build import bulk
 
-from matsim_agents.discovery.magnetism.policies import (
+from matsim_agents.science.magnetism.policies import (
     POLICIES,
     configurations_for_policy,
     policy_readiness,

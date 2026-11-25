@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from matsim_agents.discovery.composition import parse_composition
-from matsim_agents.discovery.seed_structures import (
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.science.structures.seed_structures import (
     PhaseCandidate,
     SeedGenerationAction,
     compatible_prototypes,
@@ -135,7 +135,9 @@ def test_random_search_filters_symmetry_equivalent_structures(monkeypatch):
         def to_pymatgen(self):
             return structure.copy()
 
-    monkeypatch.setattr("matsim_agents.discovery.seed_structures._pyxtal_available", lambda: True)
+    monkeypatch.setattr(
+        "matsim_agents.science.structures.seed_structures._pyxtal_available", lambda: True
+    )
     monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
 
     results = random_search(_comp("Si"), n=2, seed=3, max_attempts_factor=1)
@@ -158,7 +160,9 @@ def test_random_search_uses_formula_unit_and_space_group_controls(monkeypatch):
         def to_pymatgen(self):
             return structure.copy()
 
-    monkeypatch.setattr("matsim_agents.discovery.seed_structures._pyxtal_available", lambda: True)
+    monkeypatch.setattr(
+        "matsim_agents.science.structures.seed_structures._pyxtal_available", lambda: True
+    )
     monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
 
     random_search(
@@ -203,7 +207,9 @@ def test_random_search_seed_replays_the_same_structure(monkeypatch):
                 [[self.coordinate, 0.2, 0.3]],
             )
 
-    monkeypatch.setattr("matsim_agents.discovery.seed_structures._pyxtal_available", lambda: True)
+    monkeypatch.setattr(
+        "matsim_agents.science.structures.seed_structures._pyxtal_available", lambda: True
+    )
     monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
 
     first = random_search(_comp("Si"), n=1, seed=31)
@@ -286,7 +292,7 @@ def test_generation_action_passes_strategy_controls(monkeypatch, tmp_path: Path)
         return []
 
     monkeypatch.setattr(
-        "matsim_agents.discovery.seed_structures.generate_seeds", fake_generate_seeds
+        "matsim_agents.science.structures.seed_structures.generate_seeds", fake_generate_seeds
     )
     action = SeedGenerationAction(
         action_id="round-1-tier-4",
@@ -358,7 +364,9 @@ def test_negative_seeds_do_not_repeat_positive_seed_batches(monkeypatch):
         def to_pymatgen(self):
             return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
-    monkeypatch.setattr("matsim_agents.discovery.seed_structures._pyxtal_available", lambda: True)
+    monkeypatch.setattr(
+        "matsim_agents.science.structures.seed_structures._pyxtal_available", lambda: True
+    )
     monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
 
     def batch(seed):

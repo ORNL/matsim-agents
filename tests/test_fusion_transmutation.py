@@ -1,16 +1,30 @@
 from collections import Counter
 
 import pytest
+from fusion_bcc_app import COMPOSITION, HOST, PRODUCTS, REPEATS
 
-from matsim_agents.campaign.radiation_properties import REFERENCE_ALLOY_COUNTS
-from matsim_agents.fusion.nuclear_evidence import (
+from matsim_agents.science.irradiation.contracts import RecoilSpecies
+from matsim_agents.science.irradiation.nuclear_evidence import (
     ExternalNuclearEvidence,
     NuclearEvidenceError,
     NuclearFamily,
     NuclearQuantity,
 )
-from matsim_agents.fusion.transmutation import reference_site_map, transmuted_configuration
-from matsim_agents.irradiation.contracts import RecoilSpecies
+from matsim_agents.workflows.radiation.transmutation_configs import (
+    bcc_site_map,
+    transmuted_configuration,
+)
+
+
+def reference_site_map():
+    return bcc_site_map(COMPOSITION, REPEATS)
+
+
+def _configure(evidence, **kw):
+    return transmuted_configuration(
+        evidence, sites=reference_site_map(), host=HOST, products=PRODUCTS, **kw
+    )
+
 
 H = "a" * 64
 
@@ -59,12 +73,12 @@ def test_site_map_is_reference_alloy_with_stable_ids():
     assert len(sites) == 1024
     assert len({s.site_id for s in sites}) == 1024
     assert len({s.frac for s in sites}) == 1024
-    assert Counter(s.element for s in sites) == Counter(REFERENCE_ALLOY_COUNTS)
+    assert Counter(s.element for s in sites) == Counter(COMPOSITION)
     assert sites == reference_site_map()
 
 
 def test_substitution_counts_and_composition():
-    cfg = transmuted_configuration(EV, seed=3)
+    cfg = _configure(EV, seed=3)
     assert cfg.counts == {"Re": 10, "Os": 3}
     assert cfg.expected_counts["Re"] == pytest.approx(10.24)
     assert cfg.composition["W"] == 640 - 13 and cfg.composition["Re"] == 10
@@ -75,7 +89,7 @@ def test_substitution_counts_and_composition():
 
 
 def test_gas_isotopes_stay_separate_and_unplaced():
-    gas = transmuted_configuration(EV, seed=0).gas
+    gas = _configure(EV, seed=0).gas
     assert set(gas.hydrogen) == {"H", "D", "T"}
     assert gas.hydrogen["T"] == pytest.approx(1e-4 * 1024)
     assert set(gas.helium) == {"He-3", "He-4"}
@@ -84,33 +98,33 @@ def test_gas_isotopes_stay_separate_and_unplaced():
 
 
 def test_deterministic_and_seed_sensitive():
-    a, b = transmuted_configuration(EV, seed=1), transmuted_configuration(EV, seed=1)
+    a, b = _configure(EV, seed=1), _configure(EV, seed=1)
     assert a.digest() == b.digest() and a.digest().startswith("ftx-")
-    assert transmuted_configuration(EV, seed=2).substitutions != a.substitutions
+    assert _configure(EV, seed=2).substitutions != a.substitutions
 
 
 def test_appm_is_converted():
     ev = _ev([_q("Re", 187, 5000.0, name="concentration_appm", unit="appm")])
-    cfg = transmuted_configuration(ev, quantity="concentration_appm", seed=0)
+    cfg = _configure(ev, quantity="concentration_appm", seed=0)
     assert cfg.counts == {"Re": 5, "Os": 0}
 
 
 def test_refusals():
     with pytest.raises(NuclearEvidenceError, match="per-atom"):
-        transmuted_configuration(
+        _configure(
             _ev([_q("Re", 187, 1.0, name="production_rate", unit="appm/s")]),
             quantity="production_rate",
             seed=0,
         )
     with pytest.raises(NuclearEvidenceError, match="exceed"):
-        transmuted_configuration(_ev([_q("Re", 187, 0.7)]), seed=0)
+        _configure(_ev([_q("Re", 187, 0.7)]), seed=0)
     with pytest.raises(NuclearEvidenceError, match="duplicate"):
-        transmuted_configuration(_ev([_q("Re", 187, 1e-3), _q("Re", 187, 2e-3)]), seed=0)
+        _configure(_ev([_q("Re", 187, 1e-3), _q("Re", 187, 2e-3)]), seed=0)
     dpa = _ev(
         [NuclearQuantity(name="dpa", value=1.0, unit="dpa")],
         family=NuclearFamily.PKA_DPA,
         dpa_convention="NRT",
     )
     with pytest.raises(NuclearEvidenceError, match="needs transmutation evidence"):
-        transmuted_configuration(dpa, seed=0)
-    assert any("SYNTHETIC" in n for n in transmuted_configuration(EV, seed=0).notes)
+        _configure(dpa, seed=0)
+    assert any("SYNTHETIC" in n for n in _configure(EV, seed=0).notes)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.discovery.formula import FormulaGenerationPolicy, enumerate_formulas
+from matsim_agents.science.structures.formula import FormulaGenerationPolicy, enumerate_formulas
 
 
 def _nb_ta_o_policy(**overrides) -> FormulaGenerationPolicy:
@@ -28,7 +28,7 @@ def test_policy_rejects_minimum_species_above_element_count() -> None:
 
 def test_enumerate_formulas_includes_known_charge_balanced_binaries():
     # Canonical formulas follow the repo's strict alphabetical Hill order
-    # (e.g. Ta2O5 -> "O5Ta2"), matching matsim_agents.discovery.composition.
+    # (e.g. Ta2O5 -> "O5Ta2"), matching matsim_agents.core.composition.
     formulas = {c.reduced_formula: c for c in enumerate_formulas(_nb_ta_o_policy())}
     for expected in ["NbO2", "Nb2O3", "Nb2O5", "O2Ta", "O3Ta2", "O5Ta2"]:
         assert expected in formulas, formulas.keys()

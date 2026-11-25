@@ -1,0 +1,21 @@
+# Equiatomic CoCrFeMnNi (Cantor alloy): a non-BCC application of the hierarchy workflow.
+# The target is a 4x4x4 FCC supercell (256 sites). Binary to quaternary subsystems are
+# sampled first and the transfer to the five-component target is measured before any
+# target-size DFT is spent.
+name: cantor-fcc-256
+description: >
+  Hierarchical transfer from CoCrFeMnNi subsystems to the equiatomic 256-site FCC alloy.
+paradigm: supercell_alloy
+workflow: hierarchy
+target:
+  composition: {Co: 52, Cr: 51, Fe: 51, Mn: 51, Ni: 51}
+  supercell: [4, 4, 4]
+  parent_lattice: fcc
+  expected_sites: 256
+  reference: Cantor et al., Mater. Sci. Eng. A 375-377 (2004) 213
+species: [Co, Cr, Fe, Mn, Ni]
+properties: [energy, magnetic_moment]
+workflow_config: campaign.yaml
+parameters:
+  lattice_parameter_angstrom: 3.60
+  magnetic_elements: [Co, Cr, Fe, Mn, Ni]

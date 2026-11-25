@@ -11,8 +11,8 @@ from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
-from matsim_agents.datasets.governance import DatasetValidationSummary, write_dataset_manifest
-from matsim_agents.datasets.splits import (
+from matsim_agents.data.governance import DatasetValidationSummary, write_dataset_manifest
+from matsim_agents.data.splits import (
     SPLIT_MANIFEST,
     SplitConfig,
     TestDomainConfig,

@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -56,6 +57,9 @@ class IRIFacility(BaseModel):
     working_directory: str | None = Field(
         default=None, description="May reference {account}, filled from account_env."
     )
+    working_directory_env: str | None = Field(
+        default=None, description="Environment variable holding the working directory."
+    )
     custom_attributes: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("base_url")
@@ -66,43 +70,27 @@ class IRIFacility(BaseModel):
         return value.rstrip("/")
 
 
-KNOWN_FACILITIES: dict[str, IRIFacility] = {
-    "nersc-perlmutter": IRIFacility(
-        name="nersc-perlmutter",
-        base_url="https://api.iri.nersc.gov/api/v1",
-        compute_resource_id="94351904-6dba-4c16-b5cd-fbd280d8615b",
-        token_env="IRI_TOKEN_NERSC",
-        queue="regular",
-        account_env="NERSC_PROJECT",
-        custom_attributes={"constraint": "gpu"},
-    ),
-    "alcf-aurora": IRIFacility(
-        name="alcf-aurora",
-        base_url="https://api.alcf.anl.gov/api/v1",
-        compute_resource_id="0325fc07-6fb7-4453-b772-3d5030b2df72",
-        token_env="IRI_TOKEN_ALCF",
-        account_env="ALCF_PROJECT",
-        custom_attributes={"filesystems": "flare"},
-    ),
-    "olcf-frontier": IRIFacility(
-        name="olcf-frontier",
-        base_url="https://amsc-moderate.s3m.olcf.ornl.gov/api/v2",
-        compute_resource_id="frontier",
-        token_env="IRI_TOKEN_OLCF",
-        queue="batch",
-        account_env="OLCF_S3M_PROJECT",
-        working_directory="/lustre/orion/{account}/proj-shared",
-    ),
-    "olcf-odo": IRIFacility(
-        name="olcf-odo",
-        base_url="https://amsc-open.s3m.olcf.ornl.gov/api/v2",
-        compute_resource_id="odo",
-        token_env="IRI_TOKEN_OLCF",
-        queue="batch",
-        account_env="OLCF_S3M_PROJECT",
-        working_directory="/gpfs/wolf2/olcf/{account}/proj-shared",
-    ),
-}
+def load_iri_profiles(path: str | os.PathLike[str]) -> dict[str, IRIFacility]:
+    """Read facility profiles (endpoints, queues, working directories) from a YAML file.
+
+    The file maps profile names to :class:`IRIFacility` fields, either at top level or under a
+    ``facilities:`` key. Deployments own these files (see ``deployments/common``); the package
+    carries no facility defaults.
+    """
+    import yaml
+
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"IRI profile file {source} does not exist")
+    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"{source} does not contain a mapping of facility profiles")
+    raw = raw.get("facilities", raw)
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError(f"{source} defines no facility profiles")
+    return {
+        name: IRIFacility.model_validate({"name": name, **fields}) for name, fields in raw.items()
+    }
 
 
 def walltime_seconds(walltime: str) -> int:
@@ -153,12 +141,21 @@ class IRIPlatform:
         account: str | None = None,
         timeout: float = 30.0,
         transport: Transport | None = None,
+        profiles: str | os.PathLike[str] | None = None,
     ) -> None:
         if isinstance(facility, str):
-            if facility not in KNOWN_FACILITIES:
-                known = ", ".join(sorted(KNOWN_FACILITIES))
-                raise ValueError(f"unknown IRI facility {facility!r}; known: {known}")
-            facility = KNOWN_FACILITIES[facility]
+            if profiles is None:
+                raise ValueError(
+                    f"IRI facility {facility!r} needs a profile: pass profiles=<profile file> "
+                    "or an IRIFacility; the package has no built-in facility endpoints"
+                )
+            known = load_iri_profiles(profiles)
+            if facility not in known:
+                raise ValueError(
+                    f"unknown IRI facility {facility!r}; {profiles} defines: "
+                    f"{', '.join(sorted(known))}"
+                )
+            facility = known[facility]
         self.facility = facility
         self.name = f"iri:{facility.name}"
         self._token = token
@@ -373,6 +370,15 @@ class IRIPlatform:
         return ResourceRequest(queue=self.facility.queue, account=self.account)
 
     def resolved_working_directory(self) -> str | None:
+        """The profile's working directory, or ``None`` if it cannot be resolved.
+
+        ``working_directory_env`` names an environment variable holding the directory; otherwise
+        ``working_directory`` is used with ``{account}`` filled. When neither resolves, the
+        caller must pass ``workdir`` explicitly.
+        """
+        env = self.facility.working_directory_env
+        if env and os.environ.get(env):
+            return os.environ[env]
         template = self.facility.working_directory
         if template is None:
             return None
@@ -386,7 +392,7 @@ __all__ = [
     "IRIFacility",
     "IRIPlatform",
     "IRIWaitTimeout",
-    "KNOWN_FACILITIES",
     "TERMINAL_STATES",
+    "load_iri_profiles",
     "walltime_seconds",
 ]

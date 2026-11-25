@@ -3,7 +3,7 @@
 # participant names its server instead of a provider, model, and URL.
 #   MODEL_ROOT=/path/to/models matsim-agents resources plan \
 #     examples/debate/equal-independent-plan-servers.yaml
-#   MODEL_ROOT=/path/to/models matsim-agents debate \
+#   MODEL_ROOT=/path/to/models matsim-agents run \
 #     examples/debate/equal-independent-plan-servers.yaml
 hypothesis: >
   What candidate material provides an optimal thermoelectric functional property,

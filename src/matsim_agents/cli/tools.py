@@ -14,56 +14,48 @@ from matsim_agents.cli._app import CLIState, app, console, error_console, fail
 # name -> (module, one-line purpose); descriptions are static so ``list`` loads nothing heavy.
 TOOLS: dict[str, tuple[str, str]] = {
     "finetune-eval": (
-        "matsim_agents.active_learning.finetune_eval",
+        "matsim_agents.workflows.active_learning.finetune_eval",
         "Fine-tune and evaluate one MLIP backend on one dataset",
     ),
     "evaluate": (
-        "matsim_agents.active_learning.evaluate",
+        "matsim_agents.workflows.active_learning.evaluate",
         "Evaluate an MLIP against a held-out DFT test set",
     ),
     "eval-report": (
-        "matsim_agents.active_learning.eval_report",
+        "matsim_agents.workflows.active_learning.eval_report",
         "Per-group error reports and comparisons of MLIP evaluations",
     ),
     "elemental-dft": (
-        "matsim_agents.active_learning.elemental_dft",
+        "matsim_agents.workflows.active_learning.elemental_dft",
         "Approved, cached DFT references for elemental phases",
     ),
     "splits": (
-        "matsim_agents.datasets.splits",
+        "matsim_agents.data.splits",
         "Objective-aware train/validation/test splits of DFT datasets",
     ),
     "formation-labels": (
-        "matsim_agents.datasets.formation_training",
+        "matsim_agents.data.formation_training",
         "Prepare formation-energy labels without modifying raw DFT data",
     ),
     "finetune-mace": (
-        "matsim_agents.training.finetune_mace",
+        "matsim_agents.backends.mlip.training.finetune_mace",
         "Fine-tune a MACE foundation model on an AL dataset",
     ),
     "finetune-uma": (
-        "matsim_agents.training.finetune_uma",
+        "matsim_agents.backends.mlip.training.finetune_uma",
         "Fine-tune a UMA (FairChem) foundation model on an AL dataset",
     ),
     "finetune-hydragnn": (
-        "matsim_agents.training.finetune_hydragnn",
+        "matsim_agents.backends.mlip.training.finetune_hydragnn",
         "Fine-tune the multi-branch HydraGNN foundation model",
     ),
     "finetune-hydragnn-newhead": (
-        "matsim_agents.training.finetune_hydragnn_newhead",
+        "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead",
         "Fine-tune HydraGNN with one new head instead of the branch heads",
     ),
     "branch-routing": (
-        "matsim_agents.training.branch_routing",
+        "matsim_agents.backends.mlip.training.branch_routing",
         "Map AL datasets to HydraGNN branch heads",
-    ),
-    "warmstart-qe": (
-        "matsim_agents.workflows.warmstart_benchmark_qe",
-        "Warm-start benchmark: HydraGNN pre-relax, then Quantum ESPRESSO",
-    ),
-    "warmstart-vasp": (
-        "matsim_agents.workflows.warmstart_benchmark_vasp",
-        "Warm-start benchmark: HydraGNN pre-relax, then VASP",
     ),
 }
 

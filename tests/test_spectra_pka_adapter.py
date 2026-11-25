@@ -14,33 +14,33 @@ from pathlib import Path
 import pytest
 import yaml
 
-from matsim_agents.integrations.external.spectra_pka import adapter, availability
-from matsim_agents.integrations.external.spectra_pka.availability import Status
-from matsim_agents.integrations.external.spectra_pka.config import (
+from matsim_agents.backends.external.spectra_pka import adapter, availability
+from matsim_agents.backends.external.spectra_pka.availability import Status
+from matsim_agents.backends.external.spectra_pka.config import (
     CampaignSpec,
     ConfigError,
     load_config_file,
 )
-from matsim_agents.integrations.external.spectra_pka.input_writer import (
+from matsim_agents.backends.external.spectra_pka.input_writer import (
     build_input_text,
     stage_inputs,
 )
-from matsim_agents.integrations.external.spectra_pka.parser import (
+from matsim_agents.backends.external.spectra_pka.parser import (
     BlockKind,
     ParseError,
     parse_number,
     parse_output_text,
     to_pka_spectrum,
 )
-from matsim_agents.integrations.external.spectra_pka.validation import validate_output
-from matsim_agents.irradiation.contracts import (
+from matsim_agents.backends.external.spectra_pka.validation import validate_output
+from matsim_agents.science.irradiation.contracts import (
     ContractError,
     DefectStatus,
     NoCascadeModel,
     PKASpectrum,
     ValidationStatus,
 )
-from matsim_agents.irradiation.pka_sampling import sample_pka_events
+from matsim_agents.science.irradiation.pka_sampling import sample_pka_events
 from tests.spectra_pka_fixtures import (
     SYNTHETIC_INDEXES,
     SYNTHETIC_OUT,
@@ -333,7 +333,7 @@ def test_spectrum_aggregation_and_probabilities(campaign, tmp_path):
 
 def test_empty_spectrum_rejected(campaign):
     prov = adapter.PKASourceProvenance(source="t", nuclear_data_identity="t")
-    from matsim_agents.irradiation.contracts import RecoilSpecies, SpeciesSpectrum
+    from matsim_agents.science.irradiation.contracts import RecoilSpecies, SpeciesSpectrum
 
     zero = SpeciesSpectrum(
         species=RecoilSpecies(element="W"), bin_low_mev=(1.0,), bin_high_mev=(2.0,), rates=(0.0,)
@@ -381,7 +381,7 @@ def test_neighbor_configuration_recorded(campaign, tmp_path):
 
 
 def test_pka_is_not_defects():
-    from matsim_agents.irradiation.contracts import PKAEvent, RecoilSpecies
+    from matsim_agents.science.irradiation.contracts import PKAEvent, RecoilSpecies
 
     ev = PKAEvent(index=0, species=RecoilSpecies(element="W"), energy_mev=1e-6, probability=0.5)
     assert NoCascadeModel().surviving_defects(ev).status is DefectStatus.NOT_ESTABLISHED
@@ -389,7 +389,7 @@ def test_pka_is_not_defects():
 
 def test_irradiation_package_does_not_import_adapter():
     code = (
-        "import sys, matsim_agents.irradiation;"
+        "import sys, matsim_agents.science.irradiation;"
         "assert not any('spectra_pka' in m for m in sys.modules)"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
@@ -467,8 +467,8 @@ def test_timeout_is_reported(tmp_path, campaign):
 
 
 def test_slurm_mode_submits_once_via_slurm_jobs(tmp_path, mock_exe, campaign, monkeypatch):
+    from matsim_agents.backends.external.spectra_pka import runner
     from matsim_agents.execution.slurm_jobs import CommandResult
-    from matsim_agents.integrations.external.spectra_pka import runner
 
     calls = []
 

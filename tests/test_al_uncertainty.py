@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.active_learning.config import AcquisitionConfig
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.active_learning.uncertainty import (
+from matsim_agents.workflows.active_learning.config import AcquisitionConfig
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.uncertainty import (
     greedy_farthest_point,
     score_ensemble,
     score_random,
@@ -221,8 +221,8 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
     import torch
     import torch.nn as nn
 
-    from matsim_agents.active_learning.uncertainty import score_mc_dropout
     from matsim_agents.backends.mlip.dropout import inject_inference_dropout
+    from matsim_agents.workflows.active_learning.uncertainty import score_mc_dropout
 
     class _TorchForceCalc:
         """Minimal ASE-like calc: forces = MLP(positions), no native dropout."""
@@ -279,7 +279,7 @@ def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
     import torch.nn as nn
     from ase.calculators.calculator import Calculator, all_changes
 
-    from matsim_agents.active_learning.uncertainty import score_mc_dropout
+    from matsim_agents.workflows.active_learning.uncertainty import score_mc_dropout
 
     class CachedCalculator(Calculator):
         implemented_properties = ["forces"]

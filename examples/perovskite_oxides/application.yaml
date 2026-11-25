@@ -1,0 +1,16 @@
+# Perovskite oxide prototype search: a different paradigm from the fixed-supercell alloy
+# studies. There is no fixed supercell; each composition is decorated onto the bundled
+# crystal prototypes (and optional pyXtal random structures) and ranked by an MLIP.
+name: perovskite-oxides
+description: >
+  Candidate structures for ABO3 perovskite oxides from the bundled prototype library,
+  as input to MLIP relaxation and convex-hull ranking.
+paradigm: prototype_search
+workflow: composition_exploration
+mode: generate  # mlip_relax and dft_relax also need `relaxation:` (see README)
+compositions: [SrTiO3, BaTiO3, CaZrO3, LaAlO3]
+species: [Sr, Ba, Ca, La, Ti, Zr, Al, O]
+properties: [formation_energy]
+parameters:
+  n_random: 0
+  random_seed: 0

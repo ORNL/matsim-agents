@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.budget import (
+from matsim_agents.execution.budget import (
     BudgetError,
     BudgetExceeded,
     BudgetLedger,

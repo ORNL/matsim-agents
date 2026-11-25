@@ -2,7 +2,7 @@
 
 import pytest
 
-from matsim_agents.kinetics.benchmarks import (
+from matsim_agents.science.kinetics.benchmarks import (
     check_arrhenius,
     check_branching,
     check_first_passage,

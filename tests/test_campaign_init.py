@@ -10,16 +10,16 @@ from ase.build import bulk
 from ase.io import write
 from typer.testing import CliRunner
 
-from matsim_agents.active_learning import ALConfig
-from matsim_agents.active_learning.campaign_init import (
+from matsim_agents.cli import app
+from matsim_agents.workflows.active_learning import ALConfig
+from matsim_agents.workflows.active_learning.campaign_init import (
     check_reference_coverage,
     elements_of,
     propose_reference_phases,
     write_campaign,
 )
-from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.elemental_dft import ElementalReferencePlan
-from matsim_agents.cli import app
+from matsim_agents.workflows.active_learning.config import TrainerConfig
+from matsim_agents.workflows.active_learning.elemental_dft import ElementalReferencePlan
 
 ROOT = Path(__file__).resolve().parents[1]
 UMA = ROOT / "examples/mlip/uma-s-1p1-omat.yaml"
@@ -119,8 +119,8 @@ def test_unsupported_and_magnetic_elements_are_flagged_not_guessed():
 
 
 def test_cr_reference_is_a_declared_two_site_antiferromagnet(tmp_path):
-    from matsim_agents.active_learning.elemental_dft import _site_magnetism
     from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+    from matsim_agents.workflows.active_learning.elemental_dft import _site_magnetism
 
     campaign = _w_campaign(tmp_path)
     plan = ElementalReferencePlan.from_yaml(campaign / "elemental-phases.yaml")
@@ -149,7 +149,10 @@ def test_cr_reference_is_a_declared_two_site_antiferromagnet(tmp_path):
 def test_site_magnetization_must_match_atoms_and_excludes_species_settings():
     from ase.build import bulk as build
 
-    from matsim_agents.active_learning.elemental_dft import ElementalPhaseSpec, _site_magnetism
+    from matsim_agents.workflows.active_learning.elemental_dft import (
+        ElementalPhaseSpec,
+        _site_magnetism,
+    )
 
     base = {
         "phase_id": "cr",
@@ -173,7 +176,10 @@ def test_site_magnetization_must_match_atoms_and_excludes_species_settings():
 
 
 def test_reference_kpts_match_a_supercell_mesh_spacing():
-    from matsim_agents.active_learning.campaign_init import kpts_for_spacing, kspacing_of_mesh
+    from matsim_agents.workflows.active_learning.campaign_init import (
+        kpts_for_spacing,
+        kspacing_of_mesh,
+    )
 
     spacing = kspacing_of_mesh([3.16 * 8] * 3, [3, 3, 3])
     assert kpts_for_spacing(bulk("W", "bcc", a=3.16 * 8, cubic=True), spacing) == [3, 3, 3]

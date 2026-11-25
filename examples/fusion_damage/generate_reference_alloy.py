@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 from ase.io import write
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 CONFIG = Path(__file__).with_name("tungsten_reference_alloy.yaml")
 

@@ -34,7 +34,8 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
+from matsim_agents.core.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
+from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.execution.locking import exclusive_lock
 
 LEDGER_SCHEMA_VERSION = 1
@@ -47,14 +48,6 @@ def _canonical(payload: Any) -> str:
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def file_sha256(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _now() -> str:
@@ -676,7 +669,6 @@ __all__ = [
     "LedgerValidationError",
     "MethodRecord",
     "REVIEW_ACTION",
-    "file_sha256",
     "hashes_of",
     "record_id",
     "software_versions",

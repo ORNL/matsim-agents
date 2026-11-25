@@ -13,18 +13,18 @@ import numpy as np
 from ase.build import bulk
 from ase.io import read, write
 
-from matsim_agents.active_learning.candidates import Candidate
-from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
-from matsim_agents.active_learning.loop import _dft_method_signature, run_active_learning
-from matsim_agents.active_learning.trainer import retrain_hydragnn, retrain_mace
-from matsim_agents.active_learning.uncertainty import score_ensemble
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.config import ALConfig
+from matsim_agents.workflows.active_learning.evaluate import evaluate_promotion_candidate
+from matsim_agents.workflows.active_learning.loop import _dft_method_signature, run_active_learning
+from matsim_agents.workflows.active_learning.trainer import retrain_hydragnn, retrain_mace
+from matsim_agents.workflows.active_learning.uncertainty import score_ensemble
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig
-from matsim_agents.datasets.governance import structure_identity
-from matsim_agents.discovery.wrapper import explore_composition
-from matsim_agents.seeding import stream_seed
+from matsim_agents.data.governance import structure_identity
+from matsim_agents.workflows.composition_exploration import explore_composition
+from matsim_agents.core.seeding import stream_seed
 
 
 def require(condition: bool, message: str) -> None:

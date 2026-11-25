@@ -1,10 +1,10 @@
 import pytest
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import generate_bcc_interstitial, generate_frenkel_pair
-from matsim_agents.discovery.defect_classification import classify_defect_outcome
-from matsim_agents.discovery.defect_energies import classified_defect_formation_energy
-from matsim_agents.discovery.point_defects import generate_vacancy
+from matsim_agents.science.defects.bcc import generate_bcc_interstitial, generate_frenkel_pair
+from matsim_agents.science.defects.classification import classify_defect_outcome
+from matsim_agents.science.defects.energies import classified_defect_formation_energy
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 SPEC = AlloySpec(counts={"Mo": 18, "Ta": 18, "W": 18}, repeats=(3, 3, 3), seed=2)
 A = SPEC.lattice_parameter

@@ -7,8 +7,8 @@ import pytest
 from ase.build import bulk
 
 from matsim_agents.backends.dft.qe_magnetic import build_magnetic_types
-from matsim_agents.discovery.magnetism import generators as gen
-from matsim_agents.discovery.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism import generators as gen
+from matsim_agents.science.magnetism.config import MagneticConfiguration
 
 A = 2.87
 PSEUDOS = {"Fe": "Fe.pbe.UPF", "Cr": "Cr.pbe.UPF"}

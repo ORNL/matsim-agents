@@ -31,9 +31,9 @@ from pathlib import Path
 
 import yaml
 
-from matsim_agents.campaign.characterization import load_contract, run_characterization
-from matsim_agents.campaign.known_answers import load_suite, run_known_answers
-from matsim_agents.discovery.stability import (
+from matsim_agents.workflows.characterization import load_contract, run_characterization
+from matsim_agents.workflows.evaluation.known_answers import load_suite, run_known_answers
+from matsim_agents.science.thermodynamics.stability import (
     ElementalReferenceEntry,
     ReferenceEnergySet,
     ReferencePhaseEntry,

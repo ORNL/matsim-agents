@@ -11,7 +11,7 @@ from ase.io import write
 from benchmarks.e3 import controller, reassessment
 from benchmarks.e3.run import LLM, RULE, STRATEGIES, _structure_hash, load_protocol, sha256_bytes
 from benchmarks.e3.state import E3State, E3WorkflowState, GateOutcome
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     DecisionRecord,
     EvidenceLedger,

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.property_surrogates import (
+from matsim_agents.core.seeding import numpy_rng
+from matsim_agents.science.properties.calculators import PropertyConditions, PropertyStatus
+from matsim_agents.workflows.hierarchy.property_surrogates import (
     SourceRecord,
     TargetSpec,
     evaluate_transfer,
@@ -13,8 +15,6 @@ from matsim_agents.campaign.property_surrogates import (
     split_by_compatibility,
     train_surrogate,
 )
-from matsim_agents.execution.properties import PropertyConditions, PropertyStatus
-from matsim_agents.seeding import numpy_rng
 
 SIG = "qe-pbe-synthetic"
 TARGET = TargetSpec(

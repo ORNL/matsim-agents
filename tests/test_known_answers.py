@@ -11,13 +11,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from matsim_agents.campaign.known_answers import (
+from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.workflows.evaluation.known_answers import (
     REPLAYER,
     KnownAnswerSuite,
     load_suite,
     run_known_answers,
 )
-from matsim_agents.execution.ledger import EvidenceLedger
 
 SUITE = Path(__file__).resolve().parents[1] / "benchmarks" / "known_answers"
 
@@ -105,7 +105,7 @@ def test_grader_checks_the_hull_answer(tmp_path, case_id):
 
 
 def test_grader_fails_a_conclusion_with_the_wrong_hull_relation(tmp_path, monkeypatch):
-    from matsim_agents.campaign import known_answers
+    from matsim_agents.workflows.evaluation import known_answers
 
     real = known_answers.run_characterization
 
@@ -125,7 +125,7 @@ def test_grader_fails_a_conclusion_with_the_wrong_hull_relation(tmp_path, monkey
 
 
 def test_grader_fails_a_conclusion_that_ranks_the_wrong_structure_lowest(tmp_path, monkeypatch):
-    from matsim_agents.campaign import known_answers
+    from matsim_agents.workflows.evaluation import known_answers
 
     real = known_answers.run_characterization
 

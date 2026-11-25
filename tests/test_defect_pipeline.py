@@ -6,22 +6,22 @@ These tests check the software contracts; they say nothing about DFT or MLIP qua
 
 import pytest
 
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import (
+from matsim_agents.science.defects.bcc import (
     generate_bcc_interstitial,
     generate_crowdion,
     generate_divacancy,
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
 )
-from matsim_agents.discovery.defect_classification import classify_defect_outcome
-from matsim_agents.discovery.defect_energies import classified_defect_formation_energy
-from matsim_agents.discovery.defect_environments import defect_environment
-from matsim_agents.discovery.defect_mapping import (
+from matsim_agents.science.defects.classification import classify_defect_outcome
+from matsim_agents.science.defects.energies import classified_defect_formation_energy
+from matsim_agents.science.defects.environments import defect_environment
+from matsim_agents.science.defects.mapping import (
     assign_lattice_sites,
     identify_defect_sites,
 )
-from matsim_agents.discovery.point_defects import generate_vacancy
+from matsim_agents.science.defects.point_defects import generate_vacancy
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 REFERENCE = AlloySpec(
     counts={"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}, repeats=(8, 8, 8), seed=3

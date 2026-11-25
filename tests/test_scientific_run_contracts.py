@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     EvidenceLevel,
     ProvenanceRecord,
     WorkflowResult,

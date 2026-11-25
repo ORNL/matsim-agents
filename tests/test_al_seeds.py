@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from matsim_agents.active_learning.config import LLMSeedConfig, SeedSourceConfig
-from matsim_agents.active_learning.seed_sources import resolve_seed_structures
+from matsim_agents.workflows.active_learning.config import LLMSeedConfig, SeedSourceConfig
+from matsim_agents.workflows.active_learning.seed_sources import resolve_seed_structures
 
 
 def _write_dummy_structure(p: Path) -> None:
@@ -114,11 +114,11 @@ def _patch_llm_and_phases(
         return [_PhaseCand(structure_path=str(path), source="prototype")]
 
     monkeypatch.setattr(
-        "matsim_agents.discovery.parse_composition",
+        "matsim_agents.core.composition.parse_composition",
         _fake_parse_composition,
     )
     monkeypatch.setattr(
-        "matsim_agents.discovery.generate_seeds",
+        "matsim_agents.science.structures.seed_structures.generate_seeds",
         _fake_generate_seeds,
     )
 

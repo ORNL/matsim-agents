@@ -1,28 +1,25 @@
 import math
 
 import pytest
-from pydantic import ValidationError
+from fusion_pfc_app import POLICY, synthetic
 
-from matsim_agents.campaign.selection import Constraint, Correlation
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import (
-    PropertyEvidence,
-    PropertyQualification,
-    PropertyStatus,
-)
-from matsim_agents.fusion import synthetic
-from matsim_agents.fusion.policy import builtin_policy
-from matsim_agents.fusion.scenario import FusionEvidence
-from matsim_agents.fusion.scoring import (
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.science.acquisition.selection import Constraint, Correlation
+from matsim_agents.science.decision.scenario import ScenarioEvidence
+from matsim_agents.science.decision.scoring import (
     BenchmarkSet,
     ConstraintStatus,
     Dominance,
     RankingStatus,
+    ScoringError,
     render_report,
     score_candidates,
 )
-
-POLICY = builtin_policy("fusion_pfc_initial_v1")
+from matsim_agents.science.properties.calculators import (
+    PropertyEvidence,
+    PropertyQualification,
+    PropertyStatus,
+)
 
 
 def _score(cands=None, **kw):
@@ -86,7 +83,7 @@ def test_conditional_dominance_when_intervals_overlap():
     for item in cands["B"]:
         ev = item.evidence
         upd = ev.model_copy(update={"uncertainty": abs(ev.value) * 2})
-        wide.append(FusionEvidence(evidence=upd, context=item.context))
+        wide.append(ScenarioEvidence(evidence=upd, context=item.context))
     r = _score({"A": cands["A"], "B": wide})
     assert {(p.winner, p.loser): p.dominance for p in r.dominance}[("A", "B")] == (
         Dominance.CONDITIONAL
@@ -117,7 +114,7 @@ def _modified(items, prop, conditions=None, context=None):
                 )
             if context:
                 ctx = ctx.model_copy(update=context)
-        out.append(FusionEvidence(evidence=ev, context=ctx))
+        out.append(ScenarioEvidence(evidence=ev, context=ctx))
     return out
 
 
@@ -148,7 +145,7 @@ def test_incomparable_evidence_is_excluded():
         if ev.property == "thermal_conductivity_total":
             cond = ev.conditions.model_copy(update={"temperature_K": 300.0})
             ev = ev.model_copy(update={"conditions": cond})
-        hot.append(FusionEvidence(evidence=ev, context=item.context))
+        hot.append(ScenarioEvidence(evidence=ev, context=item.context))
     r = _score({"A": hot, "B": cands["B"]})
     tc = r.by_id("A").objective("thermal_conductivity")
     assert tc.desirability is None
@@ -162,7 +159,7 @@ def test_proxy_derived_evidence_is_excluded():
         ev = item.evidence
         if ev.property == "defect_recovery_fraction":
             ev = ev.model_copy(update={"derived_from": ["dpa"]})
-        proxied.append(FusionEvidence(evidence=ev, context=item.context))
+        proxied.append(ScenarioEvidence(evidence=ev, context=item.context))
     r = _score({"A": proxied, "B": cands["B"]})
     assert r.by_id("A").objective("radiation_damage_recovery").desirability is None
 
@@ -179,7 +176,7 @@ def test_unsupported_status_never_scored():
         reason="no BCA model available",
     )
     a = [i for i in cands["A"] if i.evidence.property != "sputtering_yield"]
-    a.append(FusionEvidence(evidence=rec, context=cands["A"][0].context))
+    a.append(ScenarioEvidence(evidence=rec, context=cands["A"][0].context))
     r = _score({"A": a, "B": cands["B"]})
     o = r.by_id("A").objective("plasma_erosion_resistance")
     assert o.desirability is None and "unsupported" in o.observables[0].reason
@@ -209,14 +206,14 @@ def test_benchmark_validation():
             "thermal_conductivity_total": {"worst": 20.0, "target": 170.0, "source": "s"}
         }
     }
-    with pytest.raises(ValidationError, match="required"):
-        BenchmarkSet.model_validate(bad)
+    with pytest.raises(ScoringError, match="required"):
+        BenchmarkSet.model_validate(bad).check_against(POLICY)
     bad["objectives"]["thermal_shock_fatigue"] = data["objectives"]["thermal_shock_fatigue"]
     bad["objectives"]["plasma_erosion_resistance"] = {
         "observables": {"sputtering_yield": {"worst": 1e-4, "target": 1e-2, "source": "s"}}
     }
-    with pytest.raises(ValidationError, match="contradict direction"):
-        BenchmarkSet.model_validate(bad)
+    with pytest.raises(ScoringError, match="contradict direction"):
+        BenchmarkSet.model_validate(bad).check_against(POLICY)
 
 
 def test_report_and_digest_deterministic():
@@ -234,7 +231,8 @@ def _qualified(items):
         "qualification": PropertyQualification.NUMERICALLY_VALIDATED,
     }
     return [
-        FusionEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context) for i in items
+        ScenarioEvidence(evidence=i.evidence.model_copy(update=upd), context=i.context)
+        for i in items
     ]
 
 
@@ -262,7 +260,7 @@ def test_qualified_ranking_needs_reliable_constraint_evidence():
             "qualification": PropertyQualification.UNVALIDATED,
         }
     )
-    weak = [*cands["A"], FusionEvidence(evidence=creep, context=base.context)]
+    weak = [*cands["A"], ScenarioEvidence(evidence=creep, context=base.context)]
     r = _score(
         {"A": weak, "B": cands["B"]}, constraints=[Constraint(property="creep_rate", maximum=1.0)]
     )

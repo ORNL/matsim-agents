@@ -138,8 +138,8 @@ that the integration tests consume:
 
 | Module | Backend | CLI |
 |---|---|---|
-| [`warmstart_benchmark_qe.py`](../../src/matsim_agents/workflows/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.workflows.warmstart_benchmark_qe …`   |
-| [`warmstart_benchmark_vasp.py`](../../src/matsim_agents/workflows/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.workflows.warmstart_benchmark_vasp …` |
+| [`benchmarks/warmstart/qe.py`](../../benchmarks/warmstart/qe.py)     | Quantum ESPRESSO `pw.x` | `python -m benchmarks.warmstart.qe …` |
+| [`benchmarks/warmstart/vasp.py`](../../benchmarks/warmstart/vasp.py) | VASP `vasp_std`         | `python -m benchmarks.warmstart.vasp …` |
 
 Each driver runs (1) an MLIP ASE relaxation with the backend chosen by
 `--mlip-config FILE` (an `mlip:` block selecting `hydragnn`, `uma`, or `mace`),

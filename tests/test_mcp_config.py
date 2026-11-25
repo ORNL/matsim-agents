@@ -7,6 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from matsim_agents.agents.state import TaskSpec
 from matsim_agents.backends.mcp.authorization import MCPAuthorizer
 from matsim_agents.backends.mcp.config import MCPConfig, load_mcp_config, parse_mcp_config
 from matsim_agents.backends.mcp.records import (
@@ -20,7 +21,6 @@ from matsim_agents.backends.mcp.records import (
     redact_uri,
 )
 from matsim_agents.backends.mcp.tasks import execute_mcp_task, planner_catalog
-from matsim_agents.orchestration.state import TaskSpec
 
 
 def _stdio(name="demo", **extra):
@@ -152,7 +152,7 @@ def test_cli_config_validation_errors_do_not_expose_input_values(tmp_path, serve
 
     path = tmp_path / "mcp.yaml"
     path.write_text(json.dumps({"mcp": {"servers": [server]}}))
-    result = CliRunner().invoke(app, ["run", "x", "--mcp-config", str(path)])
+    result = CliRunner().invoke(app, ["objective", "x", "--mcp-config", str(path)])
     assert result.exit_code != 0
     assert "secret-value" not in result.output
     assert "credentials in headers" in result.output or "api_key" in result.output
@@ -321,7 +321,7 @@ def test_redact_uri_leaves_stand_in_text_from_the_input_alone(uri, expected):
 
 
 def test_restored_task_keeps_credential_free_resource_uri():
-    from matsim_agents.orchestration.state import TaskSpec
+    from matsim_agents.agents.state import TaskSpec
 
     uri = "test://notes/__matsim_redacted__"
     task = TaskSpec(kind="mcp_resource", mcp_server="a", mcp_resource_uri=uri)

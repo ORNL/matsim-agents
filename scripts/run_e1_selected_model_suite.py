@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.workflows.e1 import (
+# benchmarks/ is a repository directory, not part of the installed package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmarks.e1.protocol import (  # noqa: E402
     CURRENT_PROMPT_VARIANT,
     E1DevelopmentManifest,
     _e1_system_prompt,

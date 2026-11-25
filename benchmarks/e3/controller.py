@@ -35,7 +35,7 @@ from benchmarks.e3.state import (
     E3WorkflowState,
     GateOutcome,
 )
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,

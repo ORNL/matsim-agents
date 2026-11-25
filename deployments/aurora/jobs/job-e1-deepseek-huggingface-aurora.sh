@@ -72,5 +72,5 @@ trap 'exit 143' TERM
 
 echo "[$(date)] Running E1 DeepSeek collection on ${MODEL_PATH}"
 echo "[$(date)] Output: ${OUTPUT_DIR}/responses.jsonl"
-mpiexec -n 1 --ppn 1 matsim-agents e1-development "${MANIFEST}" --output "${OUTPUT_DIR}"
+mpiexec -n 1 --ppn 1 python -m benchmarks.e1 "${MANIFEST}" --output "${OUTPUT_DIR}"
 echo "[$(date)] E1 DeepSeek collection finished"

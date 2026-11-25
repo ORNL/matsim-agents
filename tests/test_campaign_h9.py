@@ -10,11 +10,11 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
 from pydantic import ValidationError
-from typer.testing import CliRunner
 
-from matsim_agents.campaign.hierarchy_campaign import (
+from matsim_agents.workflows.candidate_registry import NOT_YET_ESTABLISHED
+from matsim_agents.workflows.hierarchy.config import CampaignConfig
+from matsim_agents.workflows.hierarchy.engine import (
     CampaignWorkspace,
     compare_acquisition,
     dispatch,
@@ -25,9 +25,7 @@ from matsim_agents.campaign.hierarchy_campaign import (
     review,
     transferability,
 )
-from matsim_agents.campaign.hierarchy_config import CampaignConfig
-from matsim_agents.campaign.registry import NOT_YET_ESTABLISHED
-from matsim_agents.campaign.synthetic import SyntheticSpec, make_synthetic_hierarchy
+from matsim_agents.workflows.hierarchy.synthetic import SyntheticSpec, make_synthetic_hierarchy
 
 METHOD = {
     "functional": "PBE",
@@ -39,7 +37,12 @@ METHOD = {
     "kpts": (1, 1, 1),
     "magnetic_convention": "collinear",
 }
-SMALL = {"compositions_per_system": 2, "n_orderings": 3}
+SMALL = {
+    "compositions_per_system": 2,
+    "n_orderings": 3,
+    "elements": ("Cr", "Hf", "Mo", "Ta", "V", "W"),
+    "magnetic_element": "Cr",
+}
 TARGET = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
 
 
@@ -63,6 +66,12 @@ def _config(tmp_path: Path, **sections) -> dict:
     inputs.mkdir(exist_ok=True)
     cfg = {
         "campaign": {"campaign_id": "synthetic-h9"},
+        "target": {
+            "composition": TARGET,
+            "supercell": [8, 8, 8],
+            "parent_lattice": "bcc",
+            "expected_sites": 1024,
+        },
         "data": {"candidates": str(tmp_path / "candidates.json")},
         "transfer_evaluation": {
             "experiments": ["2,3,4->5"],
@@ -231,7 +240,7 @@ def test_inventory_reuses_datasets_and_flags_incompatible_methods(tmp_path):
     assert rows["ok"]["compatibility"]["compatible"] is True
     assert rows["bad"]["compatibility"]["compatible"] is False
     # the functional-mismatched dataset must not count towards coverage
-    from matsim_agents.campaign.hierarchy_campaign import coverage
+    from matsim_agents.workflows.hierarchy.engine import coverage
 
     assert "pair1:Ta-W" not in coverage(ws)["report"].missing
 
@@ -259,7 +268,7 @@ def test_02_useless_lower_dataset_is_not_validated(tmp_path):
 def test_03_bridge_supplies_a_missing_interaction(tmp_path):
     bridge = _proposal("bridge", ["pair1:Hf-W"], order=6)
     ws, _ = _workspace(tmp_path, [bridge], live=True)
-    from matsim_agents.campaign.hierarchy_campaign import coverage
+    from matsim_agents.workflows.hierarchy.engine import coverage
 
     before = coverage(ws)["report"]
     assert "pair1:Hf-W" in before.missing
@@ -448,36 +457,3 @@ def test_failed_job_is_charged_and_not_resubmitted(tmp_path):
 
 
 # ----------------------------------------------------------------------------- CLI
-def _cli(tmp_path, proposals=None, **sections):
-    from matsim_agents.cli import app
-
-    _write_candidates(tmp_path, proposals or [_proposal("a", ["pair1:Hf-W"])])
-    path = tmp_path / "campaign.yaml"
-    path.write_text(yaml.safe_dump(_config(tmp_path, **sections)))
-    return CliRunner(), app, path, tmp_path / "ws"
-
-
-def test_cli_check_and_unknown_key(tmp_path):
-    runner, app, path, _ = _cli(tmp_path)
-    ok = runner.invoke(app, ["campaign", "check", str(path)])
-    assert ok.exit_code == 0 and "1024 sites" in ok.output and "dry run" in ok.output
-    bad = tmp_path / "bad.yaml"
-    bad.write_text(yaml.safe_dump({**_config(tmp_path), "oops": 1}))
-    assert runner.invoke(app, ["campaign", "check", str(bad)]).exit_code == 1
-
-
-def test_cli_preview_cost_review_are_dry_and_approve_refuses(tmp_path):
-    runner, app, path, ws = _cli(tmp_path)
-    for cmd in ("preview", "cost", "review", "coverage", "inventory", "transferability"):
-        result = runner.invoke(app, ["campaign", cmd, str(path), "-w", str(ws)])
-        assert result.exit_code == 0, (cmd, result.output)
-    review_out = runner.invoke(app, ["campaign", "review", str(path), "-w", str(ws)]).output
-    assert NOT_YET_ESTABLISHED in review_out
-    approve = runner.invoke(
-        app, ["campaign", "approve", str(path), "-w", str(ws), "--approved-by", "tester"]
-    )
-    assert approve.exit_code == 2 and "dry_run" in approve.output
-    assert (
-        not (ws / "state.json").exists()
-        or not json.loads((ws / "state.json").read_text())["submissions"]
-    )

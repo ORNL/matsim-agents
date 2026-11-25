@@ -2,7 +2,7 @@
 """Collect fine-tune-eval results into the unified manuscript table.
 
 Scans ``<runs>/finetune-eval/<variant>/<case>/eval/iter*.json`` (written by
-``matsim_agents.active_learning.finetune_eval``) and emits, for every method
+``matsim_agents.workflows.active_learning.finetune_eval``) and emits, for every method
 row of ``tab:finetune``, the held-out force MAE (eV/A) and per-atom
 formation-energy MAE (meV/atom) across the five paper cases.
 

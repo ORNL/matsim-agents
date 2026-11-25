@@ -21,7 +21,7 @@ from typing import Any
 
 from benchmarks.e3.controller import CAMPAIGN, Context
 from benchmarks.e3.run import _evidence_summary, unsupported_numbers
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,

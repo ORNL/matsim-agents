@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.orchestration.objective_graph import uq_gate_node
-from matsim_agents.orchestration.state import MatSimState
+from matsim_agents.agents.objective_graph import uq_gate_node
+from matsim_agents.agents.state import MatSimState
+from matsim_agents.core.relaxation import RelaxationResult
 
 
 def _result(base_path: str, top_weight: float | None) -> RelaxationResult:
@@ -96,11 +96,11 @@ def test_uq_gate_triggered_dry_run_with_mocked_al(tmp_path: Path, si_vasp: str, 
             self.loop = SimpleNamespace(out_dir=tmp_path / "al-out")
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.ALConfig.from_yaml",
+        "matsim_agents.workflows.active_learning.ALConfig.from_yaml",
         lambda _path: _DummyALConfig(),
     )
     monkeypatch.setattr(
-        "matsim_agents.active_learning.loop.run_active_learning",
+        "matsim_agents.workflows.active_learning.loop.run_active_learning",
         lambda _cfg: None,
     )
 

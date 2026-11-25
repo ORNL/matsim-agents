@@ -3,7 +3,7 @@
 influences the hypothesis BEFORE vs AFTER active-learning fine-tuning.
 
 This driver exercises the real matsim-agents debate machinery
-(:func:`matsim_agents.orchestration.interactive_chat._debate_hypothesis_response`)
+(:func:`matsim_agents.agents.interactive_chat._debate_hypothesis_response`)
 with a genuine panel of *different* models drawn from the local model zoo. The
 servers are named in the llm pool of a resource layout; the driver starts them
 on their GPUs and stops them at the end. It does not re-implement the debate
@@ -36,7 +36,7 @@ import json
 import os
 from pathlib import Path
 
-from matsim_agents.orchestration.interactive_chat import (
+from matsim_agents.agents.interactive_chat import (
     DiscoveryChatConfig,
     DiscoveryChatSession,
     chat_once,

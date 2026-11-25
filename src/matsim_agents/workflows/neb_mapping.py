@@ -7,7 +7,7 @@ Lives in ``workflows`` so the DFT backend does not import discovery types. It ne
 from __future__ import annotations
 
 from matsim_agents.backends.dft.qe_neb_parse import NebOutputParse
-from matsim_agents.discovery.neb_contracts import MIN_IMAGES, NebResult, ResultState
+from matsim_agents.science.neb.contracts import MIN_IMAGES, NebResult, ResultState
 
 _STATE: dict[str, ResultState] = {
     "converged": "converged_unqualified",

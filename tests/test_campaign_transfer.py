@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from matsim_agents.campaign.synthetic import SyntheticSpec, make_synthetic_hierarchy
-from matsim_agents.campaign.transfer import (
+from matsim_agents.workflows.hierarchy.synthetic import SyntheticSpec, make_synthetic_hierarchy
+from matsim_agents.workflows.hierarchy.transfer import (
     LeakageError,
     Split,
     TransferExperiment,
@@ -16,7 +16,12 @@ from matsim_agents.campaign.transfer import (
     standard_experiments,
 )
 
-SMALL = dict(elements=("Cr", "Mo", "Ta", "V", "W"), orders=(2, 3, 4), compositions_per_system=4)
+SMALL = dict(
+    elements=("Cr", "Mo", "Ta", "V", "W"),
+    magnetic_element="Cr",
+    orders=(2, 3, 4),
+    compositions_per_system=4,
+)
 
 
 def _exp(**kw):

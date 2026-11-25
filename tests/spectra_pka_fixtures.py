@@ -10,7 +10,7 @@ import stat
 import sys
 from pathlib import Path
 
-from matsim_agents.integrations.external.spectra_pka.config import (
+from matsim_agents.backends.external.spectra_pka.config import (
     CampaignSpec,
     ChannelSpec,
     FluxSpec,

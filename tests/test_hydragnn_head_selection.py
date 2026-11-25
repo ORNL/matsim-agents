@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from typer.main import get_command
 
+from matsim_agents.agents.interactive_chat import DiscoveryChatConfig
 from matsim_agents.backends.mlip import hydragnn_checkpoint
 from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
 from matsim_agents.backends.mlip.config import (
@@ -18,7 +19,6 @@ from matsim_agents.backends.mlip.config import (
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
 from matsim_agents.cli import app
 from matsim_agents.cli.options import load_mlip_option
-from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
 EXPECTED_HEADS = (
     "Alexandria",
@@ -74,8 +74,8 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
 def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     tmp_path, monkeypatch, declared
 ):
-    from matsim_agents.orchestration.agents import executor
-    from matsim_agents.orchestration.state import MatSimState, TaskSpec
+    from matsim_agents.agents.roles import executor
+    from matsim_agents.agents.state import MatSimState, TaskSpec
 
     logdir = tmp_path / "model"
     logdir.mkdir()
@@ -323,7 +323,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
 def test_hydragnn_head_selector_is_exposed_by_public_commands(tmp_path):
     root_command = get_command(app)
 
-    for command_name in ("run", "chat", "supervisor-run"):
+    for command_name in ("run", "chat"):
         command = root_command.commands[command_name]
         option_names = {
             option for parameter in command.params for option in getattr(parameter, "opts", ())

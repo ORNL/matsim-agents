@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from matsim_agents.active_learning.finetune_eval import EvaluationConfig  # noqa: E402
+from matsim_agents.workflows.active_learning.finetune_eval import EvaluationConfig  # noqa: E402
 from matsim_agents.backends.mlip.config import parse_mlip_config  # noqa: E402
 from matsim_agents.execution.variables import expand_variables, variable_defaults  # noqa: E402
 

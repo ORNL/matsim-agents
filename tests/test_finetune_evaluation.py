@@ -11,9 +11,9 @@ from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
 
-from matsim_agents.active_learning import finetune_eval
-from matsim_agents.active_learning.evaluate import EvalMetrics
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+from matsim_agents.workflows.active_learning import finetune_eval
+from matsim_agents.workflows.active_learning.evaluate import EvalMetrics
 
 UMA_CPU = UMAConfig(device="cpu")
 

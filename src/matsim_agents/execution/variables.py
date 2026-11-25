@@ -87,4 +87,46 @@ def expand_variables(text: str, defaults: Mapping[str, str], *, source: object) 
     )
 
 
-__all__ = ["VARIABLE_PATTERN", "expand_variables", "variable_defaults"]
+def unset_variables(document: Any) -> dict[str, str]:
+    """Names a parsed YAML document needs but neither the environment nor its vars: supply.
+
+    Maps each name to its ``${VAR:?hint}`` message, or "" when it has none.
+    """
+    references: list[tuple[str, str]] = []
+
+    def collect(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                collect(key)
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+        elif isinstance(value, str):
+            references.extend(
+                (m.group(1), m.group(2) or "") for m in VARIABLE_PATTERN.finditer(value)
+            )
+
+    collect(document)
+    vars_block = document.get("vars") if isinstance(document, dict) else None
+    fallbacks = vars_block if isinstance(vars_block, dict) else {}
+    missing: dict[str, str] = {}
+    for name, modifier in references:
+        if os.environ.get(name) or modifier.startswith(":-"):
+            continue
+        entry = fallbacks.get(name)
+        if entry is not None:
+            own = [
+                m.group(2) or ""
+                for m in VARIABLE_PATTERN.finditer(str(entry))
+                if m.group(1) == name
+            ]
+            if not own or any(item.startswith(":-") for item in own):
+                continue
+            modifier = next((item for item in own if item.startswith(":?")), "")
+        hint = modifier[2:].strip() if modifier.startswith(":?") else ""
+        missing[name] = missing.get(name) or hint
+    return missing
+
+
+__all__ = ["VARIABLE_PATTERN", "expand_variables", "unset_variables", "variable_defaults"]

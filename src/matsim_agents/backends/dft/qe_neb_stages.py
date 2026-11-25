@@ -42,6 +42,7 @@ from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_neb_input import write_neb_input
 from matsim_agents.backends.dft.qe_neb_parse import parse_neb_output
 from matsim_agents.backends.dft.qe_neb_run import NebRunRecord, run_neb
+from matsim_agents.core.hashing import sha256_file as _sha256
 
 SCHEMA = "matsim-neb-stages/1"
 HISTORY_FILE = "neb_stages.json"
@@ -108,10 +109,6 @@ class StageHistory(BaseModel):
 
     schema_id: str = Field(default=SCHEMA, alias="schema")
     stages: tuple[StageEntry, ...] = ()
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _now() -> str:

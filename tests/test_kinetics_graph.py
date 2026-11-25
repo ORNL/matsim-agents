@@ -2,8 +2,13 @@
 
 import pytest
 
-from matsim_agents.kinetics.contracts import DefectState, NetworkProvenance, TransitionEvent
-from matsim_agents.kinetics.graph import NetworkError, TransitionNetwork, state_id, transition_id
+from matsim_agents.science.kinetics.contracts import DefectState, NetworkProvenance, TransitionEvent
+from matsim_agents.science.kinetics.graph import (
+    NetworkError,
+    TransitionNetwork,
+    state_id,
+    transition_id,
+)
 
 PROV = NetworkProvenance(network_id="n", parent_id="p", parent_ordering_id="o1", synthetic=True)
 SPECIES = {"W": 14, "Mo": 2}

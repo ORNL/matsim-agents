@@ -9,13 +9,13 @@ test, and records what the result does and does not show.
 
 The pieces are:
 
-- `matsim_agents.datasets.splits`: split strategies, partitions, leakage checks,
+- `matsim_agents.data.splits`: split strategies, partitions, leakage checks,
   and the split manifest;
-- `matsim_agents.active_learning.finetune_eval`: fine-tuning and evaluation of
+- `matsim_agents.workflows.active_learning.finetune_eval`: fine-tuning and evaluation of
   one MLIP with those partitions (`--mlip-config`, `--evaluation-config`);
-- `matsim_agents.active_learning.eval_report`: per-group reports, the backend x
+- `matsim_agents.workflows.active_learning.eval_report`: per-group reports, the backend x
   strategy table, and active-learning learning curves;
-- `matsim_agents.active_learning.uncertainty.calibrate_uncertainty`: how well
+- `matsim_agents.workflows.active_learning.uncertainty.calibrate_uncertainty`: how well
   ensemble or MC-dropout disagreement tracks the actual error, on validation data.
 
 ## Split strategies
@@ -117,7 +117,7 @@ rejected.
 To make a split without fine-tuning:
 
 ```bash
-python -m matsim_agents.datasets.splits --dataset dataset.extxyz \
+python -m matsim_agents.data.splits --dataset dataset.extxyz \
   --config examples/evaluation/trajectory-holdout.yaml --output-dir splits/trajectory
 ```
 
@@ -148,7 +148,7 @@ evaluation:
 ```
 
 ```bash
-python -m matsim_agents.active_learning.finetune_eval \
+python -m matsim_agents.workflows.active_learning.finetune_eval \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
   --evaluation-config evaluation.yaml \
   --dataset dataset.extxyz --elemental-reference-manifest refs.json \
@@ -222,7 +222,7 @@ they show sensitivity to the split and seed, not independent experiments.
 To tabulate backend x split strategy for several runs:
 
 ```bash
-python -m matsim_agents.active_learning.eval_report matrix runs/finetune-eval/* \
+python -m matsim_agents.workflows.active_learning.eval_report matrix runs/finetune-eval/* \
   --metric force_mae_eV_per_A --domain test --csv matrix.csv
 ```
 
@@ -237,7 +237,7 @@ references (`trainer.validation_reference_set` or
 `trainer.training_references.manifest`). Learning curves:
 
 ```bash
-python -m matsim_agents.active_learning.eval_report learning-curve runs/al-ensemble > ensemble.csv
+python -m matsim_agents.workflows.active_learning.eval_report learning-curve runs/al-ensemble > ensemble.csv
 ```
 
 To compare acquisition strategies (random, ensemble, MC dropout, adaptive), start

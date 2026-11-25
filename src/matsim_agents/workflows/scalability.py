@@ -15,8 +15,6 @@ lock file exists; the repository currently has none, and the record says so.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import platform
 import sys
@@ -28,11 +26,12 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.kinetics.benchmarks import (
+from matsim_agents.core.hashing import sha256_json
+from matsim_agents.science.kinetics.benchmarks import (
     TEMPERATURE_K,
     chain_network,
 )
-from matsim_agents.kinetics.ensemble import run_ensemble
+from matsim_agents.science.kinetics.ensemble import run_ensemble
 
 LOCK_FILE_NAMES = ("uv.lock", "poetry.lock", "requirements.lock", "conda-lock.yml")
 TRACKED_PACKAGES = ("numpy", "pydantic", "scipy", "torch", "ase")
@@ -107,18 +106,14 @@ def measure_scaling(sizes: Sequence[int], *, seed: int, n_trajectories: int = 20
     )
 
 
-def canonical_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=_encode)
-
-
 def _encode(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
     raise TypeError(f"not serialisable: {type(value).__name__}")
 
 
-def digest(obj: Any) -> str:
-    return hashlib.sha256(canonical_json(obj).encode()).hexdigest()
+def _digest(obj: Any) -> str:
+    return sha256_json(obj, default=_encode)
 
 
 @dataclass(frozen=True)
@@ -137,8 +132,8 @@ def check_reproducibility(
     """``run(seed)`` repeated must hash identically; ``run(seed + 1)`` must differ."""
     if repeats < 2:
         raise ValueError("repeats must be at least 2")
-    digests = tuple(digest(run(seed)) for _ in range(repeats))
-    control = digest(run(seed + 1))
+    digests = tuple(_digest(run(seed)) for _ in range(repeats))
+    control = _digest(run(seed + 1))
     identical = len(set(digests)) == 1
     sensitive = control != digests[0]
     ok = identical and sensitive
@@ -195,9 +190,7 @@ __all__ = [
     "ReproducibilityReport",
     "ScalingPoint",
     "ScalingReport",
-    "canonical_json",
     "check_reproducibility",
-    "digest",
     "environment_record",
     "measure_scaling",
 ]

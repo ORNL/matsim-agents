@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.selection import (
+from matsim_agents.core.contracts import PROPERTY_UNITS, EvidenceLevel
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,
     Correlation,
@@ -14,8 +15,7 @@ from matsim_agents.campaign.selection import (
     SelectionStatus,
     select,
 )
-from matsim_agents.execution.contracts import PROPERTY_UNITS, EvidenceLevel
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PropertyConditions,
     PropertyEvidence,
     PropertyQualification,
@@ -271,7 +271,7 @@ def test_duplicate_candidate_ids_are_rejected():
 
 
 def test_report_shows_each_objective_and_how_they_combine():
-    from matsim_agents.campaign.selection import render_report
+    from matsim_agents.science.acquisition.selection import render_report
 
     objectives = [
         Objective(property=KAPPA, direction="maximize", temperature_K=T, worst=0, target=40),
@@ -302,7 +302,7 @@ def test_report_shows_each_objective_and_how_they_combine():
 
 
 def test_report_without_weighted_score_states_no_weights_are_applied():
-    from matsim_agents.campaign.selection import render_report
+    from matsim_agents.science.acquisition.selection import render_report
 
     result = select(spec(), [cand("A", 30, 150), cand("B", 12, 250)])
     assert all(r.desirability is None for c in result.candidates for r in c.objectives)

@@ -1,6 +1,6 @@
 # Relax MgO rocksalt with an MLIP and report the relaxed structure, its energy
 # per atom, and the residual force. No optimization objective is involved.
-#   matsim-agents characterize examples/characterization/relaxation.yaml
+#   matsim-agents run examples/characterization/relaxation.yaml
 # Relative paths are relative to this file.
 contract_id: mgo-rocksalt-relaxation
 objective: Relax MgO rocksalt to a converged local minimum.

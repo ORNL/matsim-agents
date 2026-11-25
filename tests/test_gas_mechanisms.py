@@ -5,15 +5,8 @@ import pytest
 from ase import Atoms
 from ase.build import bulk
 
-from matsim_agents.discovery.magnetism import generators as gen
-from matsim_agents.discovery.neb_contracts import (
-    MigrationMechanism,
-    NebTransition,
-    build_correspondence,
-    endpoint_from_atoms,
-)
-from matsim_agents.kinetics.contracts import NetworkProvenance
-from matsim_agents.kinetics.gas_mechanisms import (
+from matsim_agents.science.kinetics.contracts import NetworkProvenance
+from matsim_agents.science.kinetics.gas_mechanisms import (
     GAS_MECHANISM_IDS,
     GasMechanismError,
     OpenSystemTerm,
@@ -23,8 +16,15 @@ from matsim_agents.kinetics.gas_mechanisms import (
     inventory_of,
     prepare_gas_neb,
 )
-from matsim_agents.kinetics.graph import TransitionNetwork
-from matsim_agents.kinetics.transitions import get_mechanism
+from matsim_agents.science.kinetics.graph import TransitionNetwork
+from matsim_agents.science.kinetics.transitions import get_mechanism
+from matsim_agents.science.magnetism import generators as gen
+from matsim_agents.science.neb.contracts import (
+    MigrationMechanism,
+    NebTransition,
+    build_correspondence,
+    endpoint_from_atoms,
+)
 
 N_SITES = 16
 SPEC_IDS = [

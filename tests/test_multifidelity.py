@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.exploration.multifidelity import (
+from matsim_agents.workflows.exploration.multifidelity import (
     F1_LIMITATION,
     CostLedger,
     FidelityEvidence,

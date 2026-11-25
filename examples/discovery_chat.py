@@ -34,7 +34,7 @@ from __future__ import annotations
 import argparse
 
 from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
-from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, run_chat
+from matsim_agents.agents.interactive_chat import DiscoveryChatConfig, run_chat
 
 
 def main() -> None:

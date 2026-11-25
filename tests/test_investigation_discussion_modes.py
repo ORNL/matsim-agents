@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from matsim_agents.discovery.composition import parse_composition
-from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.core.composition import parse_composition
+from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 from matsim_agents.workflows.debate import DebateParticipant
 from matsim_agents.workflows.investigation import (
     HypothesisDiscussionConfig,

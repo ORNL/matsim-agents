@@ -161,7 +161,7 @@ def chat(
 
     Defaults to Qwen 2.5 (14B) served via a local Ollama daemon.
     """
-    from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, run_chat
+    from matsim_agents.agents.interactive_chat import DiscoveryChatConfig, run_chat
 
     panel_models = [s.strip() for s in (critic_panel_models or "").split(",") if s.strip()]
     panel_providers = [s.strip() for s in (critic_panel_providers or "").split(",") if s.strip()]

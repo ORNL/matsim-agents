@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from matsim_agents.kinetics.evidence import attach_neb_result
-from matsim_agents.kinetics.rates import (
+from matsim_agents.science.kinetics.evidence import attach_neb_result
+from matsim_agents.science.kinetics.rates import (
     KB_EV_PER_K,
     RateError,
     detailed_balance_violations,
@@ -13,7 +13,7 @@ from matsim_agents.kinetics.rates import (
     htst_rate,
     state_rates,
 )
-from matsim_agents.kinetics.transitions import add_candidate_transition
+from matsim_agents.science.kinetics.transitions import add_candidate_transition
 from tests.test_kinetics_evidence import _result
 from tests.test_kinetics_transitions import _hop, _network
 

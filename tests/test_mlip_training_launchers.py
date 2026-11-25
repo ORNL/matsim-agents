@@ -18,7 +18,7 @@ SUPPORTED = {
 SCHEDULER = {"perlmutter": "srun", "frontier": "srun", "aurora": "mpiexec"}
 FINE_TUNE = [
     "-m",
-    "matsim_agents.training.finetune_x",
+    "matsim_agents.backends.mlip.training.finetune_x",
     "--dataset",
     "labelled data.extxyz",
     "--output-dir",
@@ -156,8 +156,8 @@ def test_aurora_launcher_places_ranks_on_the_assigned_hosts_and_tiles(tmp_path):
 
 
 def test_trainer_command_reaches_the_fine_tuner_through_the_launcher(tmp_path):
-    from matsim_agents.active_learning.trainer import _fine_tune_argv
     from matsim_agents.backends.mlip.config import HydraGNNConfig
+    from matsim_agents.workflows.active_learning.trainer import _fine_tune_argv
 
     mlip = HydraGNNConfig(
         logdir=tmp_path / "gfm logdir",

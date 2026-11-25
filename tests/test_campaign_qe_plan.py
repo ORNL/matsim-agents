@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.campaign.budget import BudgetLedger
-from matsim_agents.campaign.qe_plan import (
+from matsim_agents.execution.budget import BudgetLedger
+from matsim_agents.workflows.hierarchy.qe_plan import (
     CalculationSpec,
     MethodSignature,
     PriorEvidence,

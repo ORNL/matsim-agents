@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.budget import BudgetExceeded, BudgetLedger
-from matsim_agents.campaign.property_acquisition import (
+from matsim_agents.execution.budget import BudgetExceeded, BudgetLedger
+from matsim_agents.science.acquisition.property_acquisition import (
     ProposedCalculation,
     candidate_confidence,
     plan_property_acquisition,
     render_plan,
     reserve_approved,
 )
-from matsim_agents.campaign.selection import (
+from matsim_agents.science.acquisition.selection import (
     CandidateEvidence,
     Constraint,
     Objective,
     SelectionSpec,
     select,
 )
-from matsim_agents.execution.properties import PropertyStatus
+from matsim_agents.science.properties.calculators import PropertyStatus
 from tests.test_selection import BULK, KAPPA, T, ev
 
 

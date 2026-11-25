@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matsim_agents.execution.contracts import (
+from matsim_agents.core.contracts import (
     OBSERVABLE_UNITS,
     PROPERTY_UNITS,
     EvidenceLevel,
@@ -17,7 +17,7 @@ from matsim_agents.execution.ledger import (
     EvidenceRecord,
     MethodRecord,
 )
-from matsim_agents.execution.properties import (
+from matsim_agents.science.properties.calculators import (
     PROPERTY_FAMILY,
     PropertyConditions,
     PropertyEvidence,

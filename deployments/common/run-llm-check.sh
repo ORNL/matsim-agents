@@ -52,7 +52,7 @@ pathlib.Path(os.environ["CHECK_CONFIG"]).write_text(json.dumps(config, indent=2)
 PY
 
 echo "[$(date)] Running six-stage LLM qualification"
-matsim-agents llm-check "${CHECK_CONFIG}" | tee "${RUN_DIR}/llm-check-console.log"
+matsim-agents run "${CHECK_CONFIG}" --runs-dir "${RUN_DIR}/records" | tee "${RUN_DIR}/llm-check-console.log"
 
 shopt -s nullglob
 CHECK_RUNS=("${CHECK_ROOT}"/*/)

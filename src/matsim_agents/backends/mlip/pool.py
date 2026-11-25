@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from matsim_agents.execution.allocation import short_host
 from matsim_agents.execution.devices import (
     apply_mask_environment,
     child_mask_environment,
@@ -33,7 +34,7 @@ from matsim_agents.execution.devices import (
 
 if TYPE_CHECKING:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
     from matsim_agents.execution.placement import Placement
 
 log = logging.getLogger(__name__)
@@ -116,10 +117,6 @@ def relax_task(args_json: str) -> dict:
     return relax_with_mlip(args, calculators=_worker_calculators()).model_dump(mode="json")
 
 
-def _short_host(name: str) -> str:
-    return name.split(".", 1)[0]
-
-
 class MLIPWorkerPool:
     """Runs independent MLIP tasks concurrently, one per device of the ``mlip`` pool."""
 
@@ -143,8 +140,8 @@ class MLIPWorkerPool:
                 f"resources.pools.mlip.nodes to 1 (it resolved to {pool.hosts})"
             )
         host = pool.slices[0].host
-        local = _short_host(socket.gethostname())
-        if placement.scheduler not in {"local", "preview"} and _short_host(host) != local:
+        local = short_host(socket.gethostname())
+        if placement.scheduler not in {"local", "preview"} and short_host(host) != local:
             raise ValueError(
                 f"pool 'mlip' is placed on {host}, but this process runs on {local}; place "
                 "the mlip pool on the node that runs matsim-agents"
@@ -256,7 +253,7 @@ class MLIPWorkerPool:
         """Relax structures concurrently; each successful value is a ``RelaxationResult``."""
 
         from matsim_agents.backends.mlip.relaxation import CalculatorCache, relax_with_mlip
-        from matsim_agents.backends.mlip.results import RelaxationResult
+        from matsim_agents.core.relaxation import RelaxationResult
 
         if not self.slots:
             if self._local_calculators is None:

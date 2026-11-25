@@ -17,11 +17,11 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 ## Phase A1: Generalized BCC alloy generation
 
 - [x] A1.1 Inspect existing interfaces
-  - Files: `src/matsim_agents/discovery/composition.py`, `src/matsim_agents/discovery/seeds.py`, `benchmarks/e3/structure_generation.py`, `tests/test_e3_mlip_structure_generation.py`.
+  - Files: `src/matsim_agents/core/composition.py`, `src/matsim_agents/discovery/seeds.py`, `benchmarks/e3/structure_generation.py`, `tests/test_e3_mlip_structure_generation.py`.
   - Acceptance: identify a minimal approach that preserves E3 behavior.
   - Finding: E3 alloy generation (`_alloy`, `_ALLOY_ELEMENTS`) is self-contained. No `src/` module imports it, except `cli/workflows.py`, which runs the E3 production script as a subprocess. The new generator is a separate module, so E3 is unchanged. `composition.py` supplies `Composition` parsing and `seeds.py` supplies prototypes; neither is needed for the BCC builder.
 - [x] A1.2 Implement `AlloySpec`
-  - File: `src/matsim_agents/discovery/alloys.py`.
+  - File: `src/matsim_agents/science/structures/alloys.py`.
   - Typed Pydantic model: crystal structure, element counts, supercell size, cell parameter, random seed.
   - Validate element symbols, nonnegative integer counts, nonempty composition, exact total atom count.
   - Acceptance: unit tests cover valid and invalid specifications.
@@ -45,15 +45,15 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
 ## Phase A2: Chemical short-range order
 
 - [x] A2.1 First-neighbor-shell identification
-  - File: `src/matsim_agents/discovery/alloys.py` (`first_neighbor_list`).
+  - File: `src/matsim_agents/science/structures/alloys.py` (`first_neighbor_list`).
   - Periodic directed pairs from ASE `neighbor_list` with a cutoff at the midpoint of the first and second shells; no all-pairs matrix.
   - Acceptance: eight first neighbours per site for small supercells and the 1,024-atom reference; periodic image vectors are body diagonals of length sqrt(3)/2 a.
 - [x] A2.2 Second-neighbor-shell identification
-  - File: `src/matsim_agents/discovery/alloys.py` (`second_neighbor_list`).
+  - File: `src/matsim_agents/science/structures/alloys.py` (`second_neighbor_list`).
   - Reuses the A2.1 `neighbor_list` call with an outer cutoff at the midpoint of the second and third shells, then keeps pairs at or beyond the first/second midpoint.
   - Acceptance: six second neighbours per site (axis-aligned, length a) for small supercells and the 1,024-atom reference; shell disjoint from A2.1; directed pairs reciprocal.
 - [x] A2.3 Warren-Cowley SRO descriptors
-  - File: `src/matsim_agents/discovery/alloys.py` (`warren_cowley_sro`, `SROResult`, `ShellSRO`).
+  - File: `src/matsim_agents/science/structures/alloys.py` (`warren_cowley_sro`, `SROResult`, `ShellSRO`).
   - alpha_ij = 1 - P(j|i)/c_j from the A2.1/A2.2 neighbour lists, with c_j the actual atomic fraction. One species-indexed matrix per shell; species ordering is sorted symbols unless given explicitly.
   - Checks: directed pair counts must be symmetric (reciprocity); absent, unlisted, or duplicate species, non-finite lattice parameter, empty or non-periodic structures raise `ValueError`.
   - Acceptance: ordered B2 binary gives alpha = [[1,-1],[-1,1]] (first shell) and [[-1,1],[1,-1]] (second shell); six-element reference gives two 6 x 6 matrices obeying sum_j c_j alpha_ij = 0 and pair-count row sums z * N_i; random alloys report measured nonzero SRO.
@@ -63,27 +63,27 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - Layered (001) block-of-two ordering: closed-form first-shell alpha = 0 and second-shell alpha = [[-1/3, 1/3], [1/3, -1/3]] on three cell shapes.
   - Random alloys: exhaustive average over all arrangements on a 16-site cell equals the finite-composition expectation E[alpha_ii] = (N - N_i)/((N - 1) N_i), E[alpha_ij] = -1/(N - 1) for a binary and a ternary composition. Nonzero finite-size bias is asserted to vanish only as the cell grows.
 - [x] A2.5 Targeted chemical short-range-order generation
-  - Files: `src/matsim_agents/discovery/alloys.py` (`SROTarget`, `generate_targeted_sro`, `TargetedSROResult`), `tests/test_alloys_targeted_sro.py`.
+  - Files: `src/matsim_agents/science/structures/alloys.py` (`SROTarget`, `generate_targeted_sro`, `TargetedSROResult`), `tests/test_alloys_targeted_sro.py`.
   - Bounded greedy search: swap two sites of different species, keep only strict decreases of L = sum w (alpha - alpha_target)^2 over the explicitly targeted (shell, pair) entries. Sites and exact species counts are fixed; the input structure is not modified.
   - Stops when L <= tolerance or after `max_attempts` swaps. Returns the structure, full measured SRO, objective, initial objective, attempts, accepted swaps, seed, tolerance, and convergence flag.
   - Pair targets are unordered (alpha_ij = alpha_ji); duplicates are merged and conflicts rejected. Rejected: unknown species, alpha outside [1 - 1/max(c_i, c_j), 1], full target rows violating sum_j c_j alpha_ij = 0, non-BCC coordination, non-periodic or single-species structures, invalid seed, attempt limit, or tolerance.
   - Limitation: a finite periodic cell admits only discrete alpha values, so an in-range target may be missed; the result is a bounded-search configuration, not an equilibrium state. Greedy acceptance can stall in a local minimum.
 - [x] A2.6 Target SRO feasibility and achieved-ordering validation
-  - Files: `src/matsim_agents/discovery/alloys.py` (`InvalidSROTargetError`, `validate_targeted_sro`, `TargetedSROValidation`, `TargetComparison`, `TargetedSROResult.status`), `tests/test_alloys_sro_feasibility.py` (18 tests).
+  - Files: `src/matsim_agents/science/structures/alloys.py` (`InvalidSROTargetError`, `validate_targeted_sro`, `TargetedSROValidation`, `TargetComparison`, `TargetedSROResult.status`), `tests/test_alloys_sro_feasibility.py` (18 tests).
   - Target checks are cheap necessary conditions, not a feasibility proof: finite alpha, supported shell, known species, alpha_ij = alpha_ji when both directions are given, alpha within [1 - 1/max(c_i, c_j), 1] (off-diagonal) or the diagonal bound from finite counts, complete rows obey sum_j c_j alpha_ij = 0 (tolerance 1e-6), partial rows may not already imply conditional probabilities above 1. Unspecified pairs are unconstrained.
   - Violations raise `InvalidSROTargetError` (a `ValueError` subclass) before any search. Status reuses the A2.5 result: `converged` (objective <= tolerance) or `not_converged`; a valid target missed within the budget is never reported as invalid.
   - `validate_targeted_sro` re-measures the returned structure and raises `ValueError` unless counts, site positions, cell and pbc match the input; reported alpha, objective, initial objective and convergence flag match the recomputed values; and a replay from the same seed, tolerance and attempt count reproduces the structure.
   - Limitation: bounds are necessary only, so a target can pass and still be unreachable; reproducibility is checked by replaying the search, so it costs one more run.
 - [x] A2.7 Independent configurational ensemble generation
-  - Files: `src/matsim_agents/discovery/alloy_ensemble.py` (`AlloyEnsembleSpec`, `generate_alloy_ensemble`, `AlloyEnsemble`, `ConfigurationRecord`, `occupation_fingerprint`), `tests/test_alloy_ensemble.py` (30 tests). `alloys.py` gains `BCCTopology`/`bcc_topology` and an optional `topology` argument on `warren_cowley_sro` and `generate_targeted_sro` so the lattice neighbour shells are built once per ensemble.
+  - Files: `src/matsim_agents/science/structures/alloy_ensemble.py` (`AlloyEnsembleSpec`, `generate_alloy_ensemble`, `AlloyEnsemble`, `ConfigurationRecord`, `occupation_fingerprint`), `tests/test_alloy_ensemble.py` (30 tests). `alloys.py` gains `BCCTopology`/`bcc_topology` and an optional `topology` argument on `warren_cowley_sro` and `generate_targeted_sro` so the lattice neighbour shells are built once per ensemble.
   - Modes: `random` (shuffled exact counts) and `targeted_sro` (random start, then the A2.5 optimizer for at most `max_swap_attempts` swaps). Ensemble size is configurable with no upper limit; five is only the intended pilot size.
-  - Seeds: `matsim_agents.seeding.stream_seed(seed, "alloy-ensemble", "occupation"|"optimizer", k)` gives each configuration its own 32-bit occupation seed and optimizer seed; global NumPy state is untouched. Same specification gives identical structures and metadata.
+  - Seeds: `matsim_agents.core.seeding.stream_seed(seed, "alloy-ensemble", "occupation"|"optimizer", k)` gives each configuration its own 32-bit occupation seed and optimizer seed; global NumPy state is untouched. Same specification gives identical structures and metadata.
   - Per configuration: ID (`<mode>-<index>`), parent `AlloySpec`, mode, seeds, species counts, SHA-256 occupation fingerprint, first- and second-shell pair counts and alpha, and for targeted mode the convergence flag, objective and attempts. `metadata()` is JSON-serializable and holds no coordinates; structures stay in memory.
   - Exact duplicate occupations (equal fingerprints) are reported in `duplicate_groups` and `n_unique`; nothing is retried.
   - Independence diagnostic: `overlap_matrix()` gives the fraction of sites with equal species for every pair, and `overlap_summary()` (also in `metadata()`) reports its min, mean and max against the random expectation sum_i c_i^2. This is descriptive only: it is consistent with independence at the pair level, not proof of it, and it is not expected to match for targeted-SRO members.
   - Limitations: independent seeds do not imply statistically uncorrelated or structurally unique configurations; symmetry equivalence is handled separately in A2.8; targeted-SRO members are bounded-search configurations, not equilibrium structures, and some may not converge. No 1,024-atom targeted-SRO campaign was run; the 1,024-atom test is random mode only.
 - [x] A2.8 Duplicate and symmetry-equivalence detection, ensemble SRO statistics
-  - Files: `src/matsim_agents/discovery/alloy_ensemble.py`, `tests/test_alloy_ensemble.py`. All functions only report; nothing in the ensemble is modified or regenerated.
+  - Files: `src/matsim_agents/science/structures/alloy_ensemble.py`, `tests/test_alloy_ensemble.py`. All functions only report; nothing in the ensemble is modified or regenerated.
   - A2.8a `find_exact_duplicates`: fingerprints filter candidates and occupation arrays confirm each match, so a hash collision cannot merge distinct occupations. The first occurrence is kept.
   - A2.8b `ensemble_sro_statistics`: per-shell mean and sample standard deviation (ddof = 1) of alpha over exact-unique configurations; the standard deviation is `None` for a single configuration.
   - A2.8c `find_translation_equivalents` and `find_symmetry_equivalents`: on the parent BCC supercell, the canonical form of an occupation is its lexicographically smallest image under all periodic translations (including the body-centre shift) combined with every cubic point operation that preserves the supercell (48 for a cube, fewer otherwise). Equal forms mean exact equivalence. Results separate exact, translation and point-group equivalents. Integer first- and second-shell pair counts filter candidates; at most `max_canonicalizations` (default 256) are canonicalized, and any rest are reported in `unchecked` with status `incomplete`. Structures not on the parent supercell raise `ValueError`.
@@ -94,6 +94,10 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` complete.
   - No new code: `find_symmetry_equivalents` (A2.8c) already combines the cached translation permutations with cached site permutations of the 48 signed coordinate permutations, keeps only those valid for the actual supercell, keeps the first configuration as representative, preserves exact and translation classifications, and reports `status`/`unchecked` when its budget stops the check.
   - Acceptance (`tests/test_alloy_ensemble.py`, cubic 2x2x2 Mo8Ta4W4 cell): 90-degree, 180-degree and 120-degree [111] rotations are merged (48 operations, status complete); a mirror, inversion and the x = y mirror are merged; a Mo-Ta site swap and a Ta/W relabelling stay distinct.
   - Scope: ideal BCC supercells only; distorted geometries are not supported.
+- [x] Generic parent lattices
+  - `AlloySpec.crystal_structure` takes `sc`, `bcc`, `fcc`, `hcp`, `diamond` or `custom` (with a `UnitCell`), plus `cell_choice` and `c_over_a`. `repeats` takes a triple or a 3x3 integer matrix. `build_supercell` replaces `build_bcc_supercell`.
+  - Neighbour shells are found from geometry (`shell_radii`, `shell_topology`), not from bcc constants. Translation and point-group permutations for `find_translation_equivalents` and `find_symmetry_equivalents` come from spglib on the actual supercell.
+  - Tests: `tests/test_alloys_lattices.py`.
 - [x] A2.9 Phase A2 integration test
   - File: `tests/test_phase_a2_integration.py` (2 tests).
   - Small Mo12Ta8W12 cell: A1 generation with exact composition; first- and second-shell SRO; targeted-SRO optimization lowers the objective and the reported alpha matches re-measurement; a four-member random ensemble is deduplicated (exact and symmetry, status complete); ensemble SRO mean and sample standard deviation match an independent recomputation from re-measured alphas; the whole workflow repeats identically with the same seeds.
@@ -171,7 +175,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 ## Progress log
 
 - A1.1: inspection complete; no E3 change required.
-- A1.2 to A1.4, A1.6: implemented in `src/matsim_agents/discovery/alloys.py`.
+- A1.2 to A1.4, A1.6: implemented in `src/matsim_agents/science/structures/alloys.py`.
 - A1.7: `tests/test_alloys.py` (20 tests) and `tests/test_e3_mlip_structure_generation.py` pass together (39 passed). Ruff check and format pass for the new files.
 - A1.5: `examples/fusion_damage/` runs locally and writes 1,024 atoms with the exact reference counts.
 - Scope check: `benchmarks/`, `runs/`, and existing `src/` and `tests/` files are unchanged (git status).
@@ -182,7 +186,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - A2.4: added `tests/test_alloys_sro_validation.py` (18 tests). With `tests/test_alloys.py`: 63 passed in about 18 s; the two exhaustive-average cases take about 16 s. Ruff check and format pass.
 - A2.4 fix: the exhaustive-average compositions are now `{Mo: 14, W: 2}` and `{Mo: 1, Ta: 1, W: 14}` (120 and 240 arrangements instead of 560 and 1,680). With `tests/test_alloys.py`: 63 passed in 4.2 s. Ruff check and format pass.
 - A2.5: added `generate_targeted_sro` in `alloys.py` and `tests/test_alloys_targeted_sro.py` (21 tests). One test-only correction (a 2x2x1 cell has 8 sites, not 16). With `tests/test_alloys.py`, `tests/test_alloys_sro_validation.py` and `tests/test_e3_mlip_structure_generation.py`: 103 passed. Ruff check and format pass on the changed files.
-- CI fix: the full-suite job failed on `tests/test_seeding.py::test_no_random_generator_or_seed_outside_the_seeding_module`, which forbids generators outside `matsim_agents.seeding`. `alloys.py` now uses `numpy_rng` and `alloy_ensemble.py` uses `stream_seed` instead of `np.random.default_rng` and `SeedSequence`. Seeded outputs differ from earlier commits.
+- CI fix: the full-suite job failed on `tests/test_seeding.py::test_no_random_generator_or_seed_outside_the_seeding_module`, which forbids generators outside `matsim_agents.core.seeding`. `alloys.py` now uses `numpy_rng` and `alloy_ensemble.py` uses `stream_seed` instead of `np.random.default_rng` and `SeedSequence`. Seeded outputs differ from earlier commits.
 - Seed consistency: `AlloySpec.seed` is now required (`StrictInt`, >= 0; no default of 0), matching `AlloyEnsembleSpec.seed` and `generate_targeted_sro(seed=...)`. Each function draws from a named stream: `generate_alloy` uses `(seed, "alloy-occupation")`, `generate_targeted_sro` uses `(seed, "targeted-sro")`, and ensembles derive per-configuration seeds with `stream_seed(seed, "alloy-ensemble", "occupation"|"optimizer", k)`. A record's `seed` and `optimizer_seed` replay the configuration through the public `generate_alloy` and `generate_targeted_sro` (tested). Equal seeds given to different functions no longer share draws. Outputs from earlier commits are not reproduced; no stored results depended on them.
 - A2.6: added target feasibility checks and `validate_targeted_sro` in `alloys.py`, with `tests/test_alloys_sro_feasibility.py` (18 tests). Two test-only correction rounds (the chosen swap left alpha unchanged; an objective override equal to the true value). With the other alloy tests and `tests/test_e3_mlip_structure_generation.py`: 121 passed; structural tests: 59 passed. Ruff check and format pass.
 - A2.7: added `alloy_ensemble.py` and `tests/test_alloy_ensemble.py` (30 tests); topology reuse added to `alloys.py`. Alloy, ensemble and E3 tests together: 151 passed, 0 failed, 0 skipped. Structural tests: 59 passed, 0 failed, 0 skipped. Ruff check and format pass. No debugging corrections were needed.
@@ -226,7 +230,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - [x] C1.4 NEB evidence ingestion (`kinetics/evidence.py`, `TransitionNetwork.replace_transition`; 5 tests). Forward/reverse barriers are swapped onto the reverse event. A rate is `qualified` only with a qualified result, qualified endpoints, a climbing image and an explicit attempt frequency; failed, incomplete, negative or inconsistent (E_f - E_r != E_N - E_0) results are rejected. Tests use synthetic fixtures.
 - [x] C1.5 network validation (`kinetics/validation.py`; 5 tests). Reports evidence/qualified fractions, missing barriers, attempt frequencies and reverse events, unreachable and dead-end states. `ready_for_qualified_kmc` needs all reachable events qualified and a non-synthetic network; `ready_for_exploratory_kmc` needs barriers and attempt frequencies only.
 - [x] C2.1 HTST rates (`kinetics/rates.py`; 13 tests). `g*nu*exp(-Ea/kT)` with kB=8.617333262e-5 eV/K, log-space underflow to 0, no rate without barrier evidence, `qualified` policy rejects unqualified evidence and missing attempt frequency, exploratory fallback frequency is recorded as an assumption, detailed balance only on request.
-- [x] C2.2 Gillespie CT-KMC (`kinetics/kmc.py`; 8 tests). Seeded through `matsim_agents.seeding.numpy_rng`; horizon and max-event censoring and stuck states are reported separately from absorption. Tests check the mean waiting time (1/k) and the branching ratio (k1/(k1+k2)) against analytic values on synthetic networks.
+- [x] C2.2 Gillespie CT-KMC (`kinetics/kmc.py`; 8 tests). Seeded through `matsim_agents.core.seeding.numpy_rng`; horizon and max-event censoring and stuck states are reported separately from absorption. Tests check the mean waiting time (1/k) and the branching ratio (k1/(k1+k2)) against analytic values on synthetic networks.
 - [x] C2.3 KMC ensembles (`kinetics/ensemble.py`; 6 tests). Independent streams `("ensemble", i)`, outcome probabilities over all trajectories with Wilson intervals, first passage from absorbed runs only, censoring recorded and flagged as bias. Checked against exp(-kt) and 1-exp(-kt) on synthetic networks.
 - [x] C2.4 uncertainty and sensitivity (`kinetics/uncertainty.py`; 7 tests). Pathway-level saddle shifts keep E_f-E_r consistent; barrier-error correlation is a required argument (no independence default); prefactor, temperature and dropped-channel perturbations; common-random-number central-difference sensitivity checked against the analytic slope -p(1-p)/kT. Sigmas are stated inputs, not measured errors.
 - [x] C2.5 integration and analytic benchmarks (`tests/test_kinetics_integration.py`; 4 tests). B pathway -> network -> evidence -> rate -> KMC: reversible-hop occupancy matches k_f/(k_f+k_r) and the detailed-balance ratio; Frenkel first passage matches 1/k. All energies synthetic fixtures. Phase C total: 64 kinetics tests pass. No qualified barrier exists, so no qualified kinetics claim is made.
@@ -235,7 +239,7 @@ Task definitions are in `radiation-damage-phase-b-spec.md`. Software verificatio
 - [x] D2: end-to-end workflow (`workflows/radiation_damage.py`, 10 tests). Stages structure, neb_prepare, neb_run, kinetics with a hashed state file; dry run by default, resume refuses a changed configuration and skips finished stages. Kinetics are exploratory only; missing NEB evidence or attempt frequency blocks the stage. Reuses the NEB workflow, split out `dispatch_neb_workflow` and `read_neb_plan`.
 - [x] D3: deterministic hypothesis revision with budgets and optional LLM rationale (`workflows/radiation_hypothesis.py`, 9 tests); status is rule-based, supported/contradicted unreachable without a qualified barrier.
 - [x] D4: non-blocking Slurm submission (`execution/slurm_jobs.py`, 21 tests, fake scheduler): job-spec hashing, manifest created at first submission only, 2-GPU-job cap, one diagnosed retry, one-call refresh; no real jobs submitted. Cluster: partition batch, QoS debug (2 h), GPU flag --gpus-per-node=1 --gpu-bind=closest as used by deployments/frontier.
-- [x] D5: `matsim-agents radiation-damage run|status|report|capabilities` CLI plus `workflows/radiation_report.py` (8 tests); dry run by default, report always states not_qualified and standing caveats.
+- [x] D5 (CLI later removed; the workflow is driven from Python): `matsim-agents radiation-damage run|status|report|capabilities` CLI plus `workflows/radiation_report.py` (8 tests); dry run by default, report always states not_qualified and standing caveats.
 - [x] D6: end-to-end integration tests (`tests/test_radiation_damage_integration.py`, 6 tests): dry run, resume, revision chain, determinism, censoring, blocking; synthetic fixtures only.
 - [x] E1: qualification matrix (`workflows/radiation_qualification.py`, 11 tests): 10 rows, all not_assessed; promotion needs measured, non-synthetic, hash-verified evidence; qualified needs every criterion.
 - [x] E2: MLIP validation protocol (`workflows/radiation_mlip_validation.py`, 12 tests, synthetic arrays only): bootstrap CI verdicts, small or non-held-out sets are insufficient. GPU smoke job 5983196 (existing Torch/PyG qualification script, 1 node, 1 GPU, 10 min) submitted non-blocking via the manifest; result not yet read, so no GPU claim is made.

@@ -6,19 +6,22 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from matsim_agents.backends.llm.transcript import Contribution
-from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
-from matsim_agents.campaign.review import (
+from matsim_agents.core.contracts import EvidenceLevel, WorkflowStatus
+from matsim_agents.science.structures.formula import FormulaCandidate, FormulaGenerationPolicy
+from matsim_agents.science.thermodynamics.stability import PhaseStability, StabilityReport
+from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
+from matsim_agents.workflows.multi_formula.evidence import (
+    open_campaign_ledger,
+    sync_stability_evidence,
+)
+from matsim_agents.workflows.multi_formula.review import (
     CampaignDebateReviewConfig,
     _deactivation_block_reason,
     _parse_verdict,
     _review_evidence,
     run_campaign_debate_review,
 )
-from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
-from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import PhaseStability, StabilityReport
-from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
-from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
+from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
 
 
 def _proposal():

@@ -10,12 +10,13 @@ from ase import Atoms
 from ase.io import write
 from pydantic import ValidationError
 
-from matsim_agents.campaign.characterization import (
-    CharacterizationContract,
-    outstanding_steps,
-    run_characterization,
+from matsim_agents.core.contracts import CharacterizationStatus, EvidenceLevel
+from matsim_agents.science.properties.calculators import (
+    PropertyConditions,
+    PropertyEvidence,
+    PropertyStatus,
 )
-from matsim_agents.campaign.property_recipes import (
+from matsim_agents.science.properties.recipes import (
     METHODS,
     PROPERTY_RECIPES,
     BackendContext,
@@ -23,11 +24,10 @@ from matsim_agents.campaign.property_recipes import (
     list_recipes,
     method_readiness,
 )
-from matsim_agents.execution.contracts import CharacterizationStatus, EvidenceLevel
-from matsim_agents.execution.properties import (
-    PropertyConditions,
-    PropertyEvidence,
-    PropertyStatus,
+from matsim_agents.workflows.characterization import (
+    CharacterizationContract,
+    outstanding_steps,
+    run_characterization,
 )
 
 pytest.importorskip("pymatgen")

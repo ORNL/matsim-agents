@@ -1,0 +1,221 @@
+"""Validation and immutable manifests for DFT-labelled active-learning data."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from matsim_agents.core.energy_conventions import FORMATION_ENERGY_REFERENCE, native_total_energy
+from matsim_agents.core.hashing import sha256_file
+
+
+class DatasetValidationSummary(BaseModel):
+    accepted: int = 0
+    rejected: int = 0
+    duplicate: int = 0
+    rejection_reasons: list[str] = Field(default_factory=list)
+
+
+class DatasetManifest(BaseModel):
+    dataset_id: str
+    created_at_utc: str
+    path: str
+    sha256: str
+    dft_backend: str
+    method_signature: str | None = None
+    method_signature_elements: list[str] | None = None
+    base_method_signature: str | None = None
+    element_method_signatures: dict[str, str] | None = None
+    energy_reference: str
+    parent_dataset_id: str | None = None
+    split_role: str = "training_pool"
+    validation: DatasetValidationSummary
+
+
+def structure_identity(atoms: Any) -> str:
+    """Hash geometry independent of ordering/translation and molecular rotations."""
+    import numpy as np
+
+    numbers = np.asarray(atoms.numbers, dtype=int)
+    pbc = np.asarray(atoms.pbc, dtype=bool)
+    if not pbc.any():
+        positions = np.asarray(atoms.positions, dtype=float)
+        distances = np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=2)
+        environments = sorted(
+            (
+                int(number),
+                sorted(
+                    (int(other), round(float(distance), 6))
+                    for other, distance in zip(numbers, row, strict=True)
+                ),
+            )
+            for number, row in zip(numbers, distances, strict=True)
+        )
+        payload = {"environments": environments, "pbc": pbc.tolist()}
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
+    scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
+    metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T
+    origins = scaled if len(scaled) else np.zeros((1, 3))
+    representations: list[str] = []
+    for origin in origins:
+        shifted = scaled - origin
+        shifted[:, pbc] = np.mod(shifted[:, pbc], 1.0)
+        sites = sorted(
+            (int(number), *(round(float(value), 8) for value in position))
+            for number, position in zip(numbers, shifted, strict=True)
+        )
+        payload = {
+            "sites": sites,
+            "metric": np.round(metric, decimals=8).tolist(),
+            "pbc": pbc.tolist(),
+        }
+        representations.append(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return hashlib.sha256(min(representations).encode("utf-8")).hexdigest()
+
+
+def validate_labelled_frames(
+    frames: Iterable[Any],
+    *,
+    existing_frames: Iterable[Any] = (),
+    expected_atomic_numbers: set[int] | None = None,
+) -> tuple[list[Any], DatasetValidationSummary]:
+    """Reject malformed/non-finite labels and exact duplicate geometries."""
+
+    import numpy as np
+
+    accepted: list[Any] = []
+    summary = DatasetValidationSummary()
+    seen = {
+        structure_identity(getattr(existing, "atoms", existing)) for existing in existing_frames
+    }
+    for index, frame in enumerate(frames):
+        try:
+            atoms = getattr(frame, "atoms", frame)
+            energy = float(getattr(frame, "energy_eV", atoms.info.get("energy")))
+            raw_forces = getattr(frame, "forces_eV_per_A", atoms.arrays.get("forces"))
+            forces = np.asarray(raw_forces, dtype=float)
+            positions = np.asarray(atoms.positions, dtype=float)
+            numbers = np.asarray(atoms.numbers, dtype=int)
+            if np.any(numbers <= 0):
+                raise ValueError("atomic numbers must be positive")
+            if expected_atomic_numbers is not None and not set(numbers).issubset(
+                expected_atomic_numbers
+            ):
+                raise ValueError("frame contains an atomic number outside the campaign element set")
+            if forces.shape != positions.shape:
+                raise ValueError(
+                    f"forces shape {forces.shape} != positions shape {positions.shape}"
+                )
+            if (
+                not np.isfinite(energy)
+                or not np.isfinite(forces).all()
+                or not np.isfinite(positions).all()
+            ):
+                raise ValueError("energy, forces, and positions must be finite")
+            key = structure_identity(atoms)
+            if key in seen:
+                summary.duplicate += 1
+                continue
+            seen.add(key)
+            accepted.append(frame)
+        except Exception as exc:  # noqa: BLE001 - record malformed external labels
+            summary.rejected += 1
+            summary.rejection_reasons.append(f"frame {index}: {exc}")
+    summary.accepted = len(accepted)
+    return accepted, summary
+
+
+def load_training_manifest(dataset_path: str | Path) -> DatasetManifest:
+    """The sidecar of a dataset of native DFT total energies, checked against its bytes.
+
+    Training and reference preparation start from raw totals; a dataset of
+    formation energies (or any other convention) is refused.
+    """
+    path = Path(dataset_path)
+    sidecar = path.with_suffix(path.suffix + ".manifest.json")
+    if not sidecar.is_file():
+        raise ValueError(f"{path} needs its dataset manifest (DFT provenance): {sidecar}")
+    metadata = json.loads(sidecar.read_text())
+    if not metadata.get("dft_backend"):
+        raise ValueError(f"{sidecar} does not name the DFT backend")
+    expected = native_total_energy(metadata["dft_backend"])
+    if metadata.get("energy_reference") != expected:
+        raise ValueError(
+            f"{path.name} declares {metadata.get('energy_reference')!r} labels; this step "
+            f"requires native DFT total-energy labels ({expected!r})"
+        )
+    digest = sha256_file(path)
+    if metadata.get("sha256") != digest:
+        raise ValueError("DFT dataset manifest hash does not match the training data")
+    # Minimal sidecars omit bookkeeping fields; fill them as source_provenance() does.
+    metadata.setdefault("dataset_id", digest[:16])
+    metadata.setdefault("created_at_utc", "")
+    metadata.setdefault("path", str(path))
+    metadata.setdefault("validation", {})
+    return DatasetManifest.model_validate(metadata)
+
+
+def reject_formation_frames(frames: Iterable[Any]) -> None:
+    """Refuse frames already marked as formation-energy labels."""
+    for index, atoms in enumerate(frames):
+        if atoms.info.get("energy_convention") == FORMATION_ENERGY_REFERENCE:
+            raise ValueError(
+                f"Training frame {index} is already marked as a formation-energy label"
+            )
+
+
+def write_dataset_manifest(
+    dataset_path: str | Path,
+    *,
+    dft_backend: str,
+    energy_reference: str,
+    validation: DatasetValidationSummary,
+    parent_dataset_id: str | None = None,
+    method_signature: str | None = None,
+    method_signature_elements: set[str] | None = None,
+    base_method_signature: str | None = None,
+    element_method_signatures: dict[str, str] | None = None,
+    split_role: str = "training_pool",
+) -> Path:
+    path = Path(dataset_path)
+    digest = sha256_file(path)
+    manifest = DatasetManifest(
+        dataset_id=digest[:16],
+        created_at_utc=datetime.now(UTC).isoformat(),
+        path=str(path.resolve()),
+        sha256=digest,
+        dft_backend=dft_backend,
+        method_signature=method_signature,
+        method_signature_elements=(
+            sorted(method_signature_elements) if method_signature_elements is not None else None
+        ),
+        base_method_signature=base_method_signature,
+        element_method_signatures=element_method_signatures,
+        energy_reference=energy_reference,
+        parent_dataset_id=parent_dataset_id,
+        split_role=split_role,
+        validation=validation,
+    )
+    destination = path.with_suffix(path.suffix + ".manifest.json")
+    destination.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return destination
+
+
+__all__ = [
+    "DatasetManifest",
+    "DatasetValidationSummary",
+    "load_training_manifest",
+    "reject_formation_frames",
+    "structure_identity",
+    "validate_labelled_frames",
+    "write_dataset_manifest",
+]

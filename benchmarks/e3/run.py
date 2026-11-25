@@ -30,11 +30,11 @@ from ase import Atoms
 from ase.io import read, write
 
 from benchmarks.e4.aurora_dft.prepare_stage1 import _lattice_occupations
-from matsim_agents.active_learning.md_sampler import Candidate
-from matsim_agents.active_learning.config import AcquisitionConfig
-from matsim_agents.active_learning.uncertainty import select_candidates
-from matsim_agents.datasets.splits import SplitConfig, make_split
-from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
+from matsim_agents.workflows.active_learning.config import AcquisitionConfig
+from matsim_agents.workflows.active_learning.uncertainty import select_candidates
+from matsim_agents.data.splits import SplitConfig, make_split
+from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,
@@ -1100,7 +1100,7 @@ def soap_descriptors(
     atoms_list: list[Atoms], species: list[str], scratch: Path
 ) -> list[np.ndarray]:
     """Existing campaign.registry SOAP descriptor for each structure (file-based API)."""
-    from matsim_agents.campaign.registry import soap_descriptor
+    from matsim_agents.workflows.candidate_registry import soap_descriptor
 
     scratch.mkdir(parents=True, exist_ok=True)
     out = []
@@ -1120,7 +1120,7 @@ def soap_rule_select(
     params: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Frozen Rule-based adaptation: uncertainty-eligible SOAP max-min selection."""
-    from matsim_agents.campaign.registry import soap_novelty
+    from matsim_agents.workflows.candidate_registry import soap_novelty
 
     order = sorted(range(len(ids)), key=lambda i: (-uncertainty[i], ids[i]))
     eligible = order[: max(n, int(np.ceil(params["eligible_top_fraction"] * len(ids))))]
@@ -1302,7 +1302,7 @@ def round1_material(
     if not all(len(rows) == len(ids) for rows in committee.values()):
         raise RuntimeError(f"{material}: committee predictions missing")
 
-    from matsim_agents.active_learning.uncertainty import score_ensemble
+    from matsim_agents.workflows.active_learning.uncertainty import score_ensemble
 
     started = time.perf_counter()
     candidates = [Candidate(cid, a, cid, 0) for cid, a in zip(ids, pool_atoms, strict=True)]
@@ -1313,7 +1313,7 @@ def round1_material(
     descriptors = soap_descriptors(pool_atoms, species, out / "soap" / "pool")
     ref_descriptors = soap_descriptors(refs, species, out / "soap" / "references")
     soap_seconds = time.perf_counter() - started
-    from matsim_agents.campaign.registry import soap_novelty
+    from matsim_agents.workflows.candidate_registry import soap_novelty
 
     entries = {
         cid: PoolEntry(cid, a.info["e3_group"], a, _structure_hash(a))

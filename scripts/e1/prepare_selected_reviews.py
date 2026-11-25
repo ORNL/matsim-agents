@@ -13,10 +13,12 @@ from pathlib import Path
 from random import SystemRandom
 from typing import Any
 
+# benchmarks/ is a repository directory, not part of the installed package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prepare_blinded_reviews import CRITERIA, THRESHOLDS
+from prepare_blinded_reviews import CRITERIA, THRESHOLDS  # noqa: E402
 
-from matsim_agents.workflows.e1 import assess_semantic_validity
+from benchmarks.e1.protocol import assess_semantic_validity  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS_PATH = ROOT / "research/paper/e1/d-questions.v1.json"

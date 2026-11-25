@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.discovery.exploration.coverage import (
+from matsim_agents.core.stats import wilson_interval
+from matsim_agents.workflows.exploration.coverage import (
     bootstrap_mean_interval,
     convergence_report,
     coverage_report,
-    wilson_interval,
 )
 
 

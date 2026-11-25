@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 from pathlib import Path
 
 import pytest
@@ -22,14 +23,13 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
 # Lowest layer first. A unit may import only from units in strictly lower
 # layers (or from itself); units in the same layer must not import each other.
 LAYERS: list[set[str]] = [
-    {"seeding"},
-    {"execution", "datasets"},
+    {"core"},
+    {"execution", "data"},
     {"backends.llm", "backends.dft", "backends.mlip", "backends.mcp"},
-    {"discovery", "training", "irradiation"},
-    {"kinetics", "integrations"},
-    {"active_learning", "workflows"},
-    {"orchestration", "campaign"},
-    {"fusion"},
+    {"science"},
+    {"backends.external"},
+    {"workflows"},
+    {"agents"},
     {"cli"},
 ]
 LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}
@@ -110,19 +110,23 @@ def _layer_violations() -> list[str]:
 @pytest.mark.parametrize(
     ("module", "is_package", "code"),
     [
-        ("matsim_agents.datasets.governance", False, "from ..orchestration.state import X"),
-        ("matsim_agents.datasets.governance", False, "from .. import orchestration"),
-        ("matsim_agents.datasets", True, "from ..campaign import state"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import orchestration"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import execution, cli"),
-        ("matsim_agents.datasets.governance", False, "from matsim_agents import MatSimState"),
+        ("matsim_agents.data.governance", False, "from ..agents.state import X"),
+        ("matsim_agents.data.governance", False, "from .. import agents"),
+        ("matsim_agents.data", True, "from ..workflows import hierarchy"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import agents"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import execution, cli"),
+        ("matsim_agents.data.governance", False, "from matsim_agents import MatSimState"),
         ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
         ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
-        ("matsim_agents.discovery.seed_structures", False, "from ..training import cost"),
         (
-            "matsim_agents.discovery.seed_structures",
+            "matsim_agents.science.structures.seed_structures",
             False,
-            "import matsim_agents.orchestration.state",
+            "from ...workflows import hierarchy",
+        ),
+        (
+            "matsim_agents.science.structures.seed_structures",
+            False,
+            "import matsim_agents.agents.state",
         ),
     ],
 )
@@ -133,17 +137,30 @@ def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_pack
 @pytest.mark.parametrize(
     ("module", "is_package", "code"),
     [
-        ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
-        ("matsim_agents.datasets.formation_training", False, "from . import governance"),
-        ("matsim_agents.datasets", True, "from .governance import sha256_file"),
-        ("matsim_agents.discovery.seed_structures", False, "from ..backends.mlip import config"),
+        ("matsim_agents.data.formation_training", False, "from .governance import x"),
+        ("matsim_agents.data.formation_training", False, "from . import governance"),
+        ("matsim_agents.data", True, "from .governance import DatasetManifest"),
+        ("matsim_agents.execution.ledger", False, "from ..core.hashing import sha256_file"),
         (
-            "matsim_agents.discovery.seed_structures",
+            "matsim_agents.science.structures.seed_structures",
+            False,
+            "from ..backends.mlip import config",
+        ),
+        (
+            "matsim_agents.science.structures.seed_structures",
             False,
             "from matsim_agents.backends import llm, mlip",
         ),
-        ("matsim_agents.discovery.seed_structures", False, "from matsim_agents import datasets"),
-        ("matsim_agents.campaign.state", False, "from ..active_learning.config import ALConfig"),
+        (
+            "matsim_agents.science.structures.seed_structures",
+            False,
+            "from matsim_agents import data",
+        ),
+        (
+            "matsim_agents.workflows.multi_formula.state",
+            False,
+            "from ..workflows.active_learning.config import ALConfig",
+        ),
         ("matsim_agents.backends.mlip.config", False, "from . import results"),
     ],
 )
@@ -168,6 +185,82 @@ def test_imports_only_point_to_lower_layers() -> None:
     assert _layer_violations() == []
 
 
+# ── Framework/application separation ──────────────────────────────────────── #
+
+APPLICATION_TREES = ("examples", "benchmarks", "research", "deployments", "scripts")
+# Campaign identifiers, allocations and facility paths belong to applications
+# and deployments, never to the framework.
+FORBIDDEN_LITERALS = re.compile(r"W640|lrn110|m5216|/lustre/|/gpfs/|/global/cfs/", re.IGNORECASE)
+CAMPAIGN_NAME = re.compile(r"(^|[-_ ])(e1|e2|e3|e4|nbtao5|fusion|pfc|w640)([-_ ]|$)", re.IGNORECASE)
+
+
+def _src_modules() -> list[tuple[Path, ast.Module]]:
+    return [(p, ast.parse(p.read_text())) for p in sorted(PACKAGE_ROOT.rglob("*.py"))]
+
+
+def test_science_does_not_import_backends() -> None:
+    violations = []
+    for path, tree in _src_modules():
+        rel = path.relative_to(PACKAGE_ROOT.parent)
+        if rel.parts[1] != "science":
+            continue
+        module = ".".join(rel.with_suffix("").parts).removesuffix(".__init__")
+        for node in ast.walk(tree):
+            units = _import_target_units(module, path.name == "__init__.py", node)
+            if any(unit and unit.startswith("backends") for unit in units):
+                violations.append(f"{rel}:{node.lineno}")
+    assert violations == []
+
+
+def test_framework_does_not_import_applications() -> None:
+    violations = []
+    for path, tree in _src_modules():
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level:
+                names = [node.module or ""]
+            if any(name.split(".")[0] in APPLICATION_TREES for name in names):
+                violations.append(f"{path.relative_to(PACKAGE_ROOT)}:{node.lineno}")
+    assert violations == []
+
+
+def test_framework_has_no_campaign_or_facility_literals() -> None:
+    violations = [
+        f"{path.relative_to(PACKAGE_ROOT)}:{lineno}"
+        for path in sorted(PACKAGE_ROOT.rglob("*.py"))
+        for lineno, line in enumerate(path.read_text().splitlines(), 1)
+        if FORBIDDEN_LITERALS.search(line)
+    ]
+    assert violations == []
+
+
+def test_framework_module_names_are_campaign_neutral() -> None:
+    names = [
+        p.relative_to(PACKAGE_ROOT).as_posix()
+        for p in PACKAGE_ROOT.rglob("*")
+        if p.name != "__pycache__" and CAMPAIGN_NAME.search(p.stem)
+    ]
+    assert names == []
+
+
+def test_cli_command_names_are_campaign_neutral() -> None:
+    from typer.main import get_command
+
+    from matsim_agents.cli._app import app
+    from matsim_agents.cli.tools import TOOLS
+
+    def walk(command, prefix: str = "") -> list[str]:
+        names = []
+        for name, sub in getattr(command, "commands", {}).items():
+            names += [prefix + name, *walk(sub, f"{prefix}{name} ")]
+        return names
+
+    names = walk(get_command(app)) + list(TOOLS)
+    assert [n for n in names if CAMPAIGN_NAME.search(n)] == []
+
+
 # ── Removed legacy paths ──────────────────────────────────────────────────── #
 
 
@@ -179,10 +272,46 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.state",
         "matsim_agents.supervisor",
         "matsim_agents.tools",
-        "matsim_agents.agents",
+        "matsim_agents.agents.agents",
         "matsim_agents.chat",
         "matsim_agents.active_learning.backends",
         "matsim_agents.active_learning.vasp_runner",
+        "matsim_agents.active_learning.candidates",
+        "matsim_agents.discovery.seeds",
+        "matsim_agents.discovery.selection",
+        "matsim_agents.data.energy_references",
+        "matsim_agents.discovery.composition",
+        "matsim_agents.execution.contracts",
+        "matsim_agents.execution.launchers",
+        "matsim_agents.agents.policies",
+        "matsim_agents.seeding",
+        "matsim_agents.datasets",
+        "matsim_agents.training",
+        "matsim_agents.orchestration",
+        "matsim_agents.active_learning",
+        "matsim_agents.integrations",
+        "matsim_agents.discovery",
+        "matsim_agents.irradiation",
+        "matsim_agents.kinetics",
+        "matsim_agents.discovery.alloys",
+        "matsim_agents.discovery.seed_structures",
+        "matsim_agents.discovery.point_defects",
+        "matsim_agents.discovery.neb_contracts",
+        "matsim_agents.discovery.magnetism",
+        "matsim_agents.discovery.stability",
+        "matsim_agents.campaign",
+        "matsim_agents.fusion",
+        "matsim_agents.execution.properties",
+        "matsim_agents.agents.composition_graph",
+        "matsim_agents.cli.campaign",
+        "matsim_agents.cli.materials",
+        "matsim_agents.cli.radiation_damage",
+        "matsim_agents.cli.e1",
+        "matsim_agents.cli.composition",
+        "matsim_agents.workflows.e1",
+        "matsim_agents.workflows.warmstart_benchmark_qe",
+        "matsim_agents.workflows.warmstart_benchmark_vasp",
+        "matsim_agents.backends.mlip.results",
     ],
 )
 def test_legacy_alias_modules_are_removed(module: str) -> None:

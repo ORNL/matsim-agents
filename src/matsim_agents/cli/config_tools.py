@@ -17,37 +17,32 @@ CONFIG_KINDS: dict[str, tuple[str, str, str]] = {
     "relax": (
         "matsim_agents.workflows.relaxation:ScientificRelaxationConfig",
         "examples/relaxation/scientific_relaxation.example.yaml",
-        "matsim-agents relax {path}",
+        "matsim-agents run {path}",
     ),
     "characterize": (
-        "matsim_agents.campaign.characterization:CharacterizationContract",
+        "matsim_agents.workflows.characterization:CharacterizationContract",
         "examples/characterization/relaxation.yaml",
-        "matsim-agents characterize {path}",
+        "matsim-agents run {path}",
     ),
     "debate": (
         "matsim_agents.workflows.debate:ScientificDebateConfig",
         "examples/debate/equal-independent.yaml",
-        "matsim-agents debate {path}",
+        "matsim-agents run {path}",
     ),
     "llm-check": (
         "matsim_agents.workflows.llm_check:LLMCheckConfig",
         "examples/llm_check/llm_check.example.yaml",
-        "matsim-agents llm-check {path}",
+        "matsim-agents run {path}",
     ),
     "al": (
-        "matsim_agents.active_learning.config:ALConfig",
+        "matsim_agents.workflows.active_learning.config:ALConfig",
         "examples/active_learning/al_config.example.yaml",
-        "matsim-agents al validate-config {path}",
+        "matsim-agents run {path}",
     ),
     "explore": (
-        "matsim_agents.workflows.exploration_config:ExplorationConfig",
+        "matsim_agents.workflows.exploration.config:ExplorationConfig",
         "examples/workflows/explore-nb2o5.yaml",
-        "matsim-agents explore check {path}",
-    ),
-    "workflow": (
-        "matsim_agents.cli.workflow_catalog:WorkflowConfig",
-        "examples/workflows/exploration-workflow.yaml",
-        "matsim-agents workflow check {path}",
+        "matsim-agents run {path}",
     ),
 }
 KIND_HELP = ", ".join(CONFIG_KINDS)

@@ -8,7 +8,7 @@ the analyst summarizes the results; the audit log records every attempt.
     pip install -e ".[mcp]"
     python examples/mcp/run_demo.py --output-dir /tmp/mcp-demo
 
-To let an LLM plan instead, use ``matsim-agents run ... --mcp-config
+To let an LLM plan instead, use ``matsim-agents objective ... --mcp-config
 examples/mcp/mcp.example.yaml`` (see docs/mcp.md).
 """
 
@@ -24,8 +24,8 @@ import matsim_agents.backends.llm.provider as llm_provider
 from matsim_agents.backends.mcp.config import load_mcp_config
 from matsim_agents.backends.mcp.records import MCPAuditLog
 from matsim_agents.backends.mcp.session import MCPSessionManager
-from matsim_agents.orchestration.objective_graph import build_graph
-from matsim_agents.orchestration.state import MatSimState, TaskSpec
+from matsim_agents.agents.objective_graph import build_graph
+from matsim_agents.agents.state import MatSimState, TaskSpec
 
 HERE = Path(__file__).resolve().parent
 

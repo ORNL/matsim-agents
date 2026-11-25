@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.campaign.elasticity import (
+from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.science.properties.calculators import PropertyStatus
+from matsim_agents.science.properties.elasticity import (
     ElasticSettings,
     apply_strain,
     ase_stress_fn,
@@ -16,8 +18,6 @@ from matsim_agents.campaign.elasticity import (
     plan_calculations,
     strain_set,
 )
-from matsim_agents.execution.contracts import EvidenceLevel
-from matsim_agents.execution.properties import PropertyStatus
 
 
 def cubic_c(c11, c12, c44):

@@ -1,4 +1,4 @@
-# External MCP servers for `matsim-agents run --mcp-config`.
+# External MCP servers for `matsim-agents objective --mcp-config`.
 # Relative stdio paths resolve against this file's directory.
 mcp:
   servers:

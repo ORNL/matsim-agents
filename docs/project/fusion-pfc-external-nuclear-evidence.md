@@ -5,7 +5,7 @@ code has been run by this software, and no imported value in the repository is r
 
 ## Contract
 
-`matsim_agents.fusion.nuclear_evidence.ExternalNuclearEvidence` validates one result from
+`matsim_agents.science.irradiation.nuclear_evidence.ExternalNuclearEvidence` validates one result from
 an external code (for example FISPACT-II or SPECTRA-PKA). Every record must carry:
 
 - the application and version, the nuclear-data library, and sha256 hashes of the
@@ -27,10 +27,12 @@ Scientific qualification needs a stated basis and non-synthetic data.
 
 ## Transmutation configurations
 
-`matsim_agents.fusion.transmutation.transmuted_configuration` turns per-atom
-transmutation evidence into Re/Os substitutions on seeded W sites. It accepts
-`atom_fraction` or `concentration_appm`. The parent is the 1,024-site BCC 8x8x8
-reference alloy, W640 Ta128 Cr64 V96 Hf32 Mo64, with stable site ids.
+`matsim_agents.workflows.radiation.transmutation_configs.transmuted_configuration` turns per-atom
+transmutation evidence into product substitutions on seeded host sites. The
+caller passes the site map, the `host` element and the `products`; the fusion
+application uses host W, products Re and Os, and the 1,024-site BCC alloy from
+[examples/fusion_bcc_1024](../../examples/fusion_bcc_1024/application.yaml).
+It accepts `atom_fraction` or `concentration_appm`.
 
 - Counts are rounded to the nearest integer.
 - Gas isotopes are counted and not placed.
@@ -38,8 +40,8 @@ reference alloy, W640 Ta128 Cr64 V96 Hf32 Mo64, with stable site ids.
 
 ## Recording
 
-`to_ledger_record` writes the append-only ledger form. `matsim-agents materials import
-FILE [--ledger LEDGER.jsonl]` validates a record and optionally appends it.
+`to_ledger_record` writes the append-only ledger form; append it with the
+evidence ledger API.
 
 Tests: [tests/test_fusion_nuclear_evidence.py](../../tests/test_fusion_nuclear_evidence.py),
 [tests/test_fusion_transmutation.py](../../tests/test_fusion_transmutation.py).

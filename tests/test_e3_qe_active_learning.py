@@ -16,10 +16,10 @@ from ase.io import write
 
 from benchmarks.e3 import production as e3
 from benchmarks.e3.qe_active_learning import E3Sampler, check_resume, main, validate_config
-from matsim_agents.active_learning.config import ALConfig, TrainerConfig
-from matsim_agents.active_learning.loop import _audit_force_errors
-from matsim_agents.active_learning.md_sampler import Candidate
 from matsim_agents.execution.allocation import Allocation
+from matsim_agents.workflows.active_learning.config import ALConfig, TrainerConfig
+from matsim_agents.workflows.active_learning.loop import _audit_force_errors
+from matsim_agents.workflows.active_learning.md_sampler import Candidate
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -334,7 +334,7 @@ def test_geometry_worker_uses_and_records_promoted_checkpoint(tmp_path, monkeypa
     from ase.calculators.emt import EMT
 
     from matsim_agents.backends.mlip import relaxation
-    from matsim_agents.backends.mlip.results import RelaxationResult
+    from matsim_agents.core.relaxation import RelaxationResult
 
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     checkpoint = tmp_path / "promoted.model"
@@ -524,7 +524,7 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
 
 
 def test_final_qe_audit_assessed_after_training_and_promotion(qe_config, monkeypatch):
-    from matsim_agents.active_learning.loop import IterationState
+    from matsim_agents.workflows.active_learning.loop import IterationState
 
     cfg, _ = qe_config
     for index in range(2):
@@ -577,7 +577,7 @@ def test_qe_resume_requires_every_completed_round_assessment(tmp_path):
 
 
 def test_generation_stop_does_not_invent_qe_hypothesis_assessment(qe_config, monkeypatch):
-    from matsim_agents.active_learning.loop import IterationState
+    from matsim_agents.workflows.active_learning.loop import IterationState
 
     cfg, _ = qe_config
     it_dir = cfg.loop.out_dir / "iteration_0000"

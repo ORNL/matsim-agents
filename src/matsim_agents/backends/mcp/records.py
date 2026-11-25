@@ -11,7 +11,6 @@ This module does not import the MCP SDK.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import threading
@@ -45,11 +44,6 @@ Outcome = Literal[
 
 def now_utc() -> str:
     return datetime.now(UTC).isoformat()
-
-
-def sha256_json(payload: Any) -> str:
-    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def scrub_text(text: str, secrets: Iterable[str]) -> str:

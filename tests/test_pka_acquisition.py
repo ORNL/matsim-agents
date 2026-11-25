@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.campaign.pka_acquisition import PKACandidate, select_pka_informed
-from matsim_agents.integrations.external.spectra_pka.parser import (
+from matsim_agents.backends.external.spectra_pka.parser import (
     parse_output_text,
     to_pka_spectrum,
 )
-from matsim_agents.irradiation.contracts import DefectStatus, PKASourceProvenance
+from matsim_agents.science.acquisition.pka_acquisition import PKACandidate, select_pka_informed
+from matsim_agents.science.irradiation.contracts import DefectStatus, PKASourceProvenance
 from tests.spectra_pka_fixtures import SYNTHETIC_OUT, make_campaign
 
 
 @pytest.fixture
 def spectrum(tmp_path):
-    from matsim_agents.integrations.external.spectra_pka.adapter import scenario_from_campaign
+    from matsim_agents.backends.external.spectra_pka.adapter import scenario_from_campaign
 
     campaign = make_campaign(tmp_path)
     prov = PKASourceProvenance(source="synthetic", nuclear_data_identity="synthetic")

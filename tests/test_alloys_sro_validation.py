@@ -12,10 +12,9 @@ from itertools import combinations, product
 import numpy as np
 import pytest
 
-from matsim_agents.discovery.alloys import (
+from matsim_agents.science.structures.alloys import (
     AlloySpec,
-    bcc_site_count,
-    build_bcc_supercell,
+    build_supercell,
     generate_alloy,
     warren_cowley_sro,
 )
@@ -83,11 +82,11 @@ def test_matches_independent_integer_offset_reference(counts, repeats, seed):
 def _layered(repeats):
     """Species by block of two (001) half-planes: floor(z_half / 2) mod 2."""
     spec = AlloySpec(
-        counts={"Mo": bcc_site_count(repeats) // 2, "W": bcc_site_count(repeats) // 2},
+        counts={"Mo": (2 * int(np.prod(repeats))) // 2, "W": (2 * int(np.prod(repeats))) // 2},
         repeats=repeats,
         seed=0,
     )
-    atoms = build_bcc_supercell(spec)
+    atoms = build_supercell(spec)
     coords, _ = _half_lattice_coordinates(atoms, repeats, spec.lattice_parameter)
     atoms.set_chemical_symbols(["W" if (z // 2) % 2 == 0 else "Mo" for z in coords[:, 2]])
     return atoms, spec.lattice_parameter
@@ -139,7 +138,7 @@ def _random_alloy_expectation(counts):
 def test_random_alloy_sro_averages_exactly_to_finite_composition_expectation(counts):
     repeats = (2, 2, 2)
     spec = AlloySpec(counts=counts, repeats=repeats, seed=0)
-    atoms = build_bcc_supercell(spec)
+    atoms = build_supercell(spec)
 
     arrangements = list(_unique_arrangements(counts, len(atoms)))
     first_total = np.zeros((len(counts), len(counts)))

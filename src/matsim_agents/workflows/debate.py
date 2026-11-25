@@ -16,7 +16,7 @@ from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import api_key_from_env, llm_endpoints
 from matsim_agents.backends.llm.transcript import Contribution, Transcript, prompt_messages
-from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
+from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
 from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 

@@ -9,9 +9,7 @@ import pytest
 from ase.geometry import get_distances
 from pydantic import ValidationError
 
-from matsim_agents.discovery.alloy_ensemble import occupation_fingerprint
-from matsim_agents.discovery.alloys import AlloySpec, generate_alloy
-from matsim_agents.discovery.bcc_defects import (
+from matsim_agents.science.defects.bcc import (
     BCC_111_DIRECTIONS,
     BCC_INTERSTITIAL_OFFSETS,
     DUMBBELL_ORIENTATIONS,
@@ -21,7 +19,7 @@ from matsim_agents.discovery.bcc_defects import (
     generate_dumbbell_interstitial,
     generate_frenkel_pair,
 )
-from matsim_agents.discovery.point_defects import (
+from matsim_agents.science.defects.point_defects import (
     DefectConfiguration,
     DefectOutcome,
     DefectSite,
@@ -29,6 +27,8 @@ from matsim_agents.discovery.point_defects import (
     generate_vacancy,
     make_defect_config_id,
 )
+from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
+from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 
 CELL = ((6.32, 0.0, 0.0), (0.0, 6.32, 0.0), (0.0, 0.0, 6.32))
 N = 16

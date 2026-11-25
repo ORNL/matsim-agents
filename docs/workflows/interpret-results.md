@@ -3,38 +3,29 @@
 Start with the human report, then inspect the authoritative evidence it names.
 Do not infer scientific success from a zero process exit code.
 
-## Common invocation records
+## Common run records
 
-`workflow run` prints an invocation directory containing:
+`run` prints a run directory containing:
 
 | Artifact | Meaning |
 | --- | --- |
-| `resolved_config.json` | Wrapper settings and paths used for this invocation |
-| `workflow-state.json` | Last atomically saved native-command status and input identities |
-| `workflow-summary.json` | JSON presentation of that invocation status |
-| `workflow-output.log` | Native output, scientific stop reasons, and result locations |
+| `run-record.json` | Kind, source config, state, summary, blockers, failure reason, native run directory |
+| `resolved_config.json` | Configuration summary used for this run |
 | `report.md` | Human explanation, evidence links, and next actions |
 
 ```bash
-matsim-agents workflow status WORKFLOW_RUN_DIRECTORY
-matsim-agents workflow summary WORKFLOW_RUN_DIRECTORY
+matsim-agents status RUN_ID
+matsim-agents evidence RUN_ID
 ```
 
-`completed` means the native command exited zero. `failed` means it failed;
-`interrupted` means execution was interrupted. `running` is only the **last
-saved record**, not proof that a process, service, or scheduler job is alive.
-An abrupt termination may leave that record behind. Consult the actual
-scheduler/service before recovery. A successfully submitted VASP batch is not
-a completed VASP calculation.
-
-Native output is streamed and logged, including interactive prompts. Ctrl-C
-stops the wrapper's own local child process group, allowing a short graceful
-shutdown before escalation. It does **not** cancel jobs already accepted by a
-scheduler. Inspect native artifacts after any interruption.
-Surviving members of the wrapper's owned process group are stopped even if the
-original command has already exited. Invocation locking uses the existing atomic
-file-lock mechanism supported on shared HPC filesystems, not CFS-incompatible
-`flock`.
+States: `complete` and `partial` finished (partial means some candidates or
+stages failed; read the report), `blocked` means nothing ran because a backend,
+credential, approval or resource was missing (listed in `blockers`), `failed`
+carries the error type and message, `interrupted` means Ctrl-C. The record is
+the **last saved state**, not proof that a process or scheduler job is alive.
+Consult the actual scheduler before recovery. A successfully submitted batch is
+not a completed calculation, and a finished run is not scientific success: inspect
+the native evidence the record names.
 
 ## Exploration: execution, convergence, and ranking are different
 
@@ -78,11 +69,10 @@ Read the [capability table](run-campaigns.md#advanced-workflow-catalog) first.
 Unsupported restart operations fail explicitly. A fresh invocation is not a
 resume and may repeat work.
 
-For exploration, identify the native directory from the retained output:
+For exploration, resume from the recorded run:
 
 ```bash
-matsim-agents workflow resume WORKFLOW_RUN_DIRECTORY \
-  --native-run SCIENTIFIC_RUN_DIRECTORY
+matsim-agents resume RUN_ID
 # Or use the native checkpoint engine directly:
 matsim-agents explore resume SCIENTIFIC_RUN_DIRECTORY
 ```
@@ -94,15 +84,15 @@ identities, and committed artifact hashes. Completed attempts,
 including failed/nonconverged ones, are not silently rerun. An uncommitted attempt
 may restart. Completed runs are no-ops.
 
-The wrapper verifies saved wrapper settings and the native config/manifest file.
+`resume` verifies the saved run record and the native config/manifest file.
 These are **not** a replacement for native transitive scientific-input checks.
 Changing scientific inputs requires a fresh run, not editing saved evidence.
-Do not point an invocation at an unrelated native run/session. AL, characterization,
+Do not point a run at an unrelated native run/session. AL, characterization,
 E1, chat, and E3 production each retain their own native restart policies.
 
 ## What to do next
 
-1. Review invocation errors and native termination reasons.
+1. Review run-record failure reasons and native termination reasons.
 2. Verify convergence and the evidence level required for the scientific claim.
 3. Resume only documented native checkpoints; otherwise prepare a fresh run.
 4. For E3, preserve frozen protocols, approval gates, and resource accounting.
