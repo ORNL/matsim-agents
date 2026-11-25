@@ -105,6 +105,30 @@ def _candidates(app: ApplicationConfig, directory: Path) -> list[tuple[str, Atom
     return found
 
 
+def application_elements(app: ApplicationConfig) -> list[str]:
+    """Every element the application's structures can contain."""
+    from matsim_agents.core.composition import parse_composition
+
+    found = set(app.species)
+    if app.target is not None:
+        found.update(app.target.elements)
+    for formula in app.compositions:
+        parsed = parse_composition(formula)
+        if parsed is not None:
+            found.update(parsed.elements)
+    return sorted(found)
+
+
+def coverage_blockers(app: ApplicationConfig, cfg) -> list[str]:
+    """Elements the configured MLIP cannot model."""
+    if cfg.mlip is None:
+        return []
+    missing = cfg.mlip.unsupported_elements(application_elements(app))
+    if not missing:
+        return []
+    return [f"MLIP {cfg.mlip.model_reference} does not cover element(s) {', '.join(missing)}"]
+
+
 def preflight(path: Path, options: runner.RunOptions) -> runner.Preflight:
     app = load_application(path)
     summary = {"application": app.name, "mode": app.mode, **check_application(app)}
@@ -113,6 +137,7 @@ def preflight(path: Path, options: runner.RunOptions) -> runner.Preflight:
         template = _relax_template(app)
         probe = _relax_config(template, Path(path), Path("."))
         blockers = [b for b in runner.relaxation_blockers(probe) if "structure_path" not in b]
+        blockers += coverage_blockers(app, probe)
     return runner.Preflight(summary, blockers)
 
 

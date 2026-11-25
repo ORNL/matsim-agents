@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import signal
 import subprocess
 import threading
@@ -11,9 +12,28 @@ import time
 from collections.abc import Callable, Mapping
 from typing import IO
 
+from matsim_agents.execution.devices import apply_mask_environment
+
 TIMEOUT_RETURN_CODE = 124
 # srun forwards SIGTERM to its step and waits up to Slurm's KillWait (30 s by default).
 TERMINATE_GRACE_SEC = 60.0
+
+
+def child_environment(env: Mapping[str, str] | None) -> dict[str, str] | None:
+    """Parent environment plus *env*; a placed ROCR mask drops an inherited HIP mask."""
+    if not env:
+        return None
+    merged = dict(os.environ)
+    apply_mask_environment(merged, env)
+    return merged
+
+
+def launcher_from_environment(variable: str) -> str | None:
+    """The launcher named by environment variable ``variable`` if its executable resolves."""
+    val = os.environ.get(variable)
+    if val and shutil.which(val.split()[0] if " " in val else val):
+        return val
+    return None
 
 
 def _group_alive(pgid: int) -> bool:
@@ -121,4 +141,11 @@ def _handle_signals(handler: Callable[[int, object], None]) -> Callable[[], None
     return restore
 
 
-__all__ = ["TERMINATE_GRACE_SEC", "TIMEOUT_RETURN_CODE", "run_launcher", "stop_process_group"]
+__all__ = [
+    "TERMINATE_GRACE_SEC",
+    "TIMEOUT_RETURN_CODE",
+    "child_environment",
+    "launcher_from_environment",
+    "run_launcher",
+    "stop_process_group",
+]

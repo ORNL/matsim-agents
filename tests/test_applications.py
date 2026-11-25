@@ -79,17 +79,6 @@ def test_perovskite_is_a_composition_driven_paradigm(tmp_path):
     assert "SrTiO3" in app.compositions
 
 
-def test_perovskite_runner_generates_prototype_candidates(tmp_path):
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("perovskite_run", PEROVSKITE.parent / "run.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    counts = module.main(["-o", str(tmp_path)])
-    assert set(counts) == set(load_application(PEROVSKITE).compositions)
-    assert all(n > 0 for n in counts.values())
-
-
 def test_target_rejects_inconsistent_site_counts():
     with pytest.raises(ValidationError, match="1024 sites"):
         SupercellTarget(

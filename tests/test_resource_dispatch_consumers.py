@@ -299,13 +299,9 @@ def test_rocm_worker_masks_compose_hip_with_rocr(monkeypatch):
         child_mask_environment({"ROCR_VISIBLE_DEVICES": "0"}, owner="x")
 
 
-@pytest.mark.parametrize("module", ["qe_relax", "vasp_relax"])
-def test_direct_rocm_dft_child_keeps_the_placed_device(monkeypatch, module):
-    import importlib
+def test_direct_rocm_dft_child_keeps_the_placed_device(monkeypatch):
+    from matsim_agents.backends.dft.process import child_environment
 
-    child_environment = importlib.import_module(
-        f"matsim_agents.backends.dft.{module}"
-    )._child_environment
     monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "2,3,6,7")
     monkeypatch.setenv("HIP_VISIBLE_DEVICES", "1,3")
     env = child_environment({"ROCR_VISIBLE_DEVICES": "7", "OMP_NUM_THREADS": "7"})

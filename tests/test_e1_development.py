@@ -803,3 +803,18 @@ def test_remote_runner_records_errors_and_retries_only_when_requested(tmp_path):
     assert retried["state"] == "complete"
     assert all_records[-1]["status"] == "complete"
     assert all_records[-1]["attempt"] == 2
+
+
+def test_question_packet_v2_matches_v1_and_names_the_current_schema() -> None:
+    from benchmarks.e1.protocol import E1Question
+
+    root = Path("research/paper/e1")
+    v1 = json.loads((root / "d-questions.v1.json").read_text(encoding="utf-8"))
+    v2 = json.loads((root / "d-questions.v2.json").read_text(encoding="utf-8"))
+    assert v2["supersedes"] == "d-questions.v1.json"
+    assert v2["questions"] == v1["questions"]
+    for packet in (v1, v2):
+        assert all(
+            E1Question.model_validate(q).question_id.startswith("D-") for q in packet["questions"]
+        )
+    assert v2["runner_question_schema"] == f"{E1Question.__module__}.E1Question"

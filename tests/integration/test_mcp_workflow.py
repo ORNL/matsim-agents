@@ -29,9 +29,9 @@ from matsim_agents.backends.mcp.records import (  # noqa: E402
     MAX_CONTENT_CHARS,
     REDACTED,
     MCPAuditLog,
-    sha256_json,
 )
 from matsim_agents.backends.mcp.session import MCPSessionManager  # noqa: E402
+from matsim_agents.core.hashing import sha256_json  # noqa: E402
 
 SERVER = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_test_server.py"
 

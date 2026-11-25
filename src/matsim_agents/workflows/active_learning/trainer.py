@@ -34,6 +34,7 @@ from matsim_agents.backends.mlip.config import (
     MLIPBackendConfig,
     UMAConfig,
 )
+from matsim_agents.execution.allocation import short_host
 from matsim_agents.execution.placement import ProcessLaunch
 from matsim_agents.workflows.active_learning.config import TrainerConfig
 
@@ -195,8 +196,8 @@ def _require_direct_placement(trainer_cfg: TrainerConfig, launch: ProcessLaunch,
             f"resources.pools.training resolved to {launch.node_count} node(s) x "
             f"{launch.ranks_per_node} rank(s); set train_launcher or use 1 node and 1 device"
         )
-    local = socket.gethostname().split(".", 1)[0]
-    host = launch.hosts[0].split(".", 1)[0]
+    local = short_host(socket.gethostname())
+    host = short_host(launch.hosts[0])
     if host != local:
         raise ValueError(
             f"{what} without trainer.train_launcher runs on this node ({local}), but "

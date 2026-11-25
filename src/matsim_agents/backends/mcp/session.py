@@ -50,9 +50,9 @@ from matsim_agents.backends.mcp.records import (
     redact,
     redact_uri,
     scrub_text,
-    sha256_json,
     truncate,
 )
+from matsim_agents.core.hashing import sha256_json
 
 _MAX_PAGES = 100
 _MAX_CONTENT_BLOCKS = 64
@@ -563,7 +563,7 @@ class MCPSessionManager:
             tool=tool,
             arguments=safe_args,
             # Hash what is recorded, so the digest cannot confirm a guessed secret.
-            arguments_sha256=sha256_json(safe_args),
+            arguments_sha256=sha256_json(safe_args, default=str),
         )
         if not decision.allowed:
             return self._finish(self._failure(base, "denied", decision.reason))
@@ -610,7 +610,9 @@ class MCPSessionManager:
                 MAX_CONTENT_CHARS
             ):
                 structured = {"omitted": "structured content exceeded the size limit"}
-            digest = sha256_json({"content": content, "structured_content": structured})
+            digest = sha256_json(
+                {"content": content, "structured_content": structured}, default=str
+            )
             if result.is_error:
                 return MCPCallRecord(
                     **base,
@@ -657,7 +659,7 @@ class MCPSessionManager:
                 finished_at=now_utc(),
                 outcome="success",
                 content=content,
-                content_sha256=sha256_json(content),
+                content_sha256=sha256_json(content, default=str),
             )
 
         return self._finish(self._run_op(server, op, timeout, base))

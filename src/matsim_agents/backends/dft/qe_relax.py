@@ -16,7 +16,6 @@ from __future__ import annotations
 import math
 import os
 import re
-import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -26,8 +25,11 @@ from typing import Any
 import numpy as np
 from ase import units
 
-from matsim_agents.backends.dft.process import run_launcher
-from matsim_agents.execution.devices import apply_mask_environment
+from matsim_agents.backends.dft.process import (
+    child_environment,
+    launcher_from_environment,
+    run_launcher,
+)
 
 # --------------------------------------------------------------------------- #
 # Element-aware defaults                                                      #
@@ -735,7 +737,7 @@ def run_pw(
     t0 = time.time()
     with open(stdout_path, "w") as out:
         rc = run_launcher(
-            argv, cwd=work_dir, stdout=out, timeout_sec=timeout_sec, env=_child_environment(env)
+            argv, cwd=work_dir, stdout=out, timeout_sec=timeout_sec, env=child_environment(env)
         )
     elapsed = time.time() - t0
 
@@ -747,17 +749,4 @@ def run_pw(
 
 def find_default_launcher() -> str | None:
     """Return the env-overridable default QE launcher, or ``None``."""
-    val = os.environ.get("MATSIM_QE_LAUNCHER")
-    if val and shutil.which(val.split()[0] if " " in val else val):
-        return val
-    return None
-
-
-def _child_environment(env: Mapping[str, str] | None) -> dict[str, str] | None:
-    """Parent environment plus *env*; a placed ROCR mask drops an inherited HIP mask."""
-
-    if not env:
-        return None
-    merged = dict(os.environ)
-    apply_mask_environment(merged, env)
-    return merged
+    return launcher_from_environment("MATSIM_QE_LAUNCHER")

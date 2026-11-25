@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, get_args
 
@@ -34,6 +35,12 @@ MACEFamily = Literal[
     "mace_anicc",
     "checkpoint",
 ]
+
+# Families trained on a fixed element set; other families are not restricted here.
+MACE_FAMILY_ELEMENTS: dict[str, frozenset[str]] = {
+    "mace_off": frozenset({"H", "C", "N", "O", "F", "P", "S", "Cl", "Br", "I"}),
+    "mace_anicc": frozenset({"H", "C", "N", "O"}),
+}
 
 HYDRAGNN_DATASET_HEADS = (
     "Alexandria",
@@ -175,6 +182,10 @@ class MLIPBackendConfig(BaseModel, ABC):
         """
         artifact = self.model_artifact()
         return [artifact] if artifact is not None else []
+
+    def unsupported_elements(self, elements: Iterable[str]) -> list[str]:
+        """Elements the model is known not to cover; empty when coverage is not known."""
+        return []
 
     def with_resolved_paths(self, base: Path) -> MLIPBackendConfig:
         """This configuration with relative local paths resolved against ``base``."""
@@ -682,6 +693,12 @@ class MACEConfig(MLIPBackendConfig):
 
     def model_artifact(self) -> Path | None:
         return Path(self.model) if self.family == "checkpoint" else None
+
+    def unsupported_elements(self, elements: Iterable[str]) -> list[str]:
+        covered = MACE_FAMILY_ELEMENTS.get(self.family)
+        if covered is None:
+            return []
+        return sorted(set(elements) - covered)
 
 
 # --------------------------------------------------------------------------- #

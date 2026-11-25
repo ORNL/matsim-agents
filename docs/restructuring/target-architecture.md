@@ -189,14 +189,20 @@ Known blockers and deviations:
   parent, including the Cantor 4x4x4 FCC cell (256 sites). The
   full-supercell defect workflow and `find_cross_cell_equivalents` are still
   bcc-only, because they use bcc interstitial and cubic-axis geometry.
-- `examples/perovskite_oxides/run.py` generates candidates only; relaxation
-  and hull ranking need an MLIP and are not run in CI.
+- The perovskite example is mode-driven (`validate`, `generate`, `mlip_relax`,
+  `dft_relax`) and runs through `matsim-agents run`; its `run.py` wrapper is
+  removed. `*_relax` modes report an MLIP that does not cover every element as
+  a blocker. Relaxation and hull ranking need an MLIP or DFT and are not run
+  in CI.
 - Acceptance criterion 3 is met: `matsim-agents run FILE` executes any
   config; the free-form objective path is `matsim-agents objective "TEXT"`.
-- Criterion 5 (single implementations) is not audited exhaustively;
-  duplicates found during the move were merged.
-- `research/paper/e1/d-questions.v1.json` still names
-  `matsim_agents.workflows.e1`; `research/` is frozen.
+- Criterion 5 (single implementations) was audited; see
+  [duplication-audit.md](duplication-audit.md) for merges and the duplicates
+  kept with a reason.
+- `research/paper/e1/d-questions.v1.json` is the hash-pinned historical record
+  and still names `matsim_agents.workflows.e1`; `d-questions.v2.json` carries
+  the same 18 questions and names the current runner schema. `research/` is
+  otherwise frozen.
 - `execution/iri.py` keeps facility working-directory templates; it is the
   allowlisted exception to the facility-literal test.
 - The full suite was not rerun after every commit; targeted suites were.

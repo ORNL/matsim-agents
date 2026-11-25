@@ -14,9 +14,9 @@ from matsim_agents.backends.mcp.records import (
     MCPCallRecord,
     now_utc,
     redact,
-    sha256_json,
     truncate,
 )
+from matsim_agents.core.hashing import sha256_json
 
 if TYPE_CHECKING:
     from matsim_agents.backends.mcp.session import MCPSessionManager
@@ -54,7 +54,7 @@ def execute_mcp_task(client: MCPSessionManager | None, task: MCPTask) -> MCPCall
             outcome="denied",
             error=NOT_CONFIGURED,
             arguments=redact(arguments),
-            arguments_sha256=sha256_json(redact(arguments)) if arguments else None,
+            arguments_sha256=sha256_json(redact(arguments), default=str) if arguments else None,
         )
     if task.kind == "mcp_tool":
         return client.call_tool(task.mcp_server, task.mcp_tool, task.mcp_arguments)

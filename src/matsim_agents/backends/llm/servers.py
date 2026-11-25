@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from matsim_agents.execution.allocation import short_host
 from matsim_agents.execution.devices import (
     apply_mask_environment,
     child_mask_environment,
@@ -85,10 +86,6 @@ def api_key_from_env(variable: str | None, *, owner: str) -> str | None:
     if not key:
         raise ValueError(f"{owner} needs an API key in ${variable}, which is unset")
     return key
-
-
-def _short_host(name: str) -> str:
-    return name.split(".", 1)[0]
 
 
 def _tail(path: Path, lines: int = 40) -> str:
@@ -162,7 +159,7 @@ class _ManagedServer:
         self.slice = server.slices[0]
         self.geometry = placement.geometry
         self.local = placement.scheduler in {"local", "preview"} or (
-            _short_host(self.slice.host) == _short_host(local_host)
+            short_host(self.slice.host) == short_host(local_host)
         )
         # In a multi-node allocation, steps on other nodes may use the server too
         # (e.g. a campaign's execution node), so it listens on all interfaces and
@@ -485,7 +482,7 @@ def _in_process_endpoint(
     owner = f"LLM server {server.name!r}"
     item = server.slices[0]
     if placement.scheduler not in {"local", "preview"} and (
-        _short_host(item.host) != _short_host(local_host)
+        short_host(item.host) != short_host(local_host)
     ):
         raise ValueError(
             f"{owner} runs in-process, so it must be placed on this node ({local_host}), "

@@ -318,3 +318,96 @@ def test_llm_check_server_with_provider_is_invalid(tmp_path) -> None:
     config.write_text("server: qwen\nprovider: ollama\n")
     with pytest.raises(ValueError, match="remove provider"):
         runner.validate(config)
+
+
+def _perovskite_relaxation(tmp_path, mlip, mode="mlip_relax", relax_mode="mlip"):
+    import yaml
+
+    relaxation = tmp_path / "relax.yaml"
+    relaxation.write_text(
+        yaml.safe_dump({"mode": relax_mode, "structure_path": "unused", "mlip": mlip})
+    )
+    return _application(
+        tmp_path,
+        "examples/perovskite_oxides/application.yaml",
+        mode=mode,
+        relaxation=str(relaxation),
+    )
+
+
+def test_mlip_without_element_coverage_is_a_blocker(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(runner, "backend_blockers", lambda names: [])
+    config = _perovskite_relaxation(tmp_path, {"backend": "mace", "family": "mace_off"})
+    _, preflight = runner.validate(config)
+    assert any(
+        "does not cover element(s) Al, Ba, Ca, La, Sr, Ti, Zr" in b for b in preflight.blockers
+    )
+    _, record = runner.run(config, runs_dir=tmp_path / "runs")
+    assert record.state == "blocked"
+
+
+def test_mlip_covering_every_element_is_not_blocked(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(runner, "backend_blockers", lambda names: [])
+    config = _perovskite_relaxation(tmp_path, {"backend": "mace", "family": "mace_mp"})
+    _, preflight = runner.validate(config)
+    assert preflight.blockers == []
+
+
+def _fake_relaxation(converged_for):
+    from matsim_agents.core.contracts import EvidenceLevel
+    from matsim_agents.workflows.relaxation import (
+        RelaxationMode,
+        RelaxationStageResult,
+        ScientificRelaxationResult,
+    )
+
+    def run_relaxation(cfg):
+        converged = converged_for(cfg.structure_path)
+        stage = RelaxationStageResult(
+            stage="mlip_relaxation",
+            backend="mace",
+            evidence_level=EvidenceLevel.MLIP_RELAXATION,
+            input_structure_path=cfg.structure_path,
+            energy_eV=-1.0,
+            max_force_eV_per_A=0.01 if converged else 0.5,
+            converged=converged,
+        )
+        return ScientificRelaxationResult(
+            run_id="r",
+            run_directory=cfg.output_root,
+            mode=RelaxationMode.MLIP,
+            status="complete",
+            stages=[stage],
+        )
+
+    return run_relaxation
+
+
+@pytest.mark.parametrize(
+    ("converged", "state"), [(True, "complete"), (False, "partial")], ids=["converged", "partial"]
+)
+def test_perovskite_mlip_relaxation_records_convergence_and_evidence(
+    tmp_path, monkeypatch, converged, state
+) -> None:
+    from matsim_agents.workflows import relaxation
+
+    monkeypatch.setattr(runner, "backend_blockers", lambda names: [])
+    monkeypatch.setattr(relaxation, "run_relaxation", _fake_relaxation(lambda path: converged))
+    config = _perovskite_relaxation(tmp_path, {"backend": "mace", "family": "mace_mp"})
+    _, record = runner.run(config, runs_dir=tmp_path / "runs")
+    assert record.state == state
+    results = record.summary["relaxations"]
+    labels = [r["candidate"] for r in results]
+    assert len(labels) == len(set(labels)) > 0
+    assert all(r["converged"] is converged for r in results)
+    assert {r["evidence_level"] for r in results} == {"mlip_relaxation"}
+    assert record.summary["not_converged"] == (0 if converged else len(results))
+    assert "not scientifically qualified" in record.summary["scientific_status"]
+
+
+def test_dft_mode_rejects_an_mlip_relaxation_config(tmp_path) -> None:
+    config = _perovskite_relaxation(
+        tmp_path, {"backend": "mace", "family": "mace_mp"}, mode="dft_relax"
+    )
+    with pytest.raises(ValueError, match="needs relaxation mode in"):
+        runner.validate(config)

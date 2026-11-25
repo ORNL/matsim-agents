@@ -41,6 +41,11 @@ def _expand_slurm_nodelist(value: str) -> tuple[str, ...]:
     return ()
 
 
+def short_host(name: str) -> str:
+    """``name`` without its domain, so FQDN and short host names compare equal."""
+    return name.split(".", 1)[0]
+
+
 def _int_from_environment(*names: str) -> int | None:
     for name in names:
         raw = os.environ.get(name)
@@ -86,4 +91,4 @@ def discover_allocation() -> Allocation:
     return Allocation(scheduler="local", nodes=(socket.gethostname(),))
 
 
-__all__ = ["Allocation", "discover_allocation"]
+__all__ = ["Allocation", "discover_allocation", "short_host"]
