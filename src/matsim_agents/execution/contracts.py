@@ -162,6 +162,20 @@ PROPERTY_UNITS = {
     "ductility_elongation": "1",
     "irradiation_swelling": "1",
     "embrittlement_dbtt_shift": "K",
+    "defect_recovery_fraction": "1",
+    "thermal_shock_damage_threshold": "MW/m^2",
+    "thermal_fatigue_cycles_to_failure": "1",
+    "thermal_expansion_coefficient": "1/K",
+    "sputtering_yield": "atoms/ion",
+    "max_phase_stable_temperature": "K",
+    "recrystallization_temperature": "K",
+    "hydrogen_retention_fraction_H": "1",
+    "hydrogen_retention_fraction_D": "1",
+    "hydrogen_retention_fraction_T": "1",
+    "helium_retention_fraction": "1",
+    "shutdown_dose_rate": "Sv/h",
+    "specific_activity": "Bq/kg",
+    "decay_heat": "W/kg",
 }
 # Canonical unit of every observable a characterization can require.
 OBSERVABLE_UNITS = {

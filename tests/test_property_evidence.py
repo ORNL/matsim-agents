@@ -60,6 +60,9 @@ def test_canonical_units_cover_every_family():
         "electrical",
         "mechanical",
         "structural_performance",
+        "plasma_interaction",
+        "phase_stability",
+        "nuclear",
     }
     assert OBSERVABLE_UNITS["energy_above_hull"] == "eV/atom"
 

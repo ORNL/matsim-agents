@@ -34,7 +34,15 @@ from matsim_agents.execution.ledger import (
     MethodRecord,
 )
 
-PropertyFamily = Literal["thermal", "electrical", "mechanical", "structural_performance"]
+PropertyFamily = Literal[
+    "thermal",
+    "electrical",
+    "mechanical",
+    "structural_performance",
+    "plasma_interaction",
+    "phase_stability",
+    "nuclear",
+]
 
 PROPERTY_FAMILY: dict[str, PropertyFamily] = {
     "thermal_conductivity_total": "thermal",
@@ -60,6 +68,20 @@ PROPERTY_FAMILY: dict[str, PropertyFamily] = {
     "ductility_elongation": "structural_performance",
     "irradiation_swelling": "structural_performance",
     "embrittlement_dbtt_shift": "structural_performance",
+    "defect_recovery_fraction": "structural_performance",
+    "thermal_shock_damage_threshold": "structural_performance",
+    "thermal_fatigue_cycles_to_failure": "structural_performance",
+    "thermal_expansion_coefficient": "thermal",
+    "sputtering_yield": "plasma_interaction",
+    "hydrogen_retention_fraction_H": "plasma_interaction",
+    "hydrogen_retention_fraction_D": "plasma_interaction",
+    "hydrogen_retention_fraction_T": "plasma_interaction",
+    "helium_retention_fraction": "plasma_interaction",
+    "max_phase_stable_temperature": "phase_stability",
+    "recrystallization_temperature": "phase_stability",
+    "shutdown_dose_rate": "nuclear",
+    "specific_activity": "nuclear",
+    "decay_heat": "nuclear",
 }
 assert set(PROPERTY_FAMILY) == set(PROPERTY_UNITS)
 
@@ -75,9 +97,15 @@ FUTURE_PROPERTIES = frozenset(
 ELASTIC_PROPERTIES = frozenset(n for n, f in PROPERTY_FAMILY.items() if f == "mechanical")
 # Transport and rate-like properties are meaningless without a temperature.
 _NEEDS_TEMPERATURE = (
-    frozenset(n for n, f in PROPERTY_FAMILY.items() if f in {"thermal", "electrical"})
+    frozenset(
+        n
+        for n, f in PROPERTY_FAMILY.items()
+        if f in {"thermal", "electrical", "plasma_interaction"}
+    )
     | FUTURE_PROPERTIES
 )
+# Activation quantities exist only for a named irradiation history.
+_NEEDS_IRRADIATION = frozenset(n for n, f in PROPERTY_FAMILY.items() if f == "nuclear")
 
 # multiply a value in the key unit to get the canonical unit
 _UNIT_FACTORS: dict[str, dict[str, float]] = {
@@ -91,6 +119,12 @@ _UNIT_FACTORS: dict[str, dict[str, float]] = {
     "MPa m^0.5": {"MPa m^0.5": 1.0, "MPa sqrt(m)": 1.0},
     "1": {"1": 1.0, "%": 0.01},
     "K": {"K": 1.0},
+    "1/K": {"1/K": 1.0, "1e-6/K": 1e-6},
+    "MW/m^2": {"MW/m^2": 1.0, "GW/m^2": 1e3, "W/m^2": 1e-6},
+    "atoms/ion": {"atoms/ion": 1.0},
+    "Sv/h": {"Sv/h": 1.0, "mSv/h": 1e-3, "uSv/h": 1e-6},
+    "Bq/kg": {"Bq/kg": 1.0, "Bq/g": 1e3, "TBq/kg": 1e12},
+    "W/kg": {"W/kg": 1.0, "mW/kg": 1e-3, "W/g": 1e3},
 }
 
 
@@ -216,6 +250,8 @@ class PropertyEvidence(BaseModel):
             self.conditions.irradiation or self.conditions.defect_state
         ):
             raise ValueError("a conductivity degradation needs an irradiation or defect state")
+        if self.property in _NEEDS_IRRADIATION and not self.conditions.irradiation:
+            raise ValueError(f"{self.property} needs conditions.irradiation (scenario and cooling)")
         if self.status in NO_VALUE_STATUSES:
             if self.value is not None or self.uncertainty is not None:
                 raise ValueError(f"a {self.status.value} property has no value or uncertainty")
