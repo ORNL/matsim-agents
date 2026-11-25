@@ -18,7 +18,6 @@ from matsim_agents.science.acquisition.acquisition import FormulaAcquisitionMetr
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
 from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 
-TARGET_ELEMENTS: tuple[str, ...] = ("Cr", "Hf", "Mo", "Ta", "V", "W")
 NOT_YET_ESTABLISHED = "NOT_YET_ESTABLISHED"
 Origin = Literal["existing", "new"]
 AllowedUse = Literal["training", "validation", "held_out_test", "reference", "transfer_source"]
@@ -30,7 +29,7 @@ def chemical_system(elements: Iterable[str]) -> str:
 
 
 def hierarchy_subspaces(
-    elements: Iterable[str] = TARGET_ELEMENTS,
+    elements: Iterable[str],
 ) -> dict[int, list[tuple[str, ...]]]:
     """Candidate chemical subspaces by component count (2..n); not an execution list."""
     ordered = sorted(set(elements))
@@ -184,11 +183,8 @@ class CandidateRegistry(BaseModel):
                 return candidate_id
         return None
 
-    def target_coverage(
-        self, subspaces: dict[int, list[tuple[str, ...]]] | None = None
-    ) -> dict[str, int]:
+    def target_coverage(self, subspaces: dict[int, list[tuple[str, ...]]]) -> dict[str, int]:
         """Records per target subspace, counted only on an exact element-set match."""
-        subspaces = subspaces or hierarchy_subspaces()
         counts = {chemical_system(sub): 0 for subs in subspaces.values() for sub in subs}
         for record in self.candidates.values():
             key = chemical_system(record.element_set)
@@ -202,13 +198,13 @@ def ingest_dataset(
     name: str,
     entries: Iterable[DatasetEntry],
     *,
-    target_elements: Iterable[str] = TARGET_ELEMENTS,
+    target_elements: Iterable[str],
     origin: Origin = "existing",
 ) -> DatasetRecord:
     """Ingest a dataset with explicit element coverage and duplicate detection.
 
     A structure covers a hierarchy subspace only if its element set equals that subspace, so
-    off-target elements (e.g. Nb) never count as W/Cr/Hf/Mo coverage. Structures dedupe by hash;
+    off-target elements never count as coverage of the target subspaces. Structures dedupe by hash;
     a calculation dedupes only on an identical calculation ID, so changed numerics or magnetic
     initialisation keep separate records.
     """

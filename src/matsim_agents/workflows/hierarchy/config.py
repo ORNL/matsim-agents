@@ -1,4 +1,7 @@
-"""Validated configuration of the hierarchical W-Ta-Cr-V-Hf-Mo transfer campaign.
+"""Validated configuration of a hierarchical chemical-transfer campaign.
+
+The target (composition, parent lattice, supercell and expected site count) is supplied by
+the application; nothing here assumes a particular alloy or cell size.
 
 Every section forbids unknown keys and every switch is honoured by the planner, so a typo or a
 stale option fails loudly instead of being ignored. The default is a dry run: nothing is
@@ -15,7 +18,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.science.acquisition.acquisition import CandidateAcquisitionPolicy
-from matsim_agents.workflows.candidate_registry import TARGET_ELEMENTS
 from matsim_agents.workflows.hierarchy.qe_plan import (
     MethodSignature,
     ResourceLimits,
@@ -24,9 +26,7 @@ from matsim_agents.workflows.hierarchy.qe_plan import (
 from matsim_agents.workflows.hierarchy.stages import StageThresholds
 from matsim_agents.workflows.hierarchy.transfer import standard_experiments
 
-TARGET_SITES = 1024
-TARGET_COMPOSITION = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
-TARGET_REFERENCE = "Lupo Pasini et al., Comput. Mater. Sci. 257 (2025) 113908"
+ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4}
 KNOWN_EXPERIMENTS = tuple(e.name for e in standard_experiments())
 
 
@@ -41,27 +41,31 @@ class CampaignSection(_Section):
 
 
 class TargetSection(_Section):
-    composition: dict[str, StrictInt] = Field(default_factory=lambda: dict(TARGET_COMPOSITION))
-    supercell: tuple[StrictInt, StrictInt, StrictInt] = (8, 8, 8)
-    parent_lattice: Literal["bcc"] = "bcc"
-    reference: str = TARGET_REFERENCE
+    composition: dict[str, StrictInt] = Field(min_length=2)
+    supercell: tuple[StrictInt, StrictInt, StrictInt]
+    parent_lattice: Literal["sc", "bcc", "fcc"]
+    expected_sites: StrictInt = Field(gt=0)
+    reference: str = ""
 
     @property
     def n_sites(self) -> int:
-        return 2 * prod(self.supercell)  # BCC conventional cell holds two atoms
+        return ATOMS_PER_CONVENTIONAL_CELL[self.parent_lattice] * prod(self.supercell)
+
+    @property
+    def elements(self) -> tuple[str, ...]:
+        return tuple(sorted(self.composition))
 
     @model_validator(mode="after")
-    def _is_the_1024_site_target(self) -> TargetSection:
-        if self.n_sites != TARGET_SITES:
+    def _consistent(self) -> TargetSection:
+        if self.n_sites != self.expected_sites:
             raise ValueError(
-                f"target must have {TARGET_SITES} sites; supercell gives {self.n_sites}"
+                f"target must have {self.expected_sites} sites; "
+                f"{self.parent_lattice} supercell {self.supercell} gives {self.n_sites}"
             )
-        if set(self.composition) != set(TARGET_ELEMENTS):
-            raise ValueError(f"target elements must be exactly {sorted(TARGET_ELEMENTS)}")
         if any(n <= 0 for n in self.composition.values()):
             raise ValueError("every target element needs a positive atom count")
-        if sum(self.composition.values()) != TARGET_SITES:
-            raise ValueError(f"target composition must sum to {TARGET_SITES} atoms")
+        if sum(self.composition.values()) != self.expected_sites:
+            raise ValueError(f"target composition must sum to {self.expected_sites} atoms")
         return self
 
 
@@ -93,24 +97,9 @@ class DataSection(_Section):
 
 
 class ChemicalHierarchySection(_Section):
-    elements: tuple[str, ...] = TARGET_ELEMENTS
-    orders: tuple[StrictInt, ...] = (2, 3, 4, 5, 6)
-
-    @model_validator(mode="after")
-    def _valid(self) -> ChemicalHierarchySection:
-        if set(self.elements) != set(TARGET_ELEMENTS):
-            raise ValueError(f"hierarchy elements must be {sorted(TARGET_ELEMENTS)}")
-        if sorted(set(self.orders)) != sorted(self.orders) or not set(self.orders) <= {
-            2,
-            3,
-            4,
-            5,
-            6,
-        }:
-            raise ValueError("orders must be distinct values in 2..6")
-        if 6 not in self.orders:
-            raise ValueError("the hierarchy must end at the six-component target (order 6)")
-        return self
+    orders: tuple[StrictInt, ...] | None = Field(
+        None, description="component counts to cover; default 2..n for an n-element target"
+    )
 
 
 class SamplingSection(_Section):
@@ -148,13 +137,6 @@ class QESection(_Section):
     conv_thr_ry: float = Field(1e-6, gt=0.0)
     magnetic_treatment: str = "collinear"
 
-    @model_validator(mode="after")
-    def _pseudopotentials(self) -> QESection:
-        missing = set(TARGET_ELEMENTS) - set(self.method.pseudopotentials)
-        if missing:
-            raise ValueError(f"method.pseudopotentials lacks {sorted(missing)}")
-        return self
-
 
 class BudgetSection(_Section):
     total_node_hours: float = Field(gt=0.0)
@@ -170,8 +152,8 @@ class ExecutionSection(_Section):
     approved_by: str | None = None
     approved_node_hours: float | None = Field(None, gt=0.0)
     qos: str = "debug"
-    account: str = "LRN110"
-    job_script: str = "qe_1024_job.sbatch"
+    account: str | None = None
+    job_script: str = "job.sbatch"
 
     @model_validator(mode="after")
     def _live_runs_need_approval(self) -> ExecutionSection:
@@ -184,7 +166,7 @@ class ExecutionSection(_Section):
 
 class CampaignConfig(_Section):
     campaign: CampaignSection
-    target: TargetSection = Field(default_factory=TargetSection)
+    target: TargetSection
     data: DataSection = Field(default_factory=DataSection)
     chemical_hierarchy: ChemicalHierarchySection = Field(default_factory=ChemicalHierarchySection)
     sampling: SamplingSection = Field(default_factory=SamplingSection)
@@ -195,11 +177,29 @@ class CampaignConfig(_Section):
     budget: BudgetSection
     execution: ExecutionSection = Field(default_factory=ExecutionSection)
 
+    @property
+    def elements(self) -> tuple[str, ...]:
+        return self.target.elements
+
+    @property
+    def orders(self) -> tuple[int, ...]:
+        n = len(self.elements)
+        return self.chemical_hierarchy.orders or tuple(range(2, n + 1))
+
     @model_validator(mode="after")
-    def _approval_within_budget(self) -> CampaignConfig:
+    def _consistent(self) -> CampaignConfig:
         approved = self.execution.approved_node_hours
         if approved is not None and approved > self.budget.total_node_hours:
             raise ValueError("approved_node_hours exceeds budget.total_node_hours")
+        n = len(self.elements)
+        orders = self.orders
+        if len(set(orders)) != len(orders) or not set(orders) <= set(range(2, n + 1)):
+            raise ValueError(f"orders must be distinct values in 2..{n}")
+        if n not in orders:
+            raise ValueError(f"the hierarchy must end at the {n}-component target (order {n})")
+        missing = set(self.elements) - set(self.qe.method.pseudopotentials)
+        if missing:
+            raise ValueError(f"method.pseudopotentials lacks {sorted(missing)}")
         return self
 
 

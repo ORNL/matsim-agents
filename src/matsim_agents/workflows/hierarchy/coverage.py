@@ -19,22 +19,10 @@ from matsim_agents.science.structures.alloys import (
     warren_cowley_sro,
 )
 from matsim_agents.workflows.candidate_registry import (
-    TARGET_ELEMENTS,
     CandidateRegistry,
     chemical_system,
 )
 
-PRIORITY_PAIRS: tuple[tuple[str, str], ...] = (
-    ("Ta", "W"),
-    ("Cr", "W"),
-    ("V", "W"),
-    ("Hf", "W"),
-    ("Mo", "W"),
-    ("Ta", "V"),
-    ("Cr", "V"),
-    ("Cr", "Mo"),
-    ("Cr", "Ta"),
-)
 SRO_REGIME_EDGES = (0.05, 0.2)
 
 
@@ -150,7 +138,7 @@ def structure_descriptor(
     )
 
 
-def required_interactions(elements: Iterable[str] = TARGET_ELEMENTS) -> set[str]:
+def required_interactions(elements: Iterable[str]) -> set[str]:
     """Every pair interaction (both shells) and every local-cluster element set of order >= 2."""
     ordered = sorted(set(elements))
     required = {
@@ -191,11 +179,8 @@ class CoverageReport(BaseModel):
     missing_higher_order: list[str]
 
 
-def coverage_report(
-    sources: Iterable[StructureDescriptor], required: set[str] | None = None
-) -> CoverageReport:
+def coverage_report(sources: Iterable[StructureDescriptor], required: set[str]) -> CoverageReport:
     """Covered and explicitly missing interactions; higher-order gaps are listed, never implied."""
-    required = required if required is not None else required_interactions()
     covered = _covered(required, list(sources))
     by_order: dict[int, list[bool]] = {}
     for key in required:
@@ -220,11 +205,10 @@ class CoverageGain(BaseModel):
 
 def rank_by_coverage_gain(
     candidates: Mapping[str, StructureDescriptor],
+    required: set[str],
     sources: Iterable[StructureDescriptor] = (),
-    required: set[str] | None = None,
 ) -> list[CoverageGain]:
     """Candidates ordered by newly covered required interactions; ties break on candidate id."""
-    required = required if required is not None else required_interactions()
     sources = list(sources)
     base = _covered(required, sources)
     ranked = []
@@ -234,10 +218,14 @@ def rank_by_coverage_gain(
     return sorted(ranked, key=lambda g: (-g.gain, g.candidate_id))
 
 
-def pair_priority(registry: CandidateRegistry) -> list[tuple[str, int]]:
+def pair_priority(
+    registry: CandidateRegistry,
+    pairs: Iterable[tuple[str, str]],
+    subspaces: dict[int, list[tuple[str, ...]]],
+) -> list[tuple[str, int]]:
     """Priority binaries ordered by fewest existing records (least covered first)."""
-    counts = registry.target_coverage()
+    counts = registry.target_coverage(subspaces)
     return sorted(
-        ((chemical_system(p), counts.get(chemical_system(p), 0)) for p in PRIORITY_PAIRS),
+        ((chemical_system(p), counts.get(chemical_system(p), 0)) for p in pairs),
         key=lambda item: (item[1], item[0]),
     )

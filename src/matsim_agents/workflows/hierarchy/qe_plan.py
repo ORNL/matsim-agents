@@ -1,7 +1,7 @@
 """Full-size QE calculation records, old/new compatibility checks and the dispatch gate.
 
-Every new production calculation is the full parent cell: pristine 1024 atoms, vacancy 1023,
-interstitial 1025, Frenkel pair 1024, divacancy 1022. A cell is never shrunk to fit resources;
+Every new production calculation is the full parent cell of N sites: pristine N atoms, vacancy N-1,
+interstitial N+1, Frenkel pair N, divacancy N-2. A cell is never shrunk to fit resources;
 an unaffordable job is ``RESOURCE_BLOCKED`` and its full-size input is kept. Historical smaller
 cells are prior evidence only, recorded with their size and method. Mixing functionals,
 pseudopotentials or magnetic conventions is never silent.

@@ -37,7 +37,12 @@ METHOD = {
     "kpts": (1, 1, 1),
     "magnetic_convention": "collinear",
 }
-SMALL = {"compositions_per_system": 2, "n_orderings": 3}
+SMALL = {
+    "compositions_per_system": 2,
+    "n_orderings": 3,
+    "elements": ("Cr", "Hf", "Mo", "Ta", "V", "W"),
+    "magnetic_element": "Cr",
+}
 TARGET = {"W": 640, "Ta": 128, "Cr": 64, "V": 96, "Hf": 32, "Mo": 64}
 
 
@@ -61,6 +66,12 @@ def _config(tmp_path: Path, **sections) -> dict:
     inputs.mkdir(exist_ok=True)
     cfg = {
         "campaign": {"campaign_id": "synthetic-h9"},
+        "target": {
+            "composition": TARGET,
+            "supercell": [8, 8, 8],
+            "parent_lattice": "bcc",
+            "expected_sites": 1024,
+        },
         "data": {"candidates": str(tmp_path / "candidates.json")},
         "transfer_evaluation": {
             "experiments": ["2,3,4->5"],

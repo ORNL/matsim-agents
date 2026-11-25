@@ -6,6 +6,7 @@ from ase.build import bulk
 from matsim_agents.workflows.candidate_registry import (
     CandidateRegistry,
     DatasetEntry,
+    hierarchy_subspaces,
     ingest_dataset,
 )
 from matsim_agents.workflows.hierarchy.coverage import (
@@ -17,6 +18,19 @@ from matsim_agents.workflows.hierarchy.coverage import (
 )
 
 A = 3.2
+ELEMENTS = ("Cr", "Hf", "Mo", "Ta", "V", "W")
+REQUIRED = required_interactions(ELEMENTS)
+PAIRS = (
+    ("Ta", "W"),
+    ("Cr", "W"),
+    ("V", "W"),
+    ("Hf", "W"),
+    ("Mo", "W"),
+    ("Ta", "V"),
+    ("Cr", "V"),
+    ("Cr", "Mo"),
+    ("Cr", "Ta"),
+)
 
 
 def _alloy(elements, seed=0, repeat=3):
@@ -49,7 +63,7 @@ def test_sro_regime_separates_ordered_from_random():
 
 
 def test_binary_population_leaves_higher_order_interactions_missing():
-    report = coverage_report([_desc(["W", "Ta"])])
+    report = coverage_report([_desc(["W", "Ta"])], REQUIRED)
     assert "pair1:Ta-W" in report.covered
     assert "cluster:Ta-W" in report.covered
     assert report.fraction_by_order[2] > 0 and report.fraction_by_order[3] == 0
@@ -59,7 +73,7 @@ def test_binary_population_leaves_higher_order_interactions_missing():
 
 
 def test_higher_order_source_covers_its_sub_clusters():
-    report = coverage_report([_desc(["W", "Ta", "Cr"])])
+    report = coverage_report([_desc(["W", "Ta", "Cr"])], REQUIRED)
     assert {"cluster:Ta-W", "cluster:Cr-W", "cluster:Cr-Ta", "cluster:Cr-Ta-W"} <= set(
         report.covered
     )
@@ -68,8 +82,8 @@ def test_higher_order_source_covers_its_sub_clusters():
 
 def test_full_target_population_reaches_full_cluster_coverage():
     d = structure_descriptor(_alloy(["W", "Ta", "Cr", "V", "Hf", "Mo"], repeat=4), A)
-    report = coverage_report([d])
-    assert all(k in report.covered for k in required_interactions() if k.startswith("cluster:"))
+    report = coverage_report([d], REQUIRED)
+    assert all(k in report.covered for k in REQUIRED if k.startswith("cluster:"))
 
 
 def test_ranking_prefers_new_interactions_and_is_deterministic():
@@ -79,10 +93,10 @@ def test_ranking_prefers_new_interactions_and_is_deterministic():
         "ternary": _desc(["W", "Ta", "Cr"]),
         "other": _desc(["Mo", "V"]),
     }
-    ranked = rank_by_coverage_gain(cands, source)
+    ranked = rank_by_coverage_gain(cands, REQUIRED, source)
     assert ranked[0].candidate_id == "ternary" and ranked[-1].candidate_id == "dup"
     assert ranked[-1].gain == 0
-    assert ranked == rank_by_coverage_gain(dict(reversed(list(cands.items()))), source)
+    assert ranked == rank_by_coverage_gain(dict(reversed(list(cands.items()))), REQUIRED, source)
 
 
 def test_defect_and_magnetic_descriptors_are_recorded():
@@ -96,7 +110,8 @@ def test_defect_and_magnetic_descriptors_are_recorded():
 
 def test_pair_priority_lists_least_covered_pairs_first():
     reg = CandidateRegistry()
-    ingest_dataset(reg, "d", [DatasetEntry(structure_hash="h", composition={"W": 4, "Ta": 4})])
-    order = pair_priority(reg)
+    entry = DatasetEntry(structure_hash="h", composition={"W": 4, "Ta": 4})
+    ingest_dataset(reg, "d", [entry], target_elements=ELEMENTS)
+    order = pair_priority(reg, PAIRS, hierarchy_subspaces(ELEMENTS))
     assert len(order) == 9 and order[-1] == ("Ta-W", 1)
     assert all(count == 0 for _, count in order[:-1])

@@ -39,6 +39,7 @@ from matsim_agents.workflows.candidate_registry import (
     CandidateRegistry,
     DatasetEntry,
     calculation_id,
+    hierarchy_subspaces,
     ingest_dataset,
 )
 from matsim_agents.workflows.hierarchy.config import CampaignConfig
@@ -243,7 +244,12 @@ def inventory(ws: CampaignWorkspace) -> list[dict[str, Any]]:
         if src.name in state.registry.datasets:
             record = state.registry.datasets[src.name]
         else:
-            record = ingest_dataset(state.registry, src.name, load_dataset_entries(src.path))
+            record = ingest_dataset(
+                state.registry,
+                src.name,
+                load_dataset_entries(src.path),
+                target_elements=cfg.elements,
+            )
         if src.method is None:
             compat = {"compatible": None, "hard_mismatches": [], "warnings": ["method unknown"]}
         else:
@@ -307,13 +313,13 @@ def coverage(ws: CampaignWorkspace) -> dict[str, Any]:
         if sub.state == "finished" and sub.outcome == "converged":
             descriptors.append(_descriptor(sub.interactions, {}))
             bases.add("explicit")
-    report: CoverageReport = coverage_report(
-        descriptors, required_interactions(ws.config.chemical_hierarchy.elements)
-    )
+    report: CoverageReport = coverage_report(descriptors, required_interactions(ws.config.elements))
     return {
         "basis": sorted(bases) or ["no_data"],
         "report": report,
-        "subspace_records": ws.state.registry.target_coverage(),
+        "subspace_records": ws.state.registry.target_coverage(
+            hierarchy_subspaces(ws.config.elements)
+        ),
     }
 
 
@@ -667,8 +673,17 @@ class DispatchOutcome(BaseModel):
     stopped_because: str | None = None
 
 
+def _target_label(cfg: CampaignConfig) -> str:
+    t = cfg.target
+    formula = "".join(f"{el}{n}" for el, n in t.composition.items())
+    cell = "x".join(str(r) for r in t.supercell)
+    return f"{formula} ({cell} {t.parent_lattice.upper()}, {t.n_sites} sites)"
+
+
 def sbatch_submitter(cfg: CampaignConfig) -> Submitter:
     """Real submitter: ``sbatch --parsable -q <qos> -A <account>``, no shell parsing."""
+    if not cfg.execution.account:
+        raise ValueError("execution.account is required to submit with sbatch")
 
     def submit(spec: CalculationSpec) -> str:
         if spec.input_path is None:
@@ -937,7 +952,7 @@ def review(
     return (
         CampaignReport(
             campaign_id=cfg.campaign.campaign_id,
-            target="W640Ta128Cr64V96Hf32Mo64 (8x8x8 BCC, 1024 sites)",
+            target=_target_label(cfg),
             datasets_reused=sorted(state.registry.datasets),
             subspaces_covered=sorted(
                 {s for d in state.registry.datasets.values() for s in d.covered_subspaces}

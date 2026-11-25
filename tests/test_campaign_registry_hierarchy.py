@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from matsim_agents.workflows.candidate_registry import (
     NOT_YET_ESTABLISHED,
-    TARGET_ELEMENTS,
     CandidateRegistry,
     DatasetEntry,
     calculation_id,
@@ -14,15 +13,17 @@ from matsim_agents.workflows.candidate_registry import (
     ingest_dataset,
 )
 
+ELEMENTS = ("Cr", "Hf", "Mo", "Ta", "V", "W")
+
 
 def _entry(composition, h, **kw):
     return DatasetEntry(structure_hash=h, composition=composition, **kw)
 
 
 def test_hierarchy_component_counts_for_six_elements():
-    sub = hierarchy_subspaces()
+    sub = hierarchy_subspaces(ELEMENTS)
     assert {k: len(v) for k, v in sub.items()} == {2: 15, 3: 20, 4: 15, 5: 6, 6: 1}
-    assert sub[6] == [tuple(sorted(TARGET_ELEMENTS))]
+    assert sub[6] == [tuple(sorted(ELEMENTS))]
     assert len(set(sub[2])) == 15
 
 
@@ -37,11 +38,12 @@ def test_nb_data_never_counts_as_target_coverage():
             _entry({"Ta": 8, "V": 8}, "c"),
             _entry({"Nb": 6, "Ta": 5, "V": 5}, "d"),
         ],
+        target_elements=ELEMENTS,
     )
     assert rec.off_target_elements == ["Nb"]
     assert rec.target_elements_covered == ["Ta", "V"]
     assert rec.covered_subspaces == ["Ta-V"]
-    coverage = reg.target_coverage()
+    coverage = reg.target_coverage(hierarchy_subspaces(ELEMENTS))
     assert coverage["Ta-V"] == 1
     assert all(coverage[k] == 0 for k in coverage if k != "Ta-V")
     assert not any(
@@ -67,6 +69,7 @@ def test_record_fields_and_serialization_round_trip():
                 provenance={"doi": "x"},
             )
         ],
+        target_elements=ELEMENTS,
     )
     record = next(iter(reg.candidates.values()))
     assert record.chemical_system == "Ta-W" and record.n_components == 2
@@ -79,15 +82,25 @@ def test_record_fields_and_serialization_round_trip():
 def test_duplicate_calculation_detected_but_changed_conditions_kept():
     reg = CandidateRegistry()
     base = {"dft_backend": "qe", "dft_settings": {"ecutwfc": 80}, "magnetic_initial": {"m": 0}}
-    first = ingest_dataset(reg, "d1", [_entry({"W": 4, "Ta": 4}, "h", **base)])
-    again = ingest_dataset(reg, "d2", [_entry({"W": 4, "Ta": 4}, "h", **base)])
+    first = ingest_dataset(
+        reg, "d1", [_entry({"W": 4, "Ta": 4}, "h", **base)], target_elements=ELEMENTS
+    )
+    again = ingest_dataset(
+        reg, "d2", [_entry({"W": 4, "Ta": 4}, "h", **base)], target_elements=ELEMENTS
+    )
     assert (first.n_new_calculations, again.n_duplicate_calculations) == (1, 1)
     assert len(reg.candidates) == 1 and len(reg.calculations) == 1
     ingest_dataset(
-        reg, "d3", [_entry({"W": 4, "Ta": 4}, "h", **{**base, "dft_settings": {"ecutwfc": 60}})]
+        reg,
+        "d3",
+        [_entry({"W": 4, "Ta": 4}, "h", **{**base, "dft_settings": {"ecutwfc": 60}})],
+        target_elements=ELEMENTS,
     )
     ingest_dataset(
-        reg, "d4", [_entry({"W": 4, "Ta": 4}, "h", **{**base, "magnetic_initial": {"m": 1}})]
+        reg,
+        "d4",
+        [_entry({"W": 4, "Ta": 4}, "h", **{**base, "magnetic_initial": {"m": 1}})],
+        target_elements=ELEMENTS,
     )
     assert len(reg.candidates) == 1 and len(reg.calculations) == 3
 

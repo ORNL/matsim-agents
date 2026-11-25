@@ -16,7 +16,12 @@ from matsim_agents.workflows.hierarchy.transfer import (
     standard_experiments,
 )
 
-SMALL = dict(elements=("Cr", "Mo", "Ta", "V", "W"), orders=(2, 3, 4), compositions_per_system=4)
+SMALL = dict(
+    elements=("Cr", "Mo", "Ta", "V", "W"),
+    magnetic_element="Cr",
+    orders=(2, 3, 4),
+    compositions_per_system=4,
+)
 
 
 def _exp(**kw):

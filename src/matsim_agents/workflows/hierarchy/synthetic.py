@@ -12,7 +12,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from matsim_agents.core.seeding import numpy_rng
-from matsim_agents.workflows.candidate_registry import TARGET_ELEMENTS, chemical_system
+from matsim_agents.workflows.candidate_registry import chemical_system
 from matsim_agents.workflows.hierarchy.transfer import TransferData
 
 
@@ -30,7 +30,8 @@ def feature_vector(fractions: np.ndarray, sro: float) -> np.ndarray:
 class SyntheticSpec(BaseModel):
     seed: int = 0
     property: str = "bulk"
-    elements: tuple[str, ...] = TARGET_ELEMENTS
+    elements: tuple[str, ...] = ("A", "B", "C", "D", "E", "F")
+    magnetic_element: str | None = "C"
     orders: tuple[int, ...] = (2, 3, 4, 5, 6)
     compositions_per_system: int = Field(6, ge=1)
     n_orderings: int = Field(4, ge=2)
@@ -56,7 +57,7 @@ def make_synthetic_hierarchy(spec: SyntheticSpec | None = None) -> TransferData:
     rows = numpy_rng(spec.seed, "synthetic-rows")
     noise = numpy_rng(spec.seed, "synthetic-noise", spec.property)
     ordering_sro = np.linspace(-1.0, 1.0, spec.n_orderings)
-    cr = elements.index("Cr") if "Cr" in elements else None
+    mag = elements.index(spec.magnetic_element) if spec.magnetic_element in elements else None
 
     columns: dict[str, list] = {
         k: []
@@ -104,7 +105,7 @@ def make_synthetic_hierarchy(spec: SyntheticSpec | None = None) -> TransferData:
                     columns["sro_regime"].append(
                         "random" if strength < 0.2 else "weak" if strength < 0.6 else "strong"
                     )
-                    magnetic = cr is not None and fractions[cr] > 0.25
+                    magnetic = mag is not None and fractions[mag] > 0.25
                     columns["magnetic"].append("fm" if magnetic else "nm")
                     columns["cost"].append(spec.cost_per_order * order)
     return TransferData(
