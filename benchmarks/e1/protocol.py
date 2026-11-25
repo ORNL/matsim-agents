@@ -275,7 +275,7 @@ def _sha256(value: Any) -> str:
 
 
 def _protocol_artifact_hashes() -> dict[str, str]:
-    artifact_dir = Path(__file__).resolve().parents[3] / "research" / "paper" / "e1"
+    artifact_dir = Path(__file__).resolve().parents[2] / "research" / "paper" / "e1"
     artifacts = {
         "development_questions": artifact_dir / "d-questions.v1.json",
         "response_schema": artifact_dir / "response-schema.v1.json",

@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.workflows.e1 import (
+from benchmarks.e1.protocol import (
     CURRENT_PROMPT_VARIANT,
     E1DevelopmentManifest,
     run_e1_development,

@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
-from matsim_agents.workflows.e1 import (
+from benchmarks.e1.protocol import (
     E1DevelopmentManifest,
     E1ScientificResponse,
     _e1_system_prompt,

@@ -16,7 +16,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from prepare_blinded_reviews import CRITERIA, THRESHOLDS
 
-from matsim_agents.workflows.e1 import assess_semantic_validity
+from benchmarks.e1.protocol import assess_semantic_validity
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS_PATH = ROOT / "research/paper/e1/d-questions.v1.json"

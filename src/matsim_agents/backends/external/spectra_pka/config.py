@@ -11,8 +11,9 @@ Where the external pieces come from (full steps in ``docs/external/spectra-pka.m
 * PKA matrices (``nuclear_data_root``): the "Data download for SPECTRA-PKA" table on
   https://fispact.github.io/resources/nuclear_data_downloads/ links one Dropbox folder
   (``pkas.zip``, about 7.9 GB, TENDL-2015/2017/2019/2023). Site copies are listed per
-  deployment (``deployments/``) with SOURCE.txt and SHA256SUMS. Extract the needed ``<El><AAA>s.asc`` files per
-  campaign (docs/external/spectra-pka.md, section 2) and point ``PKA_DATA_DIRECTORY`` there.
+  deployment (``deployments/``) with SOURCE.txt and SHA256SUMS. Extract the needed
+  ``<El><AAA>s.asc`` files per campaign (docs/external/spectra-pka.md, section 2) and point
+  ``PKA_DATA_DIRECTORY`` there.
 * Neutron spectrum (``flux.file``): user-supplied. The upstream ``manual/test/fluxes_specter.dat``
   is a 709-group PWR spectrum for build checks only, not an application spectrum.
 """

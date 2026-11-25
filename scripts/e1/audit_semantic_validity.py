@@ -14,7 +14,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from matsim_agents.workflows.e1 import assess_semantic_validity
+from benchmarks.e1.protocol import assess_semantic_validity
 
 AUDIT_VERSION = "e1-semantic-audit-v1"
 

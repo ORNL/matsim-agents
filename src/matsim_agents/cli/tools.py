@@ -57,14 +57,6 @@ TOOLS: dict[str, tuple[str, str]] = {
         "matsim_agents.backends.mlip.training.branch_routing",
         "Map AL datasets to HydraGNN branch heads",
     ),
-    "warmstart-qe": (
-        "matsim_agents.workflows.warmstart_benchmark_qe",
-        "Warm-start benchmark: HydraGNN pre-relax, then Quantum ESPRESSO",
-    ),
-    "warmstart-vasp": (
-        "matsim_agents.workflows.warmstart_benchmark_vasp",
-        "Warm-start benchmark: HydraGNN pre-relax, then VASP",
-    ),
 }
 
 tools_app = typer.Typer(help="List and run the package's training, dataset and benchmark tools.")

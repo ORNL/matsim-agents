@@ -1,22 +1,20 @@
-"""Warm-start benchmark (VASP): MLIP pre-relax then compare DFT step counts.
+"""Warm-start benchmark (Quantum ESPRESSO): MLIP pre-relax then compare DFT step counts.
 
-Sibling of :mod:`matsim_agents.workflows.warmstart_benchmark_qe`. For a given
-input crystal we run::
+For a given input crystal we run::
 
     1. MLIP structure optimisation (HydraGNN, UMA, or MACE; cheap, ML-driven)
-    2. vasp_std relaxation from the *original* coordinates    (cold start)
-    3. vasp_std relaxation from the MLIP-relaxed coordinates  (warm start)
+    2. pw.x relaxation from the *original* coordinates    (cold start)
+    3. pw.x relaxation from the MLIP-relaxed coordinates  (warm start)
 
-and report how many ionic steps and total electronic-SCF iterations each
-DFT run needed, plus the agreement between the two final energies. The full
-comparison is written to a JSON file analogous to the QE flavour, so any
-downstream analysis can consume both with the same schema.
+and report how many BFGS / SCF iterations each DFT run needed, plus the
+agreement between the two final energies. The whole comparison is written to
+a JSON file that the integration tests consume.
 
-The MLIP step is delegated to :mod:`matsim_agents.backends.mlip.relaxation`.
-If it fails, or ``--skip-mlip`` is passed, only the cold DFT run is
-performed and the ``warm`` block is left ``None``.
+The MLIP step is delegated to ``matsim_agents.backends.mlip.relaxation``. If it
+fails, or ``--skip-mlip`` is passed, only the cold run is performed and the
+``warm`` block is left as ``None``.
 
-Energy units throughout: **eV** (matches what VASP and the AL pipeline use).
+For the VASP equivalent see :mod:`benchmarks.warmstart.vasp`.
 """
 
 from __future__ import annotations
@@ -28,13 +26,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.backends.dft.vasp_relax import (
-    VASPRelaxResult,
-    VASPSettings,
-    parse_relax_outputs,
-    prepare_relax_workdir,
+from matsim_agents.backends.dft.qe_relax import (
+    PWResult,
+    QESettings,
     recommend_settings,
-    run_vasp,
+    run_pw,
+    write_pw_input,
 )
 from matsim_agents.backends.mlip.arguments import add_mlip_arguments, mlip_config_from_args
 from matsim_agents.backends.mlip.config import MLIPConfig
@@ -42,17 +39,17 @@ from matsim_agents.backends.mlip.config import MLIPConfig
 
 @dataclass
 class WarmstartComparison:
-    """JSON-serialisable summary of a cold-vs-warm VASP comparison."""
+    """JSON-serialisable summary of a cold-vs-warm comparison."""
 
     structure_path: str
     work_dir: str
     cold: dict[str, Any]
     warm: dict[str, Any] | None
     mlip: dict[str, Any] | None
-    delta_ionic_steps: int | None
+    delta_bfgs_steps: int | None
     delta_scf_iterations: int | None
     delta_energy_ev: float | None
-    speedup_ionic: float | None
+    speedup_bfgs: float | None
     warm_helped: bool | None
 
     def to_json(self, path: str) -> None:
@@ -68,18 +65,17 @@ class WarmstartComparison:
 def run_warmstart_benchmark(
     structure_path: str,
     work_dir: str,
-    potcar_dir: str,
-    vasp_launcher: list[str] | str,
+    pseudo_dir: str,
+    qe_launcher: list[str] | str,
     *,
-    vasp_settings_overrides: dict[str, Any] | None = None,
+    qe_settings_overrides: dict[str, Any] | None = None,
     mlip: MLIPConfig | None = None,
     mlip_settings: dict[str, Any] | None = None,
     timeout_sec: int | None = None,
 ) -> WarmstartComparison:
-    """Run the cold + warm VASP relaxations and return the comparison summary.
+    """Run the cold + warm DFT relaxations and return the comparison summary.
 
-    ``vasp_settings_overrides`` is forwarded verbatim to
-    :func:`matsim_agents.backends.dft.vasp_relax.recommend_settings`.
+    ``qe_settings_overrides`` is forwarded to :func:`recommend_settings`.
 
     ``mlip`` selects the MLIP (backend plus its settings) for the warm
     pre-relaxation; ``None`` runs only the cold DFT relaxation.
@@ -92,15 +88,24 @@ def run_warmstart_benchmark(
     Path(work_dir).mkdir(parents=True, exist_ok=True)
 
     cold_atoms = read(structure_path)
-    overrides = dict(vasp_settings_overrides or {})
-    settings_cold = recommend_settings(cold_atoms, potcar_dir=potcar_dir, **overrides)
+    overrides = dict(qe_settings_overrides or {})
+    settings_cold = recommend_settings(cold_atoms, pseudo_dir, **overrides)
 
     cold_dir = os.path.join(work_dir, "cold")
-    prepare_relax_workdir(cold_atoms, cold_dir, settings_cold, potcar_dir=potcar_dir)
-    cold_result = run_vasp(
-        cold_dir,
-        launcher_cmd=vasp_launcher,
-        stdout_name="vasp.out",
+    cold_input = os.path.join(cold_dir, "pw.in")
+    write_pw_input(
+        cold_atoms,
+        settings_cold,
+        cold_input,
+        prefix="pwscf_cold",
+        outdir=os.path.join(cold_dir, "tmp"),
+        title=f"Cold-start relax of {os.path.basename(structure_path)}",
+    )
+    cold_result = run_pw(
+        cold_input,
+        work_dir=cold_dir,
+        launcher_cmd=qe_launcher,
+        stdout_name="pw.out",
         timeout_sec=timeout_sec,
     )
 
@@ -119,17 +124,28 @@ def run_warmstart_benchmark(
         if warm_atoms_path is not None:
             warm_atoms = read(warm_atoms_path)
             warm_dir = os.path.join(work_dir, "warm")
-            # Reuse the *same* VASP settings as cold to make the comparison fair.
-            prepare_relax_workdir(warm_atoms, warm_dir, settings_cold, potcar_dir=potcar_dir)
-            warm_result = run_vasp(
-                warm_dir,
-                launcher_cmd=vasp_launcher,
-                stdout_name="vasp.out",
+            warm_input = os.path.join(warm_dir, "pw.in")
+            # Reuse the *same* QE settings as cold to make the comparison fair.
+            write_pw_input(
+                warm_atoms,
+                settings_cold,
+                warm_input,
+                prefix="pwscf_warm",
+                outdir=os.path.join(warm_dir, "tmp"),
+                title=f"Warm-start relax ({mlip.backend}-prerelaxed) of "
+                f"{os.path.basename(structure_path)}",
+            )
+            warm_result = run_pw(
+                warm_input,
+                work_dir=warm_dir,
+                launcher_cmd=qe_launcher,
+                stdout_name="pw.out",
                 timeout_sec=timeout_sec,
             )
             warm_block = warm_result.to_dict()
 
-            # Round-trip the warm-input ASE structure for bookkeeping.
+            # Round-trip the warm-input ASE structure to the work dir for
+            # bookkeeping — handy when looking at runs later.
             write(os.path.join(warm_dir, "input_warm.cif"), warm_atoms)
 
     summary = _summarise(structure_path, work_dir, cold_result, warm_block, mlip_block)
@@ -171,38 +187,30 @@ def _mlip_relax(
 def _summarise(
     structure_path: str,
     work_dir: str,
-    cold: VASPRelaxResult,
+    cold: PWResult,
     warm_block: dict[str, Any] | None,
     mlip_block: dict[str, Any] | None,
 ) -> WarmstartComparison:
     cold_block = cold.to_dict()
-    if warm_block is None or "n_ionic_steps" not in warm_block:
+    if warm_block is None or "bfgs_steps" not in warm_block:
         return WarmstartComparison(
             structure_path=structure_path,
             work_dir=work_dir,
             cold=cold_block,
             warm=warm_block,
             mlip=mlip_block,
-            delta_ionic_steps=None,
+            delta_bfgs_steps=None,
             delta_scf_iterations=None,
             delta_energy_ev=None,
-            speedup_ionic=None,
+            speedup_bfgs=None,
             warm_helped=None,
         )
 
-    warm_ionic = int(warm_block["n_ionic_steps"])
-    warm_scf_total = sum(int(n) for n in warm_block.get("scf_iterations_per_step", []))
-    cold_scf_total = sum(cold.scf_iterations_per_step)
-
-    delta_ionic = cold.n_ionic_steps - warm_ionic
-    delta_scf = cold_scf_total - warm_scf_total
-    delta_e = (
-        (cold.final_energy_eV - float(warm_block["final_energy_eV"]))
-        if (cold.final_energy_eV is not None and warm_block.get("final_energy_eV") is not None)
-        else None
-    )
-    speedup = cold.n_ionic_steps / max(1, warm_ionic)
-    warm_helped = warm_ionic <= cold.n_ionic_steps
+    delta_bfgs = cold.bfgs_steps - int(warm_block["bfgs_steps"])
+    delta_scf = cold.scf_iterations_total - int(warm_block["scf_iterations_total"])
+    delta_e = cold.final_energy_ev - float(warm_block["final_energy_ev"])
+    speedup = cold.bfgs_steps / max(1, int(warm_block["bfgs_steps"]))
+    warm_helped = warm_block["bfgs_steps"] <= cold.bfgs_steps
 
     return WarmstartComparison(
         structure_path=structure_path,
@@ -210,10 +218,10 @@ def _summarise(
         cold=cold_block,
         warm=warm_block,
         mlip=mlip_block,
-        delta_ionic_steps=delta_ionic,
+        delta_bfgs_steps=delta_bfgs,
         delta_scf_iterations=delta_scf,
         delta_energy_ev=delta_e,
-        speedup_ionic=speedup,
+        speedup_bfgs=speedup,
         warm_helped=warm_helped,
     )
 
@@ -225,52 +233,46 @@ def _summarise(
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="matsim-warmstart-benchmark-vasp",
+        prog="matsim-warmstart-benchmark-qe",
         description=(
-            "Run an MLIP warm-started vs cold-started VASP "
+            "Run an MLIP warm-started vs cold-started Quantum ESPRESSO "
             "geometry-optimisation comparison and emit a JSON summary."
         ),
     )
     p.add_argument("--structure", required=True, help="Path to input structure (.cif/.vasp/.xyz).")
-    p.add_argument("--work-dir", required=True, help="Output directory for VASP inputs/outputs.")
+    p.add_argument("--work-dir", required=True, help="Output directory for QE inputs/outputs.")
     p.add_argument(
-        "--potcar-dir",
+        "--pseudo-dir",
         required=True,
-        help="Directory with per-element POTCARs (e.g. <potcar_dir>/Si/POTCAR).",
+        help="Directory containing .UPF pseudopotentials.",
     )
     p.add_argument(
-        "--vasp-launcher",
+        "--qe-launcher",
         required=True,
         help=(
-            "Command (or absolute path) used to launch vasp_std. The wrapper "
-            "is fully responsible for invoking VASP under the local MPI launcher. "
-            "VASP reads its inputs from the cwd, so no input path is appended."
+            "Command (or absolute path) used to launch pw.x. The QE input file "
+            "is appended as the final argument."
         ),
     )
     add_mlip_arguments(p)
-    p.add_argument("--mlip-fmax", type=float, default=0.05)
+    p.add_argument("--mlip-fmax", type=float, default=0.01)
     p.add_argument("--mlip-maxiter", type=int, default=200)
-    p.add_argument(
-        "--calculation",
-        default="vc-relax",
-        choices=["relax", "vc-relax", "vc-relax-shape"],
-    )
-    p.add_argument("--encut", type=float, default=None, help="Override ENCUT (eV).")
-    p.add_argument("--kspacing", type=float, default=None, help="Override KSPACING (1/Å).")
-    p.add_argument("--nsw", type=int, default=100, help="Max ionic steps (NSW).")
-    p.add_argument("--ediff", type=float, default=None, help="Override EDIFF (eV).")
-    p.add_argument(
-        "--ediffg",
-        type=float,
-        default=None,
-        help="Override EDIFFG (eV/Å, sign convention: negative = force criterion).",
-    )
-    p.add_argument("--timeout-sec", type=int, default=None)
     p.add_argument(
         "--skip-mlip",
         action="store_true",
         help="Run only the cold DFT relax (instead of --mlip-config).",
     )
+    p.add_argument("--calculation", default="vc-relax", choices=["relax", "vc-relax"])
+    p.add_argument(
+        "--is-2d",
+        action="store_true",
+        help="Treat as 2-D (k-mesh = 1 in the longest cell direction).",
+    )
+    p.add_argument("--ecutwfc", type=float, default=None, help="Override ecutwfc (Ry).")
+    p.add_argument("--ecutrho", type=float, default=None, help="Override ecutrho (Ry).")
+    p.add_argument("--kpts", type=int, nargs=3, default=None, metavar=("KX", "KY", "KZ"))
+    p.add_argument("--nstep", type=int, default=100)
+    p.add_argument("--timeout-sec", type=int, default=None)
     return p
 
 
@@ -280,31 +282,30 @@ def main(argv: list[str] | None = None) -> int:
 
     overrides: dict[str, Any] = {
         "calculation": args.calculation,
-        "nsw": args.nsw,
+        "nstep": args.nstep,
+        "is_2d": args.is_2d,
     }
-    if args.encut is not None:
-        overrides["encut_ev"] = args.encut
-    if args.kspacing is not None:
-        overrides["kspacing"] = args.kspacing
-    if args.ediff is not None:
-        overrides["ediff"] = args.ediff
-    if args.ediffg is not None:
-        overrides["ediffg_eV_per_A"] = args.ediffg
+    if args.ecutwfc is not None:
+        overrides["ecutwfc_ry"] = args.ecutwfc
+    if args.ecutrho is not None:
+        overrides["ecutrho_ry"] = args.ecutrho
+    if args.kpts is not None:
+        overrides["kpts"] = tuple(args.kpts)
 
     mlip = mlip_config_from_args(parser, args)
     if (mlip is None) != args.skip_mlip:
         parser.error("pass exactly one of --mlip-config or --skip-mlip")
 
-    vasp_launcher: list[str] | str = (
-        args.vasp_launcher.split() if " " in args.vasp_launcher else args.vasp_launcher
+    qe_launcher: list[str] | str = (
+        args.qe_launcher.split() if " " in args.qe_launcher else args.qe_launcher
     )
 
     summary = run_warmstart_benchmark(
         structure_path=args.structure,
         work_dir=args.work_dir,
-        potcar_dir=args.potcar_dir,
-        vasp_launcher=vasp_launcher,
-        vasp_settings_overrides=overrides,
+        pseudo_dir=args.pseudo_dir,
+        qe_launcher=qe_launcher,
+        qe_settings_overrides=overrides,
         mlip=mlip,
         mlip_settings={"fmax": args.mlip_fmax, "maxiter": args.mlip_maxiter},
         timeout_sec=args.timeout_sec,
@@ -318,6 +319,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-# Touch to silence linters that flag the imports as unused (they form part of
-# the documented public surface re-exported via this module).
-_ = (VASPSettings, parse_relax_outputs)  # noqa: F841
+# Ensure the optional QESettings override 'is_2d' propagates cleanly. The
+# dataclass stores it; recommend_settings honours it. Touch to silence linters
+# that flag the import as unused.
+_ = QESettings  # noqa: F401
