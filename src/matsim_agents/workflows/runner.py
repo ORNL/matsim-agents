@@ -192,6 +192,9 @@ def _llm_check_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.llm_check import LLMCheckConfig
 
     cfg = LLMCheckConfig.model_validate(load_workflow_config(path))
+    if cfg.uses_plan_server:
+        # The plan's server, not a provider backend, is what the check qualifies.
+        return Preflight({"server": cfg.server or "(only server of the plan)"})
     return Preflight(
         {"provider": cfg.provider, "model": cfg.model}, backend_blockers([cfg.provider])
     )
@@ -596,7 +599,7 @@ def detect_kind(path: str | Path) -> str:
         (lambda k: k == {"evaluation"}, "finetune-eval"),
         (lambda k: {"selection", "candidates", "reference_alloy"} <= k, "selection-example"),
         (lambda k: {"hypothesis", "rounds"} <= k, "debate"),
-        (lambda k: {"provider", "model"} <= k, "llm-check"),
+        (lambda k: {"provider", "model"} <= k or "server" in k, "llm-check"),
         (lambda k: "contract_id" in k, "characterize"),
         (lambda k: {"mode", "structure_path"} <= k, "relax"),
         (lambda k: {"parent", "defect"} <= k, "neb"),

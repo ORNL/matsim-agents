@@ -295,3 +295,26 @@ def test_investigation_examples_are_blocked_without_a_model(monkeypatch) -> None
 def test_auxiliary_inputs_are_refused_with_their_role(relative) -> None:
     with pytest.raises(runner.UnrunnableInput, match="not run directly"):
         runner.validate(REPO / "examples" / relative)
+
+
+def test_server_backed_llm_check_is_detected_and_not_blocked_on_a_provider(
+    tmp_path, monkeypatch
+) -> None:
+    # The shape deployments/common/run-llm-check.sh generates: a plan server, no provider/model.
+    monkeypatch.setattr(runner, "backend_blockers", lambda names: [f"unavailable: {list(names)}"])
+    config = tmp_path / "check.json"
+    config.write_text(
+        '{"server": "qwen", "output_root": "out", "temperature": 0.0, "timeout_sec": 120,'
+        ' "concurrent_requests": 2, "context_length": 8192}'
+    )
+    kind, preflight = runner.validate(config)
+    assert kind == "llm-check"
+    assert preflight.summary == {"server": "qwen"}
+    assert preflight.blockers == []
+
+
+def test_llm_check_server_with_provider_is_invalid(tmp_path) -> None:
+    config = tmp_path / "check.yaml"
+    config.write_text("server: qwen\nprovider: ollama\n")
+    with pytest.raises(ValueError, match="remove provider"):
+        runner.validate(config)
