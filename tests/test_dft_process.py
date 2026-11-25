@@ -17,6 +17,15 @@ def _alive(pid: int) -> bool:
         return stat.read().split(")")[-1].split()[0] != "Z"
 
 
+def _default_sigint() -> None:
+    # A suite started in the background (``cmd &``, ``nohup cmd &``) inherits SIGINT as
+    # ignored, and Python then keeps it ignored. Start the workflow as an interactive shell
+    # would, so the Ctrl-C tests do not depend on how pytest was launched.
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 @pytest.mark.parametrize("ignore_term", [False, True])
 def test_a_timed_out_launch_stops_its_whole_process_tree(tmp_path, ignore_term):
     trap = "trap '' TERM; " if ignore_term else ""
@@ -109,7 +118,7 @@ def test_ctrl_c_during_timeout_cleanup_still_kills_and_reaps_the_launch(tmp_path
     )
     source = str(Path(process.__file__).parents[3])
     env = {**os.environ, "PYTHONPATH": source}
-    workflow = subprocess.Popen([sys.executable, "-c", code], env=env)
+    workflow = subprocess.Popen([sys.executable, "-c", code], env=env, preexec_fn=_default_sigint)
     seen = tmp_path / "term.seen"
     deadline = time.monotonic() + 30
     while not seen.exists():
@@ -145,6 +154,6 @@ def test_a_launcher_exiting_as_the_workflow_is_interrupted_leaves_no_children(tm
     )
     source = str(Path(process.__file__).parents[3])
     env = {**os.environ, "PYTHONPATH": source}
-    workflow = subprocess.Popen([sys.executable, "-c", code], env=env)
+    workflow = subprocess.Popen([sys.executable, "-c", code], env=env, preexec_fn=_default_sigint)
     assert workflow.wait(timeout=30) == -signal.SIGINT
     assert not _alive(int((tmp_path / "child.pid").read_text()))
