@@ -52,6 +52,19 @@ def test_budget_is_respected_and_deterministic(spectrum):
     assert a.used_node_hours <= 1.5 and len(a.selected) == 1
 
 
+def test_nan_budget_is_rejected(spectrum):
+    with pytest.raises(ValueError):
+        select_pka_informed(spectrum, _cands(), float("nan"))
+
+
+def test_element_candidate_covers_its_isotopes(spectrum):
+    cands = [PKACandidate(candidate_id="w-el", species="W", node_hours=1.0)]
+    result = select_pka_informed(spectrum, cands, 1.0)
+    assert [s.candidate_id for s in result.selected] == ["w-el"]
+    assert "W182" not in result.uncovered_species
+    assert "Ta181" in result.uncovered_species
+
+
 def test_defect_production_never_claimed(spectrum):
     result = select_pka_informed(spectrum, _cands(), 3.0)
     assert result.surviving_defect_production is DefectStatus.NOT_ESTABLISHED

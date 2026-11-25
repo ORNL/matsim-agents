@@ -222,6 +222,23 @@ def test_vasp_backend_satisfies_dft_protocol() -> None:
         assert hasattr(VASPBackend, attr)
 
 
+def test_vasp_backend_rejects_magnetic_config(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from ase import Atoms
+
+    from matsim_agents.backends.dft.base import DFTJobSpec
+    from matsim_agents.backends.dft.vasp import VASPBackend
+
+    backend = VASPBackend(SimpleNamespace(timeout_sec=1))
+    spec = DFTJobSpec(
+        job_id="j", atoms=Atoms("Fe"), work_dir=str(tmp_path), magnetic_config=object()
+    )
+    with pytest.raises(NotImplementedError, match="magnetic_config"):
+        backend.run_one(spec)
+    assert not any(tmp_path.iterdir())
+
+
 # ── Interface 2: MLIP backend ─────────────────────────────────────────────── #
 
 

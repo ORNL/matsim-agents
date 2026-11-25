@@ -159,6 +159,22 @@ def test_template_with_magnetic_keys_is_rejected(tmp_path):
         _render(tmp_path, atoms, cfg, body)
 
 
+def test_template_with_inline_magnetic_key_is_rejected(tmp_path):
+    atoms = _atoms()
+    cfg = _polar(gen.ferromagnetic(atoms, "s", {"Fe": 2.2}))
+    body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40, nspin = 2")
+    with pytest.raises(ValueError, match="controls"):
+        _render(tmp_path, atoms, cfg, body)
+
+
+def test_magnetic_key_in_comment_or_string_is_ignored(tmp_path):
+    atoms = _atoms()
+    cfg = _polar(gen.ferromagnetic(atoms, "s", {"Fe": 2.2}))
+    body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40 ! nspin = 1 set below")
+    text = _render(tmp_path, atoms, cfg, body)
+    assert "nspin = 2" in text
+
+
 def test_template_with_inline_ntyp_is_updated(tmp_path):
     atoms = _atoms()
     body = TEMPLATE.replace("  nat = {nat}\n  ntyp = {ntyp}\n", "  nat = {nat}, ntyp = 1\n")

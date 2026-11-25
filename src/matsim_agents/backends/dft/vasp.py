@@ -34,6 +34,11 @@ class VASPBackend:
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:
         cfg = self.cfg
+        if spec.magnetic_config is not None:
+            raise NotImplementedError(
+                "VASP backend does not support magnetic_config yet; use the QE backend or "
+                "set MAGMOM/ISPIN explicitly via extra_incar"
+            )
         launch = spec.require_launch()
 
         prepare_vasp_workdir(

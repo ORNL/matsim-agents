@@ -75,7 +75,7 @@ def select_pka_informed(
     batch_size: int | None = None,
 ) -> PKAAcquisitionResult:
     """Greedy, deterministic ranking. Ties break by ``candidate_id``."""
-    if budget_node_hours <= 0:
+    if not budget_node_hours > 0:
         raise ValueError("budget_node_hours must be positive")
     production = _production_by_key(spectrum)
     unmatched = tuple(sorted(c.candidate_id for c in candidates if c.species not in production))
@@ -110,8 +110,13 @@ def select_pka_informed(
         taken[c.species] = taken.get(c.species, 0) + 1
         used += c.node_hours
         pool.remove(c)
-    isotopes = {s.species.key for s in spectrum.spectra}
-    uncovered = tuple(sorted(k for k in isotopes if k not in taken))
+    uncovered = tuple(
+        sorted(
+            s.species.key
+            for s in spectrum.spectra
+            if s.species.key not in taken and s.species.element not in taken
+        )
+    )
     return PKAAcquisitionResult(
         selected=tuple(selected),
         unmatched_candidates=unmatched,

@@ -85,7 +85,8 @@ _MAGNETIC_KEYS = (
     "angle1",
     "angle2",
 )
-_KEY_RE = re.compile(r"^\s*(" + "|".join(_MAGNETIC_KEYS) + r")\s*(\(\s*\d+\s*\))?\s*=", re.I | re.M)
+_KEY_RE = re.compile(r"(?<!\w)(" + "|".join(_MAGNETIC_KEYS) + r")\s*(\(\s*\d+\s*\))?\s*=", re.I)
+_QUOTED_OR_COMMENT_RE = re.compile(r"'[^'\n]*'|\"[^\"\n]*\"|![^\n]*")
 
 
 def reject_contradictory_settings(extra_system: Mapping[str, object], where: str) -> None:
@@ -104,7 +105,8 @@ def reject_contradictory_settings(extra_system: Mapping[str, object], where: str
 
 def reject_contradictory_text(text: str, where: str) -> None:
     """Same check for a pw.in template body."""
-    bad = sorted({m.group(1).lower() for m in _KEY_RE.finditer(text)} - {"ntyp"})
+    code = _QUOTED_OR_COMMENT_RE.sub(" ", text)
+    bad = sorted({m.group(1).lower() for m in _KEY_RE.finditer(code)} - {"ntyp"})
     if bad:
         raise ValueError(
             f"template {where} sets {bad}, which the magnetic configuration controls; "
