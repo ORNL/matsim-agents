@@ -182,7 +182,7 @@ The two libraries live side by side under
 - **Cutoffs.** The SSSP minimum over the 10 elements is 80 Ry wfc (set by H) and 400 Ry rho
   (set by W and Ta). The candidate config uses 80/640. These are SSSP recommendations, not
   convergence tests for this alloy.
-- **QE compatibility (reader level only).** `upfconv.x` from `install-gpu-new` reads all 10
+- **QE compatibility (reader level only).** `upfconv.x` from `install-gpu` reads all 10
   files. No pw.x calculation has been run.
 - **Config.** `deployments/frontier/campaigns/qe-1024-sssp-candidate/campaign.yaml`.
   - It uses its own `MATSIM_SSSP_PSEUDO_DIR` and campaign id.
