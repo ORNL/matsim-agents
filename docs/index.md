@@ -32,6 +32,7 @@ the framework.
 - [Hypothesis-driven discovery chat](guide/discovery-chat.md)
 - [Active learning (MLIP and DFT)](guide/active-learning.md)
 - [MLIP training references and model promotion](mlip-training-and-promotion.md)
+- [MLIP and DFT energy conventions](mlip-energy-conventions.md): labels, references and units for each MLIP
 - [Competing-phase reference hulls](reference-hulls.md)
 
 ## 4. Read results and restart safely

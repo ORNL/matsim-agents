@@ -240,7 +240,9 @@ polymorphs enter the phase diagram. The lowest corrected energy per atom for
 each model defines that model's elemental endpoint. A missing converged unary
 endpoint makes the hull provisional and suppresses formation/hull energies.
 Isolated atoms are not hull endpoints; they are appropriate only for optional
-cohesive or atomization-energy diagnostics. Competing compound references are
+cohesive or atomization-energy diagnostics (see
+[energy conventions](../mlip-energy-conventions.md#reference-energies-pure-element-condensed-phases)).
+Competing compound references are
 currently model-scored at their manifest geometries, so these results remain
 explicitly labeled `mlip_proxy` rather than DFT thermodynamics.
 

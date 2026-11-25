@@ -116,7 +116,8 @@ iteration's fine-tuning. Each draw uses its own named stream of the seed; see
 VASP PAW totals and QE pseudopotential totals are **not** directly
 comparable. Every frame written to the dataset is tagged with
 `info["dft_backend"]`; never train one MLIP on a mixed
-VASP+QE dataset without an explicit per-backend energy offset.
+VASP+QE dataset without an explicit per-backend energy offset. See
+[MLIP and DFT energy conventions](../mlip-energy-conventions.md).
 
 ### Energy comparison and promotion
 
