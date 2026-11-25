@@ -38,10 +38,6 @@ def test_gpu_qualification_cpu_operations(tmp_path: Path) -> None:
         for package in ("torch", "torch_geometric", "torch_scatter")
     ):
         pytest.skip("Torch, PyG, and torch_scatter are required for the CPU qualification")
-    try:
-        import torch_scatter  # noqa: F401
-    except OSError as exc:
-        pytest.skip(f"torch_scatter binary does not match the installed torch: {exc}")
 
     output = tmp_path / "qualification.json"
     subprocess.run(
