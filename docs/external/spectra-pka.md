@@ -64,16 +64,18 @@ unzip -o pkas.zip TENDL2017data-n-pka.tar.bz2 && tar -xjf TENDL2017data-n-pka.ta
 
 The licence and terms of use are those set by FISPACT/TENDL. Do not commit these files.
 
-**On Frontier (lrn110) this is already done.** The cache is
-`/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/`. It holds `pkas.zip`, its
-`SHA256SUMS`, and `SOURCE.txt` (URL, date, fetch/extract/verify commands). The extracted
-TENDL-2017 neutron set is in `njoy_results-n-tendl2017-jc/pka/`: 287 matrices with their own
-`SHA256SUMS`, covering among others Cr, Hf, Mo, Os, Re, Ta, V and W isotopes. The other TENDL
-sets are still inside the zip.
+**On Frontier (lrn110) the download is done.** The cache
+`/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/` holds only `pkas.zip`, its
+`SHA256SUMS`, and `SOURCE.txt` (URL, date, fetch/extract/verify commands). Nothing is kept
+unpacked. Extract only the matrices a campaign needs into its own work area, for example:
 
 ```bash
-export PKA_DATA_DIRECTORY=/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka/njoy_results-n-tendl2017-jc/pka
-(cd "$PKA_DATA_DIRECTORY" && sha256sum -c --quiet SHA256SUMS)
+C=/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka
+(cd "$C" && sha256sum -c --quiet SHA256SUMS)
+mkdir -p data && cd data
+unzip -p "$C/pkas.zip" TENDL2017data-n-pka.tar.bz2 \
+  | tar -xj --wildcards 'njoy_results-n-tendl2017-jc/pka/W18*s.asc'
+export PKA_DATA_DIRECTORY=$PWD/njoy_results-n-tendl2017-jc/pka
 ```
 
 The neutron spectrum is always supplied by the user. The upstream `manual/test/fluxes_specter.dat`
@@ -210,8 +212,8 @@ verification.** The tests do not run SPECTRA-PKA.
   Nucl. Mater. Energy 9 (2016) 576-580; J. Nucl. Mater. 504 (2018) 101-108;
   Nucl. Sci. Eng. (2024) doi:10.1080/00295639.2024.2342506.
 * The real build writes the index file as `<stub>.indexes`.
-* SPECTRA-PKA is built on Frontier at `external/SPECTRA-PKA` (gitignored). TENDL-2017 neutron
-  matrices are installed in the shared cache (section 2).
+* SPECTRA-PKA is built on Frontier at `external/SPECTRA-PKA` (gitignored). The PKA data archive is
+  in the shared cache; matrices are extracted per campaign (section 2).
 
 ## 14. PKA-informed ranking and the synthetic chain
 

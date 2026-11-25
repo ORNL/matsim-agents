@@ -27,7 +27,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | 7 | Cluster-dynamics bridge | `kinetics/cluster_dynamics.py` | `IMPLEMENTED_TESTED` | Bubble physics rejected as future work; bubble kinetics `NOT_ESTABLISHED`. |
 | 8 | Transfer-driven gas acquisition | `campaign/gas_transfer.py` | `IMPLEMENTED_TESTED` | Not shown to beat random selection on any real data. |
 | 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). Cutoffs are not convergence-tested (the Os suggestion of 53.8 Ry exceeds the campaign `ecutwfc`). No QE run with them yet. Own dispatch, not `slurm_jobs`. |
-| 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; TENDL-2017 neutron matrices cached. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
+| 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; PKA data archive (`pkas.zip`) cached, extracted per campaign. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
 

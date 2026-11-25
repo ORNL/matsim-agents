@@ -12,7 +12,8 @@ Where the external pieces come from (full steps in ``docs/external/spectra-pka.m
   https://fispact.github.io/resources/nuclear_data_downloads/ links one Dropbox folder
   (``pkas.zip``, about 7.9 GB, TENDL-2015/2017/2019/2023). The Frontier copy is under
   ``/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka`` with SOURCE.txt and
-  SHA256SUMS. Set ``PKA_DATA_DIRECTORY`` to the extracted library directory.
+  SHA256SUMS (zip only, nothing unpacked). Extract the needed ``<El><AAA>s.asc`` files per
+  campaign (docs/external/spectra-pka.md, section 2) and point ``PKA_DATA_DIRECTORY`` there.
 * Neutron spectrum (``flux.file``): user-supplied. The upstream ``manual/test/fluxes_specter.dat``
   is a 709-group PWR spectrum for build checks only, not a fusion or campaign spectrum.
 """
