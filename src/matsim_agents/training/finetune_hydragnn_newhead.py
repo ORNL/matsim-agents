@@ -337,6 +337,25 @@ class _LossSpec:
 # --------------------------------------------------------------------------- #
 
 
+def _finetune_protocol(
+    strategy: str, head_index: int | None, freeze_mode: str, *, resumed_from: Path | None
+) -> dict:
+    if resumed_from is not None:
+        head_init = "resumed"
+    else:
+        head_init = "pretrained" if head_index is not None else "random"
+    protocol = {
+        "backend": "hydragnn",
+        "protocol": f"newhead-finetune-{strategy}",
+        "head_init": head_init,
+        "pretrained_heads": [GFM_HEAD_DATASETS[head_index]] if head_index is not None else [],
+        "freeze_mode": freeze_mode,
+    }
+    if resumed_from is not None:
+        protocol["resumed_from"] = str(resumed_from)
+    return protocol
+
+
 def _load_resume_metadata(
     gfm_logdir: Path,
     gfm_checkpoint: str | None,
@@ -730,15 +749,12 @@ def finetune_hydragnn_newhead(
         output_dir,
         ckpt_out,
         inference_metadata={
-            "finetune": {
-                "backend": "hydragnn",
-                "protocol": f"newhead-finetune-{strategy}",
-                "head_init": "pretrained" if head_index is not None else "random",
-                "pretrained_heads": (
-                    [GFM_HEAD_DATASETS[head_index]] if head_index is not None else []
-                ),
-                "freeze_mode": freeze_mode,
-            }
+            "finetune": _finetune_protocol(
+                strategy,
+                head_index,
+                freeze_mode,
+                resumed_from=gfm_logdir if resume_metadata else None,
+            )
         },
     )
     report.write(output_dir / "cost.json")

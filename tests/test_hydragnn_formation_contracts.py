@@ -278,6 +278,21 @@ def test_finetune_protocol_is_recorded_and_still_restores(tmp_path, training_inp
     restore_hydragnn_total_energy(FormationCalculator(), model)
 
 
+@pytest.mark.parametrize(
+    "head_index,resumed,expected",
+    [(None, False, "random"), (0, False, "pretrained"), (None, True, "resumed")],
+)
+def test_newhead_protocol_distinguishes_resumed_readout(tmp_path, head_index, resumed, expected):
+    from matsim_agents.training.finetune_hydragnn_newhead import _finetune_protocol
+
+    record = _finetune_protocol(
+        "lora", head_index, "none", resumed_from=tmp_path if resumed else None
+    )
+    assert record["head_init"] == expected
+    assert record.get("resumed_from") == (str(tmp_path) if resumed else None)
+    assert bool(record["pretrained_heads"]) == (head_index is not None)
+
+
 def test_missing_elements_and_double_wrapping_fail(tmp_path, training_inputs):
     model = _checkpoint(tmp_path, training_inputs)
     calculator = restore_hydragnn_total_energy(FormationCalculator(), model)
