@@ -420,12 +420,18 @@ def test_finetune_training_inputs_are_gated(
         _load_training_frames(path, references)
 
 
+@pytest.mark.parametrize("minimal", [False, True])
 def test_finetune_training_inputs_accept_a_verified_native_dataset(
-    tmp_path, references, dataset_method_sidecar
+    tmp_path, references, dataset_method_sidecar, minimal
 ):
     from matsim_agents.training.finetune_uma import _load_training_frames
 
     path = tmp_path / "labels.extxyz"
     _labelled_nb(path)
-    dataset_method_sidecar(path, references)
+    sidecar = dataset_method_sidecar(path, references)
+    if minimal:
+        metadata = json.loads(sidecar.read_text())
+        for key in ("dataset_id", "created_at_utc", "path", "validation"):
+            del metadata[key]
+        sidecar.write_text(json.dumps(metadata))
     assert len(_load_training_frames(path, references)) == 2

@@ -156,16 +156,24 @@ def load_training_manifest(dataset_path: str | Path) -> DatasetManifest:
     sidecar = path.with_suffix(path.suffix + ".manifest.json")
     if not sidecar.is_file():
         raise ValueError(f"{path} needs its dataset manifest (DFT provenance): {sidecar}")
-    manifest = DatasetManifest.model_validate_json(sidecar.read_text())
-    expected = native_total_energy(manifest.dft_backend)
-    if manifest.energy_reference != expected:
+    metadata = json.loads(sidecar.read_text())
+    if not metadata.get("dft_backend"):
+        raise ValueError(f"{sidecar} does not name the DFT backend")
+    expected = native_total_energy(metadata["dft_backend"])
+    if metadata.get("energy_reference") != expected:
         raise ValueError(
-            f"{path.name} declares {manifest.energy_reference!r} labels; this step requires "
-            f"native DFT total-energy labels ({expected!r})"
+            f"{path.name} declares {metadata.get('energy_reference')!r} labels; this step "
+            f"requires native DFT total-energy labels ({expected!r})"
         )
-    if sha256_file(path) != manifest.sha256:
+    digest = sha256_file(path)
+    if metadata.get("sha256") != digest:
         raise ValueError("DFT dataset manifest hash does not match the training data")
-    return manifest
+    # Minimal sidecars omit bookkeeping fields; fill them as source_provenance() does.
+    metadata.setdefault("dataset_id", digest[:16])
+    metadata.setdefault("created_at_utc", "")
+    metadata.setdefault("path", str(path))
+    metadata.setdefault("validation", {})
+    return DatasetManifest.model_validate(metadata)
 
 
 def reject_formation_frames(frames: Iterable[Any]) -> None:
