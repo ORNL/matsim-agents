@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 RESULTS: list[dict[str, str]] = []
+FACILITY = "frontier"
 
 
 def check(name: str) -> Callable[[Callable[..., str]], Callable[..., str]]:
@@ -39,6 +40,13 @@ def check(name: str) -> Callable[[Callable[..., str]], Callable[..., str]]:
     return wrap
 
 
+def _sleepers() -> list[str]:
+    out = subprocess.run(
+        ["pgrep", "-u", str(os.getuid()), "-f", "^sleep 600$"], capture_output=True, text=True
+    ).stdout.split()
+    return sorted(out)
+
+
 def _job_steps(job_id: str) -> list[str]:
     out = subprocess.run(
         ["squeue", "-s", "-h", "-j", job_id, "-o", "%i"], capture_output=True, text=True
@@ -46,51 +54,63 @@ def _job_steps(job_id: str) -> list[str]:
     return [step for step in out if not step.endswith((".batch", ".extern"))]
 
 
+def _facility():
+    from matsim_agents.execution.presets import get_preset
+
+    return get_preset(FACILITY)
+
+
 @check("allocation discovery")
 def allocation() -> str:
     from matsim_agents.execution.allocation import discover_allocation
 
+    preset = _facility()
+    expected = "slurm" if preset.launcher == "srun" else "pbs"
     found = discover_allocation()
-    assert found.scheduler == "slurm", found
-    assert found.node_count == int(os.environ["SLURM_JOB_NUM_NODES"]), found
+    assert found.scheduler == expected, f"expected {expected}, found {found}"
+    nodes = int(os.environ.get("SLURM_JOB_NUM_NODES", "1"))
+    assert found.node_count == nodes, found
     return f"{found.scheduler} nodes={list(found.nodes)} gpus_per_node={found.gpus_per_node}"
 
 
-@check("device mask inside a Slurm step")
+def probe_mask(vendor: str) -> int:
+    from matsim_agents.execution.devices import child_mask_environment, visible_ordinals
+    from matsim_agents.execution.presets import DEVICE_MASK_VARIABLES
+
+    variable = DEVICE_MASK_VARIABLES[vendor]
+    ok = visible_ordinals(vendor, [0, 1], owner="probe")
+    try:
+        visible_ordinals(vendor, [2], owner="probe")
+        bad = None
+    except ValueError as exc:
+        bad = str(exc)
+    child = child_mask_environment({variable: "1"}, owner="probe")[variable]
+    print(
+        json.dumps({"mask": os.environ.get(variable), "ok": list(ok), "bad": bad, "child": child})
+    )
+    return 0
+
+
+@check("device mask inside a launcher step")
 def step_masks() -> str:
-    code = (
-        "import os, json;"
-        "from matsim_agents.execution.devices import visible_ordinals, child_mask_environment;"
-        "v=os.environ.get('ROCR_VISIBLE_DEVICES');"
-        "ok=visible_ordinals('rocm',[0,1],owner='probe');"
-        "bad=None\n"
-        "try: visible_ordinals('rocm',[2],owner='probe')\n"
-        "except ValueError as e: bad=str(e)\n"
-        "child=child_mask_environment({'ROCR_VISIBLE_DEVICES':'1'},owner='probe');"
-        "print(json.dumps({'mask':v,'ok':list(ok),'bad':bad,'child':child['ROCR_VISIBLE_DEVICES']}))"
-    )
-    proc = subprocess.run(
-        [
-            "srun",
-            "-N1",
-            "-n1",
-            "--gpus-per-node=2",
-            "--gpu-bind=closest",
-            sys.executable,
-            "-c",
-            code,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    preset = _facility()
+    vendor = preset.geometry.vendor
+    probe = [sys.executable, str(Path(__file__).resolve()), "probe-mask", "--vendor", vendor]
+    env = dict(os.environ)
+    if preset.launcher == "srun":
+        argv = ["srun", "-N1", "-n1", "--gpus-per-node=2", "--gpu-bind=closest", *probe]
+    else:
+        # No scheduler step mask under PBS, so impose a two-device one.
+        argv = ["mpiexec", "-n", "1", *probe]
+        env.update(preset.geometry.device_mask_environment((2, 3)))
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=300, env=env)
     assert proc.returncode == 0, proc.stderr[-400:]
     info = json.loads(proc.stdout.strip().splitlines()[-1])
     mask = (info["mask"] or "").split(",")
-    assert len(mask) == 2, f"expected a two-device step mask, got {info['mask']!r}"
+    assert len(mask) == 2, f"expected a two-device mask, got {info['mask']!r}"
     assert info["ok"] == [0, 1] and info["bad"], info
     assert info["child"] == mask[1], info
-    return f"step mask {info['mask']}; child of index 1 -> {info['child']}; index 2 rejected"
+    return f"mask {info['mask']}; child of index 1 -> {info['child']}; index 2 rejected"
 
 
 def _silicon():
@@ -127,9 +147,11 @@ def qe(work: Path) -> str:
     )
     work.mkdir(parents=True, exist_ok=True)
     deck = write_pw_input(_silicon(), settings, str(work / "pw.in"), outdir=str(work / "tmp"))
-    # An inherited HIP mask must be dropped for the placed ROCR mask.
-    os.environ["HIP_VISIBLE_DEVICES"] = "1"
-    mask = {"ROCR_VISIBLE_DEVICES": ",".join(str(i) for i in range(8))}
+    geometry = _facility().geometry
+    if geometry.vendor == "rocm":
+        # An inherited HIP mask must be dropped for the placed ROCR mask.
+        os.environ["HIP_VISIBLE_DEVICES"] = "1"
+    mask = geometry.device_mask_environment(tuple(range(geometry.devices_per_node)))
     result = run_pw(deck, str(work), shlex.split(launcher), timeout_sec=900, env=mask)
     assert result.return_code == 0, f"return code {result.return_code}; see {result.stdout_path}"
     assert result.job_done and result.converged, (
@@ -142,32 +164,29 @@ def qe(work: Path) -> str:
     )
 
 
-@check("launcher timeout stops the srun step")
+@check("launcher timeout stops the launched step")
 def timeout_cleanup(work: Path) -> str:
     from matsim_agents.backends.dft.process import TIMEOUT_RETURN_CODE, run_launcher
 
     work.mkdir(parents=True, exist_ok=True)
-    job = os.environ["SLURM_JOB_ID"]
-    before = _job_steps(job)
+    slurm = _facility().launcher == "srun"
+    job = os.environ.get("SLURM_JOB_ID", "")
+    argv = (
+        ["srun", "-N1", "-n1", "sleep", "600"] if slurm else ["mpiexec", "-n", "1", "sleep", "600"]
+    )
+    before = _job_steps(job) if slurm else _sleepers()
     started = time.monotonic()
     with open(work / "sleep.out", "w") as out:
-        code = run_launcher(
-            ["srun", "-N1", "-n1", "sleep", "600"],
-            cwd=str(work),
-            stdout=out,
-            timeout_sec=5,
-            env=None,
-            grace_sec=90,
-        )
+        code = run_launcher(argv, cwd=str(work), stdout=out, timeout_sec=5, env=None, grace_sec=90)
     elapsed = time.monotonic() - started
     assert code == TIMEOUT_RETURN_CODE, code
-    after = _job_steps(job)
-    assert after == before, f"steps left behind: {sorted(set(after) - set(before))}"
-    return f"returned {code} after {elapsed:.0f}s; no step left in job {job}"
+    after = _job_steps(job) if slurm else _sleepers()
+    assert after == before, f"left behind: {sorted(set(after) - set(before))}"
+    return f"returned {code} after {elapsed:.0f}s; nothing left running"
 
 
 @check("slurm_jobs submit, dedupe and sacct refresh")
-def slurm_jobs(account: str, manifest: Path) -> str:
+def slurm_jobs(account: str, manifest: Path, qos: str, partition: str) -> str:
     from matsim_agents.execution.slurm_jobs import JobSpec, refresh_manifest, submit_job
 
     manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -176,6 +195,8 @@ def slurm_jobs(account: str, manifest: Path) -> str:
         command=("hostname",),
         time_limit="00:02:00",
         account=account,
+        qos=qos,
+        partition=partition,
         cwd=str(manifest.parent),
     )
     entry, submitted = submit_job(spec, manifest)
@@ -190,10 +211,21 @@ def slurm_jobs(account: str, manifest: Path) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=["allocation", "qe", "slurm-jobs", "refresh"])
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "phase", choices=["allocation", "qe", "slurm-jobs", "refresh", "probe-mask"]
+    )
+    parser.add_argument("--facility", default="frontier", help="resource preset name")
+    parser.add_argument("--vendor", default="rocm", help="probe-mask only")
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--account", help="scheduler account for slurm-jobs")
+    parser.add_argument("--qos", default="debug")
+    parser.add_argument("--partition", default="batch")
     args = parser.parse_args()
+    global FACILITY
+    FACILITY = args.facility
+    if args.phase == "probe-mask":
+        return probe_mask(args.vendor)
+    assert args.output, "--output is required"
     args.output.mkdir(parents=True, exist_ok=True)
     manifest = args.output / "validation_jobs.json"
     if args.phase == "allocation":
@@ -204,7 +236,7 @@ def main() -> int:
         timeout_cleanup(args.output / "timeout")
     elif args.phase == "slurm-jobs":
         assert args.account, "--account is required"
-        slurm_jobs(args.account, manifest)
+        slurm_jobs(args.account, manifest, args.qos, args.partition)
     else:
         from matsim_agents.execution.slurm_jobs import refresh_manifest
 

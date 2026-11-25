@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N matsim-hpc-runtime
+#PBS -q debug
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+# Scheduler and launcher validation (see deployments/common/validate_hpc_runtime.py).
+#   qsub -A <allocation> deployments/aurora/jobs/job-hpc-runtime-validation-aurora.pbs
+
+set -eo pipefail  # no -u: lmod's bash init breaks under nounset
+REPO="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
+[[ -f "${REPO}/pyproject.toml" ]] || { echo "set PROJECT_ROOT or submit from the repo root" >&2; exit 1; }
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
+source "${MATSIM_AURORA_VENV:-${REPO}/.venv}/bin/activate"
+
+export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
+export PYTHONPATH="${REPO}/src:${REPO}"
+export MATSIM_QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-bash ${REPO}/deployments/aurora/launchers/run-pw-gpu-aurora.sh}"
+export MATSIM_QE_PSEUDO_DIR="${MATSIM_QE_PSEUDO_DIR:-${REPO}/external/quantum-espresso/src/pseudo}"
+OUT="${VALIDATION_OUTPUT_DIR:-${REPO}/.hpc-build/aurora/runtime-validation/${PBS_JOBID:-local}}"
+
+status=0
+for phase in allocation qe; do
+  python "${REPO}/deployments/common/validate_hpc_runtime.py" "${phase}" \
+    --facility aurora --output "${OUT}" || status=1
+done
+echo "runtime validation exit status: ${status}"
+exit "${status}"

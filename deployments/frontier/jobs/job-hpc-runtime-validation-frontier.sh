@@ -21,7 +21,7 @@ PY="${MATSIM_FRONTIER_VENV:-$REPO/.venv}/bin/python"
 
 status=0
 for phase in allocation qe; do
-  "$PY" "$REPO/deployments/common/validate_hpc_runtime.py" "$phase" --output "$OUT" || status=1
+  "$PY" "$REPO/deployments/common/validate_hpc_runtime.py" "$phase" --facility frontier --output "$OUT" || status=1
 done
 echo "runtime validation exit status: $status"
 exit "$status"
