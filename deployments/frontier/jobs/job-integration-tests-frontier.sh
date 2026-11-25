@@ -13,7 +13,8 @@
 # and model variables are set; weights are not downloaded on compute nodes.
 
 set -uo pipefail
-REPO="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+# Slurm runs a spooled copy of this script, so fall back to the submit directory.
+REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:-$d}")}"
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
