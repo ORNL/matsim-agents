@@ -321,7 +321,7 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     # n_select=2 with random strategy on 3 candidates -> exactly 2 selected.
     assert state["n_selected"] == 2
     assert len(state["selected_candidate_ids"]) == 2
-    assert set(state["candidate_uncertainty"]) == set(state["selected_candidate_ids"])
+    assert state["candidate_uncertainty"] == {}
     assert all(0.0 <= score <= 1.0 for score in state["candidate_uncertainty"].values())
     assert state["n_dft_converged"] == 2
     assert state["n_dft_failed"] == 0

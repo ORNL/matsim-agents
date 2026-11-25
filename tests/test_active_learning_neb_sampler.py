@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 from contextlib import nullcontext
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -22,12 +23,16 @@ from matsim_agents.science.neb.contracts import (
     build_correspondence,
     endpoint_from_atoms,
 )
+from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import (
     AcquisitionConfig,
+    MDConfig,
+    MDSamplingStrategy,
     NebRefinementStage,
     NebSamplingConfig,
     NEBSamplingStrategy,
     SamplingConfig,
+    SeedSourceConfig,
 )
 from matsim_agents.workflows.active_learning.neb_sampler import (
     NebSamplingOutcome,
@@ -40,6 +45,7 @@ from matsim_agents.workflows.active_learning.sampling import sample_strategies
 from matsim_agents.workflows.active_learning.uncertainty import (
     score_ensemble_pathway,
     score_mc_dropout_pathway,
+    select_candidates,
 )
 
 
@@ -105,6 +111,7 @@ def test_ase_neb_emits_shared_candidates_and_barrier_result(tmp_path):
     assert outcome.result.saddle_image_index in (1, 2)
     assert (tmp_path / "neb" / "neb-images.extxyz").exists()
     assert (tmp_path / "neb" / "initial-to-final-result.json").exists()
+    assert all(image.calc is None for image in outcome.images)
     resumed = sample_neb_candidates(config, EMT(), tmp_path / "neb")
     assert resumed.result.optimization_steps >= outcome.result.optimization_steps
 
@@ -152,7 +159,7 @@ def test_independent_neb_pathways_use_configured_worker_pool(tmp_path, monkeypat
         tmp_path / "batch",
         random_seed=3,
         iteration=0,
-        seed_paths=None,
+        seed_paths_by_strategy=None,
         mlip_config=MACEConfig(model="small"),
         acquisition=None,
         md_pool_factory=lambda: nullcontext(pool),
@@ -161,6 +168,91 @@ def test_independent_neb_pathways_use_configured_worker_pool(tmp_path, monkeypat
     assert [task.transition_label for task in submitted] == ["path-0", "path-1"]
     assert len({task.out_dir for task in submitted}) == 2
     assert [path.outcome.result.method_id for path in batch.neb_pathways] == ["mock", "mock"]
+
+
+def test_multiple_md_strategies_keep_seeds_and_candidate_ids_separate(tmp_path):
+    seed_a = tmp_path / "seed-a.extxyz"
+    seed_b = tmp_path / "seed-b.extxyz"
+    write(seed_a, Atoms("Cu", positions=[[1, 1, 1]], cell=[8, 8, 8], pbc=True))
+    write(seed_b, Atoms("Cu", positions=[[2, 2, 2]], cell=[8, 8, 8], pbc=True))
+    strategies = [
+        MDSamplingStrategy(
+            method="md",
+            parameters=MDConfig(seed_source=SeedSourceConfig(paths=[seed])),
+        )
+        for seed in (seed_a, seed_b)
+    ]
+    calls = []
+
+    def fake_md(md_config, calculator, out_dir, *, seed_paths, **kwargs):
+        calls.append((out_dir, seed_paths))
+        atoms = Atoms("Cu", positions=[[1, 1, 1]], cell=[8, 8, 8], pbc=True)
+        return [
+            Candidate(
+                candidate_id=Path(seed_paths[0]).stem,
+                atoms=atoms,
+                seed_path=str(seed_paths[0]),
+                sampling_method="md",
+                sampling_run_id=Path(seed_paths[0]).stem,
+            )
+        ]
+
+    batch = sample_strategies(
+        strategies,
+        EMT(),
+        tmp_path / "multi-md",
+        random_seed=1,
+        iteration=0,
+        seed_paths_by_strategy={0: [seed_a], 1: [seed_b]},
+        mlip_config=MACEConfig(model="small"),
+        acquisition=None,
+        md_sampler=fake_md,
+    )
+
+    assert [paths for _, paths in calls] == [[seed_a], [seed_b]]
+    assert calls[0][0] != calls[1][0]
+    assert [candidate.candidate_id for candidate in batch.candidates] == [
+        "strategy-000_seed-a",
+        "strategy-001_seed-b",
+    ]
+
+
+@pytest.mark.parametrize("diversity_filter", [False, True])
+def test_neb_pathway_cap_refills_selection_from_other_candidates(diversity_filter):
+    candidates = []
+    for index in range(4):
+        candidates.append(
+            Candidate(
+                candidate_id=f"neb-{index}",
+                atoms=Atoms("Cu", positions=[[float(index), 0, 0]]),
+                sampling_method="neb",
+                provenance={"transition_id": "path-a"},
+            )
+        )
+    for index in range(2):
+        candidates.append(
+            Candidate(
+                candidate_id=f"md-{index}",
+                atoms=Atoms("W", positions=[[float(index), 0, 0]]),
+                sampling_method="md",
+            )
+        )
+
+    selected, _ = select_candidates(
+        candidates,
+        AcquisitionConfig(
+            strategy="random",
+            n_select=4,
+            diversity_filter=diversity_filter,
+            max_per_neb_pathway=2,
+        ),
+        primary_calculator=None,
+        seed=4,
+    )
+
+    assert len(selected) == 4
+    assert sum(candidate.sampling_method == "neb" for candidate in selected) == 2
+    assert sum(candidate.sampling_method == "md" for candidate in selected) == 2
 
 
 def test_neb_worker_task_returns_pickle_safe_result(tmp_path, monkeypatch):
@@ -261,6 +353,36 @@ def test_ci_neb_and_idpp_are_configurable(tmp_path):
     outcome = sample_neb_candidates(config, EMT(), tmp_path / "ci-neb")
 
     assert outcome.result.climbing_image_used
+    assert outcome.candidates
+
+
+def test_idpp_can_resolve_a_close_linear_guess_before_overlap_validation(tmp_path):
+    initial = Atoms(
+        "Cu2",
+        positions=[[2.0, 2.0, 2.0], [4.0, 2.0, 2.0]],
+        cell=[8.0, 8.0, 8.0],
+        pbc=True,
+    )
+    initial.set_array("atom_id", np.array([0, 1]))
+    final = initial.copy()
+    final.positions[:] = [[4.0, 2.0, 2.0], [2.2, 2.0, 2.0]]
+    initial_path = tmp_path / "crossing-initial.extxyz"
+    final_path = tmp_path / "crossing-final.extxyz"
+    write(initial_path, initial)
+    write(final_path, final)
+    config = NebSamplingConfig(
+        initial_path=initial_path,
+        final_path=final_path,
+        n_images=5,
+        interpolation="idpp",
+        min_distance_A=0.5,
+        max_steps=1,
+        fmax_eV_per_A=100.0,
+    )
+
+    outcome = sample_neb_candidates(config, EMT(), tmp_path / "idpp-crossing")
+
+    assert len(outcome.images) == 5
     assert outcome.candidates
 
 
@@ -453,3 +575,13 @@ def test_mixed_sampling_configuration_accepts_neb_only_and_combined():
     }
     config = SamplingConfig(strategies=[neb])
     assert [strategy.method for strategy in config.strategies] == ["neb"]
+
+
+def test_sampling_configuration_rejects_duplicate_effective_neb_transition_ids(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    strategy = NEBSamplingStrategy(
+        method="neb",
+        parameters=NebSamplingConfig(initial_path=initial, final_path=final),
+    )
+    with pytest.raises(ValueError, match="unique effective transition IDs"):
+        SamplingConfig(strategies=[strategy, strategy])

@@ -356,32 +356,19 @@ def _select_for_labelling(
         ensemble_calculators=ensemble_calcs or None,
         seed=stream_seed(cfg.random_seed, "acquisition", i),
     )
-    if cfg.acquisition.max_per_neb_pathway is not None:
-        counts: dict[str, int] = {}
-        capped = []
-        for candidate in selected:
-            if candidate.sampling_method != "neb":
-                capped.append(candidate)
-                continue
-            pathway = candidate.parent_id or candidate.sampling_run_id or candidate.candidate_id
-            pathway = candidate.provenance.get("transition_id", pathway)
-            count = counts.get(pathway, 0)
-            if count < cfg.acquisition.max_per_neb_pathway:
-                capped.append(candidate)
-                counts[pathway] = count + 1
-        selected = capped
     if cfg.loop.max_dft_calculations is not None:
         remaining_dft = cfg.loop.max_dft_calculations - completed_dft
         selected = selected[:remaining_dft]
     state.n_selected = len(selected)
     state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
     selected_ids = set(state.selected_candidate_ids)
-    for candidate, score in zip(candidates, scores, strict=True):
-        candidate.uncertainty = float(score) if np.isfinite(score) else None
+    if cfg.acquisition.strategy != "random":
+        for candidate, score in zip(candidates, scores, strict=True):
+            candidate.uncertainty = float(score) if np.isfinite(score) else None
     state.candidate_uncertainty = {
-        candidate.candidate_id: float(score)
-        for candidate, score in zip(candidates, scores, strict=True)
-        if candidate.candidate_id in selected_ids and np.isfinite(score)
+        candidate.candidate_id: candidate.uncertainty
+        for candidate in candidates
+        if candidate.candidate_id in selected_ids and candidate.uncertainty is not None
     }
     finite_scores = scores[np.isfinite(scores)]
     if finite_scores.size:
@@ -451,26 +438,50 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
         candidate = candidates.get(Path(frame.source_work_dir).name)
         info = frame.atoms.info
         if candidate is not None:
+            frame_info = dict(info)
+            info.update(candidate.atoms.info)
+            info.update(frame_info)
             method = candidate.atoms.info.get("sampling_method", candidate.sampling_method)
             info["sampling_method"] = method
             info["candidate_id"] = candidate.candidate_id
-            info["parent_structure_id"] = candidate.parent_id or ""
-            info["sampling_run_id"] = candidate.sampling_run_id or ""
+            if candidate.parent_id is not None:
+                info["parent_structure_id"] = candidate.parent_id
+            else:
+                info.pop("parent_structure_id", None)
+            if candidate.sampling_run_id is not None:
+                info["sampling_run_id"] = candidate.sampling_run_id
+            else:
+                info.pop("sampling_run_id", None)
             if candidate.model_id is not None:
                 info["mlip_model_id"] = candidate.model_id
+            else:
+                info.pop("mlip_model_id", None)
             if candidate.geometry_fingerprint is not None:
                 info["geometry_fingerprint"] = candidate.geometry_fingerprint
+            else:
+                info.pop("geometry_fingerprint", None)
             if candidate.uncertainty is not None:
                 info["configuration_uncertainty"] = candidate.uncertainty
-            info.update(candidate.atoms.info)
+            else:
+                info.pop("configuration_uncertainty", None)
             if method == "md":
                 temperature = candidate.metadata.get("temperature_K")
-                if temperature is None and cfg.md is not None:
-                    temperature = cfg.md.temperature_K
+                md_config = cfg.md
+                if md_config is None:
+                    md_strategies = [
+                        strategy.parameters
+                        for strategy in _sampling_strategies(cfg)
+                        if isinstance(strategy, MDSamplingStrategy)
+                    ]
+                    strategy_index = candidate.provenance.get("sampling_strategy_index", 0)
+                    if isinstance(strategy_index, int) and strategy_index < len(md_strategies):
+                        md_config = md_strategies[strategy_index]
+                if temperature is None and md_config is not None:
+                    temperature = md_config.temperature_K
                 if temperature is not None:
                     info["temperature_K"] = temperature
                 thermostat = candidate.metadata.get(
-                    "thermostat", None if cfg.md is None else cfg.md.thermostat
+                    "thermostat", None if md_config is None else md_config.thermostat
                 )
                 if thermostat is not None:
                     info["thermostat"] = thermostat
@@ -492,7 +503,8 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
         method = candidate.atoms.info.get("sampling_method", candidate.sampling_method)
         if method == "md":
             seed = Path(candidate.seed_path).stem
-            info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
+            run_id = candidate.sampling_run_id or seed
+            info["trajectory_id"] = f"iteration-{i:04d}/{run_id}"
             info["time_index"] = int(candidate.md_step or 0)
             info["initial_structure_id"] = seed
         elif method == "neb":
@@ -915,29 +927,40 @@ def run_active_learning(
         validation_dataset_path = root / "validation.extxyz"
 
         # Resolve MD seed structures once per run. For ``kind='prompt'`` this
-        # invokes the LLM exactly once and caches the resulting JSON under
-        # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
+        # invokes each configured seed source once and keeps strategy artifacts separate.
         seeds_dir = root / "seeds"
         strategies = _sampling_strategies(cfg)
-        md_config = next(
-            (
-                strategy.parameters
-                for strategy in strategies
-                if isinstance(strategy, MDSamplingStrategy)
-            ),
-            None,
-        )
-        seed_paths = (
-            resolve_seed_structures(
-                md_config.seed_source,
-                seeds_dir,
-                random_seed=stream_seed(cfg.random_seed, "seed-source"),
-            )
-            if candidate_sampler is None and md_config is not None
-            else []
-        )
-        log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
-        training_inputs = list(seed_paths)
+        md_strategies = [
+            (index, strategy)
+            for index, strategy in enumerate(strategies)
+            if isinstance(strategy, MDSamplingStrategy)
+        ]
+        seed_paths_by_strategy: dict[int, list[Path]] = {}
+        if candidate_sampler is None:
+            for strategy_index, strategy in md_strategies:
+                strategy_seeds_dir = (
+                    seeds_dir
+                    if len(md_strategies) == 1
+                    else seeds_dir / f"strategy-{strategy_index:03d}"
+                )
+                seed_stream = (
+                    stream_seed(cfg.random_seed, "seed-source")
+                    if len(md_strategies) == 1
+                    else stream_seed(cfg.random_seed, "seed-source", strategy_index)
+                )
+                paths = resolve_seed_structures(
+                    strategy.parameters.seed_source,
+                    strategy_seeds_dir,
+                    random_seed=seed_stream,
+                )
+                seed_paths_by_strategy[strategy_index] = paths
+                log.info(
+                    "Resolved %d seed structure(s) for strategy %d under %s",
+                    len(paths),
+                    strategy_index,
+                    strategy_seeds_dir,
+                )
+        training_inputs = [path for paths in seed_paths_by_strategy.values() for path in paths]
         training_inputs.extend(
             path
             for strategy in strategies
@@ -974,7 +997,7 @@ def run_active_learning(
                 start_iter=start_iter,
                 completed_dft=completed_dft,
                 completed_dft_neb=completed_dft_neb,
-                seed_paths=seed_paths,
+                seed_paths=seed_paths_by_strategy,
                 dataset_path=dataset_path,
                 validation_dataset_path=validation_dataset_path,
                 comparison_enabled=comparison_enabled,
@@ -1192,7 +1215,7 @@ def _run_iterations(
     start_iter: int,
     completed_dft: int,
     completed_dft_neb: int,
-    seed_paths: list,
+    seed_paths: dict[int, list],
     dataset_path: Path,
     validation_dataset_path: Path,
     comparison_enabled: bool,
@@ -1233,7 +1256,7 @@ def _run_iterations(
                     it_dir,
                     random_seed=cfg.random_seed,
                     iteration=i,
-                    seed_paths=seed_paths,
+                    seed_paths_by_strategy=seed_paths,
                     mlip_config=cfg.mlip,
                     acquisition=cfg.acquisition,
                     ensemble_calculators=ensemble_calcs or (),

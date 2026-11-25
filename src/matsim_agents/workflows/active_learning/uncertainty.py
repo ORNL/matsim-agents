@@ -228,6 +228,9 @@ def greedy_farthest_point(
     n_select: int,
     fingerprint_weight: float = 1.0,
     score_weight: float = 1.0,
+    *,
+    group_labels: Sequence[str | None] | None = None,
+    max_per_group: int | None = None,
 ) -> list[int]:
     """Pick ``n_select`` indices that are diverse in composition AND high-score.
 
@@ -235,19 +238,50 @@ def greedy_farthest_point(
     the highest-score candidate. Prefer to ``argsort(scores)[-n:]`` when you
     expect many near-duplicates.
     """
-    if n_select >= len(candidates):
+    if max_per_group is None and n_select >= len(candidates):
         return list(range(len(candidates)))
+    if max_per_group is not None:
+        if max_per_group < 1:
+            raise ValueError("max_per_group must be positive")
+        if group_labels is None or len(group_labels) != len(candidates):
+            raise ValueError("group_labels must match candidates when max_per_group is set")
 
     fps = np.stack([_composition_fingerprint(c.atoms) for c in candidates], axis=0)
     fps *= float(fingerprint_weight)
     s = scores.reshape(-1, 1) * float(score_weight)
     feat = np.concatenate([fps, s], axis=1)
 
-    chosen = [int(np.argmax(scores))]
-    dists = np.linalg.norm(feat - feat[chosen[0]], axis=1)
-    for _ in range(n_select - 1):
-        nxt = int(np.argmax(dists))
+    if max_per_group is None:
+        chosen = [int(np.argmax(scores))]
+        dists = np.linalg.norm(feat - feat[chosen[0]], axis=1)
+        for _ in range(n_select - 1):
+            nxt = int(np.argmax(dists))
+            chosen.append(nxt)
+            dists = np.minimum(dists, np.linalg.norm(feat - feat[nxt], axis=1))
+        return chosen
+
+    counts: dict[str, int] = {}
+    selected_mask = np.zeros(len(candidates), dtype=bool)
+    chosen: list[int] = []
+    dists = np.full(len(candidates), np.inf)
+    for _ in range(min(n_select, len(candidates))):
+        eligible = np.array(
+            [
+                not selected_mask[index] and (label is None or counts.get(label, 0) < max_per_group)
+                for index, label in enumerate(group_labels)
+            ],
+            dtype=bool,
+        )
+        if not np.any(eligible):
+            break
+        metric = scores.copy() if not chosen else dists.copy()
+        metric[~eligible] = -np.inf
+        nxt = int(np.argmax(metric))
         chosen.append(nxt)
+        selected_mask[nxt] = True
+        label = group_labels[nxt]
+        if label is not None:
+            counts[label] = counts.get(label, 0) + 1
         dists = np.minimum(dists, np.linalg.norm(feat - feat[nxt], axis=1))
     return chosen
 
@@ -322,11 +356,44 @@ def select_candidates(
     eligible_scores = scores[eligible_idx]
     eligible_cands = [candidates[i] for i in eligible_idx]
 
-    if cfg.diversity_filter:
-        chosen_local = greedy_farthest_point(eligible_cands, eligible_scores, cfg.n_select)
+    if cfg.max_per_neb_pathway is not None:
+        groups = [
+            (
+                str(
+                    candidate.provenance.get("transition_id")
+                    or candidate.parent_id
+                    or candidate.sampling_run_id
+                    or candidate.candidate_id
+                )
+                if candidate.sampling_method == "neb"
+                else None
+            )
+            for candidate in eligible_cands
+        ]
     else:
-        order = np.argsort(eligible_scores)[::-1][: cfg.n_select]
-        chosen_local = list(order)
+        groups = None
+
+    if cfg.diversity_filter:
+        chosen_local = greedy_farthest_point(
+            eligible_cands,
+            eligible_scores,
+            cfg.n_select,
+            group_labels=groups,
+            max_per_group=cfg.max_per_neb_pathway,
+        )
+    else:
+        order = np.argsort(eligible_scores)[::-1]
+        chosen_local = []
+        counts = {}
+        for index in order:
+            group = None if groups is None else groups[int(index)]
+            if group is not None and counts.get(group, 0) >= cfg.max_per_neb_pathway:
+                continue
+            chosen_local.append(int(index))
+            if group is not None:
+                counts[group] = counts.get(group, 0) + 1
+            if len(chosen_local) >= cfg.n_select:
+                break
 
     selected = [eligible_cands[i] for i in chosen_local]
     return selected, scores

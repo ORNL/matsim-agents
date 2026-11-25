@@ -269,6 +269,28 @@ class SamplingConfig(BaseModel):
 
     strategies: list[SamplingStrategy] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _unique_neb_transition_ids(self) -> SamplingConfig:
+        identifiers = []
+        for strategy in self.strategies:
+            if not isinstance(strategy, NEBSamplingStrategy):
+                continue
+            parameters = strategy.parameters
+            identifier = (
+                parameters.transition.transition_id
+                if parameters.transition is not None
+                else parameters.transition_id
+                or f"{parameters.initial_path.stem}-to-{parameters.final_path.stem}"
+            )
+            identifiers.append(identifier)
+        duplicates = sorted({item for item in identifiers if identifiers.count(item) > 1})
+        if duplicates:
+            raise ValueError(
+                "NEB strategies must have unique effective transition IDs; "
+                f"duplicates: {', '.join(duplicates)}"
+            )
+        return self
+
 
 class AcquisitionConfig(BaseModel):
     """Which uncertainty measure(s) to use to pick frames for VASP labelling."""

@@ -20,7 +20,7 @@ from matsim_agents.science.neb.contracts import (
     NebTransition,
     build_correspondence,
 )
-from matsim_agents.science.neb.images import generate_linear_images
+from matsim_agents.science.neb.images import generate_linear_images, validate_images
 from matsim_agents.science.neb.paths import correspond_atoms, minimum_image
 from matsim_agents.workflows.active_learning.candidates import Candidate
 from matsim_agents.workflows.active_learning.config import NebSamplingConfig
@@ -359,6 +359,7 @@ def sample_neb_candidates(
         config.n_images,
         min_distance=config.min_distance_A,
         max_step=config.max_step_A,
+        check_intermediate_overlaps=config.interpolation != "idpp",
     )
     checkpoint_path = out_dir / "neb-images.extxyz"
     images = (
@@ -376,6 +377,8 @@ def sample_neb_candidates(
     )
     if config.interpolation == "idpp" and not is_restart:
         neb.interpolate(method="idpp")
+    if config.interpolation == "idpp":
+        validate_images(images, config.min_distance_A)
 
     trajectory_path = out_dir / "neb-optimization.traj"
     state_path = out_dir / "neb-optimization-state.json"
@@ -633,6 +636,8 @@ def sample_neb_candidates(
         len(images),
         result.forward_barrier_eV,
     )
+    for image in images:
+        image.calc = None
     return NebSamplingOutcome(
         candidates=candidates,
         result=result,

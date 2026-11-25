@@ -34,30 +34,33 @@ def run_sampling(config: SamplingRunConfig, directory: str | Path) -> dict[str, 
                 "ensemble_then_dropout",
             }
             primary, ensemble = models.calculators(config.mlip, enable_dropout)
-            md_config = next(
-                (
-                    strategy.parameters
-                    for strategy in config.sampling.strategies
-                    if isinstance(strategy, MDSamplingStrategy)
-                ),
-                None,
-            )
-            seed_paths = (
-                resolve_seed_structures(
-                    md_config.seed_source,
-                    root / "seeds",
-                    random_seed=stream_seed(config.random_seed, "seed-source"),
+            md_strategies = [
+                (index, strategy)
+                for index, strategy in enumerate(config.sampling.strategies)
+                if isinstance(strategy, MDSamplingStrategy)
+            ]
+            seed_paths_by_strategy = {}
+            for strategy_index, strategy in md_strategies:
+                seeds_dir = root / "seeds"
+                if len(md_strategies) > 1:
+                    seeds_dir /= f"strategy-{strategy_index:03d}"
+                seed_stream = (
+                    stream_seed(config.random_seed, "seed-source")
+                    if len(md_strategies) == 1
+                    else stream_seed(config.random_seed, "seed-source", strategy_index)
                 )
-                if md_config is not None
-                else None
-            )
+                seed_paths_by_strategy[strategy_index] = resolve_seed_structures(
+                    strategy.parameters.seed_source,
+                    seeds_dir,
+                    random_seed=seed_stream,
+                )
             batch = sample_strategies(
                 config.sampling.strategies,
                 primary,
                 root,
                 random_seed=config.random_seed,
                 iteration=0,
-                seed_paths=seed_paths,
+                seed_paths_by_strategy=seed_paths_by_strategy,
                 mlip_config=config.mlip,
                 acquisition=acquisition,
                 ensemble_calculators=ensemble,

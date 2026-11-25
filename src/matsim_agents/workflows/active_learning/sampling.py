@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,7 +45,7 @@ def sample_strategies(
     *,
     random_seed: int,
     iteration: int,
-    seed_paths: list | None,
+    seed_paths_by_strategy: Mapping[int, list] | None,
     mlip_config: MLIPConfig,
     acquisition: AcquisitionConfig | None,
     ensemble_calculators=(),
@@ -77,16 +77,36 @@ def sample_strategies(
                 md_dir = root / "md"
                 if md_strategy_count > 1:
                     md_dir /= f"strategy-{strategy_index:03d}"
-                candidates_by_strategy[strategy_index] = (md_sampler or sample_md_candidates)(
+                md_candidates = (md_sampler or sample_md_candidates)(
                     strategy.parameters,
                     primary_calculator,
                     md_dir,
-                    seed_paths=seed_paths,
+                    seed_paths=(
+                        None
+                        if seed_paths_by_strategy is None
+                        else seed_paths_by_strategy.get(strategy_index)
+                    ),
                     random_seed=stream_seed(random_seed, "md", iteration, strategy_index),
                     mlip_pool=pool,
                     mlip_cfg=mlip_config,
                     enable_mc_dropout=enable_dropout,
                 )
+                if md_strategy_count > 1:
+                    prefix = f"strategy-{strategy_index:03d}"
+                    for candidate in md_candidates:
+                        candidate.candidate_id = f"{prefix}_{candidate.candidate_id}"
+                        if candidate.sampling_run_id is not None:
+                            candidate.sampling_run_id = f"{prefix}/{candidate.sampling_run_id}"
+                        candidate.atoms.info.update(
+                            candidate_id=candidate.candidate_id,
+                            sampling_method=candidate.sampling_method,
+                            sampling_strategy_index=strategy_index,
+                        )
+                        if candidate.sampling_run_id is not None:
+                            candidate.atoms.info["sampling_run_id"] = candidate.sampling_run_id
+                for candidate in md_candidates:
+                    candidate.provenance["sampling_strategy_index"] = strategy_index
+                candidates_by_strategy[strategy_index] = md_candidates
             elif isinstance(strategy, NEBSamplingStrategy):
                 neb_dir = root / "neb"
                 if neb_strategy_count > 1:
