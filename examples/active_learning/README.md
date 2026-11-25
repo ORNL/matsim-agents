@@ -188,6 +188,9 @@ time by `ALConfig.from_yaml`:
 | `${VAR:-default}`       | falls back to `default` if unset                 |
 | `${VAR:?error message}` | aborts validate-config with `error message`      |
 
+`matsim-agents validate`, `plan` and `run` instead list every unset variable, with its
+`:?` message, as a blocker (exit 3), so one pass shows everything to export.
+
 Values resolve in this order: (1) `os.environ`, (2) the optional top-level
 `vars:` block in the YAML itself. Nested references inside `vars:` are
 resolved iteratively, so e.g. `VASP_BIN: ${PROJ_ROOT}/external/.../vasp_std`

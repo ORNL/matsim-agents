@@ -28,7 +28,9 @@ The config's top-level keys select the workflow (`application`, `explore`, `al`,
 interfaces). `validate` checks configuration and the relevant native config model
 without calculating. It does **not** qualify authentication, model/device ABI,
 live services, or scheduler readiness; those appear as blockers in `plan` and
-`run`.
+`run`. Inputs the config leaves to you are blockers too, not invalid configs: every
+unset `${VAR}` (with its `${VAR:?hint}` text) and a missing user-supplied file such as
+the stability `reference_energies` are listed, and `validate` exits 3.
 
 `run` calls the native workflow in-process. Every invocation, including blocked
 and failed ones, leaves `run-record.json` and `report.md` in a new directory under

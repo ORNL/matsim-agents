@@ -171,6 +171,11 @@ Implemented on branch `refactor/framework-architecture` (PR #80):
   W640Ta128Cr64V96Hf32Mo64, 8×8×8 BCC), `examples/cantor_fcc_256` (FCC,
   hierarchy workflow), `examples/perovskite_oxides` (prototype search).
   `matsim-agents validate FILE` dry-runs each; CI runs all three.
+- Every maintained example goes through `matsim-agents validate`
+  (`tests/test_runner.py`). Unset `${VAR}` inputs, a missing stability
+  `reference_energies` file, and server-backed LLM checks are reported as
+  blockers (exit 3) rather than invalid configs; investigation configs have a
+  runner handler.
 - Transmutation host/products, radiation species and HydraGNN paths come
   from configuration.
 - Enforcement: `tests/test_package_boundaries.py`, `tests/test_applications.py`,

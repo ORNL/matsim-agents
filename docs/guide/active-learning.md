@@ -112,6 +112,10 @@ at load time by `ALConfig.from_yaml`:
 | `${VAR:-default}`       | falls back to `default` if unset                 |
 | `${VAR:?error message}` | aborts with `error message`                      |
 
+`al validate-config` and `al run` raise on an unset variable. `matsim-agents validate`,
+`plan` and `run` list every unset variable, with its `:?` message, as a blocker (exit 3)
+instead of stopping at the first one.
+
 Resolution order: (1) `os.environ`, (2) optional top-level `vars:`
 block in the YAML itself. Nested references inside `vars:` resolve
 iteratively, so `VASP_BIN: ${PROJ_ROOT}/external/.../vasp_std` just
