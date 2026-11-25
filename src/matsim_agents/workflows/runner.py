@@ -460,6 +460,78 @@ def _application_execute(path: Path, run: ScientificRunDirectory, options: RunOp
     return application_runner.execute(path, run, options)
 
 
+# --- investigation ----------------------------------------------------------------------
+
+INVESTIGATION_SEED = 0
+
+
+def _investigation_config(path: Path):
+    from matsim_agents.workflows.investigation import InvestigationConfig
+
+    return InvestigationConfig.model_validate(load_workflow_config(path))
+
+
+def _investigation_blockers(cfg, options: RunOptions) -> list[str]:
+    discussion = cfg.hypothesis_discussion
+    if discussion is None:
+        return ["configure hypothesis_discussion: no model proposes the hypothesis"]
+    if discussion.mode == "single_llm":
+        providers = [discussion.single_llm.provider]
+    else:
+        providers = [p.provider for p in discussion.multi_llm_debate.participants if p.provider]
+    blockers = backend_blockers(providers)
+    policy = cfg.phase_policy
+    if policy.relax_structures and options.mlip_config is None:
+        blockers.append("relax_structures needs an MLIP: pass --mlip-config")
+    if policy.active_learning:
+        blockers.append(
+            "active_learning inside an investigation needs a dispatching runner; "
+            "run an active-learning config with `matsim-agents run` instead"
+        )
+    return blockers
+
+
+def _investigation_preflight(path: Path, options: RunOptions) -> Preflight:
+    cfg = _investigation_config(path)
+    discussion = cfg.hypothesis_discussion
+    return Preflight(
+        {
+            "objective": cfg.objective,
+            "discussion": discussion.mode if discussion else None,
+            "relax_structures": cfg.phase_policy.relax_structures,
+        },
+        _investigation_blockers(cfg, options),
+    )
+
+
+def _investigation_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.investigation import run_investigation
+    from matsim_agents.workflows.phase_exploration import run_phase_exploration
+
+    cfg = _investigation_config(path)
+    mlip = _mlip_override(options)
+
+    def phase_runner(composition, policy, output_dir):
+        kwargs = {"random_seed": INVESTIGATION_SEED}
+        if mlip is not None:
+            kwargs["mlip"] = mlip
+        return run_phase_exploration(
+            composition, policy=policy, output_dir=output_dir, exploration_kwargs=kwargs
+        )
+
+    result = run_investigation(cfg, phase_runner=phase_runner)
+    return Outcome(
+        _WORKFLOW_STATE[result.status.value],
+        result.run_directory,
+        {
+            "hypothesis": result.hypothesis.hypothesis,
+            "compositions": result.hypothesis.proposed_compositions,
+            "explorations": len(result.explorations),
+            "random_seed": INVESTIGATION_SEED,
+        },
+    )
+
+
 # --- registry ---------------------------------------------------------------------------
 
 HANDLERS: dict[str, Handler] = {
@@ -473,6 +545,7 @@ HANDLERS: dict[str, Handler] = {
     "characterize": Handler(_characterize_preflight, _characterize_execute),
     "explore": Handler(_explore_preflight, _explore_execute, _explore_resume),
     "alloy-spec": Handler(_alloy_preflight, _alloy_execute),
+    "investigation": Handler(_investigation_preflight, _investigation_execute),
 }
 
 # Files that configure something else; `run` explains what to use instead.
@@ -483,6 +556,13 @@ AUXILIARY: dict[str, str] = {
     "supercell-campaign": "a campaign config; run it through its application.yaml",
     "hierarchy-campaign": "a campaign config; run it through its application.yaml",
     "manifest": "a data manifest referenced by a campaign config",
+    "finetune-eval": (
+        "an evaluation protocol; pass it as --evaluation-config to "
+        "`matsim-agents tools run finetune-eval`"
+    ),
+    "selection-example": (
+        "a synthetic multi-property selection input for matsim_agents.science.acquisition"
+    ),
 }
 
 
@@ -501,6 +581,7 @@ def detect_kind(path: str | Path) -> str:
         (lambda k: "phase_policy" in k, "investigation"),
         (lambda k: "external_tools" in k, "external"),
         (lambda k: k == {"evaluation"}, "finetune-eval"),
+        (lambda k: {"selection", "candidates", "reference_alloy"} <= k, "selection-example"),
         (lambda k: {"hypothesis", "rounds"} <= k, "debate"),
         (lambda k: {"provider", "model"} <= k, "llm-check"),
         (lambda k: "contract_id" in k, "characterize"),

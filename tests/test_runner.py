@@ -211,3 +211,37 @@ def test_malformed_yaml_is_a_config_error_not_a_traceback(tmp_path, command):
     assert result.exit_code == 2, result.output
     assert not isinstance(result.exception, yaml.YAMLError)
     assert "malformed YAML" in result.output
+
+
+EXAMPLES = sorted((REPO / "examples").rglob("*.y*ml"))
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: str(p.relative_to(REPO)))
+def test_every_example_validates_or_names_what_is_missing(path, monkeypatch) -> None:
+    for name in ("MODEL_ROOT", "PROJ_ROOT", "MACE_CHECKPOINT"):
+        monkeypatch.delenv(name, raising=False)
+    try:
+        kind, preflight = runner.validate(path)
+    except ValueError as exc:  # unrunnable inputs and unset user inputs; never a traceback
+        assert str(exc)
+        return
+    assert kind in runner.HANDLERS
+    assert isinstance(preflight.blockers, list)
+
+
+def test_investigation_examples_are_blocked_without_a_model(monkeypatch) -> None:
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name in ("single_llm.yaml", "multi_llm_debate.yaml"):
+        kind, preflight = runner.validate(REPO / "examples" / "investigation" / name)
+        assert kind == "investigation"
+        assert preflight.blockers
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ["evaluation/composition-holdout.yaml", "characterization/fusion_alloy_selection.yaml"],
+)
+def test_auxiliary_inputs_are_refused_with_their_role(relative) -> None:
+    with pytest.raises(runner.UnrunnableInput, match="not run directly"):
+        runner.validate(REPO / "examples" / relative)
