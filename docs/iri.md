@@ -16,9 +16,10 @@ The package carries no facility endpoints, queues, or filesystem paths. They liv
 profile file owned by the deployment:
 [`deployments/common/iri-profiles.yaml`](../deployments/common/iri-profiles.yaml). Pass it as
 `IRIPlatform(name, profiles=path)`, or pass an explicit `IRIFacility` object. A profile
-may define `working_directory` (with `{account}` filled from `account_env`); when it does not,
-or the account is unset, `resolved_working_directory()` returns `None` and the caller must
-pass `workdir` explicitly. Naming a facility without a profile file raises `ValueError`.
+may name the variable holding the run directory (`working_directory_env`, for example
+`OLCF_IRI_WORKDIR`) or give a `working_directory` template (`{account}` filled from
+`account_env`); when neither resolves, `resolved_working_directory()` returns `None` and the
+caller must pass `workdir` explicitly. Naming a facility without a profile file raises `ValueError`.
 
 ## Supported facilities (shipped profiles)
 
@@ -51,8 +52,8 @@ export ALCF_PROJECT="<project>"
 - Tokens are bearer credentials: never commit them or pass them on the command line.
 - Add the exports to the startup file of the shell you actually use
   (`~/.zshrc` on macOS by default, `~/.bashrc` for bash).
-- The project variable fills the job `account` and, where the profile defines a
-  `working_directory` template, that directory.
+- The project variable fills the job `account`. Export `OLCF_IRI_WORKDIR` for the OLCF
+  profiles; without it the caller passes `workdir`.
 
 ## Basic usage
 

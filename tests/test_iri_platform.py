@@ -224,12 +224,19 @@ def test_missing_token_names_environment_variable(monkeypatch):
         platform.submit(["true"], resources=ResourceRequest(), workdir="/tmp")
 
 
-def test_account_and_working_directory_from_environment(monkeypatch):
+def test_account_and_working_directory_from_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("OLCF_S3M_PROJECT", "mat999")
+    monkeypatch.setenv("OLCF_IRI_WORKDIR", str(tmp_path))
     platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]), profiles=PROFILES)
 
     assert platform.available_resources() == ResourceRequest(queue="batch", account="mat999")
-    assert platform.resolved_working_directory() == "/lustre/orion/mat999/proj-shared"
+    assert platform.resolved_working_directory() == str(tmp_path)
+
+
+def test_working_directory_env_unset_leaves_it_to_the_caller(monkeypatch):
+    monkeypatch.delenv("OLCF_IRI_WORKDIR", raising=False)
+    platform = IRIPlatform("olcf-frontier", transport=FakeTransport([]), profiles=PROFILES)
+    assert platform.resolved_working_directory() is None
 
 
 def test_unknown_facility_lists_profile_names():

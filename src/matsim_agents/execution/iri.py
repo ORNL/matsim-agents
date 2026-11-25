@@ -57,6 +57,9 @@ class IRIFacility(BaseModel):
     working_directory: str | None = Field(
         default=None, description="May reference {account}, filled from account_env."
     )
+    working_directory_env: str | None = Field(
+        default=None, description="Environment variable holding the working directory."
+    )
     custom_attributes: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("base_url")
@@ -367,11 +370,15 @@ class IRIPlatform:
         return ResourceRequest(queue=self.facility.queue, account=self.account)
 
     def resolved_working_directory(self) -> str | None:
-        """The profile's working directory with ``{account}`` filled, or ``None`` if unset.
+        """The profile's working directory, or ``None`` if it cannot be resolved.
 
-        The directory comes from the facility profile only. Without one, or when the profile
-        needs an account that is not configured, the caller must pass ``workdir`` explicitly.
+        ``working_directory_env`` names an environment variable holding the directory; otherwise
+        ``working_directory`` is used with ``{account}`` filled. When neither resolves, the
+        caller must pass ``workdir`` explicitly.
         """
+        env = self.facility.working_directory_env
+        if env and os.environ.get(env):
+            return os.environ[env]
         template = self.facility.working_directory
         if template is None:
             return None

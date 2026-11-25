@@ -1,6 +1,7 @@
 # IRI Facility API profiles. The matsim_agents package carries no facility endpoints or paths;
 # pass this file as IRIPlatform(<name>, profiles="deployments/common/iri-profiles.yaml").
-# {account} in working_directory is filled from the environment variable named by account_env.
+# working_directory_env names the variable holding the run directory; {account} in a
+# working_directory template is filled from the variable named by account_env.
 facilities:
   nersc-perlmutter:
     base_url: https://api.iri.nersc.gov/api/v1
@@ -21,11 +22,11 @@ facilities:
     token_env: IRI_TOKEN_OLCF
     queue: batch
     account_env: OLCF_S3M_PROJECT
-    working_directory: /lustre/orion/{account}/proj-shared
+    working_directory_env: OLCF_IRI_WORKDIR
   olcf-odo:
     base_url: https://amsc-open.s3m.olcf.ornl.gov/api/v2
     compute_resource_id: odo
     token_env: IRI_TOKEN_OLCF
     queue: batch
     account_env: OLCF_S3M_PROJECT
-    working_directory: /gpfs/wolf2/olcf/{account}/proj-shared
+    working_directory_env: OLCF_IRI_WORKDIR

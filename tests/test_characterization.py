@@ -404,14 +404,16 @@ def test_cli_reports_an_invalid_contract_without_calculating(system, tmp_path):
             }
         )
     )
-    result = CliRunner().invoke(app, ["characterize", str(path)])
+    runs = tmp_path / "records"
+    result = CliRunner().invoke(app, ["run", str(path), "--runs-dir", str(runs)])
     assert result.exit_code == 1
-    assert "Characterization cli (thermodynamic_stability): invalid_protocol" in result.output
-    assert "Missing:" in result.output or "Limitation:" in result.output
-
-    as_json = CliRunner().invoke(app, ["characterize", str(path), "--json"])
-    assert as_json.exit_code == 1
-    assert json.loads(as_json.stdout)["status"] == "invalid_protocol"
+    assert "Run " in result.output and "failed" in result.output
+    run_id = next(iter(runs.iterdir())).name
+    shown = CliRunner().invoke(app, ["evidence", run_id, "--runs-dir", str(runs)])
+    record = json.loads(shown.stdout)
+    assert record["state"] == "failed"
+    assert record["summary"]["status"] == "invalid_protocol"
+    assert record["summary"]["missing"] or record["failure_reason"]
 
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "characterization"
