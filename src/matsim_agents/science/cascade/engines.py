@@ -1,12 +1,14 @@
 """Engine interface for cascades and a size-convergence helper (WP1.10).
 
-The in-repo integrator is the only engine that runs here. ``LammpsEngine`` fails clearly when
-LAMMPS is missing; it does not emulate it, and no LAMMPS script is generated or validated.
+The in-repo integrator is the only cascade engine that runs here. ``LammpsEngine`` only checks
+that LAMMPS is present and fails clearly when it is not; it never emulates LAMMPS. Running
+LAMMPS goes through ``backends.external.lammps``; no LAMMPS cascade script exists yet.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 from dataclasses import dataclass
 from typing import Protocol
@@ -35,8 +37,12 @@ class LammpsEngine:
     name = "lammps"
 
     def check_available(self) -> None:
+        explicit = os.environ.get("LAMMPS_EXECUTABLE")
         if importlib.util.find_spec("lammps") is None and not (
-            shutil.which("lmp") or shutil.which("lmp_serial") or shutil.which("lmp_mpi")
+            (explicit and shutil.which(explicit))
+            or shutil.which("lmp")
+            or shutil.which("lmp_serial")
+            or shutil.which("lmp_mpi")
         ):
             raise EngineUnavailableError(
                 "LAMMPS is not installed (no python module and no lmp binary); "

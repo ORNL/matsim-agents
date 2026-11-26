@@ -25,6 +25,14 @@ spka_app = typer.Typer(
     ),
 )
 external_app.add_typer(spka_app, name="spectra-pka")
+lammps_app = typer.Typer(
+    add_completion=False,
+    help=(
+        "Optional interface to an externally installed LAMMPS. MATSIM-AGENTS does not "
+        "bundle LAMMPS or any interatomic potential."
+    ),
+)
+external_app.add_typer(lammps_app, name="lammps")
 app.add_typer(external_app, name="external")
 
 CONFIG_OPTION = typer.Option(
@@ -165,4 +173,20 @@ def import_results(config: Path = CONFIG_OPTION) -> None:
         )
     )
     if result.spectrum is None:
+        raise typer.Exit(code=1)
+
+
+@lammps_app.command("check")
+def lammps_check(
+    executable: str | None = typer.Option(
+        None, "--executable", help="Path or name; default LAMMPS_EXECUTABLE, then lmp on PATH."
+    ),
+    no_probe: bool = typer.Option(False, "--no-probe", help="Do not start the executable."),
+) -> None:
+    """Report the LAMMPS executable, version and packages. READY is tool readiness only."""
+    from matsim_agents.backends.external.lammps.availability import Status, check_availability
+
+    result = check_availability(executable, invoke=not no_probe)
+    console.print_json(json.dumps(result.as_dict()))
+    if result.status in (Status.NOT_INSTALLED, Status.EXECUTION_FAILED):
         raise typer.Exit(code=1)
