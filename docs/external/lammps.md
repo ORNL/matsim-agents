@@ -25,7 +25,7 @@ LAMMPS `potentials/` directory for both options).
 | Option A, Frontier `lammps/20240829.1-mpi-omp` (29 Aug 2024 Update 1, GCC 14.2, Cray MPICH 8.1.32; packages KSPACE MANYBODY MOLECULE RIGID) | job 6002098 on one compute node: W EAM single point matched ASE to 2.4e-10 eV/atom; NVE drift reported (see section 4) |
 | Option B, `build-lammps-frontier.sh` (`stable_22Jul2025_update6`, commit `9c5ab448`, GCC 14.2, Cray MPICH 8.1.32, CPU MPI + OpenMP) | built and installed on a Frontier login node from a fresh clone; `lmp -h` probe passed; job 6002498 on one compute node gave the same single point and NVE numbers as option A (section 4) |
 | Option B on other machines (`deployments/common/setup/lammps/build-lammps.sh`) | not run anywhere except through the Frontier wrapper |
-| ML-IAP + PYTHON, `setup/lammps/build-lammps-mliap-frontier.sh` (same tag and commit, embedded `.venv` Python 3.11.18, CPU) | built on a Frontier login node into `external/lammps/install-mliap`; the upstream unified-LJ example reproduced its reference thermo at steps 0, 50 and 100. matsim-agents MLIPs run through it with the bridge in section 5 (login-node parity: EMT, MACE-MP-0 small; compute-node job not yet run) |
+| ML-IAP + PYTHON, `setup/lammps/build-lammps-mliap-frontier.sh` (same tag and commit, embedded `.venv` Python 3.11.18, CPU) | built on a Frontier login node into `external/lammps/install-mliap`; the upstream unified-LJ example reproduced its reference thermo at steps 0, 50 and 100. matsim-agents MLIPs run through it with the bridge in section 5 (login-node parity: EMT, MACE-MP-0 small, HydraGNN BEST6, UMA uma-s-1p1; compute-node job not yet run) |
 | GPU (KOKKOS/HIP or GPU package) builds | not built; `LAMMPS_KOKKOS=hip` and `LAMMPS_CMAKE_ARGS` pass the flags, but no such build has been made or tested |
 
 Neither option has produced a cascade or any physical result. A passing check means the binary
@@ -207,6 +207,16 @@ Login-node results (108-atom rattled Cu, CPU, tolerance 1e-4 eV and 1e-4 eV/A):
 | EMT, then EMT + ZBL | a=2.0 (3659 eV, then 5407 eV) | 0.0, then 9.1e-13 | 2.3e-12, then 4.5e-12 |
 | MACE-MP-0 small | a=3.6 | 0.0 | 1.7e-14 |
 | MACE-MP-0 small + ZBL | a=2.3 (ZBL active) | 3.5e-10 | 9.2e-11 |
+| HydraGNN BEST6 (fp64, frozen source `81d5b883`) | a=3.6 | 2.8e-14 | 3.6e-15 |
+| HydraGNN BEST6 + ZBL | a=2.3 (ZBL active) | 1.8e-12 | 4.2e-12 |
+| UMA uma-s-1p1 (fp32) | a=3.6 | 1.3e-6 | 3.6e-7 |
+| UMA uma-s-1p1 + ZBL | a=2.3 (ZBL active) | 2.2e-5 | 5.4e-5 |
+
+UMA runs in fp32, so its differences are orders of magnitude above the fp64 models and the ZBL
+case is within a factor of two of the 1e-4 tolerance. The HydraGNN checkpoint only loads with
+the frozen source (`docs/hydragnn-frozen-source.md`); the shared `HydraGNN` checkout fails on
+unexpected state-dict keys. UMA weights come from
+`deployments/frontier/download/download-uma-frontier.sh` (needs `HF_TOKEN`).
 
 Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-parity-frontier.sh`.
 
@@ -215,8 +225,8 @@ Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-parity-fron
 - The bridge is single-rank and CPU: forces are written to local atoms only, so use NVE/NVT
   (pressure and virial are not reported) and one MPI rank. Multi-rank, GPU/KOKKOS and per-pair
   ML-IAP coupling are not implemented. The parity check covers a single point, not MD stability.
-- UMA and HydraGNN go through the same bridge but were not run: no UMA weights on Frontier and no
-  HydraGNN checkpoint was tried. Aurora and Perlmutter are untested.
+- Parity for UMA and HydraGNN was measured on a login node only; the compute-node job has not
+  been run with them. Aurora and Perlmutter are untested.
 - Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are
   not covered by the scripts' defaults.
 - The common script is validated only through the Frontier wrapper; other machines need their

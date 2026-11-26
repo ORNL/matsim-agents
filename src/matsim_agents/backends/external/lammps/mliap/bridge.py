@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -49,13 +49,20 @@ class UncertaintyGate:
     def triggered(self) -> bool:
         return bool(self.events)
 
-    def check(self, step: int, atoms: Atoms) -> None:
-        from matsim_agents.workflows.active_learning.candidates import Candidate
-        from matsim_agents.workflows.active_learning.uncertainty import score_ensemble
+    def score(self, atoms: Atoms) -> float:
+        """RMS over atoms of the per-component force std across the ensemble."""
+        if len(self.calculators) < 2:
+            raise ValueError("ensemble scoring needs >=2 calculators")
+        per_model = []
+        for calc in self.calculators:
+            copy = atoms.copy()
+            copy.calc = calc
+            per_model.append(np.asarray(copy.get_forces(), dtype=float))
+        std = np.stack(per_model).std(axis=0)
+        return float(np.sqrt(np.mean(std**2)))
 
-        score = float(
-            score_ensemble([Candidate(candidate_id=f"md-{step}", atoms=atoms)], self.calculators)[0]
-        )
+    def check(self, step: int, atoms: Atoms) -> None:
+        score = self.score(atoms)
         if score > self.threshold_eV_per_A:
             self.events.append(UncertaintyEvent(step, score))
 
@@ -138,6 +145,3 @@ def run_with_gate(lmp, steps: int, chunk: int, obj: CalculatorMLIAP) -> int:
         if obj.gate is not None and obj.gate.triggered:
             break
     return done
-
-
-Factory = Callable[[], object]
