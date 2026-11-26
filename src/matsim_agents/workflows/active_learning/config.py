@@ -367,6 +367,15 @@ class TrainerConfig(BaseModel):
             "separate from enabled so retraining never silently replaces the deployed model."
         ),
     )
+    lammps_export_species: list[str] = Field(
+        default_factory=list,
+        description=(
+            "When non-empty and a candidate is promoted, validate it under the LAMMPS ML-IAP "
+            "bridge (ASE-vs-LAMMPS parity and an NVE stability check on the first species) and "
+            "write lammps_export.json with the checkpoint hash next to the model. The result is "
+            "recorded in the iteration state; it does not block the promotion."
+        ),
+    )
     promotion_approved: bool = Field(
         False,
         description=(

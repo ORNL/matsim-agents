@@ -23,6 +23,7 @@ from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_neb_stages import (
     ci_entry_problems,
     derive_stage_config,
+    load_history,
     prepare_stage,
     run_stage,
 )
@@ -88,9 +89,73 @@ def _with_positions(template: Atoms, relaxed: Atoms) -> Atoms:
     return out
 
 
+CONTINUABLE = ("iteration_limit", "incomplete_output", "process_failure")
+
+
+def advance_stages(
+    neb_dir: Path,
+    *,
+    nstep_path: int,
+    nstep_path_ci: int,
+    max_continues: int,
+    timeout_sec: float,
+    skip_ci: bool = False,
+):
+    """Run any prepared stage, continue an unfinished one, then the climbing-image stage.
+
+    Returns ``(outcome, note)``. Each ``continue`` stage keeps the CI settings and raises
+    ``nstep_path`` by ``nstep_path`` above what was already done; at most ``max_continues`` run.
+    """
+    qe_dir = neb_dir / "qe"
+    images = read_pathway(neb_dir / "pathway").images
+    history = load_history(qe_dir)
+    if not history.stages:
+        raise RuntimeError(f"no NEB stage in {qe_dir}")
+    if history.stages[-1].status == "prepared":
+        run_stage(qe_dir, timeout_sec=timeout_sec)
+    continues = 0
+    while True:
+        last = load_history(qe_dir).stages[-1]
+        if last.outcome not in CONTINUABLE or continues >= max_continues:
+            break
+        base = QENebConfig.model_validate(last.config)
+        target = max(base.nstep_path, last.iterations_completed or 0) + nstep_path
+        prepare_stage(
+            derive_stage_config(base, "continue", nstep_path=target), images, kind="continue"
+        )
+        run_stage(qe_dir, timeout_sec=timeout_sec)
+        continues += 1
+    outcome = ingest_neb_results(neb_dir)
+    note = "climbing-image stage not run"
+    problems = ["skipped by request"] if skip_ci else ci_entry_problems(last)
+    if problems:
+        note += ": " + "; ".join(problems)
+    else:
+        base = QENebConfig.model_validate(last.config)
+        target = max(nstep_path_ci, (last.iterations_completed or 0) + nstep_path)
+        prepare_stage(derive_stage_config(base, "ci", nstep_path=target), images, kind="ci")
+        run_stage(qe_dir, timeout_sec=timeout_sec)
+        outcome = ingest_neb_results(neb_dir)
+        note = "climbing-image stage run"
+    if continues:
+        note += f"; {continues} continue stage(s) run"
+    return outcome, note
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--workdir", type=Path, required=True)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="reuse the endpoints and path in an existing --workdir and only run NEB stages",
+    )
+    parser.add_argument(
+        "--max-continues",
+        type=int,
+        default=0,
+        help="continue stages to run after an unfinished stage (iteration limit or timeout)",
+    )
     parser.add_argument("--pseudo-dir", required=True)
     parser.add_argument("--pseudo-file", required=True)
     parser.add_argument("--pw-bin", required=True)
@@ -115,9 +180,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--npool", type=int, default=1)
     parser.add_argument("--pw-timeout-sec", type=int, default=1200)
     parser.add_argument("--neb-timeout-sec", type=float, default=1500.0)
+    parser.add_argument(
+        "--skip-ci", action="store_true", help="do not start the climbing-image stage"
+    )
     args = parser.parse_args(argv)
 
     work = args.workdir
+    if args.resume:
+        return _resume(args)
     work.mkdir(parents=True, exist_ok=False)
     element = args.element
     pseudos = {element: args.pseudo_file}
@@ -202,22 +272,16 @@ def main(argv: list[str] | None = None) -> int:
         timeout_sec=args.neb_timeout_sec,
         method_id=ENDPOINT_METHOD,
     )
-    stage_one = outcome.stage
     climbing_note = "climbing-image stage not run"
-    if stage_one is not None:
-        problems = ci_entry_problems(stage_one)
-        if problems:
-            climbing_note = "climbing-image stage not run: " + "; ".join(problems)
-        else:
-            ci_config = derive_stage_config(
-                QENebConfig.model_validate(stage_one.config),
-                "ci",
-                nstep_path=args.nstep_path_ci,
-            )
-            prepare_stage(ci_config, read_pathway(work / "neb" / "pathway").images, kind="ci")
-            run_stage(work / "neb" / "qe", timeout_sec=args.neb_timeout_sec)
-            outcome = ingest_neb_results(work / "neb")
-            climbing_note = "climbing-image stage run"
+    if outcome.stage is not None:
+        outcome, climbing_note = advance_stages(
+            work / "neb",
+            nstep_path=args.nstep_path,
+            nstep_path_ci=args.nstep_path_ci,
+            max_continues=args.max_continues,
+            timeout_sec=args.neb_timeout_sec,
+            skip_ci=args.skip_ci,
+        )
     result = outcome.result
     summary = {
         "system": f"{element} {args.structure} {'x'.join(map(str, args.repeats))} vacancy hop",
@@ -248,11 +312,46 @@ def main(argv: list[str] | None = None) -> int:
         "qualification_blockers": list(outcome.qualification_blockers),
         "scope": "single-setting barrier; not converged in cutoff, k-points, supercell or images",
     }
+    return _report(work, summary, result)
+
+
+def _report(work: Path, summary: dict, result) -> int:
     (work / "physical-neb-summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if result is not None and result.state in {"converged_unqualified"} else 1
+
+
+def _resume(args) -> int:
+    """Run more NEB stages in an existing work directory; keep its endpoint facts."""
+    work = args.workdir
+    outcome, note = advance_stages(
+        work / "neb",
+        nstep_path=args.nstep_path,
+        nstep_path_ci=args.nstep_path_ci,
+        max_continues=args.max_continues,
+        timeout_sec=args.neb_timeout_sec,
+        skip_ci=args.skip_ci,
+    )
+    path = work / "physical-neb-summary.json"
+    summary = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    result = outcome.result
+    summary.update(
+        plan_status=outcome.plan.status,
+        plan_reasons=list(outcome.plan.reasons),
+        state=None if result is None else result.state,
+        forward_barrier_eV=None if result is None else result.forward_barrier_eV,
+        reverse_barrier_eV=None if result is None else result.reverse_barrier_eV,
+        relative_energies_eV=None if result is None else list(result.relative_energies_eV),
+        optimization_steps=None if result is None else result.optimization_steps,
+        max_force_eV_per_A=None if result is None else result.max_force_eV_per_A,
+        climbing_image_used=None if result is None else result.climbing_image_used,
+        climbing_note=note,
+        qualification_blockers=list(outcome.qualification_blockers),
+        resumed=True,
+    )
+    return _report(work, summary, result)
 
 
 if __name__ == "__main__":

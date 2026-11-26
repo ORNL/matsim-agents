@@ -144,6 +144,7 @@ class IterationState:
     model_comparison: dict[str, Any] | None = None
     model_promoted: bool = False
     promotion_validation: dict[str, Any] | None = None
+    lammps_export: dict[str, Any] | None = None
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
@@ -825,6 +826,30 @@ def _compare_and_promote(
         state.new_logdir = state.candidate_model_path
         state.model_promoted = True
         _apply_model_override(cfg, state.candidate_model_path)
+        _export_for_lammps(cfg, state)
+
+
+def _export_for_lammps(cfg: ALConfig, state: IterationState) -> None:
+    """Opt-in: validate the promoted model under the LAMMPS ML-IAP bridge and record the result."""
+    species = list(cfg.trainer.lammps_export_species)
+    if not species or state.candidate_model_path is None:
+        return
+    try:
+        from matsim_agents.backends.external.lammps.mliap.export import (
+            export_checkpoint_for_lammps,
+        )
+
+        state.lammps_export = export_checkpoint_for_lammps(
+            cfg.mlip,
+            state.candidate_model_path,
+            Path(state.candidate_model_path)
+            if Path(state.candidate_model_path).is_dir()
+            else Path(state.candidate_model_path).parent,
+            species=species,
+        )
+    except Exception as exc:  # noqa: BLE001 - recorded, never blocks the promotion
+        log.exception("LAMMPS export validation failed for %s", state.candidate_model_path)
+        state.lammps_export = {"approved": False, "error": str(exc)}
 
 
 class _SurrogateModels:

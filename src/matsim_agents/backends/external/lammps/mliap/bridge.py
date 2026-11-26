@@ -70,10 +70,13 @@ class UncertaintyGate:
 
 
 class CalculatorMLIAP(_Base):
-    """Single-rank bridge: LAMMPS owns dynamics, the ASE calculator owns the physics.
+    """Bridge: LAMMPS owns dynamics, the ASE calculator owns the physics.
 
-    Forces are written straight to local atoms, so pressure/virial and multi-rank runs
-    are unsupported; use NVE/NVT on one rank.
+    Forces are written straight to local atoms, so pressure/virial is unsupported; use NVE/NVT.
+    With more than one MPI rank every rank gathers all atoms (``mpi4py`` is required), evaluates
+    the whole system and keeps the forces of its own atoms; rank 0 alone reports the energy so the
+    LAMMPS sum over ranks counts it once. This is correct but not scalable: the calculator cost
+    is paid on every rank.
     """
 
     def __init__(
@@ -122,16 +125,49 @@ class CalculatorMLIAP(_Base):
             pbc=[bool(p) for p in periodicity],
         )
 
+    def _mpi_comm(self):
+        """The MPI communicator when LAMMPS runs on several ranks, else ``None``."""
+        extract = getattr(self.lmp, "extract_setting", None)
+        if extract is None or int(extract("world_size")) <= 1:
+            return None
+        try:
+            from mpi4py import MPI
+        except ImportError as exc:
+            raise RuntimeError(
+                "LAMMPS runs on several MPI ranks; the ML-IAP bridge needs mpi4py to gather atoms"
+            ) from exc
+        return MPI.COMM_WORLD
+
+    def _gathered_atoms(self, comm, nlocal: int, elems: np.ndarray):
+        """All atoms of the system ordered by LAMMPS id, plus the rows of this rank's atoms."""
+        local = self.atoms_from_lammps(nlocal, elems)
+        ids = np.array(self.lmp.numpy.extract_atom("id")[:nlocal], dtype=np.int64)
+        parts = comm.allgather((ids, local.numbers, local.positions))
+        all_ids = np.concatenate([p[0] for p in parts])
+        order = np.argsort(all_ids)
+        atoms = Atoms(
+            numbers=np.concatenate([p[1] for p in parts])[order],
+            positions=np.concatenate([p[2] for p in parts])[order],
+            cell=local.cell,
+            pbc=local.pbc,
+        )
+        return atoms, np.searchsorted(all_ids[order], ids)
+
     def compute_forces(self, data):
         nlocal = int(data.nlocal)
-        atoms = self.atoms_from_lammps(nlocal, data.elems)
+        comm = self._mpi_comm()
+        if comm is None:
+            atoms = self.atoms_from_lammps(nlocal, data.elems)
+            rows = slice(0, nlocal)
+        else:
+            atoms, rows = self._gathered_atoms(comm, nlocal, data.elems)
         atoms.calc = self.calculator
         forces = np.asarray(atoms.get_forces(), dtype=float)
         energy = float(atoms.get_potential_energy())
         if not (np.isfinite(forces).all() and np.isfinite(energy)):
             raise FloatingPointError("MLIP returned non-finite energy or forces")
-        data.f[:nlocal] += forces
-        data.energy = energy
+        data.f[:nlocal] += forces[rows]
+        data.energy = energy if comm is None or comm.Get_rank() == 0 else 0.0
         if self.gate is not None and self.ncalls % self.gate.every == 0:
             self.gate.check(self.ncalls, atoms)
         self.ncalls += 1

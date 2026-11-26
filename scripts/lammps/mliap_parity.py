@@ -66,9 +66,19 @@ def main() -> int:
     ap.add_argument("--a", type=float, default=3.6)
     ap.add_argument("--rattle", type=float, default=0.05)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--md-steps", type=int, default=0, help="NVE steps for the stability check")
+    ap.add_argument("--md-temperature", type=float, default=300.0, help="K, initial velocities")
+    ap.add_argument("--md-timestep-fs", type=float, default=1.0)
+    ap.add_argument(
+        "--pka-eV",
+        type=float,
+        default=0.0,
+        help="add a recoil of this energy to atom 0 along <110> before the MD stage (WP1 smoke)",
+    )
     args = ap.parse_args()
 
     from matsim_agents.backends.external.lammps.mliap.parity import (
+        md_stability_check,
         parity_check,
         write_export_record,
     )
@@ -88,8 +98,53 @@ def main() -> int:
     atoms = bulk(args.element, "fcc", a=args.a, cubic=True).repeat((3, 3, 3))
     atoms.rattle(args.rattle, seed=7)
     result = parity_check(atoms, calc, [args.element])
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     payload = {"label": label, "zbl": args.zbl, "result": result.__dict__}
+    md_passed = True
+    if args.md_steps > 0:
+        from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
+
+        md_atoms = atoms.copy()
+        MaxwellBoltzmannDistribution(
+            md_atoms, temperature_K=args.md_temperature, rng=np.random.default_rng(11)
+        )
+        Stationary(md_atoms)
+        if args.pka_eV > 0:
+            from matsim_agents.science.cascade.recoil import crystal_direction, initialize_recoil
+
+            recoil = initialize_recoil(
+                md_atoms,
+                0,
+                args.pka_eV,
+                crystal_direction(md_atoms, (1, 1, 0)),
+                expected_symbol=args.element,
+                convention="add",
+            )
+            payload["pka"] = {
+                "energy_eV": recoil.realized_energy_eV,
+                "direction": recoil.direction,
+                "convention": recoil.convention,
+            }
+        md = md_stability_check(
+            md_atoms,
+            calc,
+            [args.element],
+            steps=args.md_steps,
+            timestep_fs=args.md_timestep_fs,
+        )
+        payload["md"] = md.__dict__
+        md_passed = md.passed
+        print(json.dumps(payload["md"], indent=2, default=float))
+    rank, size = 0, 1
+    if int(os.environ.get("SLURM_NTASKS", "1")) > 1:
+        from mpi4py import MPI
+
+        rank, size = MPI.COMM_WORLD.Get_rank(), MPI.COMM_WORLD.Get_size()
+        if size != int(os.environ["SLURM_NTASKS"]):
+            raise SystemExit(f"MPI world size {size} != SLURM_NTASKS: launcher/MPI mismatch")
+    payload["mpi_ranks"] = size
+    if rank != 0:  # every rank ran the same collective checks; only rank 0 reports
+        return 0 if result.passed and md_passed else 1
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     if ckpt is not None:
         payload["export"] = write_export_record(
             args.out.with_suffix(".export.json"),
@@ -100,7 +155,7 @@ def main() -> int:
         )
     args.out.write_text(json.dumps(payload, indent=2, default=float) + "\n")
     print(json.dumps(payload["result"], indent=2, default=float))
-    return 0 if result.passed else 1
+    return 0 if result.passed and md_passed else 1
 
 
 if __name__ == "__main__":

@@ -190,7 +190,11 @@ the dynamics and the calculator owns the physics, so ZBL goes through the same
 LAMMPS evaluation and `write_export_record` stores the checkpoint sha256, species and short-range
 choice next to the result. `UncertaintyGate` scores force disagreement across an ensemble every
 `every` force calls; `run_with_gate` stops the run when it fires so the caller can fine-tune,
-re-export and rerun the parity check (the fine-tune and re-export steps are not automated here).
+re-export and rerun the parity check. After a promotion, the active-learning loop does the re-export
+when `trainer.lammps_export_species` is set: `mliap/export.py` (`export_checkpoint_for_lammps`)
+builds the calculator from the promoted checkpoint, runs the parity and NVE stability checks, and
+writes `lammps_export.json` (checkpoint sha256, parity, MD, `approved`) next to the model. The result is
+recorded in the iteration state and does not block the promotion.
 
 ```bash
 source external/lammps/activate-mliap.sh
@@ -240,14 +244,36 @@ parity evaluation writes its data file to its own temporary directory. These gua
 job 6004462 and are covered by `tests/test_lammps_mliap.py`; the job was not rerun with them (an
 EMT parity run through LAMMPS after the change passed, 3.9e-14 eV/A).
 
+### MD stability
+
+`md_stability_check` (`--md-steps N` in `scripts/lammps/mliap_parity.py`) runs N NVE steps in LAMMPS
+from Maxwell-Boltzmann velocities (300 K, `Stationary`) and requires finite values, a conserved atom
+count, total-energy drift of at most 1e-3 eV/atom, and positions within 1e-5 A of an ASE
+velocity-Verlet run from the same state. On the 108-atom cell, 20 to 200 steps at 0.2 to 1 fs:
+
+| Case | Steps | Max energy drift (eV/atom) | Max position diff vs ASE (A) |
+|---|---|---|---|
+| EMT (job 6005055) | 20 | 3.4e-7 | 1.8e-9 |
+| MACE-MP-0 small (job 6005055) | 20 | 7.7e-7 | 1.4e-9 |
+| HydraGNN BEST6 (job 6005055) | 20 | 1.8e-5 | 3.0e-10 |
+| EMT, 50 eV recoil on atom 0 along <110> (login node) | 200 at 0.2 fs | 4.7e-5 | 2.1e-8 |
+| EMT, 200 eV recoil (login node) | 200 at 0.2 fs | 5.3e-4 | 1.2e-7 |
+
+The recoil runs (`--pka-eV`) show that the bridge reproduces ASE integration of a high-energy
+recoil with the same calculator. They are software checks of the bridge, not cascade physics: no
+stopping, no thermostat, one geometry, EMT only.
+
 ## Limits
 
-- The bridge is single-rank and CPU: forces are written to local atoms only, so use NVE/NVT
-  (pressure and virial are not reported) and one MPI rank. Multi-rank, GPU/KOKKOS and per-pair
-  ML-IAP coupling are not implemented. The parity check covers a single point, not MD stability.
+- Multi-rank runs gather every rank's atoms (all-gather by atom id), evaluate the full system on
+  every rank, and add each rank's own forces. Only rank 0 reports the energy. This gives correct
+  results but no speed-up, and it needs mpi4py built against the same MPI as LAMMPS. Pressure and
+  virial are not reported, so use NVE/NVT. GPU/KOKKOS and per-pair ML-IAP coupling are not
+  implemented, and the installed binary has no KOKKOS.
 - Parity was measured on a Frontier login node and in compute-node job 6004462 for all four
   calculators, at one geometry per case. Aurora and Perlmutter are untested.
 - Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are
-  not covered by the scripts' defaults.
+  not covered by the scripts' defaults. Even with KOKKOS, the ASE bridge copies atoms to the
+  Python calculator, so a GPU-resident ML-IAP path would need a separate implementation.
 - The common script is validated only through the Frontier wrapper; other machines need their
   compiler, MPI and CMake loaded first and are untested.

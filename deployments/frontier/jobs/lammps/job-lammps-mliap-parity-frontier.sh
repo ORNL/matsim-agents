@@ -5,7 +5,8 @@
 #SBATCH -N 1
 #SBATCH -p batch
 # ---------------------------------------------------------------------------
-# ASE vs LAMMPS ML-IAP energy/force parity on a compute node (single rank, CPU).
+# ASE vs LAMMPS ML-IAP energy/force parity and NVE stability on a compute node (single rank, CPU).
+# The multi-rank check is job-lammps-mliap-mpi-frontier.sh.
 # Needs external/lammps/activate-mliap.sh from
 # deployments/frontier/setup/lammps/build-lammps-mliap-frontier.sh. MACE uses the
 # cached MACE-MP-0 small weights. HydraGNN needs the frozen source (HYDRAGNN_DIR) and the
@@ -36,9 +37,11 @@ run() { # name python args...
     "$py" "$REPO/scripts/lammps/mliap_parity.py" "$@" --out "$OUT/$name.json" || status=1
 }
 
-run emt "$REPO/.venv/bin/python" --calc emt
+MD_STEPS="${MATSIM_MLIAP_MD_STEPS:-20}"  # NVE stability stage on the unstrained-lattice runs
+run emt "$REPO/.venv/bin/python" --calc emt --md-steps "$MD_STEPS"
+run emt-pka "$REPO/.venv/bin/python" --calc emt --md-steps 200 --md-timestep-fs 0.2 --pka-eV 200
 run emt-zbl "$REPO/.venv/bin/python" --calc emt --a 2.3 --rattle 0.02 --zbl
-run mace "$REPO/.venv-mace/bin/python" --calc mace --model small
+run mace "$REPO/.venv-mace/bin/python" --calc mace --model small --md-steps "$MD_STEPS"
 run mace-zbl "$REPO/.venv-mace/bin/python" --calc mace --model small --a 2.3 --rattle 0.02 --zbl
 PROJ="$(dirname "$REPO")"
 HG_SRC="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
@@ -46,7 +49,8 @@ HG_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
 if [[ -d "$HG_SRC/hydragnn" && -d "$HG_WEIGHTS/examples/multidataset_hpo_sc26" ]]; then
     export HYDRAGNN_DIR="$HG_SRC" HYDRAGNN_WEIGHTS="$HG_WEIGHTS"
     HG_PP="$HG_SRC:$PYTHONPATH"
-    PYTHONPATH="$HG_PP" run hydragnn "$REPO/.venv/bin/python" --calc hydragnn
+    PYTHONPATH="$HG_PP" run hydragnn "$REPO/.venv/bin/python" --calc hydragnn \
+        --md-steps "$MD_STEPS"
     PYTHONPATH="$HG_PP" run hydragnn-zbl "$REPO/.venv/bin/python" --calc hydragnn \
         --a 2.3 --rattle 0.02 --zbl
 else
@@ -57,7 +61,8 @@ export MATSIM_UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-$PROJ/models/artifact
 UMA_MODEL="${UMA_MODEL:-uma-s-1p1}"
 if [[ -f "$MATSIM_UMA_ARTIFACT_DIR/$UMA_MODEL/checkpoint.pt" && -x "$REPO/.venv-uma/bin/python" ]]; then
     export UMA_CHECKPOINT="$MATSIM_UMA_ARTIFACT_DIR/$UMA_MODEL/checkpoint.pt"
-    run uma "$REPO/.venv-uma/bin/python" --calc uma --model "$UMA_MODEL"
+    run uma "$REPO/.venv-uma/bin/python" --calc uma --model "$UMA_MODEL" \
+        --md-steps "$MD_STEPS"
     run uma-zbl "$REPO/.venv-uma/bin/python" --calc uma --model "$UMA_MODEL" \
         --a 2.3 --rattle 0.02 --zbl
 else
