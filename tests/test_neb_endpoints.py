@@ -193,6 +193,8 @@ def test_frenkel_recombination_rejects_bad_requests():
         ("sc", (3, 3, 3), 3.0, 6, 3.0),
         ("fcc", (3, 3, 3), 4.05, 12, 4.05 / np.sqrt(2)),
         ("diamond", (2, 2, 2), 5.43, 4, 5.43 * np.sqrt(3) / 4),
+        ("bcc", (3, 3, 3), 3.16, 8, 3.16 * np.sqrt(3) / 2),
+        ("hcp", (3, 3, 3), 3.2, 12, 3.2),
     ],
 )
 def test_vacancy_hop_derives_the_first_shell_for_any_structure(
@@ -201,7 +203,10 @@ def test_vacancy_hop_derives_the_first_shell_for_any_structure(
     parent = generate_alloy(
         AlloySpec(
             crystal_structure=structure,
-            counts={"Al": int(np.prod(repeats)) * {"sc": 1, "fcc": 4, "diamond": 8}[structure]},
+            counts={
+                "Al": int(np.prod(repeats))
+                * {"sc": 1, "fcc": 4, "diamond": 8, "bcc": 2, "hcp": 2}[structure]
+            },
             repeats=repeats,
             lattice_parameter=a,
             seed=0,
