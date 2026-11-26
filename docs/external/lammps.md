@@ -218,15 +218,35 @@ the frozen source (`docs/hydragnn-frozen-source.md`); the shared `HydraGNN` chec
 unexpected state-dict keys. UMA weights come from
 `deployments/frontier/download/download-uma-frontier.sh` (needs `HF_TOKEN`).
 
-Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-parity-frontier.sh`.
+Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-parity-frontier.sh`. Job
+6004462 (Frontier, one node, 4 min 25 s, commit `94ab22c`) ran all eight cases below on the same
+108-atom cells and every case passed the 1e-4 tolerances:
+
+| Case | Energy diff (eV) | Max force diff (eV/A) |
+|---|---|---|
+| EMT | 1.2e-14 | 3.9e-14 |
+| EMT + ZBL | 2.7e-12 | 8.0e-13 |
+| MACE-MP-0 small | 0.0 | 1.7e-14 |
+| MACE-MP-0 small + ZBL | 3.5e-10 | 9.3e-11 |
+| HydraGNN BEST6 | 4.3e-14 | 3.4e-15 |
+| HydraGNN BEST6 + ZBL | 1.4e-12 | 3.8e-12 |
+| UMA uma-s-1p1 | 1.3e-6 | 3.0e-7 |
+| UMA uma-s-1p1 + ZBL | 5.2e-5 | 4.5e-5 |
+
+The UMA + ZBL force difference is 4.5e-5 against a 1e-4 tolerance, so the margin is under a factor
+of three. The parity check requires a structure periodic on all three axes and raises otherwise;
+`run_with_gate` requires a positive `chunk`; the gate raises on a non-finite ensemble score. Each
+parity evaluation writes its data file to its own temporary directory. These guards were added after
+job 6004462 and are covered by `tests/test_lammps_mliap.py`; the job was not rerun with them (an
+EMT parity run through LAMMPS after the change passed, 3.9e-14 eV/A).
 
 ## Limits
 
 - The bridge is single-rank and CPU: forces are written to local atoms only, so use NVE/NVT
   (pressure and virial are not reported) and one MPI rank. Multi-rank, GPU/KOKKOS and per-pair
   ML-IAP coupling are not implemented. The parity check covers a single point, not MD stability.
-- Parity for UMA and HydraGNN was measured on a login node only; the compute-node job has not
-  been run with them. Aurora and Perlmutter are untested.
+- Parity was measured on a Frontier login node and in compute-node job 6004462 for all four
+  calculators, at one geometry per case. Aurora and Perlmutter are untested.
 - Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are
   not covered by the scripts' defaults.
 - The common script is validated only through the Frontier wrapper; other machines need their
