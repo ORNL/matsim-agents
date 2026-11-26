@@ -8,7 +8,9 @@ an unqualified foundation model; results are measurements of that model, not qua
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -106,17 +108,24 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     plan = out / "plan.json"
     settings = {k: v for k, v in vars(args).items() if k not in RUNTIME_ARGS}
-    if plan.exists():
-        old = json.loads(plan.read_text()).get("args", {})
-        changed = sorted(
-            k for k in settings.keys() | (old.keys() - RUNTIME_ARGS) if old.get(k) != settings.get(k)
-        )
-        if changed:
-            raise SystemExit(
-                f"{plan} was written with different settings {changed}; existing task records "
-                "would be reused for new tasks. Use a new --out directory."
+    # Shards start together: check and publish the plan under a lock, replacing it atomically.
+    with open(out / "plan.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if plan.exists():
+            old = json.loads(plan.read_text()).get("args", {})
+            changed = sorted(
+                k
+                for k in settings.keys() | (old.keys() - RUNTIME_ARGS)
+                if old.get(k) != settings.get(k)
             )
-    plan.write_text(json.dumps({"args": vars(args), "n_tasks": len(tasks)}))
+            if changed:
+                raise SystemExit(
+                    f"{plan} was written with different settings {changed}; existing task "
+                    "records would be reused for new tasks. Use a new --out directory."
+                )
+        tmp = plan.with_name(f"plan.json.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"args": vars(args), "n_tasks": len(tasks)}))
+        os.replace(tmp, plan)
     if args.plan_only:
         print(len(tasks), "tasks")
         return 0

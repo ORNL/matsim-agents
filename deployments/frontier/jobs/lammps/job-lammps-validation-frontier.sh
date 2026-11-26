@@ -11,15 +11,15 @@
 #
 # LAMMPS_SOURCE=module (default) loads the Frontier module (LAMMPS_MODULE overrides it);
 # LAMMPS_SOURCE=build sources external/lammps/activate.sh from
-# deployments/frontier/setup/build-lammps-frontier.sh (LAMMPS_ROOT overrides the directory).
+# deployments/frontier/setup/lammps/build-lammps-frontier.sh (LAMMPS_ROOT overrides the directory).
 #
 # Submit: LAMMPS_OUT=<dir> [LAMMPS_SOURCE=build] sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
-#   deployments/frontier/jobs/job-lammps-validation-frontier.sh
+#   deployments/frontier/jobs/lammps/job-lammps-validation-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 
-REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:?}")}"
+REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:?}")}"
 OUT="${LAMMPS_OUT:?set LAMMPS_OUT}"
 NTASKS="${LAMMPS_NTASKS:-56}"
 

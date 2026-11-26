@@ -24,8 +24,9 @@ LAMMPS `potentials/` directory for both options).
 | Adapter (`backends/external/lammps/`: availability, inputs, parser, runner) | `tests/test_lammps_adapter.py`, mocked executable only |
 | Option A, Frontier `lammps/20240829.1-mpi-omp` (29 Aug 2024 Update 1, GCC 14.2, Cray MPICH 8.1.32; packages KSPACE MANYBODY MOLECULE RIGID) | job 6002098 on one compute node: W EAM single point matched ASE to 2.4e-10 eV/atom; NVE drift reported (see section 4) |
 | Option B, `build-lammps-frontier.sh` (`stable_22Jul2025_update6`, commit `9c5ab448`, GCC 14.2, Cray MPICH 8.1.32, CPU MPI + OpenMP) | built and installed on a Frontier login node from a fresh clone; `lmp -h` probe passed; job 6002498 on one compute node gave the same single point and NVE numbers as option A (section 4) |
-| Option B on other machines (`deployments/common/setup/build-lammps.sh`) | not run anywhere except through the Frontier wrapper |
-| GPU (KOKKOS/HIP or GPU package) and ML-IAP builds | not built; `LAMMPS_CMAKE_ARGS` passes the flags, but no such build has been made or tested |
+| Option B on other machines (`deployments/common/setup/lammps/build-lammps.sh`) | not run anywhere except through the Frontier wrapper |
+| ML-IAP + PYTHON, `setup/lammps/build-lammps-mliap-frontier.sh` (same tag and commit, embedded `.venv` Python 3.11.18, CPU) | built on a Frontier login node into `external/lammps/install-mliap`; the upstream unified-LJ example reproduced its reference thermo at steps 0, 50 and 100. No matsim-agents MLIP has been run through it yet |
+| GPU (KOKKOS/HIP or GPU package) builds | not built; `LAMMPS_KOKKOS=hip` and `LAMMPS_CMAKE_ARGS` pass the flags, but no such build has been made or tested |
 
 Neither option has produced a cascade or any physical result. A passing check means the binary
 runs and agrees with ASE for one EAM potential.
@@ -51,12 +52,13 @@ minutes with 16 jobs.
 ### Frontier
 
 ```bash
-bash deployments/frontier/setup/build-lammps-frontier.sh
+bash deployments/frontier/setup/lammps/build-lammps-frontier.sh
 ```
 
-The wrapper sources `deployments/frontier/setup/lammps-toolchain-frontier.sh` (PrgEnv-gnu,
+The wrapper sources `deployments/frontier/setup/lammps/lammps-toolchain-frontier.sh` (PrgEnv-gnu,
 `gcc-native/14.2`, `cray-mpich/8.1.32`, `cmake/3.31.11`; override with `LAMMPS_GCC_MODULE`,
-`LAMMPS_MPICH_MODULE`, `LAMMPS_CMAKE_MODULE`), uses the Cray wrappers `CC`/`cc`, and calls the
+`LAMMPS_MPICH_MODULE`, `LAMMPS_CMAKE_MODULE`; the resolved names are written into
+`activate.sh`, so a job loads the modules the binary was linked against), uses the Cray wrappers `CC`/`cc`, and calls the
 common script. Everything lands in `external/lammps/` (Git-ignored), like the other external
 codes (`external/quantum-espresso`, `external/SPECTRA-PKA`):
 
@@ -75,7 +77,7 @@ codes (`external/quantum-espresso`, `external/SPECTRA-PKA`):
 Load a C++17 compiler, MPI and CMake >= 3.20, then:
 
 ```bash
-bash deployments/common/setup/build-lammps.sh
+bash deployments/common/setup/lammps/build-lammps.sh
 source external/lammps/activate.sh
 ```
 
@@ -153,10 +155,10 @@ Tests:
 ```bash
 # Option A (default)
 LAMMPS_OUT=$PWD/runs/lammps-validation sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
-    deployments/frontier/jobs/job-lammps-validation-frontier.sh
+    deployments/frontier/jobs/lammps/job-lammps-validation-frontier.sh
 # Option B
 LAMMPS_SOURCE=build LAMMPS_OUT=$PWD/runs/lammps-validation-build sbatch -A <ACCOUNT> \
-    -t 00:20:00 -q debug deployments/frontier/jobs/job-lammps-validation-frontier.sh
+    -t 00:20:00 -q debug deployments/frontier/jobs/lammps/job-lammps-validation-frontier.sh
 ```
 
 The job runs 56 MPI ranks on one node: a 432-atom W `W_zhou.eam.alloy` single point compared with

@@ -31,6 +31,29 @@ def test_resume_with_changed_settings_is_refused(tmp_path, monkeypatch):
         _plan(monkeypatch, tmp_path, "--seed", "2")
 
 
+def test_concurrent_shards_never_read_a_partial_plan(tmp_path):
+    import os
+    import subprocess
+
+    argv = [sys.executable, str(SCRIPTS / "run_cascade_study.py"), "--study", "size"]
+    argv += ["--out", str(tmp_path), "--a", "2.87", "--sizes", "3,4", "--energy", "500"]
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    procs = [
+        subprocess.Popen(
+            [*argv, "--plan-only", "--shards", "16", "--shard", str(i)],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for i in range(16)
+    ]
+    errors = [p.communicate()[1] for p in procs if p.wait() != 0]
+    assert not errors, errors[0]
+    assert json.loads((tmp_path / "plan.json").read_text())["n_tasks"] > 0
+    assert not list(tmp_path.glob("plan.json.*.tmp"))
+
+
 def _rec(sr, n, fp):
     return {
         "study": "size",

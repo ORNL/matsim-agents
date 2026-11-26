@@ -9,7 +9,7 @@
 # Dependency-enabled regression run on a compute node, one pytest pass per environment:
 # .venv (full suite), .venv-mace (MACE tests), .venv-uma (fairchem/UMA tests) and, when
 # build-openmc-frontier.sh has been run, the OpenMC activation test in its own venv; when
-# build-lammps-frontier.sh has been run, the LAMMPS EAM test against external/lammps.
+# setup/lammps/build-lammps-frontier.sh has been run, the LAMMPS EAM test against external/lammps.
 #   sbatch -A <allocation> deployments/frontier/jobs/job-integration-tests-frontier.sh
 # Warm-start integration tests still skip unless their launcher, pseudopotential, checkpoint
 # and model variables are set; weights are not downloaded on compute nodes.

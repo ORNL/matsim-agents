@@ -45,7 +45,7 @@ and uses the bundled `Si_r.upf` pseudopotential. Results are written under
 Either load the site module or build LAMMPS from source with the GNU toolchain:
 
 ```bash
-bash deployments/frontier/setup/build-lammps-frontier.sh   # into external/lammps
+bash deployments/frontier/setup/lammps/build-lammps-frontier.sh   # into external/lammps
 source external/lammps/activate.sh
 ```
 
