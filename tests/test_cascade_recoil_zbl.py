@@ -93,9 +93,9 @@ def test_switch_is_c2_at_both_ends():
 def test_analytic_derivative_matches_finite_difference():
     r = np.linspace(0.3, 2.0, 40)
     h = 1e-6
-    num = (
-        switched_energy(r + h, 74, 73, 0.8, 1.6) - switched_energy(r - h, 74, 73, 0.8, 1.6)
-    ) / (2 * h)
+    num = (switched_energy(r + h, 74, 73, 0.8, 1.6) - switched_energy(r - h, 74, 73, 0.8, 1.6)) / (
+        2 * h
+    )
     assert np.allclose(num, switched_derivative(r, 74, 73, 0.8, 1.6), rtol=1e-5, atol=1e-8)
 
 

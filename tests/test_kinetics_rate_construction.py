@@ -60,7 +60,9 @@ def test_reverse_barrier_follows_from_the_reaction_energy():
     assert report.reverse.barrier_eV == pytest.approx(0.7)
     assert report.reverse_barrier_source == "from_reaction_energy"
     f, r = report.forward.reaction, report.reverse.reaction
-    assert math.log(f.attempt_frequency_hz * math.exp(-0.9 / KT) / (r.attempt_frequency_hz * math.exp(-0.7 / KT))) == pytest.approx(-0.2 / KT)
+    forward_rate = f.attempt_frequency_hz * math.exp(-0.9 / KT)
+    reverse_rate = r.attempt_frequency_hz * math.exp(-0.7 / KT)
+    assert math.log(forward_rate / reverse_rate) == pytest.approx(-0.2 / KT)
 
 
 def test_constant_prefactor_pair_satisfies_detailed_balance():
@@ -122,7 +124,9 @@ def test_missing_reverse_information_is_rejected():
 
 
 def test_fallback_prefactor_is_labelled_and_never_qualified():
-    basis = PrefactorBasis(kind="documented_fallback", attempt_frequency_hz=1e13, citation="assumed")
+    basis = PrefactorBasis(
+        kind="documented_fallback", attempt_frequency_hz=1e13, citation="assumed"
+    )
     _, _, _, report = pair(basis, evidence_level="qualified")
     assert report.qualification == "exploratory"
     assert report.forward.reaction.qualification == "exploratory"
