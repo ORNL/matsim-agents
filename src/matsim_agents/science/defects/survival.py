@@ -124,6 +124,15 @@ class SurvivingDefectSummary:
     )
 
 
+def aligned_positions(reference: Atoms, current: Atoms, result: WignerSeitzResult) -> np.ndarray:
+    """Positions of ``current`` in the reference frame the analysis used (cell map and shift)."""
+    if result.cell_mode == "affine":
+        positions = current.get_scaled_positions(wrap=False) @ reference.cell.array
+    else:
+        positions = current.positions
+    return positions - np.asarray(result.translation)
+
+
 def summarize_surviving_defects(
     reference: Atoms,
     current: Atoms,
@@ -154,11 +163,7 @@ def summarize_surviving_defects(
         raise ValueError("result does not match the given reference and current structures")
 
     cell = reference.cell.array
-    if result.cell_mode == "affine":
-        scaled = current.get_scaled_positions(wrap=False) @ cell
-    else:
-        scaled = current.positions
-    scaled = scaled - np.asarray(result.translation)
+    scaled = aligned_positions(reference, current, result)
     vac_pos = reference.positions[list(result.vacant_sites)]
     int_pos = scaled[list(result.interstitial_atoms)]
     ref_symbols = reference.get_chemical_symbols()
@@ -194,6 +199,7 @@ def summarize_surviving_defects(
 
 
 __all__ = [
+    "aligned_positions",
     "ClusterSensitivity",
     "SurvivingDefectSummary",
     "cluster_defects",
