@@ -72,12 +72,12 @@ def summarize_cascades(records: list[dict], tolerance: float) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("directory")
+    p.add_argument("directory", nargs="+", help="first directory receives summary.json")
     p.add_argument("--reference", help="JSON with sourced literature values")
     p.add_argument("--tolerance", type=float, default=0.15)
     args = p.parse_args()
-    d = Path(args.directory)
-    records = load_records(d)
+    d = Path(args.directory[0])
+    records = [r for x in args.directory for r in load_records(Path(x))]
     if not records:
         raise SystemExit("no task records found")
     study = records[0]["study"]
