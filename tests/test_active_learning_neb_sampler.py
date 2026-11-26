@@ -565,6 +565,19 @@ def test_pathway_uncertainty_gate_requires_an_interval_and_ensemble(tmp_path):
         sample_neb_candidates(config, EMT(), tmp_path / "uq", uncertainty_calculators=())
 
 
+def test_mc_dropout_pathway_uncertainty_requires_an_explicit_seed(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(initial_path=initial, final_path=final, n_images=4, max_steps=1)
+    with pytest.raises(ValueError, match="requires uncertainty_seed"):
+        sample_neb_candidates(
+            config,
+            EMT(),
+            tmp_path / "unseeded",
+            uncertainty_mode="mc_dropout",
+            dropout_passes=2,
+        )
+
+
 def test_mixed_sampling_configuration_accepts_neb_only_and_combined():
     neb = {
         "method": "neb",
@@ -585,3 +598,22 @@ def test_sampling_configuration_rejects_duplicate_effective_neb_transition_ids(t
     )
     with pytest.raises(ValueError, match="unique effective transition IDs"):
         SamplingConfig(strategies=[strategy, strategy])
+
+
+def test_endpoint_constraints_are_compared_by_atom_identity_not_index():
+    from matsim_agents.workflows.active_learning.neb_sampler import (
+        _validate_endpoint_settings_match,
+    )
+
+    initial = Atoms("Cu2", positions=[[0, 0, 0], [1, 1, 1]])
+    initial.set_array("atom_id", np.array([0, 1]))
+    initial.set_constraint(FixAtoms(indices=[0]))
+    # Same atoms in the opposite order: atom 0 sits at index 1 and stays fixed.
+    final = Atoms("Cu2", positions=[[1, 1, 1], [0, 0, 0]])
+    final.set_array("atom_id", np.array([1, 0]))
+    final.set_constraint(FixAtoms(indices=[1]))
+    _validate_endpoint_settings_match(initial, final)
+
+    final.set_constraint(FixAtoms(indices=[0]))
+    with pytest.raises(ValueError, match="constraints differ"):
+        _validate_endpoint_settings_match(initial, final)

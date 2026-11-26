@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
+from ase import Atoms
 from pydantic import BaseModel, ConfigDict, Field
 
 from matsim_agents.backends.dft.process import run_launcher
@@ -43,7 +44,11 @@ from matsim_agents.execution.ledger import (
     hashes_of,
     software_versions,
 )
-from matsim_agents.science.neb.contracts import NebCalculationSpec, NebResult
+from matsim_agents.science.neb.contracts import (
+    MLIP_ENDPOINT_PREFIX,
+    NebCalculationSpec,
+    NebResult,
+)
 from matsim_agents.science.neb.endpoints import MigrationPair
 from matsim_agents.science.neb.images import (
     DEFAULT_MAX_STEP,
@@ -139,6 +144,9 @@ def _method_id(pair: MigrationPair, config: QENebConfig, requested: str | None) 
     if len(endpoint_methods) > 1:
         raise NebWorkflowError(f"endpoints use different methods: {sorted(endpoint_methods)}")
     declared = next(iter(endpoint_methods), None)
+    if declared is not None and declared.startswith(MLIP_ENDPOINT_PREFIX):
+        # Surrogate-relaxed endpoints start a QE NEB; the QE method is not the surrogate's.
+        declared = None
     if requested and declared and requested != declared:
         raise NebWorkflowError(f"method_id {requested!r} differs from the endpoints' {declared!r}")
     return requested or declared or f"qe-neb-{config.config_hash()[:12]}"
@@ -152,11 +160,16 @@ def prepare_neb_workflow(
     method_id: str | None = None,
     min_distance: float = DEFAULT_MIN_DISTANCE,
     max_step: float = DEFAULT_MAX_STEP,
+    images: Sequence[Atoms] | None = None,
 ) -> NebPlan:
     """Validate a migration pair and prepare (but never run) the first NEB stage.
 
     An invalid pathway is recorded as ``rejected`` with its reasons and writes no QE input.
     Raises ``NebWorkflowError`` for a misconfigured request or an existing workflow directory.
+
+    ``images`` is an already-built starting path (both endpoints included, e.g. one an MLIP
+    NEB optimized). It is validated like a generated path instead of being regenerated
+    as a linear guess.
     """
     root = Path(directory).resolve()
     if (root / PLAN_FILE).exists():
@@ -183,16 +196,32 @@ def prepare_neb_workflow(
         _write_json(root / PLAN_FILE, plan.model_dump(mode="json", by_alias=True))
         return plan
 
-    try:
-        generated = generate_linear_images(
-            pair.initial,
-            pair.final,
-            config.n_images,
-            min_distance=min_distance,
-            max_step=max_step,
-        )
-    except ValueError as exc:
-        return reject([f"images: {exc}"])
+    if images is None:
+        try:
+            generated = generate_linear_images(
+                pair.initial,
+                pair.final,
+                config.n_images,
+                min_distance=min_distance,
+                max_step=max_step,
+            )
+        except ValueError as exc:
+            return reject([f"images: {exc}"])
+        path_images = generated.images
+        path_parameters = dict(generated.parameters)
+    else:
+        path_images = tuple(image.copy() for image in images)
+        if len(path_images) != config.n_images:
+            return reject([f"images: {len(path_images)} supplied, config has {config.n_images}"])
+        if any(len(image.constraints) for image in path_images):
+            # The QE positions card carries no fixed-coordinate flags.
+            return reject(["images: constrained images are not supported by the QE NEB input"])
+        path_parameters = {
+            "method": "supplied",
+            "n_images": len(path_images),
+            "min_distance": min_distance,
+            "max_step": max_step,
+        }
 
     calculation = NebCalculationSpec(
         n_images=config.n_images,
@@ -207,8 +236,8 @@ def prepare_neb_workflow(
         transition,
         pair.initial,
         pair.final,
-        generated.images,
-        parameters=dict(generated.parameters),
+        path_images,
+        parameters=path_parameters,
         min_distance=min_distance,
         max_step=max_step,
     )
@@ -219,7 +248,7 @@ def prepare_neb_workflow(
 
     warnings = list(assessment.reasons)
     try:
-        entry = prepare_stage(stage_config, generated.images, kind="initial")
+        entry = prepare_stage(stage_config, path_images, kind="initial")
     except (StageError, ValueError) as exc:
         return reject([f"qe input: {exc}"], **pathway)
     plan = NebPlan(
@@ -420,6 +449,7 @@ def run_neb_workflow(
     method_id: str | None = None,
     min_distance: float = DEFAULT_MIN_DISTANCE,
     max_step: float = DEFAULT_MAX_STEP,
+    images: Sequence[Atoms] | None = None,
 ) -> NebWorkflowOutcome:
     """Prepare the workflow and, only with ``dispatch=True``, run and ingest it.
 
@@ -434,6 +464,7 @@ def run_neb_workflow(
         method_id=method_id,
         min_distance=min_distance,
         max_step=max_step,
+        images=images,
     )
     if plan.status != "planned" or not dispatch:
         return NebWorkflowOutcome(plan=plan)

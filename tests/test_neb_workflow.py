@@ -193,3 +193,55 @@ def test_ingest_requires_a_run_stage_and_intact_pathway(tmp_path):
     (tmp_path / "w" / "pathway" / "images.extxyz").write_text("tampered\n")
     with pytest.raises(NebWorkflowError):
         ingest_neb_results(tmp_path / "w")
+
+
+def test_supplied_images_replace_the_linear_guess(tmp_path):
+    from matsim_agents.science.neb.images import generate_linear_images
+
+    pair = _pair()
+    images = [
+        image.copy()
+        for image in generate_linear_images(pair.initial, pair.final, 6, min_distance=1.0).images
+    ]
+    images[2].positions[0, 0] += 0.01  # an optimized path differs from the linear guess
+    outcome = run_neb_workflow(
+        pair, _cfg(tmp_path), tmp_path / "w", images=images, launcher=lambda *a, **k: 0
+    )
+    assert outcome.plan.status == "planned"
+    saved = json.loads((tmp_path / "w" / "pathway" / "pathway.json").read_text())
+    assert saved["parameters"]["method"] == "supplied"
+
+    rejected = prepare_neb_workflow(pair, _cfg(tmp_path), tmp_path / "w2", images=images[:4])
+    assert rejected.status == "rejected"
+
+
+def test_constrained_supplied_images_are_rejected(tmp_path):
+    from ase.constraints import FixAtoms
+
+    from matsim_agents.science.neb.images import generate_linear_images
+
+    pair = _pair()
+    images = [
+        image.copy()
+        for image in generate_linear_images(pair.initial, pair.final, 6, min_distance=1.0).images
+    ]
+    images[2].set_constraint(FixAtoms(indices=[0]))
+    plan = prepare_neb_workflow(pair, _cfg(tmp_path), tmp_path / "w", images=images)
+    assert plan.status == "rejected"
+    assert any("constrained" in reason for reason in plan.reasons)
+    assert plan.input_path is None
+
+
+def test_mlip_relaxed_endpoints_do_not_name_the_qe_method(tmp_path):
+    pair = _pair()
+    transition = pair.transition.model_copy(
+        update={
+            "initial": pair.transition.initial.model_copy(update={"method": "mlip:model-a"}),
+            "final": pair.transition.final.model_copy(update={"method": "mlip:model-a"}),
+        }
+    )
+    pair = pair.__class__(
+        initial=pair.initial, final=pair.final, transition=transition, final_config=None
+    )
+    plan = prepare_neb_workflow(pair, _cfg(tmp_path), tmp_path / "w")
+    assert plan.method_id.startswith("qe-neb-")

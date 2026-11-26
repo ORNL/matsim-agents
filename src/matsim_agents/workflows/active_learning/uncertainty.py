@@ -133,13 +133,16 @@ def score_mc_dropout_pathway(
         for pass_index in range(passes):
             with seeded_torch(seed, "mc-dropout-pathway", pass_index, devices=devices):
                 cpu_state = torch.random.get_rng_state()
-                cuda_devices = [device for device in devices if device.type == "cuda"]
-                cuda_states = {device: torch.cuda.get_rng_state(device) for device in cuda_devices}
+                accelerator_states = {
+                    device: getattr(torch, device.type).get_rng_state(device)
+                    for device in devices
+                    if device.type != "cpu"
+                }
                 energies = []
                 for image in images:
                     torch.random.set_rng_state(cpu_state)
-                    for device, state in cuda_states.items():
-                        torch.cuda.set_rng_state(state, device)
+                    for device, state in accelerator_states.items():
+                        getattr(torch, device.type).set_rng_state(state, device)
                     enable_dropout(model)
                     reset = getattr(calculator, "reset", None)
                     if callable(reset):

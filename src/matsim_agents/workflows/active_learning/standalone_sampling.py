@@ -18,6 +18,51 @@ from matsim_agents.workflows.active_learning.sampling import sample_strategies
 from matsim_agents.workflows.active_learning.seed_sources import resolve_seed_structures
 
 
+def _score_md_candidates(candidates, acquisition, primary, ensemble, random_seed: int) -> None:
+    """Attach configuration uncertainty to MD candidates (NEB scores pathways itself)."""
+    import numpy as np
+
+    from matsim_agents.workflows.active_learning.uncertainty import (
+        score_ensemble,
+        score_mc_dropout,
+    )
+
+    md = [
+        candidate
+        for candidate in candidates
+        if candidate.sampling_method == "md" and candidate.uncertainty is None
+    ]
+    if not md or acquisition.strategy == "random":
+        return
+    if acquisition.strategy == "mc_dropout":
+        scores = score_mc_dropout(
+            md,
+            primary,
+            acquisition.mc_dropout_passes,
+            acquisition.mc_dropout_p,
+            seed=stream_seed(random_seed, "md-uq"),
+        )
+    else:
+        if not ensemble or len(ensemble) < 2:
+            raise ValueError(f"{acquisition.strategy} requires >=2 ensemble calculators")
+        scores = score_ensemble(md, ensemble)
+        if acquisition.strategy == "ensemble_then_dropout":
+            # Same screen as uncertainty.select_candidates; unrefined candidates get no value.
+            keep_n = min(len(md), max(acquisition.n_select * 4, acquisition.n_select))
+            top = np.argsort(scores)[-keep_n:]
+            refined = score_mc_dropout(
+                [md[i] for i in top],
+                primary,
+                acquisition.mc_dropout_passes,
+                acquisition.mc_dropout_p,
+                seed=stream_seed(random_seed, "md-uq"),
+            )
+            scores = np.full(len(md), np.nan, dtype=np.float64)
+            scores[top] = refined
+    for candidate, score in zip(md, scores, strict=True):
+        candidate.uncertainty = float(score) if np.isfinite(score) else None
+
+
 def run_sampling(config: SamplingRunConfig, directory: str | Path) -> dict[str, Any]:
     """Run configured samplers without DFT labelling, acquisition, or retraining."""
     root = Path(directory).resolve()
@@ -66,6 +111,10 @@ def run_sampling(config: SamplingRunConfig, directory: str | Path) -> dict[str, 
                 ensemble_calculators=ensemble,
                 md_pool_factory=models.md_pool,
             )
+            if acquisition is not None:
+                _score_md_candidates(
+                    batch.candidates, acquisition, primary, ensemble, config.random_seed
+                )
     finally:
         models.close()
 

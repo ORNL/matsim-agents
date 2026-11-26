@@ -1,6 +1,7 @@
 """NEB CLI registration, dry run, and error paths (no QE needed)."""
 
 import copy
+import re
 from pathlib import Path
 
 import yaml
@@ -30,7 +31,8 @@ def test_neb_group_and_commands_are_registered():
     assert result.exit_code == 0
     for command in ("prepare", "validate", "inspect", "resume"):
         assert command in result.output
-    assert "--dispatch" in runner.invoke(app, ["neb", "prepare", "--help"]).output
+    prepare_help = runner.invoke(app, ["neb", "prepare", "--help"]).output
+    assert "--dispatch" in re.sub(r"\x1b\[[0-9;]*m", "", prepare_help)
 
 
 def test_prepare_is_a_dry_run_and_writes_expected_artifacts(tmp_path):
