@@ -303,6 +303,46 @@ def test_escalation_passes_optimized_images_endpoints_and_dft_environment(tmp_pa
     assert record["dft_start_path"] == "mlip_optimized"
 
 
+@pytest.mark.parametrize(("launcher", "expected_local"), [((), True), (("srun", "-n", "8"), False)])
+def test_escalation_environment_is_local_only_without_a_qe_launcher(
+    tmp_path, monkeypatch, launcher, expected_local
+):
+    import matsim_agents.workflows.active_learning.loop as loop
+
+    seen = []
+
+    class _Launch:
+        def environment(self, *, local=False):
+            seen.append(local)
+            return {"LOCAL": str(local)}
+
+    placement = SimpleNamespace(pool=lambda name: SimpleNamespace(launches=[_Launch()]))
+    received = []
+
+    def fake_apply(*args, env=None, **kwargs):
+        received.append(env)
+        return {"decision": "not_configured"}, False
+
+    monkeypatch.setattr(loop, "_apply_neb_escalation", fake_apply)
+    policy = _escalation_policy()
+    policy = policy.model_copy(
+        update={"dft_neb": policy.dft_neb.model_copy(update={"launcher": launcher})}
+    )
+    cfg = SimpleNamespace(escalation=policy)
+    pathway = SimpleNamespace(
+        outcome=_pathway(None),
+        directory=tmp_path / "neb",
+        parameters=SimpleNamespace(kinetics=None),
+    )
+
+    loop._escalate_neb_pathways(
+        cfg, [pathway], tmp_path, tmp_path, IterationState(iteration=0), 0, placement
+    )
+
+    assert seen == [expected_local]
+    assert received == [{"LOCAL": str(expected_local)}]
+
+
 def test_kinetics_evidence_describes_the_calculation_that_produced_the_result(tmp_path):
     from matsim_agents.science.neb.contracts import NebCalculationSpec
 

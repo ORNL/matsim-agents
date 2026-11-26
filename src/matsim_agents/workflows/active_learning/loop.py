@@ -1209,7 +1209,11 @@ def _escalate_neb_pathways(
     placement: Placement,
 ) -> int:
     """Apply the escalation policy and kinetics output to each sampled NEB pathway."""
-    env = placement.pool("dft").launches[0].environment() if cfg.escalation is not None else None
+    env = None
+    if cfg.escalation is not None:
+        # An empty launcher runs neb.x on this node, so it needs the local device mask and threads.
+        local = cfg.escalation.dft_neb is not None and not cfg.escalation.dft_neb.launcher
+        env = placement.pool("dft").launches[0].environment(local=local)
     for pathway in pathways:
         outcome = pathway.outcome
         pathway_record, dft_neb_dispatched = _apply_neb_escalation(
