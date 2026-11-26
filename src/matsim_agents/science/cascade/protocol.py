@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 from ase import Atoms
+from ase.data import atomic_masses, atomic_numbers
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 
 from matsim_agents.core.hashing import sha256_json
@@ -124,6 +125,20 @@ def _load_state(path: Path, atoms: Atoms) -> int:
     return int(meta["phase_index"])
 
 
+def _substitute_daughter(atoms: Atoms, event: CascadeEvent) -> None:
+    """Put the daughter on the parent's site; its mass is the element's standard atomic weight."""
+    i = event.site_index
+    symbols = atoms.get_chemical_symbols()
+    daughter = event.recoil_species.element
+    if symbols[i] == daughter:
+        return
+    masses = atoms.get_masses()
+    symbols[i] = daughter
+    atoms.set_chemical_symbols(symbols)
+    masses[i] = atomic_masses[atomic_numbers[daughter]]
+    atoms.set_masses(masses)
+
+
 def run_protocol(
     atoms: Atoms,
     event: CascadeEvent,
@@ -156,6 +171,8 @@ def run_protocol(
             )
     if boundary_mask is not None and boundary_target_K is None:
         raise ProtocolError("a boundary mask needs a target temperature")
+    if event.kind == "transmutation_daughter":
+        _substitute_daughter(atoms, event)
     initial = atoms.copy()
     ckpt = Path(checkpoint_dir) if checkpoint_dir is not None else None
     start_phase = 0

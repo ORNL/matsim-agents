@@ -87,6 +87,31 @@ def test_unqualified_potential_is_refused_unless_explicitly_waived():
     assert res.qualification is None
 
 
+def test_transmutation_daughter_is_substituted_before_the_recoil():
+    atoms = _cell()
+    thermalize(atoms, 300.0, seed=1)
+    pka = PKAEvent(
+        index=0, species=RecoilSpecies(element="Re"), energy_mev=2e-5, site_index=0, probability=1
+    )
+    ev = event_from_pka(
+        pka,
+        atoms,
+        parent_material_id="W",
+        channel="(n,gamma)",
+        seed=7,
+        nuclear_data_provenance="unit-test",
+        scenario_id="s",
+        rate_basis="probability",
+        kind="transmutation_daughter",
+        parent_species=RecoilSpecies(element="W"),
+        parent_site_index=0,
+    )
+    res = run_protocol(atoms, ev, direction=(1.0, 0.3, 0.1), phases=_phases(), require_level=None)
+    assert res.initial_atoms.get_chemical_symbols()[0] == "Re"
+    assert res.initial_atoms.get_masses()[0] == pytest.approx(186.207, abs=1e-2)
+    assert res.recoil.realized_energy_eV == pytest.approx(20.0)
+
+
 def test_output_contract_is_complete():
     res = _run(qualification=_qual(Level.CASCADE_QUALIFIED))
     assert res.phases == ("ballistic", "thermal_spike", "cooling")

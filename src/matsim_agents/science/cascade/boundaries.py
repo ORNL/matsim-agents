@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from ase import Atoms
+from ase.geometry import find_mic
 
 
 @dataclass(frozen=True)
@@ -24,14 +25,6 @@ class BoundaryReport:
     min_cell_length_A: float
     n_in_boundary_displaced: int
     reservoir_fraction: float
-
-
-def _mic_displacement(start: Atoms, end: Atoms) -> np.ndarray:
-    d = end.positions - start.positions
-    cell = np.asarray(start.cell.array)
-    frac = np.linalg.solve(cell.T, d.T).T
-    frac -= np.round(frac) * np.asarray(start.pbc, dtype=float)
-    return frac @ cell
 
 
 def assess_cascade_boundaries(
@@ -48,7 +41,7 @@ def assess_cascade_boundaries(
 ) -> BoundaryReport:
     if len(start) != len(end):
         raise ValueError("start and end must have the same atoms")
-    disp = np.linalg.norm(_mic_displacement(start, end), axis=1)
+    _, disp = find_mic(end.positions - start.positions, start.cell, start.pbc)
     displaced = disp > displaced_threshold_A
     findings: list[str] = []
     lengths = np.asarray(start.cell.lengths())
@@ -56,10 +49,7 @@ def assess_cascade_boundaries(
     min_len = float(lengths[pbc].min()) if pbc.any() else float("inf")
     extent = 0.0
     if displaced.any():
-        p = start.positions - start.positions[pka_index]
-        frac = np.linalg.solve(np.asarray(start.cell.array).T, p.T).T
-        frac -= np.round(frac) * pbc.astype(float)
-        dist = np.linalg.norm(frac @ np.asarray(start.cell.array), axis=1)
+        dist = start.get_distances(pka_index, range(len(start)), mic=True)
         extent = float(dist[displaced].max())
     if np.isfinite(min_len) and extent > extent_cell_fraction * min_len:
         findings.append(
@@ -102,7 +92,7 @@ def minimum_cell_length_A(
     """Shortest periodic length for which a damaged region of this extent passes the check."""
     if damaged_extent_A < 0 or safety < 1:
         raise ValueError("need a non-negative extent and safety >= 1")
-    return safety * damaged_extent_A / (2 * extent_cell_fraction)
+    return safety * damaged_extent_A / extent_cell_fraction
 
 
 __all__ = ["BoundaryReport", "assess_cascade_boundaries", "minimum_cell_length_A"]

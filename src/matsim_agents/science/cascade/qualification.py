@@ -114,8 +114,9 @@ def resolve_level(record: QualificationRecord, query: Query, *, checkpoint: str)
     reasons = _outside(record.domain, query)
     if reasons:
         return Resolution(Level.UNASSESSED, tuple(reasons), {})
-    passed = {c.name for c in record.checks if c.passed}
     failed = {c.name for c in record.checks if not c.passed}
+    # A failed result for a name blocks it even if another result for that name passed.
+    passed = {c.name for c in record.checks if c.passed} - failed
     level = Level.UNASSESSED
     missing: dict[str, tuple[str, ...]] = {}
     notes: list[str] = []

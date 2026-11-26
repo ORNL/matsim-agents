@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from ase import Atoms
 from ase.build import bulk
 
 from matsim_agents.science.cascade.boundaries import (
@@ -215,6 +216,16 @@ def test_failed_required_check_blocks_level_and_is_reported():
     assert res.level == Level.UNASSESSED and "elastic" in " ".join(res.reasons)
 
 
+def test_conflicting_duplicate_check_does_not_grant_a_level():
+    allnames = {n for v in REQUIRED_CHECKS.values() for n in v}
+    rec = _record(allnames)
+    rec = QualificationRecord(
+        rec.checkpoint, rec.domain, (*rec.checks, Check("elastic", False, "c", 2.0, "d"))
+    )
+    res = resolve_level(rec, _query(), checkpoint="ck1")
+    assert res.level == Level.UNASSESSED and "elastic" in " ".join(res.reasons)
+
+
 def test_bad_domain_ranges_are_rejected():
     with pytest.raises(ValueError):
         Domain(frozenset({"W"}), (5, 1), (1, 2), (1, 2), "f", "s")
@@ -243,6 +254,18 @@ def test_recirculation_and_minimum_cell_length():
         start, start.copy(), pka_index=0, far_side_ke_eV=5.0, far_side_ke_limit_eV=1.0
     )
     assert not rep.ok and "recirculates" in rep.findings[0]
-    assert minimum_cell_length_A(30.0, safety=1.0) == pytest.approx(30.0)
+    assert minimum_cell_length_A(30.0, safety=1.0) == pytest.approx(60.0)
+
+
+def test_displacements_use_the_nearest_image_in_a_skewed_cell():
+    cell = np.array([[10.0, 0, 0], [9.0, 1.5, 0], [0, 0, 10.0]])
+    start = Atoms("W2", positions=[[0, 0, 0], [5, 0.7, 5]], cell=cell, pbc=True)
+    end = start.copy()
+    shift = np.array([-1.9, 2.2, 0.0])  # rounding fractional coordinates gives 9.1 A here
+    end.positions[1] += shift
+    images = [i * cell[0] + j * cell[1] for i in range(-3, 4) for j in range(-3, 4)]
+    nearest = min(np.linalg.norm(shift + g) for g in images)
+    rep = assess_cascade_boundaries(start, end, pka_index=0)
+    assert rep.max_displacement_A == pytest.approx(nearest)
     with pytest.raises(ValueError):
         minimum_cell_length_A(-1.0)

@@ -139,6 +139,15 @@ Tasks are `single_point`, `minimize`, `nvt` and `nve`; a temperature needs an ex
 is a process success only with exit code 0, `Total wall time` in the log and the script's end
 marker. `runner.submit_slurm` submits the same command through `execution.slurm_jobs`.
 
+Tests:
+
+- `tests/test_lammps_adapter.py`: input writing, parsing, runner and availability with a mocked
+  executable; runs everywhere, including CI.
+- `tests/integration/test_lammps_eam.py`: a real 54-atom W EAM single point compared with ASE and a
+  500-step NVE drift check. It skips unless LAMMPS is `READY` and `$LAMMPS_POTENTIALS` has
+  `W_zhou.eam.alloy`; `LAMMPS_TEST_LAUNCHER` (e.g. `srun -n 8`) sets the launcher.
+  `job-integration-tests-frontier.sh` runs it against `external/lammps` when that build exists.
+
 ## 4. Compute-node check (Frontier)
 
 ```bash

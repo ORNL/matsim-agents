@@ -104,3 +104,13 @@ def test_zero_probability_stratum_may_be_unsampled_and_is_reported():
         strata, [Realization("x", "a", 1, 1.0), Realization("y", "a", 2, 3.0)]
     )
     assert est.mean == pytest.approx(2.0) and "rare" not in est.per_stratum
+    one = [Realization("x", "a", 1, 1.0), Realization("y", "a", 2, 3.0)]
+    est = stratified_estimate(strata, [*one, Realization("z", "rare", 3, 9.0)])
+    assert est.mean == pytest.approx(2.0) and math.isfinite(est.dof)
+
+
+def test_negative_probabilities_are_refused_by_the_estimator():
+    strata = [Stratum("a", 2.0), Stratum("b", -1.0)]
+    real = [Realization(f"{s}{i}", s, i + 10 * (s == "b"), 1.0 + i) for s in "ab" for i in (0, 1)]
+    with pytest.raises(EnsembleError, match="nonnegative"):
+        stratified_estimate(strata, real)

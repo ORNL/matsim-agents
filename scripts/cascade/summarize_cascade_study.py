@@ -43,7 +43,25 @@ def summarize_threshold(records: list[dict], reference: dict | None) -> dict:
     return out
 
 
+def _settings_key(r: dict) -> str:
+    counts = r.get("counts") or {}
+    total = sum(counts.values())
+    comp = json.dumps({k: round(v / total, 3) for k, v in counts.items()}, sort_keys=True)
+    return (
+        f"sr={r['short_range']} E={r['energy_eV']} el={r['element']} pka={r['pka_symbol']} "
+        f"T={r['temperature_K']} comp={comp}"
+    )
+
+
 def summarize_cascades(records: list[dict], tolerance: float) -> dict:
+    """One size study per distinct short-range model, energy, chemistry and temperature."""
+    groups: dict[str, list[dict]] = {}
+    for r in records:
+        groups.setdefault(_settings_key(r), []).append(r)
+    return {"groups": {k: _summarize_sizes(v, tolerance) for k, v in sorted(groups.items())}}
+
+
+def _summarize_sizes(records: list[dict], tolerance: float) -> dict:
     out: dict = {"sizes": {}}
     by_size: dict[int, list[dict]] = {}
     for r in records:
@@ -93,13 +111,15 @@ def main() -> int:
     summary["n_boundary_flagged"] = sum(not r["boundary_ok"] for r in records)
     if study != "threshold" and reference and "arc_dpa" in reference:
         a = reference["arc_dpa"]
-        energy = float(records[0]["energy_eV"])
         summary["literature_estimate"] = {
-            "damage_energy_assumed_eV": energy,
-            "nrt": nrt_displacements(energy, a["ed_eV"]),
-            "arc_dpa": arc_dpa_displacements(energy, a["ed_eV"], a["b"], a["c"]),
-            "source": a["source"],
-            "note": "damage energy taken equal to the PKA energy (no electronic loss)",
+            str(energy): {
+                "damage_energy_assumed_eV": energy,
+                "nrt": nrt_displacements(energy, a["ed_eV"]),
+                "arc_dpa": arc_dpa_displacements(energy, a["ed_eV"], a["b"], a["c"]),
+                "source": a["source"],
+                "note": "damage energy taken equal to the PKA energy (no electronic loss)",
+            }
+            for energy in sorted({float(r["energy_eV"]) for r in records})
         }
     (d / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2)[:6000])

@@ -8,7 +8,8 @@
 #SBATCH -e %x-%j.err
 # Dependency-enabled regression run on a compute node, one pytest pass per environment:
 # .venv (full suite), .venv-mace (MACE tests), .venv-uma (fairchem/UMA tests) and, when
-# build-openmc-frontier.sh has been run, the OpenMC activation test in its own venv.
+# build-openmc-frontier.sh has been run, the OpenMC activation test in its own venv; when
+# build-lammps-frontier.sh has been run, the LAMMPS EAM test against external/lammps.
 #   sbatch -A <allocation> deployments/frontier/jobs/job-integration-tests-frontier.sh
 # Warm-start integration tests still skip unless their launcher, pseudopotential, checkpoint
 # and model variables are set; weights are not downloaded on compute nodes.
@@ -67,6 +68,23 @@ run_openmc_phase() {
   return "$status"
 }
 
+run_lammps_phase() {
+  local activate="${LAMMPS_ACTIVATE:-$REPO/external/lammps/activate.sh}"
+  [[ -f "$activate" ]] || { echo "lammps: missing $activate, phase skipped" | tee -a "$OUT/summary.txt"; return 0; }
+  (
+    # shellcheck disable=SC1090
+    source "$activate"
+    OMP_NUM_THREADS=1 LAMMPS_TEST_LAUNCHER="${LAMMPS_TEST_LAUNCHER:-srun -n 8}" \
+      "${MATSIM_FRONTIER_VENV:-$REPO/.venv}/bin/python" -m pytest \
+      tests/integration/test_lammps_eam.py -q -rs -p no:cacheprovider \
+      --junitxml="$OUT/lammps-junit.xml" 2>&1 | tee "$OUT/lammps-pytest.txt"
+    exit "${PIPESTATUS[0]}"
+  )
+  local status=$?
+  echo "lammps pytest exit status: $status" | tee -a "$OUT/summary.txt"
+  return "$status"
+}
+
 overall=0
 run_phase main "${MATSIM_FRONTIER_VENV:-$REPO/.venv}" tests || overall=1
 run_phase mace "${MATSIM_MACE_VENV:-$REPO/.venv-mace}" tests/test_mace_*.py "${MLIP_TESTS[@]}" \
@@ -74,4 +92,5 @@ run_phase mace "${MATSIM_MACE_VENV:-$REPO/.venv-mace}" tests/test_mace_*.py "${M
 run_phase uma "${MATSIM_FAIRCHEM_VENV:-$REPO/.venv-uma}" tests/test_finetune_uma.py \
   "${MLIP_TESTS[@]}" || overall=1
 run_openmc_phase || overall=1
+run_lammps_phase || overall=1
 exit "$overall"

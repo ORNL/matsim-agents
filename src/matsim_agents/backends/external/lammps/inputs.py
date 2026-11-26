@@ -93,8 +93,9 @@ def render_script(species: list[str], potential: Potential, task: LammpsTask) ->
         *task.extra_commands,
     ]
     if task.temperature_k is not None:
-        seed = stream_seed(task.seed, "lammps-velocity")
-        lines.append(f"velocity all create {task.temperature_k} {max(seed, 1)} dist gaussian")
+        # LAMMPS reads the seed as a positive signed 32-bit integer.
+        seed = stream_seed(task.seed, "lammps-velocity") % (2**31 - 1) + 1
+        lines.append(f"velocity all create {task.temperature_k} {seed} dist gaussian")
     if task.task == "single_point":
         lines.append("run 0")
     elif task.task == "minimize":
@@ -114,7 +115,7 @@ def render_script(species: list[str], potential: Potential, task: LammpsTask) ->
     type_names = " ".join(species)
     lines += [
         f"write_data {FINAL_DATA}",
-        f"write_dump all custom {FINAL_DUMP} id type x y z fx fy fz "
+        f"write_dump all custom {FINAL_DUMP} id type element x y z fx fy fz "
         f"modify sort id element {type_names}",
         'print "MATSIM_LAMMPS_DONE"',
     ]
@@ -167,7 +168,8 @@ def potential_from_file(
     pair_style: str, potential_file: str | Path, species: list[str]
 ) -> Potential:
     """Common ``pair_coeff * * <file> <species...>`` form (eam/alloy, eam/fs, ...)."""
-    path = str(Path(potential_file).expanduser())
+    # Absolute, because LAMMPS runs with the run directory as its working directory.
+    path = str(Path(potential_file).expanduser().resolve())
     coeff = f"* * {shlex.quote(path)} {' '.join(species)}"
     return Potential(pair_style=pair_style, pair_coeff=(coeff,), files=(path,))
 

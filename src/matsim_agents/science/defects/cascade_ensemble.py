@@ -111,6 +111,8 @@ def stratified_estimate(
     total = sum(s.probability for s in strata)
     if not math.isclose(total, 1.0, rel_tol=1e-9, abs_tol=1e-9):
         raise EnsembleError(f"stratum probabilities must sum to 1, got {total}")
+    if any(s.probability < 0 for s in strata):
+        raise EnsembleError("stratum probabilities must be nonnegative")
     ids = [r.realization_id for r in realizations]
     if len(set(ids)) != len(ids):
         raise EnsembleError("duplicate realization_id: frames of one cascade are not independent")
@@ -136,7 +138,7 @@ def stratified_estimate(
                 f"stratum {s.name!r} (probability {s.probability}) has {len(vals)} realizations; "
                 "at least 2 are needed"
             )
-        if not vals:
+        if not vals or s.probability == 0:
             continue
         n = len(vals)
         m = float(np.mean(vals))

@@ -105,6 +105,13 @@ def test_potential_is_required_and_files_must_exist(tmp_path):
         write_inputs(bulk("W", "bcc", a=3.165), tmp_path / "run", pot, LammpsTask())
 
 
+def test_relative_potential_path_is_made_absolute(tmp_path, monkeypatch):
+    (tmp_path / "W.eam.alloy").write_text("fake\n")
+    monkeypatch.chdir(tmp_path)
+    pot = potential_from_file("eam/alloy", "W.eam.alloy", ["W"])
+    assert pot.pair_coeff[0].split()[2] == str(tmp_path.resolve() / "W.eam.alloy")
+
+
 def test_task_validation():
     with pytest.raises(LammpsInputError):
         LammpsTask("nve")
@@ -129,6 +136,9 @@ def test_write_inputs_records_hashes_and_species_order(tmp_path):
     assert f"read_data {DATA_NAME}" in text and "pair_style eam/alloy" in text
     assert "velocity all create 300.0" in text and "run 10" in text
     assert "MATSIM_LAMMPS_DONE" in text
+    velocity_seed = int(next(x for x in text.splitlines() if x.startswith("velocity")).split()[4])
+    assert 0 < velocity_seed < 2**31
+    assert "id type element x y z" in text
     record = (tmp_path / "run" / INPUT_RECORD).read_text()
     assert '"species_order": [\n    "W"\n  ]' in record and str(pot_file.resolve()) in record
     second = write_inputs(

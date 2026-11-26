@@ -28,6 +28,8 @@ ZBL_JUSTIFICATION = (
     "MACE-MP-0 has no native short-range term and its training data do not reach the collision "
     "regime; an additive universal ZBL is used as a sensitivity choice, not a validated model"
 )
+# Arguments that only select which tasks run here or where; they may change between resumes.
+RUNTIME_ARGS = frozenset({"shard", "shards", "device", "plan_only", "out"})
 
 
 def build_tasks(args: argparse.Namespace) -> list[dict]:
@@ -102,7 +104,19 @@ def main() -> int:
     tasks = build_tasks(args)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "plan.json").write_text(json.dumps({"args": vars(args), "n_tasks": len(tasks)}))
+    plan = out / "plan.json"
+    settings = {k: v for k, v in vars(args).items() if k not in RUNTIME_ARGS}
+    if plan.exists():
+        old = json.loads(plan.read_text()).get("args", {})
+        changed = sorted(
+            k for k in settings.keys() | (old.keys() - RUNTIME_ARGS) if old.get(k) != settings.get(k)
+        )
+        if changed:
+            raise SystemExit(
+                f"{plan} was written with different settings {changed}; existing task records "
+                "would be reused for new tasks. Use a new --out directory."
+            )
+    plan.write_text(json.dumps({"args": vars(args), "n_tasks": len(tasks)}))
     if args.plan_only:
         print(len(tasks), "tasks")
         return 0
@@ -115,7 +129,10 @@ def main() -> int:
     )
     r = np.geomspace(0.3, 5.0, 600)
     checks = {}
+    used = {t["short_range"] for t in tasks}
     for name, calc in (("none", base), ("zbl", zbl)):
+        if name not in used:
+            continue
         e, f = pair_curve(calc, args.element, args.element, r)
         rep = check_pair_curve(r, e, f, repulsive_below=2.0)
         checks[name] = {"ok": rep.ok, "problems": list(rep.problems)}
