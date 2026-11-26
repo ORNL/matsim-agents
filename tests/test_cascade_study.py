@@ -52,7 +52,7 @@ def test_shell_and_pka_selection():
 
 
 def test_plan_threshold_is_complete_and_has_distinct_seeds():
-    tasks = plan_threshold("Fe", 2.87, [20.0, 30.0], ["100", "111"], 3, "zbl")
+    tasks = plan_threshold("Fe", 2.87, [20.0, 30.0], ["100", "111"], 3, "zbl", base_seed=1)
     assert len(tasks) == 12
     assert len({t["seed"] for t in tasks}) == 12
     assert [t["id"] for t in tasks] == list(range(12))

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import stats
 
+from matsim_agents.core.seeding import numpy_rng
+
 Method = str  # "t" or "bootstrap"
 
 
@@ -57,7 +59,7 @@ def weighted_estimate(
     confidence: float = 0.95,
     method: Method = "t",
     n_bootstrap: int = 2000,
-    seed: int = 0,
+    seed: int | None = None,
 ) -> EnsembleEstimate:
     """Weighted mean with a confidence interval over independent realizations."""
     if not 0.0 < confidence < 1.0:
@@ -80,7 +82,9 @@ def weighted_estimate(
     else:
         if n_bootstrap < 100:
             raise ValueError("n_bootstrap must be at least 100")
-        rng = np.random.default_rng(seed)
+        if seed is None:
+            raise ValueError("the bootstrap method needs a configured seed")
+        rng = numpy_rng(seed, "weighted-bootstrap")
         support = np.flatnonzero(w > 0)  # zero-weight draws would give 0/0
         draws = support[rng.integers(0, len(support), size=(n_bootstrap, len(support)))]
         means = np.sum(w[draws] * x[draws], axis=1) / np.sum(w[draws], axis=1)

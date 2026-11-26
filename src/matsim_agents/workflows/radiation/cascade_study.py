@@ -20,7 +20,7 @@ from ase.build import bulk
 from ase.calculators.calculator import Calculator
 from ase.optimize import LBFGS
 
-from matsim_agents.core.seeding import numpy_rng
+from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.science.cascade.boundaries import assess_cascade_boundaries
 from matsim_agents.science.cascade.events import CascadeEvent, structure_hash
 from matsim_agents.science.cascade.protocol import (
@@ -182,7 +182,7 @@ def plan_threshold(
     *,
     n_cells: int = 6,
     temperature_K: float = 50.0,
-    base_seed: int = 1,
+    base_seed: int,
     first_id: int = 0,
 ) -> list[dict]:
     tasks = []
@@ -206,7 +206,7 @@ def plan_threshold(
                         "short_range": short_range,
                         "temperature_K": temperature_K,
                         "phase_set": "threshold",
-                        "seed": base_seed * 1_000_003 + i,
+                        "seed": stream_seed(base_seed, "cascade-study", i),
                     }
                 )
     return tasks
@@ -224,7 +224,7 @@ def plan_cascades(
     counts_for: Callable[[int], dict[str, int]] | None = None,
     pka_symbol: str | None = None,
     temperature_K: float = 300.0,
-    base_seed: int = 1,
+    base_seed: int,
     first_id: int = 0,
 ) -> list[dict]:
     tasks = []
@@ -247,7 +247,7 @@ def plan_cascades(
                     "short_range": short_range,
                     "temperature_K": temperature_K,
                     "phase_set": "cascade",
-                    "seed": base_seed * 1_000_003 + i,
+                    "seed": stream_seed(base_seed, "cascade-study", i),
                 }
             )
     return tasks
