@@ -25,10 +25,17 @@ Compute nodes have no internet. Run downloads and builds on a login node, from t
 
 ```bash
 export PYTHONPATH=$PWD/src XALT_EXECUTABLE_TRACKING=no
+export PROJECT_ROOT=$PWD
 export MATSIM_PSEUDO_DIR=/lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
 ```
 
 - Create the environment with `deployments/frontier/setup/install.sh` (the shared checkout already has `.venv`).
+  The installer does not activate it. In every new shell, run
+  `source deployments/frontier/setup/setup_matsim_frontier.sh --rocm72` (it loads the ROCm 7.2 modules and
+  puts `.venv/bin` on `PATH`), or use `.venv/bin/matsim-agents` explicitly. The bare `matsim-agents`
+  commands below need one of the two.
+- `PROJECT_ROOT` is required for the QE submissions in steps 4 and 5. Both scripts default to the shared
+  checkout when it is unset, so without it they would run the shared `pw.x` instead of the one in your checkout.
 - `XALT_EXECUTABLE_TRACKING=no` avoids an exit-time segfault after importing torch.
 - `MATSIM_PSEUDO_DIR` is required: `campaign.yaml` reads it for `qe.pseudo_dir`.
 - `matsim-agents capabilities check` may show `dft qe  missing (env MATSIM_QE_LAUNCHER)`. The steps below submit QE with `sbatch`, so this does not block them.
@@ -135,9 +142,18 @@ A barrier from this chain is at most `unqualified`.
 
 ## 7. Radiation inputs
 
-- SPECTRA-PKA: build with `deployments/common/setup/build-spectra-pka.sh`. The TENDL data is in
-  `/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka`. Use
-  `matsim-agents external spectra-pka check|prepare|run -c examples/external/spectra-pka/campaign.yaml`.
+- SPECTRA-PKA: build with `deployments/common/setup/build-spectra-pka.sh`. The TENDL archive is in
+  `/lustre/orion/lrn110/proj-shared/cache/nuclear-data/spectra-pka`. The template
+  [`campaign.yaml`](../../examples/external/spectra-pka/campaign.yaml) is not runnable as shipped.
+  Before `check|prepare|run`:
+  - Export `SPECTRA_PKA_EXECUTABLE_PATH` (the build script only prints this export), `PKA_DATA_DIRECTORY`
+    (extract the matrices with `external spectra-pka fetch-data`) and `NEUTRON_SPECTRUM_FILE`. The neutron
+    spectrum is always supplied by you.
+  - Copy the template and replace its `REPLACE-WITH-...` values: `nuclear_data_identity` and `flux.identity`.
+    Check `flux.normalization` and `norm_type` against your spectrum. The composition in it is an
+    invented W-Ta example, not this alloy.
+
+  Then run `matsim-agents external spectra-pka check|prepare|run -c <your-campaign.yaml>`.
   `run` is a dry run unless `--execute` is given. See [SPECTRA-PKA](../external/spectra-pka.md).
 - OpenMC activation: build with `deployments/frontier/setup/build-openmc-frontier.sh`, then run
   `examples/external/openmc_activation.py`. See [OpenMC](../external/openmc.md).
