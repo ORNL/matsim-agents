@@ -40,6 +40,18 @@ The smoke job requires the installed `external/quantum-espresso/install-gpu/bin/
 and uses the bundled `Si_r.upf` pseudopotential. Results are written under
 `.hpc-build/frontier/qe-smoke/<job-id>/`.
 
+## LAMMPS
+
+Either load the site module or build LAMMPS from source with the GNU toolchain:
+
+```bash
+bash deployments/frontier/setup/build-lammps-frontier.sh   # into .hpc-build/frontier/lammps
+source .hpc-build/frontier/lammps/activate.sh
+```
+
+`job-lammps-validation-frontier.sh` checks either one (`LAMMPS_SOURCE=module|build`). See
+`docs/external/lammps.md`.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.

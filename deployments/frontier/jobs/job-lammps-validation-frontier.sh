@@ -5,11 +5,15 @@
 #SBATCH -N 1
 #SBATCH -p batch
 # ---------------------------------------------------------------------------
-# LAMMPS adapter check on a compute node with the Frontier CPU module and srun (MPI). Runs a
-# W EAM single point compared with ASE's EAM calculator, then a short NVE run whose energy
-# drift is reported. This checks the adapter and the binary, not any physical result.
+# LAMMPS adapter check on a compute node with srun (MPI). Runs a W EAM single point compared
+# with ASE's EAM calculator, then a short NVE run whose energy drift is reported. This checks
+# the adapter and the binary, not any physical result.
 #
-# Submit: LAMMPS_OUT=<dir> sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
+# LAMMPS_SOURCE=module (default) loads the Frontier module (LAMMPS_MODULE overrides it);
+# LAMMPS_SOURCE=build sources .hpc-build/frontier/lammps/activate.sh from
+# deployments/frontier/setup/build-lammps-frontier.sh (LAMMPS_ROOT overrides the directory).
+#
+# Submit: LAMMPS_OUT=<dir> [LAMMPS_SOURCE=build] sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
 #   deployments/frontier/jobs/job-lammps-validation-frontier.sh
 # ---------------------------------------------------------------------------
 
@@ -19,7 +23,16 @@ REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev
 OUT="${LAMMPS_OUT:?set LAMMPS_OUT}"
 NTASKS="${LAMMPS_NTASKS:-56}"
 
-module load gcc-native/14.2 cray-mpich/8.1.32 "${LAMMPS_MODULE:-lammps/20240829.1-mpi-omp}"
+case "${LAMMPS_SOURCE:-module}" in
+    module)
+        module load gcc-native/14.2 cray-mpich/8.1.32 "${LAMMPS_MODULE:-lammps/20240829.1-mpi-omp}"
+        ;;
+    build)
+        # shellcheck disable=SC1091
+        source "${LAMMPS_ROOT:-$REPO/.hpc-build/frontier/lammps}/activate.sh"
+        ;;
+    *) echo "LAMMPS_SOURCE must be module or build" >&2; exit 2 ;;
+esac
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 XALT_EXECUTABLE_TRACKING=no OMP_NUM_THREADS=1
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$OUT"
@@ -47,7 +60,11 @@ av = check_availability()
 pot_file = Path(os.environ["LAMMPS_POTENTIALS"]) / "W_zhou.eam.alloy"
 pot = potential_from_file("eam/alloy", pot_file, ["W"])
 launcher = ("srun", "-n", str(ntasks), "--cpu-bind=cores")
-report = {"availability": av.as_dict(), "ntasks": ntasks}
+report = {
+    "availability": av.as_dict(),
+    "ntasks": ntasks,
+    "lammps_source": os.environ.get("LAMMPS_SOURCE", "module"),
+}
 
 atoms = bulk("W", "bcc", a=3.165, cubic=True).repeat(6)
 atoms.positions += numpy_rng(11, "lammps-validation").normal(0, 0.05, atoms.positions.shape)

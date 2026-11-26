@@ -27,6 +27,7 @@ the framework.
 - [External SPECTRA-PKA interface](external/spectra-pka.md)
 - [SPECTRA-PKA nuclear data (TENDL-2023)](external/spectra-pka-data.md)
 - [OpenMC activation and transmutation](external/openmc.md)
+- [LAMMPS classical MD (module or build from source)](external/lammps.md)
 - [Hierarchical transfer campaign (W-Ta-Cr-V-Hf-Mo)](hierarchical-transfer-campaign.md)
 - [Characterization contracts](characterization.md)
 - [Multi-property characterization, selection, and hypothesis revision](multiproperty-selection.md)
