@@ -109,7 +109,7 @@ def inject_sources(
     return InjectionReport(
         terms=terms,
         species_rate_per_s=dict(sorted(rates.items())),
-        not_tracked=("interstitial and self-interstitial-cluster balance",),
+        not_tracked=("interstitial balance unless the network states carry interstitials",),
     )
 
 
