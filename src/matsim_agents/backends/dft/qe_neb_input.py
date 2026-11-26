@@ -9,12 +9,13 @@ Layout (per the Quantum ESPRESSO NEB documentation)::
     END_PATH_INPUT
     BEGIN_ENGINE_INPUT
     &CONTROL / &SYSTEM / &ELECTRONS / &IONS
+    ATOMIC_SPECIES                    must precede the positions: pw.x aborts otherwise
     BEGIN_POSITIONS
     FIRST_IMAGE / ATOMIC_POSITIONS angstrom ...
     INTERMEDIATE_IMAGE / ATOMIC_POSITIONS angstrom ...   (repeated)
     LAST_IMAGE / ATOMIC_POSITIONS angstrom ...
     END_POSITIONS
-    ATOMIC_SPECIES / CELL_PARAMETERS angstrom / K_POINTS automatic
+    CELL_PARAMETERS angstrom / K_POINTS automatic
     END_ENGINE_INPUT
     END
 
@@ -148,6 +149,11 @@ def render_neb_input(config: QENebConfig, images: Sequence[Atoms]) -> str:
     parts.append(_namelist("SYSTEM", system))
     parts.append(_namelist("ELECTRONS", electrons))
     parts.append(_namelist("IONS", ions))
+    parts.append("ATOMIC_SPECIES")
+    for symbol in species:
+        parts.append(
+            f"  {symbol}  {_ATOMIC_MASS.get(symbol, 1.0):.4f}  {config.pseudopotentials[symbol]}"
+        )
     parts.append("BEGIN_POSITIONS")
     for index, image in enumerate(images):
         label = (
@@ -161,11 +167,6 @@ def render_neb_input(config: QENebConfig, images: Sequence[Atoms]) -> str:
         parts.extend(_positions_card(image))
     parts.append("END_POSITIONS")
 
-    parts.append("ATOMIC_SPECIES")
-    for symbol in species:
-        parts.append(
-            f"  {symbol}  {_ATOMIC_MASS.get(symbol, 1.0):.4f}  {config.pseudopotentials[symbol]}"
-        )
     parts.append("CELL_PARAMETERS angstrom")
     for v in images[0].cell.array:
         parts.append(f"  {v[0]:18.10f} {v[1]:18.10f} {v[2]:18.10f}")

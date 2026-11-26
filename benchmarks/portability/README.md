@@ -87,7 +87,7 @@ to satisfy the mandatory MLIP+QE pair above but can be passed as a third
 `config/relaxation/hydragnn-si-frontier.yaml` are the Frontier equivalents:
 the QE case points `dft.launcher` at
 [`deployments/frontier/launchers/run-pw-gpu-frontier.sh`](../../deployments/frontier/launchers/run-pw-gpu-frontier.sh)
-(which performs its own module reset to the PrgEnv-cray/rocm-6.2.4 QE
+(which performs its own module reset to the PrgEnv-cray QE
 toolchain) instead of a bare `pw.x` path, and the MLIP case uses the
 HydraGNN backend because UMA/fairchem is not installed on Frontier. Submit
 compute-mode qualification on Frontier with:

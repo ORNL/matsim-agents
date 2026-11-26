@@ -14,7 +14,7 @@ set -euo pipefail
 REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:-$d}")}"
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 WORK_DIR="${QE_SMOKE_DIR:-${REPO}/.hpc-build/frontier/qe-smoke/${SLURM_JOB_ID:-local}}"
 
 [[ -x "${PW_BIN}" ]] || { echo "pw.x not found: ${PW_BIN}" >&2; exit 2; }
@@ -57,8 +57,6 @@ K_POINTS automatic
 EOF
 
 module reset
-module load "${CPE_MODULE:-cpe/24.11}"   # pw.x was built under cpe/24.11 (rocm 6.2.4, mpich 8.1.31)
-module load Core/25.03
 module load PrgEnv-cray
 module load cce
 module load craype-accel-amd-gfx90a

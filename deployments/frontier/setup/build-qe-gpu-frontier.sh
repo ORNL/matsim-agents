@@ -91,9 +91,11 @@ echo "=========================================="
 
 # ---- Load modules -----------------------------------------------------------
 module reset
-# Frontier's default cpe moved to 26.03 (cce 21, mpich 9.1); the runtime stack is pinned to 24.11.
-module load cpe/24.11
-module load Core/25.03
+# Default: the site-default cpe (26.03: cce 21, cray-mpich 9.1, ROCm 7 GTL).
+# Set CPE_MODULE=cpe/24.11 CORE_MODULE=Core/25.03 CCE_MODULE=cce/18.0.1 ROCM_MODULE=rocm/6.2.4
+# to reproduce the previous ROCm 6 build.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
 # NOTE: We deliberately stay on the Frontier-default cce/18.0.1 stack.
@@ -103,20 +105,15 @@ module load Core/25.03
 # A per-file workaround later in this script handles cce/18.0.1's ICE on
 # PW/src/gen_at_d{j,y}.f90.
 module load PrgEnv-cray
-module load cce/18.0.1
+if [[ -n "${CCE_MODULE:-}" ]]; then module load "${CCE_MODULE}"; fi
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
-# ROCm version is selectable via env. Default rocm/6.2.4 is the only option
-# that is ABI-compatible with Frontier's cray-mpich/8.1.31 GTL: the GTL library
-# /opt/cray/pe/mpich/8.1.31/gtl/lib/libmpi_gtl_hsa.so is hard-linked against
-# libamdhip64.so.6 (rocm 6.x SONAME). rocm/7.x ships libamdhip64.so.7 and
-# breaks the MPI Fortran link probe at CMake configure. Frontier does not yet
-# ship a cray-mpich built against rocm 7. Override with ROCM_MODULE=rocm/6.4.x
-# only if needed.
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
+# The ROCm module must match the cray-mpich GTL (libmpi_gtl_hsa.so): mpich 9.1.0
+# (cpe/26.03) links libamdhip64.so.7, mpich 8.1.31 (cpe/24.11) links .so.6.
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 module load "${ROCM_MODULE}"             # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
-module load cmake/3.30.5
-module load git/2.47.0
+module load "${CMAKE_MODULE:-cmake/3.31.11}"
+module load "${GIT_MODULE:-git/2.53.0}"
 
 # QE GPU build needs unbuffered HIP and host-callable rocFFT/rocBLAS.
 # Cray's compiler wrapper picks these up when craype-accel-amd-gfx90a is loaded;
