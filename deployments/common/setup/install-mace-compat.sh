@@ -53,6 +53,7 @@ if [[ "${FACILITY}" == "aurora" ]]; then
 fi
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "e3nn==${E3NN_VERSION}"
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "mace-torch==${MACE_TORCH_VERSION}"
+bash "${MATSIM_DIR}/deployments/common/setup/install-mpi4py.sh" "${PYTHON}"
 if [[ "${FACILITY}" == "aurora" ]]; then
     log "Guarding the optional CUDA/HIP-only OpenEquivariance import in MACE"
     "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/guard_mace_optional_backends.py" \

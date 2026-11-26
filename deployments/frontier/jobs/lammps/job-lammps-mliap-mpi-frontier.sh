@@ -5,7 +5,7 @@
 #SBATCH -N 1
 #SBATCH -p batch
 # ---------------------------------------------------------------------------
-# Multi-rank ML-IAP check: EMT and MACE parity plus a 200-step NVE run on
+# Multi-rank ML-IAP check: EMT, MACE, HydraGNN and UMA parity plus NVE runs on
 # MATSIM_MLIAP_MPI_RANKS ranks (default 4) of one node, CPU. The script asserts that the MPI world
 # size equals SLURM_NTASKS and records it as "mpi_ranks" in the result, so the output proves the
 # rank count. Every rank evaluates the full system (all-gather), so this checks correctness only,
@@ -36,4 +36,24 @@ run() { # name python args...
 }
 run emt-mpi "$REPO/.venv/bin/python" --calc emt --md-steps 200 --md-timestep-fs 0.2 --pka-eV 200
 run mace-mpi "$REPO/.venv-mace/bin/python" --calc mace --model small --md-steps 20
+
+PROJ="$(dirname "$REPO")"
+HG_SRC="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
+HG_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
+if [[ -d "$HG_SRC/hydragnn" && -d "$HG_WEIGHTS/examples/multidataset_hpo_sc26" ]]; then
+    export HYDRAGNN_DIR="$HG_SRC" HYDRAGNN_WEIGHTS="$HG_WEIGHTS"
+    PYTHONPATH="$HG_SRC:$PYTHONPATH" run hydragnn-mpi "$REPO/.venv/bin/python" \
+        --calc hydragnn --md-steps 20
+else
+    echo "hydragnn: skipped (frozen source or weights missing)" | tee "$OUT/hydragnn-mpi.skipped"
+fi
+
+export MATSIM_UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-$PROJ/models/artifacts/uma}"
+UMA_MODEL="${UMA_MODEL:-uma-s-1p1}"
+if [[ -f "$MATSIM_UMA_ARTIFACT_DIR/$UMA_MODEL/checkpoint.pt" && -x "$REPO/.venv-uma/bin/python" ]]; then
+    export UMA_CHECKPOINT="$MATSIM_UMA_ARTIFACT_DIR/$UMA_MODEL/checkpoint.pt"
+    run uma-mpi "$REPO/.venv-uma/bin/python" --calc uma --model "$UMA_MODEL" --md-steps 20
+else
+    echo "uma: skipped (no bundle in $MATSIM_UMA_ARTIFACT_DIR)" | tee "$OUT/uma-mpi.skipped"
+fi
 exit "$status"

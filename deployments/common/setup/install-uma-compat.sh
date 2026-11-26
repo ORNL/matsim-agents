@@ -74,6 +74,7 @@ fi
 "${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed \
     "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]" "${FAIRCHEM_ARGS[@]}" \
     "${TORCH_INSTALL_ARGS[@]}" "${TORCH_INDEX_ARGS[@]}"
+bash "${MATSIM_DIR}/deployments/common/setup/install-mpi4py.sh" "${PYTHON}"
 if [[ "${FACILITY}" == "aurora" ]]; then
     "${PYTHON}" -m pip install --force-reinstall --no-deps "${COMPAT_WHEEL}"
     "${PYTHON}" -m pip check || log "Full pip check reported inherited conflicts; checking UMA runtime next"

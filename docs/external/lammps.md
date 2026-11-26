@@ -256,6 +256,7 @@ velocity-Verlet run from the same state. On the 108-atom cell, 20 to 200 steps a
 | EMT (job 6005055) | 20 | 3.4e-7 | 1.8e-9 |
 | MACE-MP-0 small (job 6005055) | 20 | 7.7e-7 | 1.4e-9 |
 | HydraGNN BEST6 (job 6005055) | 20 | 1.8e-5 | 3.0e-10 |
+| UMA uma-s-1p1 (job 6005055) | 20 | 9.4e-8 | 4.9e-9 |
 | EMT, 50 eV recoil on atom 0 along <110> (login node) | 200 at 0.2 fs | 4.7e-5 | 2.1e-8 |
 | EMT, 200 eV recoil (login node) | 200 at 0.2 fs | 5.3e-4 | 1.2e-7 |
 
@@ -263,13 +264,35 @@ The recoil runs (`--pka-eV`) show that the bridge reproduces ASE integration of 
 recoil with the same calculator. They are software checks of the bridge, not cascade physics: no
 stopping, no thermostat, one geometry, EMT only.
 
+### Fine-tune and re-export
+
+`scripts/lammps/mliap_finetune_export.py --backend {hydragnn,mace,uma}` fine-tunes a model on
+12 EMT-labelled 2x2x2 Cu frames (a 3.5 to 3.7 A, 0.05 A rattle, one epoch, CPU), then calls
+`export_checkpoint_for_lammps` on the result. `--lora` makes the MACE and UMA fine-tunes low-rank.
+The labels are EMT, not DFT, so the run checks the pipeline (fine-tune, checkpoint, reload, parity
+and NVE under LAMMPS) and says nothing about accuracy. MACE starts from the cached `small`
+checkpoint, UMA from the local `uma-s-1p1` bundle, HydraGNN from BEST6 through the routed
+`finetune_hydragnn` (the `HydraGNN_GFM_FineTuning4Materials` newhead fine-tuner is not installed).
+Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-finetune-frontier.sh` runs
+all three and writes `<backend>/finetune-export.json`.
+
+Login-node smoke test (6 frames, 1 epoch, 5 NVE steps, no LoRA):
+
+| Backend | Approved | Parity energy diff (eV) | NVE drift (eV/atom) |
+|---|---|---|---|
+| MACE-MP-0 small | yes | 5.7e-14 | 8.1e-8 |
+| UMA uma-s-1p1 | yes | 4.7e-7 | 9.1e-8 |
+
 ## Limits
 
 - Multi-rank runs gather every rank's atoms (all-gather by atom id), evaluate the full system on
   every rank, and add each rank's own forces. Only rank 0 reports the energy. This gives correct
-  results but no speed-up, and it needs mpi4py built against the same MPI as LAMMPS. Pressure and
-  virial are not reported, so use NVE/NVT. GPU/KOKKOS and per-pair ML-IAP coupling are not
-  implemented, and the installed binary has no KOKKOS.
+  results but no speed-up, and it needs mpi4py built against the same MPI as LAMMPS
+  (`install-uma-compat.sh` and `install-mace-compat.sh` call `deployments/common/setup/install-mpi4py.sh`,
+  which builds 4.1.1 with the Cray `cc` wrapper on Perlmutter and `mpicc` elsewhere). Only the
+  Frontier environments were rebuilt and checked; the Aurora and Perlmutter paths are untested.
+  Pressure and virial are not reported, so use NVE/NVT. GPU/KOKKOS and per-pair ML-IAP coupling
+  are not implemented, and the installed binary has no KOKKOS.
 - Parity was measured on a Frontier login node and in compute-node job 6004462 for all four
   calculators, at one geometry per case. Aurora and Perlmutter are untested.
 - Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are

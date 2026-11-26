@@ -56,7 +56,7 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     log "Installing UMA in its Torch-compatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" UMA_VENV_PATH="${UMA_VENV_PATH}" \
-        RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
+        FACILITY=perlmutter RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-uma-compat.sh"
 fi
 if [[ "${INSTALL_MACE}" == "1" ]]; then
