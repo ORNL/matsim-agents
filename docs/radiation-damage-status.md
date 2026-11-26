@@ -30,6 +30,22 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; PKA data archive (`pkas.zip`) cached, extracted per campaign. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
+| 13 | MLIP NEB with uncertainty-gated QE NEB escalation | `workflows/active_learning/{neb_sampler,loop}.py`, `backends/dft/qe_neb_input.py` | `IMPLEMENTED_TESTED` | See the NEB escalation table below. `neb.x` and `pw.x` each ran once on a tiny Li cell (plumbing only); no physical barrier exists. |
+
+## NEB escalation (WP2) tracker
+
+| Task | Status | Evidence | Numerical validation |
+| --- | --- | --- | --- |
+| Escalation policy (`mlip_only`, `uncertainty_gated`, `always_dft_neb`) with DFT NEB budget ledger | Implemented | `tests/test_active_learning_neb_escalation.py` | None |
+| Missing uncertainty never read as low | Implemented | Test with a huge limit and no uncertainty | None |
+| Escalation record: policy, reason, MLIP id | Implemented | Unit tests | None |
+| Restart refuses a path from a different MLIP (main and refinement stage) | Implemented | `tests/test_active_learning_neb_sampler.py` | None |
+| NEB-image labels marked `dft_single_point`, `label_is_dft_mep=False` | Implemented | Unit test | None |
+| QE `neb.x` launch and ingest on Frontier (cce 21.0.4, rocm/7.2.0) | Hardware smoke passed | Job 5998160 | Plumbing only; tiny Li cell, one image group |
+
+Limitations: a stored DFT NEB workflow directory is refused rather than reused, so no cross-model reuse
+exists outside the sampler restart check. No converged physical barrier has been computed, nothing is
+physically validated or scientifically qualified, and WP1, WP3 and WP4 are not implemented on this branch.
 
 ## Compute state
 

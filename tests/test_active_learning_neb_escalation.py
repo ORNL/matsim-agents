@@ -156,6 +156,28 @@ def test_unavailable_uncertainty_is_never_treated_as_low_even_when_the_limit_is_
     assert not dispatched
 
 
+def test_neb_image_labels_are_marked_single_points_not_a_dft_mep(tmp_path):
+    from matsim_agents.workflows.active_learning.candidates import Candidate
+    from matsim_agents.workflows.active_learning.loop import _record_provenance
+
+    image = Atoms("Cu2", positions=[[1, 1, 1], [3, 1, 1]], cell=[8, 8, 8], pbc=True)
+    candidate = Candidate(
+        candidate_id="img-1",
+        atoms=image.copy(),
+        sampling_method="neb",
+        model_id="mlip-a",
+        provenance={"transition_id": "t1", "label_is_dft_mep": True},
+    )
+    frame = SimpleNamespace(atoms=image.copy(), source_work_dir=str(tmp_path / "img-1"))
+    cfg = SimpleNamespace(loop=SimpleNamespace(out_dir=tmp_path), md=None)
+
+    _record_provenance(cfg, [frame], [candidate], 0)
+
+    assert frame.atoms.info["label_kind"] == "dft_single_point"
+    assert frame.atoms.info["label_is_dft_mep"] is False
+    assert frame.atoms.info["transition_id"] == "t1"
+
+
 def test_escalation_record_names_the_policy_reason_and_mlip(tmp_path):
     outcome = _pathway(0.5)
     outcome.result = outcome.result.model_copy(

@@ -494,6 +494,9 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
                     if value is not None:
                         info[key] = value
                 info.update(candidate.metadata)
+                # Set last so no candidate field can relabel a fixed-geometry image as a DFT MEP.
+                info["label_kind"] = "dft_single_point"
+                info["label_is_dft_mep"] = False
             for key in ("e3_action_id", "e3_geometry_stage", "incumbent_checkpoint_sha256"):
                 if key in candidate.atoms.info:
                     info[key] = candidate.atoms.info[key]
