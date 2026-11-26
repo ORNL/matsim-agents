@@ -50,7 +50,7 @@ export XALT_EXECUTABLE_TRACKING=no
 export PYTHONNOUSERSITE=1
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-"${PYTHON}" "${REPO}/deployments/common/neb_escalation_smoke.py" \
+"${PYTHON}" "${REPO}/scripts/neb/neb_escalation_smoke.py" \
   --workdir "${WORK_DIR}/run" \
   --pseudo-dir "${PSEUDO_DIR}" \
   --neb-bin "${NEB_BIN}" \

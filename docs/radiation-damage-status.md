@@ -30,6 +30,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; PKA data archive (`pkas.zip`) cached, extracted per campaign. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
+| 12a | Wigner-Seitz defect analysis, clustering, surviving-defect counts (WP3.2, 3.5, part of 3.7) | `defects/{wigner_seitz,survival}.py` | `IMPLEMENTED_TESTED` | Synthetic-structure tests only, agreeing with `defects/mapping.py` on counts. No cascade data, no reference comparison, no confidence intervals or ensemble statistics (rest of WP3.7, WP3.6 tracking, WP3.11 ensemble checks not done). Not validated. |
 | 13 | MLIP NEB with uncertainty-gated QE NEB escalation | `workflows/active_learning/{neb_sampler,loop}.py`, `backends/dft/qe_neb_input.py` | `IMPLEMENTED_TESTED` | See the NEB escalation table below. `neb.x` and `pw.x` each ran once on a tiny Li cell (plumbing only); no physical barrier exists. |
 
 ## NEB escalation (WP2) tracker
@@ -45,7 +46,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 
 Limitations: a stored DFT NEB workflow directory is refused rather than reused, so no cross-model reuse
 exists outside the sampler restart check. No converged physical barrier has been computed, nothing is
-physically validated or scientifically qualified, and WP1, WP3 and WP4 are not implemented on this branch.
+physically validated or scientifically qualified. WP1 and WP4 are not implemented on this branch and WP3 is only partly done (item 12a).
 
 ## Compute state
 
