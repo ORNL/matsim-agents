@@ -116,6 +116,17 @@ def test_ase_neb_emits_shared_candidates_and_barrier_result(tmp_path):
     assert resumed.result.optimization_steps >= outcome.result.optimization_steps
 
 
+def test_neb_resume_refuses_a_path_from_a_different_mlip(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(
+        initial_path=initial, final_path=final, n_images=4, max_steps=2, min_distance_A=0.5
+    )
+    sample_neb_candidates(config, EMT(), tmp_path / "neb", model_id="mlip-a")
+    sample_neb_candidates(config, EMT(), tmp_path / "neb", model_id="mlip-a")
+    with pytest.raises(ValueError, match="mlip-a.*mlip-b"):
+        sample_neb_candidates(config, EMT(), tmp_path / "neb", model_id="mlip-b")
+
+
 def test_independent_neb_pathways_use_configured_worker_pool(tmp_path, monkeypatch):
     import matsim_agents.workflows.active_learning.neb_sampler as neb_sampler
 

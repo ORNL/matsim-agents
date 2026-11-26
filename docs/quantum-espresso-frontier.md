@@ -20,12 +20,13 @@ itself is committed under `deployments/frontier/setup/` and
 
 | Component | Version | Why pinned |
 |---|---|---|
-| `PrgEnv-cray` | site default | only PrgEnv with working OpenMP target offload to gfx90a |
-| `cce` | 18.0.1 (Frontier default) | cce/19/20/21 ftn wrapper requires `libopenacc.pc` not shipped on Frontier |
+| `PrgEnv-cray` | 8.7.0 (site default) | only PrgEnv with working OpenMP target offload to gfx90a |
+| `cpe` / `cce` | 26.03 / 21.0.4 (site default) | the build and smoke jobs below ran on this stack |
 | `craype-accel-amd-gfx90a` | site default | enables `-target-accel=amd_gfx90a -h omp` in `ftn` |
-| `rocm` | 6.2.4 | cray-mpich/8.1.31 GTL is hard-linked against `libamdhip64.so.6`; rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe |
-| `cray-fftw` | 3.3.10.9 | CPU FFTW3 (offload kernels still call CPU FFTW for non-annotated paths) |
-| `cmake` | 3.30.5 | QE develop CMake API |
+| `rocm` | 7.2.0 | `pw.x` and `neb.x` link `libamdhip64.so.7`; override with `ROCM_MODULE` |
+| `cray-mpich` | 9.1.0 (from cpe/26.03) | |
+| `cray-fftw` | site default | CPU FFTW3 (offload kernels still call CPU FFTW for non-annotated paths) |
+| `cmake` | 3.31.11 | QE develop CMake API; override with `CMAKE_MODULE` / `GIT_MODULE` |
 
 ## Build
 
@@ -74,8 +75,13 @@ relocate everything as a unit, or override `SRC_DIR`/`BUILD_DIR`/
    reference uninstalled tools. The script builds an explicit list of
    user-facing target groups and copies `bin/*.x` to `install-gpu/bin/`.
 
-4. **cce/18.0.1 uninitialized-descriptor segfault in `pw_init_qexsd_input`.**
-   `pw.x` segfaults deterministically on every run: `hybrid_type`/`dftU_type`/
+4. **cce uninitialized-descriptor segfault in `pw_init_qexsd_input`** (found on
+   cce/18.0.1; the patch was carried into the cce/21.0.4 build, where the
+   `ALLOCATE`s are guarded with `IF (.NOT. ALLOCATED(...))` because `neb.x`
+   calls `iosys` once per image and an unconditional `ALLOCATE` aborts with
+   "already allocated").
+
+   On cce/18.0.1, `pw.x` segfaults deterministically on every run: `hybrid_type`/`dftU_type`/
    `vdW_type` (`Modules/qes_types_module.f90`) carry several `ALLOCATABLE`
    array components, and cce/18.0.1 does not reliably initialize the
    allocation-status descriptor of those components when the containing type
@@ -101,7 +107,14 @@ relocate everything as a unit, or override `SRC_DIR`/`BUILD_DIR`/
    build script against an already-patched source tree is a no-op. Verified
    with a bulk BCC-Fe DFT+U SCF run: `pw.x` converges (`JOB DONE`) and the
    written `data-file-schema.xml` contains real `Hubbard_Occ`/`Hubbard_ns`
-   occupation data.
+   occupation data (cce/18.0.1 build).
+
+   On the cce/21.0.4 + rocm/7.2.0 build, verified by smoke jobs only: the
+   `pw.x` smoke converged (job 5998158), and the `neb.x` smoke (job 5998160,
+   `nimage=1`, 4 images, tiny Li cell, low cutoffs) ran to "convergence
+   achieved in 3 iterations" and its output was ingested. That checks launch
+   and ingest only, not a physical or numerical validation. `nimage` must not
+   exceed the number of path images (`NEB_SMOKE_NIMAGE`, default 1).
 
 ## Run
 

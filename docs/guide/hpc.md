@@ -64,7 +64,7 @@ The Frontier-targeted backends do **not** all use the same ROCm version:
 |---|---|---|
 | **HydraGNN environment** | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; created by HydraGNN's installer at `matsim-agents/.venv/` |
 | **vLLM model server** | `rocm/7.2.0` | Isolated Python `venv` at `matsim-agents/.venv-vllm/`; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](../../deployments/frontier/setup/build-vllm-rocm72.sh) |
-| **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. See [`docs/quantum-espresso-frontier.md`](../quantum-espresso-frontier.md). |
+| **Quantum ESPRESSO GPU** | `rocm/7.2.0` | Built with the site-default `cpe/26.03` (`cce/21.0.4`, `cray-mpich/9.1.0`); `pw.x` and `neb.x` link `libamdhip64.so.7`. Override with `ROCM_MODULE`. See [`docs/quantum-espresso-frontier.md`](../quantum-espresso-frontier.md). |
 
 QE and the Python/ML stacks are deliberately never co-loaded in the same
 shell; they couple through Slurm and the filesystem.
@@ -83,9 +83,8 @@ The build is cross-compiled on a login node and produces ~92 binaries
 (`pw.x`, `cp.x`, `ph.x`, `pp.x`, `neb.x`, `epw.x`, `kcw.x`, `tddfpt`/
 `turbo_*` suite, `pioud.x`, `all_currents.x`, …) under
 `external/quantum-espresso/install-gpu/bin/` (gitignored). The recipe
-includes baked-in workarounds for the cce/18.0.1 ftn-7991 ICE, the
-PIOUD `etime()` link error (rewritten to F95 `cpu_time`), the
-rocm/7.x cray-mpich SONAME mismatch, and a cce/18.0.1
+includes baked-in workarounds for the cce ftn-7991 ICE (seen on cce/18.0.1), the
+PIOUD `etime()` link error (rewritten to F95 `cpu_time`), and a cce
 uninitialized-descriptor segfault in `pw_init_qexsd_input` that (if
 unpatched) both crashes `pw.x` and silently drops DFT+U/vdW restart
 data — see [`docs/quantum-espresso-frontier.md`](../quantum-espresso-frontier.md#workarounds-baked-into-the-build-script)

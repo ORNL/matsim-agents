@@ -52,6 +52,9 @@ PROJ="$(dirname "${REPO}")"
 # ---- Configuration ----------------------------------------------------------
 QE_VERSION="${QE_VERSION:-develop}"      # git tag (e.g. "7.4") or "develop"
 QE_REPO="${QE_REPO:-https://gitlab.com/QEF/q-e.git}"
+# Upstream commit the patches in patches/ are generated against; used when QE_VERSION=develop.
+# Set QE_COMMIT=develop to build the branch tip instead (patches may then fail to apply).
+QE_COMMIT="${QE_COMMIT:-2e651f7253920e1ce8737c5cee2cce63919746a6}"
 
 # Where QE source/build/install live. Default: under matsim-agents/external/
 # (gitignored). The repo "owns" the location while the large build artifacts
@@ -140,6 +143,7 @@ if [[ ! -d "${SRC_DIR}/.git" ]]; then
     mkdir -p "$(dirname "${SRC_DIR}")"
     if [[ "${QE_VERSION}" == "develop" ]]; then
         git clone --branch develop "${QE_REPO}" "${SRC_DIR}"
+        (cd "${SRC_DIR}" && git checkout --quiet "${QE_COMMIT}")
     else
         git clone --branch "qe-${QE_VERSION}" "${QE_REPO}" "${SRC_DIR}"
     fi
@@ -151,6 +155,10 @@ else
         (cd "${SRC_DIR}" && git fetch --unshallow 2>/dev/null || true)
     fi
     echo "  HEAD = $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
+    if [[ "${QE_VERSION}" == "develop" ]] \
+       && [[ "$(cd "${SRC_DIR}" && git rev-parse HEAD)" != "$(cd "${SRC_DIR}" && git rev-parse "${QE_COMMIT}^{commit}" 2>/dev/null)" ]]; then
+        echo "  WARNING: HEAD is not the pinned QE_COMMIT ${QE_COMMIT}; patches may not apply."
+    fi
 fi
 
 # ---- Configure with CMake ---------------------------------------------------

@@ -49,8 +49,9 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
   work; it is one variable changed, with an unproven outcome.
 * Root cause and fix of the `pw.x` segfault (software-verified on one 128-atom debug job; no
   energies, nothing numerically validated). QE was rebuilt from scratch with the pinned
-  toolchain `cpe/24.11`, `cce/18.0.1` (Frontier's default cpe/26.03 / cce 21.0.4 does not
-  compile QE). A standalone reproducer showed that Cray `ftn` (cce 18, 19, 20) segfaults at run
+  toolchain `cpe/24.11`, `cce/18.0.1` (at the time, Frontier's default cpe/26.03 / cce 21.0.4
+  was not used for QE; QE has since been rebuilt on cce 21.0.4 + rocm/7.2.0, see
+  `docs/quantum-espresso-frontier.md`). A standalone reproducer showed that Cray `ftn` (cce 18, 19, 20) segfaults at run
   time on an array assignment inside an OpenMP `WORKSHARE` (orphaned; a rebuilt `pw.x` with
   `PARALLEL WORKSHARE` still crashed in the outlined region, found with a core dump taken in
   job 5988713). `PW/src/buffers.f90` uses that construct in `buiol_write_record` and

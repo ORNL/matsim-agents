@@ -125,6 +125,21 @@ def _relax_endpoints(
     return relaxed[0], relaxed[1]
 
 
+def _check_restart_model(state_path: Path, checkpoint_path: Path, model_id: str | None) -> None:
+    """Refuse to resume a pathway that was optimized with a different (or unrecorded) MLIP."""
+    if not checkpoint_path.is_file():
+        return
+    recorded = None
+    if state_path.is_file():
+        recorded = json.loads(state_path.read_text(encoding="utf-8")).get("model_id")
+    if recorded != (model_id or "unspecified"):
+        raise ValueError(
+            f"cannot resume NEB from {checkpoint_path}: it was optimized with MLIP "
+            f"{recorded!r}, not {model_id or 'unspecified'!r}; "
+            "remove the directory or disable resume"
+        )
+
+
 def _load_restart(path: Path, expected_count: int, reference_images):
     if not path.is_file():
         return None
@@ -380,6 +395,9 @@ def sample_neb_candidates(
         check_intermediate_overlaps=config.interpolation != "idpp",
     )
     checkpoint_path = out_dir / "neb-images.extxyz"
+    state_path = out_dir / "neb-optimization-state.json"
+    if config.resume:
+        _check_restart_model(state_path, checkpoint_path, model_id)
     images = (
         _load_restart(checkpoint_path, config.n_images, generated.images) if config.resume else None
     )
@@ -399,7 +417,6 @@ def sample_neb_candidates(
         validate_images(images, config.min_distance_A)
 
     trajectory_path = out_dir / "neb-optimization.traj"
-    state_path = out_dir / "neb-optimization-state.json"
     prior_steps = 0
     if config.resume and state_path.is_file():
         state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -468,7 +485,11 @@ def sample_neb_candidates(
     save_checkpoint()
     optimization_steps = prior_steps + max(0, optimizer.get_number_of_steps() - starting_steps)
     state_path.write_text(
-        json.dumps({"optimization_steps": optimization_steps}, indent=2) + "\n",
+        json.dumps(
+            {"optimization_steps": optimization_steps, "model_id": model_id or "unspecified"},
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     refinement_stage_used = False
