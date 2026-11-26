@@ -106,12 +106,13 @@ Record wall time and any failure as found.
 
 ## 5. Full 1,024-atom SCF
 
-Run this only after step 4 converges and a non-debug QoS and node-hour budget are approved. The debug
-QoS allows 2 h and one job per user, which is not enough for this cell.
+Run this only after step 4 converges and a non-debug QoS, wall time and node-hour budget are approved.
+The debug QoS allows 2 h and one job per user, which is not enough for this cell. The script declares
+`#SBATCH -t 02:00:00`, so the command line must override the wall time as well as the QoS.
 
 ```bash
 CALC_DIR=$PWD/runs/campaigns/wtacrvhfmo-1024-first-test/pristine_nonmagnetic \
-  sbatch --parsable -A LRN110 -q <approved-qos> --export=ALL,CALC_DIR \
+  sbatch --parsable -A LRN110 -q <approved-qos> -t <approved-walltime> --export=ALL,CALC_DIR \
   deployments/frontier/campaigns/qe-1024/qe_1024_job.sbatch
 ```
 
@@ -120,8 +121,16 @@ strings. Repeat for `vacancy`, `interstitial`, `frenkel_pair` and `divacancy`.
 
 ## 6. Defect migration
 
-Relax the defect endpoints first. Then use `matsim-agents neb prepare|validate|inspect|resume`
-(see [Run a workflow](run-campaigns.md)). The prepared `neb_*` entries require relaxed endpoints.
+Relax the defect endpoints first. The prepared `neb_*` entries require relaxed endpoints.
+
+`matsim-agents neb prepare` cannot use them. It builds its own vacancy hop from the `parent` and
+`defect` keys of its config and rejects the interstitial and recombination mechanisms
+([`cli/neb.py`](../../src/matsim_agents/cli/neb.py)), so it ignores the prior relaxation and covers
+only `neb_vacancy`. For all three paths, build a `MigrationPair` in Python from the relaxed
+structures with their endpoint provenance and call `matsim_agents.workflows.neb.run_neb_workflow`.
+Then use `matsim-agents neb validate|inspect|resume` on the resulting workflow directory
+(see [Run a workflow](run-campaigns.md)).
+
 A barrier from this chain is at most `unqualified`.
 
 ## 7. Radiation inputs
@@ -135,18 +144,23 @@ A barrier from this chain is at most `unqualified`.
 
 ## 8. Higher-level stages
 
-All are dry runs by default.
+Hierarchical transfer and the radiation-damage chain are dry runs by default. Active learning is not.
 
-- Active learning: `matsim-agents active-learning --help` and
-  `deployments/frontier/launchers/run-active-learning-frontier.sh`.
 - Hierarchical transfer: `matsim_agents.workflows.hierarchy.engine`. Dispatch needs `approved_by` and a node-hour budget.
 - Radiation-damage chain: `matsim_agents.workflows.radiation_damage.run_radiation_damage`. Dispatch needs `dispatch=True`.
   Kinetics are blocked without NEB evidence and are never labelled qualified.
+- Active learning: `matsim-agents active-learning --help`. `active-learning run` calls
+  `run_active_learning` with no dry-run gate. `deployments/frontier/launchers/run-active-learning-frontier.sh`
+  requests 64 nodes for 12 h and runs DFT and training. It is live execution and needs approval.
 
 ## 9. Check results
 
-- `matsim-agents status` and `matsim-agents evidence RUN_ID`. Exit codes: 0 finished, 1 failed, 2 invalid, 3 blocked.
-- Read `pw.out` directly. Record the git revision and `input_sha256` from the manifest.
+- The QE jobs in steps 3 to 5 are not recorded runs. Use the saved Slurm job IDs, the scheduler state
+  (`sacct -j <jobid>`), `campaign_manifest.json` and `pw.out`. Record the git revision and `input_sha256`
+  from the manifest.
+- `matsim-agents status` and `matsim-agents evidence RUN_ID` read `run-record.json`, which
+  `matsim-agents run`, `resume` and `objective` write. Use them for those runs only (see
+  [Run a workflow](run-campaigns.md) for the `run` exit codes).
 - Treat nothing as a scientific result until cutoff and k-point convergence are shown.
   See [Interpret results](interpret-results.md).
 
