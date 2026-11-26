@@ -9,6 +9,8 @@
 #          LAMMPS_SRC_DIR    checkout (default: $LAMMPS_ROOT/src)
 #          LAMMPS_PREFIX     install prefix (default: $LAMMPS_ROOT/install)
 #          LAMMPS_TAG        upstream tag (default: stable_22Jul2025_update6)
+#          LAMMPS_COMMIT     expected commit of the tag (default: the validated one for the
+#                            default tag; empty skips the check for other tags)
 #          LAMMPS_PACKAGES   space-separated packages (default below)
 #          LAMMPS_MPI        on|off (default: on)
 #          LAMMPS_CXX, LAMMPS_CC  compilers (default: mpicxx/mpicc with MPI, else g++/gcc)
@@ -25,7 +27,13 @@ SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO="$(CDPATH= cd -P -- "${SCRIPT_DIR}/../../.." && pwd -P)"
 
 UPSTREAM="https://github.com/lammps/lammps.git"
-TAG="${LAMMPS_TAG:-stable_22Jul2025_update6}"
+DEFAULT_TAG="stable_22Jul2025_update6"
+TAG="${LAMMPS_TAG:-${DEFAULT_TAG}}"
+if [[ "${TAG}" == "${DEFAULT_TAG}" ]]; then
+    COMMIT="${LAMMPS_COMMIT-9c5ab448c78a14fd534619622162ba418d6a1fb1}"
+else
+    COMMIT="${LAMMPS_COMMIT:-}"
+fi
 ROOT="${LAMMPS_ROOT:-${REPO}/.hpc-build/lammps}"
 SRC="${LAMMPS_SRC_DIR:-${ROOT}/src}"
 PREFIX="${LAMMPS_PREFIX:-${ROOT}/install}"
@@ -53,6 +61,11 @@ fi
 HEAD_TAG="$(git -C "${SRC}" describe --tags --exact-match 2>/dev/null || true)"
 if [[ "${HEAD_TAG}" != "${TAG}" ]]; then
     echo "${SRC} is not at ${TAG} (found '${HEAD_TAG:-no tag}'); remove it or set LAMMPS_TAG" >&2
+    exit 2
+fi
+HEAD_COMMIT="$(git -C "${SRC}" rev-parse HEAD)"
+if [[ -n "${COMMIT}" && "${HEAD_COMMIT}" != "${COMMIT}" ]]; then
+    echo "${TAG} resolves to ${HEAD_COMMIT}, expected ${COMMIT}; upstream moved the tag" >&2
     exit 2
 fi
 

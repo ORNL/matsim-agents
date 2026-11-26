@@ -80,8 +80,8 @@ source .hpc-build/lammps/activate.sh
 
 The script:
 
-1. clones `https://github.com/lammps/lammps.git` at `LAMMPS_TAG` (shallow) and refuses a checkout
-   at another tag;
+1. clones `https://github.com/lammps/lammps.git` at `LAMMPS_TAG` (shallow), refuses a checkout
+   at another tag, and checks that the tag still resolves to the validated commit (`LAMMPS_COMMIT`);
 2. configures `cmake/` with `BUILD_MPI`, `BUILD_OMP=on`, `LAMMPS_EXCEPTIONS=on`, a static
    library, and one `PKG_<name>=on` per package;
 3. builds, installs to `LAMMPS_PREFIX`, and checks that `bin/lmp` and the potentials exist;
@@ -93,6 +93,7 @@ The script:
 | `LAMMPS_ROOT` | `.hpc-build/lammps` (Frontier wrapper: `.hpc-build/frontier/lammps`) |
 | `LAMMPS_SRC_DIR`, `LAMMPS_PREFIX` | `$LAMMPS_ROOT/src`, `$LAMMPS_ROOT/install` |
 | `LAMMPS_TAG` | `stable_22Jul2025_update6` |
+| `LAMMPS_COMMIT` | `9c5ab448c78a14fd534619622162ba418d6a1fb1` for the default tag; empty (no check) for other tags |
 | `LAMMPS_PACKAGES` | `MANYBODY EXTRA-PAIR EXTRA-FIX KSPACE MOLECULE RIGID OPENMP` |
 | `LAMMPS_MPI` | `on` (`off` builds a serial `lmp` with `g++`) |
 | `LAMMPS_CXX`, `LAMMPS_CC` | `mpicxx`/`mpicc` (Frontier: `CC`/`cc`) |
