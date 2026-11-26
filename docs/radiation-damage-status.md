@@ -43,6 +43,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | Restart refuses a path from a different MLIP (main and refinement stage) | Implemented | `tests/test_active_learning_neb_sampler.py` | None |
 | NEB-image labels marked `dft_single_point`, `label_is_dft_mep=False` | Implemented | Unit test | None |
 | QE `neb.x` launch and ingest on Frontier (cce 21.0.4, rocm/7.2.0) | Hardware smoke passed | Job 5998160 | Plumbing only; tiny Li cell, one image group |
+| Al vacancy-hop NEB driver (`scripts/neb/physical_neb_vacancy.py`): vc-relax, endpoints, NEB | Ran to the NEB stage; no barrier | Job 5998331 | None. Endpoints relaxed; `neb.x` was killed by the 1500 s driver timeout in path iteration 4 (about 6 min per iteration, 7 images, 8 GPUs). Run state `failed`, no barrier. The intermediate estimates (1.16, 1.09, 0.77 eV) were still moving and are not a result. |
 
 Limitations: a stored DFT NEB workflow directory is refused rather than reused, so no cross-model reuse
 exists outside the sampler restart check. No converged physical barrier has been computed, nothing is
