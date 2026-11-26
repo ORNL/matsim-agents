@@ -31,16 +31,13 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from ase.data import chemical_symbols
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 from scipy.linalg import expm
 
 from matsim_agents.core.seeding import numpy_rng
-from matsim_agents.science.kinetics.gas_mechanisms import (
-    GasMechanismError,
-    OpenSystemTerm,
-    check_event_inventory,
-    get_gas_mechanism,
-)
+from matsim_agents.science.kinetics.event_library import RESERVED_LABELS, check_event
+from matsim_agents.science.kinetics.gas_mechanisms import GasMechanismError, OpenSystemTerm
 from matsim_agents.science.kinetics.graph import TransitionNetwork
 from matsim_agents.science.kinetics.rates import RateError, event_rate, htst_rate
 from matsim_agents.science.kinetics.uncertainty import _quantile
@@ -51,6 +48,7 @@ FUTURE_WORK: dict[str, str] = {
     "bubble_bursting": "cavity rupture and gas release at surfaces or boundaries",
     "mean_field_bimolecular_coupling": "concentration-dependent association rates between "
     "evolving cluster populations",
+    "precipitate_formation": "no validated nucleation or precipitation model is available",
 }
 
 RateQualification = Literal["synthetic", "exploratory", "qualified"]
@@ -82,20 +80,55 @@ def capabilities() -> dict[str, str]:
 
 
 class ClusterState(BaseModel):
+    """Cluster identified by its defect inventory and an environment label.
+
+    Interstitials and solute atoms (including transmutation products) are optional; the key
+    of a state without them is unchanged. Solute symbols may not be ``V``, ``I``, ``H`` or
+    ``He``, which are the vacancy, interstitial and gas labels.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     n_vacancies: StrictInt = Field(ge=0)
     n_helium: StrictInt = Field(ge=0)
     n_hydrogen: StrictInt = Field(ge=0)
     environment: str = Field(min_length=1)
+    n_interstitials: StrictInt = Field(default=0, ge=0)
+    solutes: tuple[tuple[str, StrictInt], ...] = ()
+
+    @field_validator("solutes", mode="before")
+    @classmethod
+    def _normalise_solutes(cls, value):
+        items = value.items() if isinstance(value, Mapping) else value
+        pairs = sorted((str(s), n) for s, n in items)
+        seen = [s for s, _ in pairs]
+        if len(set(seen)) != len(seen):
+            raise ValueError("duplicate solute species")
+        for symbol, count in pairs:
+            if symbol in RESERVED_LABELS or symbol not in chemical_symbols[1:]:
+                raise ValueError(f"{symbol!r} is not a usable solute symbol")
+            if not isinstance(count, int) or count < 1:
+                raise ValueError("solute counts must be positive integers")
+        return tuple(pairs)
 
     @property
     def key(self) -> str:
-        return f"V{self.n_vacancies}He{self.n_helium}H{self.n_hydrogen}@{self.environment}"
+        interstitial = f"I{self.n_interstitials}" if self.n_interstitials else ""
+        solutes = "".join(f"+{s}{n}" for s, n in self.solutes)
+        return (
+            f"V{self.n_vacancies}He{self.n_helium}H{self.n_hydrogen}"
+            f"{interstitial}{solutes}@{self.environment}"
+        )
 
     @property
     def inventory(self) -> dict[str, int]:
-        raw = {"V": self.n_vacancies, "He": self.n_helium, "H": self.n_hydrogen}
+        raw = {
+            "V": self.n_vacancies,
+            "I": self.n_interstitials,
+            "He": self.n_helium,
+            "H": self.n_hydrogen,
+            **dict(self.solutes),
+        }
         return {k: v for k, v in raw.items() if v}
 
 
@@ -217,16 +250,10 @@ class ClusterNetwork:
 
     def add_reaction(self, reaction: ClusterReaction) -> None:
         reject_future_work(reaction.mechanism)
-        try:
-            get_gas_mechanism(reaction.mechanism)
-        except GasMechanismError as exc:
-            raise ClusterError(str(exc)) from exc
         source = self.state(reaction.source_key)
         target = self.state(reaction.target_key)
         try:
-            check_event_inventory(
-                reaction.mechanism, source.inventory, target.inventory, reaction.open_terms
-            )
+            check_event(reaction.mechanism, source.inventory, target.inventory, reaction.open_terms)
         except GasMechanismError as exc:
             raise ClusterError(str(exc)) from exc
         if reaction.reaction_id in self._reactions:
