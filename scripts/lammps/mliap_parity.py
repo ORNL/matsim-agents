@@ -25,7 +25,7 @@ def build_calculator(kind: str, model: str, zbl: bool):
 
         calc = build_mace_calculator(MACEConfig(model=model, device="cpu", precision="fp64"))
         ckpt = Path(model).expanduser()
-        if not ckpt.is_file():
+        if not ckpt.is_file() and model == "small":
             ckpt = Path(os.environ.get("MACE_CACHE", "~/.cache/mace")).expanduser() / MACE_SMALL
         return calc, "mace", ckpt if ckpt.is_file() else None
     if kind == "hydragnn":

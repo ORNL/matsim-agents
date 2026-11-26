@@ -18,10 +18,25 @@ metadata = pretrained_mlip._MODEL_CKPTS.checkpoints[model_name]
 bundle = Path(artifact_root) / model_name
 bundle.mkdir(parents=True, exist_ok=True)
 token = os.environ.get("HF_TOKEN")
+manifest = {"model": model_name, "repo_id": metadata.repo_id, "revision": metadata.revision}
+manifest_path = bundle / "manifest.json"
+
+
+def _manifest_matches() -> bool:
+    try:
+        return json.loads(manifest_path.read_text()) == manifest
+    except (OSError, ValueError):
+        return False
+
+
+# A manifest is written only after a complete download, so a match means the files are current.
+reuse = _manifest_matches()
+if not reuse:
+    manifest_path.unlink(missing_ok=True)
 
 
 def download(filename: str, subfolder: str | None, destination: Path) -> None:
-    if destination.is_file() and destination.stat().st_size:
+    if reuse and destination.is_file() and destination.stat().st_size:
         return
     url = hf_hub_url(metadata.repo_id, filename, subfolder=subfolder, revision=metadata.revision)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -44,8 +59,7 @@ if metadata.form_elem_refs is not None:
         metadata.form_elem_refs["subfolder"],
         bundle / "form_elem_refs.yaml",
     )
-manifest = {"model": model_name, "repo_id": metadata.repo_id, "revision": metadata.revision}
-(bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 atom_refs = OmegaConf.load(bundle / "atom_refs.yaml")
 form_path = bundle / "form_elem_refs.yaml"
