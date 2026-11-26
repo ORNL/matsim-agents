@@ -261,12 +261,13 @@ EXTERNAL_APPLICATIONS: tuple[tuple[str, str, str, str, str], ...] = (
     ),
     (
         "LAMMPS",
-        "GPL-2.0, external executable (e.g. Frontier `lammps` module)",
+        "GPL-2.0, external executable (site module or source build into external/lammps)",
         "Single point, minimization and NVE/NVT MD with a user-supplied classical potential",
         "`matsim-agents external lammps check`; Python API in `backends.external.lammps`",
         "Optional interface only. No potential is built in; pair_style/pair_coeff are explicit "
         "and potential files are hashed. MLIPs are not run inside LAMMPS: that needs a build "
-        "with ML-IAP/PYTHON, which the Frontier modules lack.",
+        "with ML-IAP/PYTHON, which the Frontier modules lack and the default source build does "
+        "not enable. See docs/external/lammps.md.",
     ),
 )
 
