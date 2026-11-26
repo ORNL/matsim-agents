@@ -59,7 +59,8 @@ WP1 (`science/cascade/`, `workflows/radiation/cascade_candidates.py`) has recoil
   wall 3.56 s. This checks the binary and adapter only; it is not a cascade result.
 * Job 6002498 (same job, `LAMMPS_SOURCE=build`, LAMMPS `stable_22Jul2025_update6` built by
   `build-lammps-frontier.sh`, Cray MPICH 8.1.32 at run time) `COMPLETED` with the same single point
-  and drift values; NVE wall 3.53 s. Not a cascade result.
+  and drift values; NVE wall 3.53 s. Job 6002722 repeated it after a fresh rebuild in
+  `external/lammps` with the same values (NVE wall 3.92 s). Not a cascade result.
 * Job 5986052 (128-atom k-point test, meshes 4/6/8, 4 nodes) reported Slurm `COMPLETED`, but all
   three `pw.x` runs ended with exit 139 (segmentation fault) after printing the FFT grid and
   before the first SCF iteration. No energies exist. Each run left a roughly 7 GB core file

@@ -11,7 +11,7 @@ other machine build it from source with the common script.
 | Option | When to use it | Executable |
 |---|---|---|
 | A. Site module | A module exists with the packages you need | `module load ...`; `lmp` on `PATH` |
-| B. Build from source | No module, a missing package (for example ML-IAP), a newer version, or a portable, reproducible build | `.hpc-build/<machine>/lammps/install/bin/lmp` |
+| B. Build from source | No module, a missing package (for example ML-IAP), a newer version, or a portable, reproducible build | `external/lammps/install/bin/lmp` |
 
 The adapter finds the executable in this order: an explicit path, `$LAMMPS_EXECUTABLE`, then `lmp`,
 `lmp_mpi`, `lmp_serial` on `PATH`. `$LAMMPS_POTENTIALS` points at a potential directory (the
@@ -57,7 +57,8 @@ bash deployments/frontier/setup/build-lammps-frontier.sh
 The wrapper sources `deployments/frontier/setup/lammps-toolchain-frontier.sh` (PrgEnv-gnu,
 `gcc-native/14.2`, `cray-mpich/8.1.32`, `cmake/3.31.11`; override with `LAMMPS_GCC_MODULE`,
 `LAMMPS_MPICH_MODULE`, `LAMMPS_CMAKE_MODULE`), uses the Cray wrappers `CC`/`cc`, and calls the
-common script with `LAMMPS_ROOT=.hpc-build/frontier/lammps`. Everything lands there (Git-ignored):
+common script. Everything lands in `external/lammps/` (Git-ignored), like the other external
+codes (`external/quantum-espresso`, `external/SPECTRA-PKA`):
 
 | Path | Content |
 |---|---|
@@ -75,7 +76,7 @@ Load a C++17 compiler, MPI and CMake >= 3.20, then:
 
 ```bash
 bash deployments/common/setup/build-lammps.sh
-source .hpc-build/lammps/activate.sh
+source external/lammps/activate.sh
 ```
 
 The script:
@@ -90,7 +91,7 @@ The script:
 
 | Variable | Default |
 |---|---|
-| `LAMMPS_ROOT` | `.hpc-build/lammps` (Frontier wrapper: `.hpc-build/frontier/lammps`) |
+| `LAMMPS_ROOT` | `external/lammps` |
 | `LAMMPS_SRC_DIR`, `LAMMPS_PREFIX` | `$LAMMPS_ROOT/src`, `$LAMMPS_ROOT/install` |
 | `LAMMPS_TAG` | `stable_22Jul2025_update6` |
 | `LAMMPS_COMMIT` | `9c5ab448c78a14fd534619622162ba418d6a1fb1` for the default tag; empty (no check) for other tags |
@@ -111,7 +112,7 @@ record shows which flags produced the binary.
 Check the executable (no input, no dynamics):
 
 ```bash
-source .hpc-build/frontier/lammps/activate.sh     # or Option A's module load
+source external/lammps/activate.sh     # or Option A's module load
 PYTHONPATH=src python -m matsim_agents.cli external lammps check
 ```
 
@@ -157,6 +158,7 @@ total-energy drift it reports in `lammps_validation.json`.
 |---|---|---|---|---|---|
 | A, module 29 Aug 2024 Update 1 | 6002098 | 2.4e-10 | 5.0e-6 | 9.6e-6 | 3.56 |
 | B, build `stable_22Jul2025_update6` | 6002498 | 2.4e-10 | 5.0e-6 | 9.6e-6 | 3.53 |
+| B, same tag, rebuilt from a fresh clone in `external/lammps` | 6002722 | 2.4e-10 | 5.0e-6 | 9.6e-6 | 3.92 |
 
 The self-built binary links `libmpi_gnu_123.so.12` by soname. Without `LD_LIBRARY_PATH` set from
 `CRAY_LD_LIBRARY_PATH`, the loader picks the default MPICH from `/opt/cray/pe/lib64` (9.0.1)

@@ -10,7 +10,7 @@
 # the adapter and the binary, not any physical result.
 #
 # LAMMPS_SOURCE=module (default) loads the Frontier module (LAMMPS_MODULE overrides it);
-# LAMMPS_SOURCE=build sources .hpc-build/frontier/lammps/activate.sh from
+# LAMMPS_SOURCE=build sources external/lammps/activate.sh from
 # deployments/frontier/setup/build-lammps-frontier.sh (LAMMPS_ROOT overrides the directory).
 #
 # Submit: LAMMPS_OUT=<dir> [LAMMPS_SOURCE=build] sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
@@ -29,7 +29,7 @@ case "${LAMMPS_SOURCE:-module}" in
         ;;
     build)
         # shellcheck disable=SC1091
-        source "${LAMMPS_ROOT:-$REPO/.hpc-build/frontier/lammps}/activate.sh"
+        source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate.sh"
         ;;
     *) echo "LAMMPS_SOURCE must be module or build" >&2; exit 2 ;;
 esac

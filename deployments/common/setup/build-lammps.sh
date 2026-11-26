@@ -4,8 +4,8 @@
 #
 # Usage:   bash deployments/common/setup/build-lammps.sh
 #          On Frontier use deployments/frontier/setup/build-lammps-frontier.sh, which loads the
-#          toolchain and confines everything to <repo>/.hpc-build/frontier/lammps/.
-# Env:     LAMMPS_ROOT       base directory (default: <repo>/.hpc-build/lammps)
+#          toolchain first.
+# Env:     LAMMPS_ROOT       base directory (default: <repo>/external/lammps)
 #          LAMMPS_SRC_DIR    checkout (default: $LAMMPS_ROOT/src)
 #          LAMMPS_PREFIX     install prefix (default: $LAMMPS_ROOT/install)
 #          LAMMPS_TAG        upstream tag (default: stable_22Jul2025_update6)
@@ -34,7 +34,7 @@ if [[ "${TAG}" == "${DEFAULT_TAG}" ]]; then
 else
     COMMIT="${LAMMPS_COMMIT:-}"
 fi
-ROOT="${LAMMPS_ROOT:-${REPO}/.hpc-build/lammps}"
+ROOT="${LAMMPS_ROOT:-${REPO}/external/lammps}"
 SRC="${LAMMPS_SRC_DIR:-${ROOT}/src}"
 PREFIX="${LAMMPS_PREFIX:-${ROOT}/install}"
 BUILD="${ROOT}/build"
