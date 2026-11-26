@@ -47,7 +47,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 
 Limitations: a stored DFT NEB workflow directory is refused rather than reused, so no cross-model reuse
 exists outside the sampler restart check. No converged physical barrier has been computed, nothing is
-physically validated or scientifically qualified. WP1 and WP4 are not implemented on this branch and WP3 is only partly done (item 12a).
+physically validated or scientifically qualified. WP1 is not implemented on this branch, WP3 is only partly done (item 12a), and WP4 has only one piece: `science/kinetics/harmonic_tst.py` (4.3), harmonic TST rates with a temperature-dependent prefactor and vibrational free-energy correction from caller-supplied mode frequencies. It was checked against analytic limits (Vineyard, zero-point energy, detailed balance) with synthetic frequencies; it does not compute modes, include tunnelling or anharmonicity, or connect to NEB runs or source terms (4.1, 4.2, 4.4 to 4.6 are not done).
 
 ## Compute state
 
