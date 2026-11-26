@@ -190,3 +190,55 @@ def test_acquisition_respects_budget_and_scores_ood_candidates():
     assert picks and not picks[0].in_distribution and picks[0].score > 0
     with pytest.raises(ValueError):
         select_cascades_to_run(sur, [far], budget_node_hours=0.0)
+
+
+def test_acquisition_never_spends_budget_on_duplicate_inputs():
+    sur = train_cascade_surrogate(_data(60, 1), TARGET, SPEC, seed=3)
+    rng = numpy_rng(6, "acq-dup")
+    proto = _sample(0, rng, e_log=-1.5, temp=0.6, prefix="p")
+    dup = [proto.model_copy(update={"query_id": f"dup{i}"}) for i in range(4)]
+    other = _sample(0, rng, e_log=-1.1, temp=0.35, prefix="o")
+    picks = select_cascades_to_run(sur, [*dup, other], budget_node_hours=10.0)
+    assert len(picks) == 2 and sum(p.query_id.startswith("dup") for p in picks) == 1
+
+
+def test_acquisition_with_zero_gate_threshold_stays_finite():
+    protos = _data(3, 1)
+    train = [
+        p.model_copy(update={"query_id": f"r{j}-{i}"})
+        for j, p in enumerate(protos)
+        for i in range(5)
+    ]
+    sur = train_cascade_surrogate(train, TARGET, SPEC, seed=3)
+    assert sur.gate.threshold == 0.0
+    far = _sample(0, numpy_rng(6, "acq-zero"), e_log=1.5, prefix="far")
+    picks = select_cascades_to_run(sur, [far, *_data(3, 5, prefix="c")], budget_node_hours=5.0)
+    assert picks and all(math.isfinite(p.score) for p in picks)
+
+
+def test_evaluation_rejects_calibration_rows_in_the_test_set():
+    cal = _data(10, 8, prefix="c")
+    sur = train_cascade_surrogate(_data(40, 1), TARGET, SPEC, seed=3, calibration=cal)
+    with pytest.raises(ValueError, match="calibration"):
+        evaluate_cascade_surrogate(sur, cal)
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"composition": {"W": float("nan")}},
+        {"recoil_energy_mev": float("inf")},
+        {"temperature_K": float("inf")},
+    ],
+)
+def test_query_rejects_non_finite_inputs(update):
+    base = dict(
+        query_id="q",
+        composition={"W": 1.0},
+        recoil_element="W",
+        recoil_energy_mev=0.1,
+        temperature_K=300.0,
+        direction=(0.0, 0.0, 1.0),
+    )
+    with pytest.raises(ValueError):
+        CascadeQuery(**{**base, **update})

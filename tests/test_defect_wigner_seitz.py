@@ -190,6 +190,28 @@ def test_brute_force_nearest_site_agrees():
         assert result.atom_site[atom] == nearest
 
 
+@pytest.mark.parametrize("repeats", [(2, 1, 1), (3, 3, 3)])
+def test_triclinic_cell_matches_brute_force_minimum_image(repeats):
+    from ase.build import bulk
+
+    reference = bulk("W", "bcc", a=3.165).repeat(repeats)  # primitive bcc cell is triclinic
+    reference.set_cell(reference.cell.array + np.array([[0, 0, 0], [0.4, 0, 0], [0, 0, 0]]), True)
+    current = reference.copy()
+    current.positions += np.random.default_rng(1).normal(0.0, 0.4, current.positions.shape)
+    current.positions += 7.0 * reference.cell.array[0]  # far outside the cell
+    result = wigner_seitz_analysis(reference, current, align="none", ambiguity_margin=0.0)
+    for atom, pos in enumerate(current.positions):
+        _, d = find_mic(reference.positions - pos, reference.cell, pbc=True)
+        order = np.argsort(d, kind="stable")
+        assert result.atom_site[atom] == int(order[0])
+    assert result.max_nearest_distance == pytest.approx(
+        max(
+            float(find_mic(reference.positions - p, reference.cell, pbc=True)[1].min())
+            for p in current.positions
+        )
+    )
+
+
 def test_substituted_gas_atom_at_a_site_is_geometrically_occupied():
     current = REF.copy()
     current.symbols[10] = "He"

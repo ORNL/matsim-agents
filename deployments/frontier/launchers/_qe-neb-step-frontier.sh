@@ -43,8 +43,11 @@ ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 unset LD_LIBRARY_PATH
 
 module reset
+# Same CPE_MODULE/CORE_MODULE/CCE_MODULE overrides as the build script.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 module load PrgEnv-cray
-module load cce
+module load "${CCE_MODULE:-cce}"
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw
@@ -63,12 +66,30 @@ export OMP_TARGET_OFFLOAD="${OMP_TARGET_OFFLOAD:-DEFAULT}"
 export OMP_STACKSIZE="${OMP_STACKSIZE:-512M}"
 
 echo "[qe-neb-step] $(date) host=$(hostname) cwd=$(pwd) ranks=${RANKS} threads=${THREADS_PER_RANK}"
-echo "[qe-neb-step] srun -N 1 -n ${RANKS} ${NEB_BIN} $*"
+# Honour the scheduler placement the same way as _qe-step-frontier.sh.
+NODE_ARGS=()
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
+fi
+STEP_GPUS="${MATSIM_GPUS_PER_NODE:-8}"
+GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
+STEP_ENV=()
+STEP_SHARE=(--exclusive)
+if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
+      && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
+  GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  STEP_SHARE=(--overlap)
+  STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
+fi
+echo "[qe-neb-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}" \
+  "placed_devices=${MATSIM_DEVICE_MASK:-all}"
+echo "[qe-neb-step] srun ${STEP_SHARE[*]} -N 1 -n ${RANKS} ${GPU_ARGS[*]} ${NEB_BIN} $*"
 exec srun \
-  --exclusive \
+  "${STEP_SHARE[@]}" \
+  "${NODE_ARGS[@]}" \
   -N 1 \
   -n "${RANKS}" \
   -c "${THREADS_PER_RANK}" \
-  --gpus-per-node="${MATSIM_GPUS_PER_NODE:-8}" \
-  --gpu-bind=closest \
+  "${GPU_ARGS[@]}" \
+  "${STEP_ENV[@]}" \
   "${NEB_BIN}" "$@"

@@ -23,6 +23,17 @@ def test_weights_are_normalized_so_scaling_changes_nothing():
     assert base == scaled
 
 
+@pytest.mark.parametrize("factor", [1e200, 1e-200])
+def test_extreme_weight_scales_give_the_unscaled_result(factor):
+    x = [1.0, 4.0, 2.0, 8.0, 5.0]
+    w = [1.0, 2.0, 0.5, 3.0, 1.5]
+    base = weighted_estimate(x, w)
+    extreme = weighted_estimate(x, [factor * v for v in w])
+    assert extreme.mean == pytest.approx(base.mean)
+    assert extreme.standard_error == pytest.approx(base.standard_error)
+    assert extreme.effective_n == pytest.approx(base.effective_n)
+
+
 def test_weighting_moves_the_mean_to_the_weighted_average():
     x, w = [0.0, 10.0, 4.0], [1.0, 3.0, 1.0]
     est = weighted_estimate(x, w)

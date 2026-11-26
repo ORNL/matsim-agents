@@ -23,6 +23,7 @@
 #   QE_PREFIX        = <repo>/external/quantum-espresso
 #   PW_BIN           = ${QE_PREFIX}/install-gpu/bin/pw.x
 #   ROCM_MODULE      = rocm/7.2.0
+#   CPE_MODULE, CORE_MODULE, CCE_MODULE: the stack the build used (unset = site default)
 #   NRANKS           = 8         (one MPI rank per GCD)
 #   OMP_NUM_THREADS  = 7         (Frontier core-per-GCD count)
 # =============================================================================
@@ -64,8 +65,11 @@ unset LD_LIBRARY_PATH
 # aborts this script under set -e before pw.x ever runs.
 set +e
 module reset
+# Same CPE_MODULE/CORE_MODULE/CCE_MODULE overrides as the build script.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 module load PrgEnv-cray
-module load cce
+module load "${CCE_MODULE:-cce}"
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw

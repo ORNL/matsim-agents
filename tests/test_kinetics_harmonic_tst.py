@@ -41,6 +41,15 @@ def test_prefactor_depends_on_temperature_unlike_a_constant():
     assert cold.effective_prefactor_hz != pytest.approx(hot.effective_prefactor_hz, rel=1e-3)
 
 
+def test_prefactor_does_not_overflow_at_very_low_temperature():
+    got = harmonic_tst_rate(0.4, MIN, SADDLE, 0.1)
+    assert got.rate_per_s == 0.0
+    assert math.isfinite(got.log_effective_prefactor) and got.log_effective_prefactor > 709.0
+    assert got.effective_prefactor_hz == math.inf
+    warm = harmonic_tst_rate(0.4, MIN, SADDLE, 300.0)
+    assert math.log(warm.effective_prefactor_hz) == pytest.approx(warm.log_effective_prefactor)
+
+
 def test_free_energy_is_checked_against_a_direct_sum():
     f, t = (2e12, 9e12), 400.0
     kt = KB_EV_PER_K * t

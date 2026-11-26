@@ -43,9 +43,9 @@ def _prepare(values: Sequence[float], weights: Sequence[float] | None):
         raise ValueError("at least two realizations are required")
     if not (np.isfinite(x).all() and np.isfinite(w).all()):
         raise ValueError("values and weights must be finite")
-    if (w < 0).any() or w.sum() <= 0:
+    if (w < 0).any() or w.max() <= 0:
         raise ValueError("weights must be nonnegative with a positive sum")
-    return x, w
+    return x, w / w.max()  # scale-free, and keeps w**2 and sums away from overflow/underflow
 
 
 def _weighted_mean(x: np.ndarray, w: np.ndarray) -> float:

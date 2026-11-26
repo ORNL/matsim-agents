@@ -60,8 +60,8 @@ def centrosymmetry(atoms: Atoms, *, n_neighbors: int) -> np.ndarray:
     """
     if n_neighbors < 2 or n_neighbors % 2:
         raise ValueError("n_neighbors must be an even integer >= 2")
-    if len(atoms) < n_neighbors + 1:
-        raise ValueError("too few atoms for the requested number of neighbours")
+    if len(atoms) == 0:
+        raise ValueError("the structure has no atoms")
     # Grow the search radius until every atom has enough neighbours or the cap is reached.
     volume_per_atom = abs(atoms.cell.volume) / len(atoms)
     radius = 1.5 * (volume_per_atom ** (1.0 / 3.0))
@@ -157,7 +157,7 @@ def voronoi_volumes(atoms: Atoms) -> np.ndarray:
     others = [(a, b, c) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1)]
     others.remove((0, 0, 0))
     shifts = np.array([(0, 0, 0), *others])
-    pos = atoms.get_positions()
+    pos = atoms.get_positions(wrap=True)
     cell = np.asarray(atoms.cell)
     images = np.concatenate([pos + s @ cell for s in shifts])
     vor = Voronoi(images)

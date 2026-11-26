@@ -82,14 +82,19 @@ def test_uncertainty_propagation():
     spec = _spectrum([_w([0.0, 0.1], [0.1, 0.2], [2.0, 3.0])])
     yields = _table([YieldBin("W", 0.0, 0.2, _est(10.0, 1.0))])
     src = pka_weighted_source(spec, yields)
-    assert src.standard_error == pytest.approx(math.sqrt((2.0 * 1.0) ** 2 + (3.0 * 1.0) ** 2))
+    assert src.standard_error == pytest.approx((2.0 + 3.0) * 1.0)
     with_spec = pka_weighted_source(spec, yields, spectrum_relative_sigma=0.1)
-    expected = math.sqrt(
-        (2.0 * 1.0) ** 2 + (20.0 * 0.1) ** 2 + (3.0 * 1.0) ** 2 + (30.0 * 0.1) ** 2
-    )
+    expected = math.sqrt(((2.0 + 3.0) * 1.0) ** 2 + (20.0 * 0.1) ** 2 + (30.0 * 0.1) ** 2)
     assert with_spec.standard_error == pytest.approx(expected)
     assert any("spectrum" in item for item in src.not_propagated)
     assert not any("spectrum uncertainty" in item for item in with_spec.not_propagated)
+
+
+def test_splitting_a_spectrum_bin_does_not_change_the_yield_error():
+    yields = _table([YieldBin("W", 0.0, 0.2, _est(10.0, 1.0))])
+    whole = pka_weighted_source(_spectrum([_w([0.0], [0.2], [5.0])]), yields)
+    split = pka_weighted_source(_spectrum([_w([0.0, 0.1], [0.1, 0.2], [2.0, 3.0])]), yields)
+    assert split.standard_error == pytest.approx(whole.standard_error) == pytest.approx(5.0)
 
 
 def test_uncovered_bins_error_by_default():

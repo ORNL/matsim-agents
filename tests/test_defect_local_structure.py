@@ -62,6 +62,22 @@ def test_voronoi_volume_grows_around_a_vacancy():
     assert vols.max() > BCC.cell.volume / len(BCC) * 1.05
 
 
+def test_voronoi_volumes_are_translation_invariant():
+    atoms = BCC.copy()
+    del atoms[0]
+    moved = atoms.copy()
+    moved.positions += np.array([7.3, -11.1, 25.0])
+    assert voronoi_volumes(moved) == pytest.approx(voronoi_volumes(atoms), rel=1e-6)
+
+
+def test_centrosymmetry_of_a_two_atom_bcc_cell():
+    small = bulk("W", "bcc", a=3.165, cubic=True)
+    assert len(small) == 2
+    assert np.allclose(centrosymmetry(small, n_neighbors=8), 0.0, atol=1e-8)
+    with pytest.raises(ValueError):
+        centrosymmetry(small[:0], n_neighbors=8)
+
+
 def test_invalid_arguments_rejected():
     with pytest.raises(ValueError):
         coordination_numbers(BCC, cutoff=0.0)

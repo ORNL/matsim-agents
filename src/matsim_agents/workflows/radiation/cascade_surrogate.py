@@ -26,7 +26,7 @@ _COMPOSITION_TOL = 1e-6
 class CascadeQuery(BaseModel):
     """Inputs of one cascade; ``direction`` is normalised and must be non-zero."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     query_id: str = Field(min_length=1)
     composition: dict[str, float]
@@ -127,6 +127,7 @@ class CascadeSurrogate:
     training_ids: list[str]
     uncertainty_scale: float
     excluded: dict[str, list[str]] = field(default_factory=dict)
+    calibration_ids: list[str] = field(default_factory=list)
 
 
 def _matrix(spec: CascadeFeatureSpec, rows: Sequence[CascadeQuery]) -> np.ndarray:
@@ -177,6 +178,7 @@ def train_cascade_surrogate(
         training_ids=[s.query_id for s in keep],
         uncertainty_scale=scale,
         excluded=excluded,
+        calibration_ids=[c.query_id for c in cal] if len(cal) >= 5 else [],
     )
 
 
@@ -250,6 +252,8 @@ def evaluate_cascade_surrogate(
     seen = set(surrogate.training_ids)
     if any(t.query_id in seen for t in test):
         raise ValueError("test rows overlap the training set")
+    if any(t.query_id in set(surrogate.calibration_ids) for t in test):
+        raise ValueError("test rows overlap the calibration set used to scale the uncertainty")
     rows = [t for t in test if not incompatibilities(t, surrogate.target)]
     preds = predict_cascades(surrogate, rows)
     pairs = [(r.value, p) for r, p in zip(rows, preds, strict=True) if p.in_distribution]
@@ -304,8 +308,9 @@ def select_cascades_to_run(
     """Greedy ranking of candidate cascades by uncertainty per node-hour, spread across inputs.
 
     An out-of-distribution candidate scores by its distance past the gate. Each pick shrinks
-    the score of candidates close to it, so a batch does not repeat one input. This is a
-    policy, not a result shown to beat random selection. Ties break by ``query_id``.
+    the score of candidates close to it, and a candidate whose encoded input equals a picked
+    one is never chosen. This is a policy, not a result shown to beat random selection. Ties
+    break by ``query_id``.
     """
     if not budget_node_hours > 0:
         raise ValueError("budget_node_hours must be positive")
@@ -313,7 +318,8 @@ def select_cascades_to_run(
         return []
     X = _matrix(surrogate.spec, candidates) / surrogate.gate.scale
     preds = predict_cascades(surrogate, candidates)
-    thr = surrogate.gate.threshold
+    # Identical training rows can give a zero gate threshold; the gate still classifies.
+    thr = surrogate.gate.threshold if surrogate.gate.threshold > 0 else 1.0
     base = []
     for p, d in zip(
         preds, surrogate.gate.distance(_matrix(surrogate.spec, candidates)), strict=True
@@ -331,6 +337,8 @@ def select_cascades_to_run(
                 continue
             if picked:
                 gap = min(float(np.linalg.norm(X[i] - X[j])) for j in picked)
+                if gap == 0.0:
+                    continue
                 spread = min(1.0, gap / thr)
             else:
                 spread = 1.0

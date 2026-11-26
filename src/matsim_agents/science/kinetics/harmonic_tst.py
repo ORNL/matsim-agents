@@ -68,6 +68,7 @@ class HarmonicRate:
     rate_per_s: float
     activation_free_energy_eV: float
     effective_prefactor_hz: float  # rate * exp(Ea / kT) / g, so it carries the T dependence
+    log_effective_prefactor: float  # natural log of effective_prefactor_hz; finite when it is inf
     vibrational_correction_eV: float
     vineyard_prefactor_hz: float
     log_rate_sigma: float | None
@@ -108,13 +109,15 @@ def harmonic_tst_rate(
     kt = KB_EV_PER_K * temperature_K
     log_rate = math.log(multiplicity) + math.log(kt / H_EV_S) - dg / kt
     rate = math.exp(log_rate) if log_rate > -700.0 else 0.0
+    log_pref = log_rate + barrier_eV / kt - math.log(multiplicity)
     sigma = None
     if barrier_sigma_eV is not None or prefactor_log_sigma is not None:
         sigma = math.hypot((barrier_sigma_eV or 0.0) / kt, prefactor_log_sigma or 0.0)
     return HarmonicRate(
         rate_per_s=rate,
         activation_free_energy_eV=dg,
-        effective_prefactor_hz=math.exp(log_rate + barrier_eV / kt) / multiplicity,
+        effective_prefactor_hz=math.exp(log_pref) if log_pref < 709.0 else math.inf,
+        log_effective_prefactor=log_pref,
         vibrational_correction_eV=correction,
         vineyard_prefactor_hz=vineyard,
         log_rate_sigma=sigma,

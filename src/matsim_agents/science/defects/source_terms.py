@@ -193,6 +193,8 @@ def pka_weighted_source(
 
     contributions: list[SourceContribution] = []
     variances: list[float] = []
+    # One yield estimate's error is shared by every bin using it, so add rates before squaring.
+    yield_rates: dict[int, tuple[float, float]] = {}
     excluded = 0.0
     extrapolated = 0.0
     for s in spectrum.spectra:
@@ -218,7 +220,9 @@ def pka_weighted_source(
                 extrapolated += rate
             y, se = chosen.estimate.mean, chosen.estimate.standard_error
             value = rate * y
-            variances.append((rate * se) ** 2 + (value * spectrum_relative_sigma) ** 2)
+            variances.append((value * spectrum_relative_sigma) ** 2)
+            summed, _ = yield_rates.get(id(chosen), (0.0, se))
+            yield_rates[id(chosen)] = (summed + rate, se)
             contributions.append(
                 SourceContribution(
                     species=s.species.key,
@@ -245,7 +249,9 @@ def pka_weighted_source(
     return DefectSource(
         defect_class=yields.defect_class,
         rate_per_target_atom_per_s=source_rate,
-        standard_error=math.sqrt(math.fsum(variances)),
+        standard_error=math.sqrt(
+            math.fsum(variances) + math.fsum((r * se) ** 2 for r, se in yield_rates.values())
+        ),
         mean_yield_per_pka=source_rate / used if used > 0 else None,
         total_pka_rate=total,
         used_pka_rate=used,

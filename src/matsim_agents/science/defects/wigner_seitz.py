@@ -15,19 +15,21 @@ validation of any defect count.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 from ase import Atoms
-from ase.geometry import find_mic
+from ase.geometry import find_mic, minkowski_reduce
 from scipy.optimize import linear_sum_assignment
+from scipy.spatial import cKDTree
 
 Align = Literal["none", "median"]
 CellMode = Literal["fixed", "affine"]
 
-_CHUNK = 128
 _MAX_ALIGN_ITERATIONS = 25
+_IMAGES = np.array(list(itertools.product((-1, 0, 1), repeat=3)), dtype=float)
 
 
 @dataclass(frozen=True)
@@ -89,26 +91,38 @@ class WignerSeitzResult:
 
 
 def _nearest_sites(positions: np.ndarray, reference: Atoms):
-    """Nearest and second-nearest reference site of every position, by minimum image."""
+    """Nearest and second-nearest distinct reference site of every position, by minimum image.
+
+    A KD-tree over the 27 images of the sites in the Minkowski-reduced cell, which contain every
+    minimum-image neighbour of a wrapped point, so the cost is near-linear in the atom count.
+    """
     n_sites = len(reference)
-    nearest = np.empty(len(positions), dtype=np.int64)
-    d1 = np.empty(len(positions))
-    d2 = np.empty(len(positions))
-    offsets = np.empty((len(positions), 3))
-    for start in range(0, len(positions), _CHUNK):
-        block = positions[start : start + _CHUNK]
-        vectors = reference.positions[None, :, :] - block[:, None, :]
-        flat, lengths = find_mic(vectors.reshape(-1, 3), reference.cell, pbc=True)
-        flat = flat.reshape(len(block), n_sites, 3)
-        lengths = lengths.reshape(len(block), n_sites)
-        order = np.argsort(lengths, axis=1, kind="stable")[:, :2]
-        rows = np.arange(len(block))
-        stop = start + len(block)
-        nearest[start:stop] = order[:, 0]
-        d1[start:stop] = lengths[rows, order[:, 0]]
-        d2[start:stop] = lengths[rows, order[:, 1]]
-        offsets[start:stop] = -flat[rows, order[:, 0]]  # atom minus its nearest site
-    return nearest, d1, d2, offsets
+    cell, _ = minkowski_reduce(reference.cell.array)
+    inv = np.linalg.inv(cell)
+
+    def wrap(xyz: np.ndarray) -> np.ndarray:
+        frac = xyz @ inv
+        return (frac - np.floor(frac)) @ cell
+
+    images = (wrap(reference.positions)[None] + (_IMAGES @ cell)[:, None]).reshape(-1, 3)
+    site_of = np.tile(np.arange(n_sites), len(_IMAGES))
+    tree = cKDTree(images)
+    points = wrap(positions)
+    dist, idx = tree.query(points, k=2)
+    sites = site_of[idx]
+    # Tiny cells: both hits can be images of one site; requery enough to see a second site.
+    clash = np.flatnonzero(sites[:, 0] == sites[:, 1])
+    if clash.size:
+        k = min(len(images), len(_IMAGES) + 1)
+        dk, ik = tree.query(points[clash], k=k)
+        sk = site_of[ik]
+        second = np.argmax(sk != sk[:, :1], axis=1)
+        rows = np.arange(clash.size)
+        dist[clash, 1] = dk[rows, second]
+        idx[clash, 1] = ik[rows, second]
+        sites[clash, 1] = sk[rows, second]
+    offsets = points - images[idx[:, 0]]  # atom minus its nearest site image
+    return sites[:, 0].astype(np.int64), dist[:, 0], dist[:, 1], offsets
 
 
 def _validate(reference: Atoms, current: Atoms, cell_mode: str, align: str) -> None:

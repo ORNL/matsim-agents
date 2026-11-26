@@ -53,8 +53,11 @@ fi
 ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 
 module reset
+# Same CPE_MODULE/CORE_MODULE/CCE_MODULE overrides as the build script.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 module load PrgEnv-cray
-module load cce
+module load "${CCE_MODULE:-cce}"
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw
