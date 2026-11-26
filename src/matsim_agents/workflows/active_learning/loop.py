@@ -1134,6 +1134,19 @@ def _apply_neb_escalation(
     run_dft = policy.policy == "always_dft_neb" or (
         policy.policy == "uncertainty_gated" and not acceptable
     )
+    if acceptable:
+        reason = None
+    elif result.state != "converged_unqualified":
+        reason = f"mlip_state_{result.state}"
+    elif uncertainty is None:
+        reason = "uncertainty_unavailable"  # unavailable is never read as low
+    else:
+        reason = "uncertainty_above_limit"
+    record["escalation"] = {
+        "policy": policy.policy,
+        "mlip_model_id": result.provenance.get("model_id"),
+        "reason": "always_dft_neb" if policy.policy == "always_dft_neb" else reason,
+    }
     if not run_dft:
         record["decision"] = "accepted_mlip" if acceptable else "not_accepted"
         return record, False

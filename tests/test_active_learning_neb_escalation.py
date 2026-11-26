@@ -140,6 +140,44 @@ def test_missing_uncertainty_escalates_to_existing_qe_neb_workflow(tmp_path, mon
     assert (iteration_dir / "state.json").is_file()
 
 
+def test_unavailable_uncertainty_is_never_treated_as_low_even_when_the_limit_is_huge(tmp_path):
+    policy = NebEscalationConfig(policy="mlip_only", max_pathway_uncertainty_eV=1e9)
+    record, dispatched = _apply_neb_escalation(
+        policy,
+        _pathway(None),
+        tmp_path,
+        tmp_path / "neb",
+        IterationState(iteration=0),
+        completed_dft_neb=0,
+    )
+
+    assert record["decision"] == "not_accepted"
+    assert record["escalation"]["reason"] == "uncertainty_unavailable"
+    assert not dispatched
+
+
+def test_escalation_record_names_the_policy_reason_and_mlip(tmp_path):
+    outcome = _pathway(0.5)
+    outcome.result = outcome.result.model_copy(
+        update={"provenance": {**outcome.result.provenance, "model_id": "mlip-a"}}
+    )
+    policy = NebEscalationConfig(policy="mlip_only", max_pathway_uncertainty_eV=0.2)
+    record, _ = _apply_neb_escalation(
+        policy,
+        outcome,
+        tmp_path,
+        tmp_path / "neb",
+        IterationState(iteration=0),
+        completed_dft_neb=0,
+    )
+
+    assert record["escalation"] == {
+        "policy": "mlip_only",
+        "mlip_model_id": "mlip-a",
+        "reason": "uncertainty_above_limit",
+    }
+
+
 def test_required_escalation_fails_explicitly_when_budget_is_exhausted(tmp_path):
     policy = NebEscalationConfig(
         policy="uncertainty_gated",

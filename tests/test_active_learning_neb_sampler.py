@@ -417,6 +417,42 @@ def test_optional_two_stage_neb_runs_climbing_image_refinement(tmp_path):
     assert (tmp_path / "two-stage" / "neb-refinement-state.json").is_file()
 
 
+def test_neb_resume_refuses_a_refinement_checkpoint_from_a_different_mlip(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(
+        initial_path=initial,
+        final_path=final,
+        n_images=4,
+        fmax_eV_per_A=100.0,
+        max_steps=2,
+        min_distance_A=0.5,
+        refinement_stage=NebRefinementStage(fmax_eV_per_A=100.0, max_steps=2),
+    )
+    out_dir = tmp_path / "two-stage"
+    sample_neb_candidates(config, EMT(), out_dir, model_id="mlip-a")
+    # Only the refinement checkpoint disagrees, so the main-stage check cannot be what raises.
+    main_state = out_dir / "neb-optimization-state.json"
+    main_state.write_text(main_state.read_text().replace("mlip-a", "mlip-b"))
+    with pytest.raises(ValueError, match="neb-refinement-images.*mlip-a.*mlip-b"):
+        sample_neb_candidates(config, EMT(), out_dir, model_id="mlip-b")
+
+
+def test_neb_state_records_the_mlip_before_optimization_finishes(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(
+        initial_path=initial, final_path=final, n_images=4, max_steps=2, min_distance_A=0.5
+    )
+
+    class Interrupted(EMT):
+        def calculate(self, *args, **kwargs):
+            state = tmp_path / "neb" / "neb-optimization-state.json"
+            assert state.is_file() and "mlip-a" in state.read_text()
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        sample_neb_candidates(config, Interrupted(), tmp_path / "neb", model_id="mlip-a")
+
+
 def test_endpoint_relaxation_reuses_the_mlip_relaxation_workflow(tmp_path, monkeypatch):
     import matsim_agents.backends.mlip.relaxation as relaxation
 

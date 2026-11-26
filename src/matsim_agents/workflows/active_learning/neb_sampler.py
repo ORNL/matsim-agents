@@ -125,6 +125,11 @@ def _relax_endpoints(
     return relaxed[0], relaxed[1]
 
 
+def _write_restart_state(state_path: Path, steps: int, model_id: str | None) -> None:
+    payload = {"optimization_steps": steps, "model_id": model_id or "unspecified"}
+    state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def _check_restart_model(state_path: Path, checkpoint_path: Path, model_id: str | None) -> None:
     """Refuse to resume a pathway that was optimized with a different (or unrecorded) MLIP."""
     if not checkpoint_path.is_file():
@@ -441,6 +446,8 @@ def sample_neb_candidates(
         for image in images:
             trajectory.write(image)
 
+    # Written before optimizing so an interrupted run still records which MLIP made the checkpoint.
+    _write_restart_state(state_path, prior_steps, model_id)
     optimizer.attach(save_checkpoint, interval=1)
     optimizer.attach(record_trajectory, interval=config.record_every)
     uncertainty_evaluations = 0
@@ -484,14 +491,7 @@ def sample_neb_candidates(
         trajectory.close()
     save_checkpoint()
     optimization_steps = prior_steps + max(0, optimizer.get_number_of_steps() - starting_steps)
-    state_path.write_text(
-        json.dumps(
-            {"optimization_steps": optimization_steps, "model_id": model_id or "unspecified"},
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    _write_restart_state(state_path, optimization_steps, model_id)
     refinement_stage_used = False
     refinement_steps = 0
     if config.refinement_stage is not None and converged:
@@ -499,6 +499,8 @@ def sample_neb_candidates(
         refinement_checkpoint = out_dir / "neb-refinement-images.extxyz"
         refinement_state = out_dir / "neb-refinement-state.json"
         prior_refinement_steps = 0
+        if config.resume:
+            _check_restart_model(refinement_state, refinement_checkpoint, model_id)
         if config.resume and refinement_state.is_file():
             saved_state = json.loads(refinement_state.read_text(encoding="utf-8"))
             prior_refinement_steps = saved_state.get("optimization_steps")
@@ -522,6 +524,7 @@ def sample_neb_candidates(
             logfile=str(out_dir / "neb-refinement.log"),
         )
         starting_refinement_steps = refinement_optimizer.get_number_of_steps()
+        _write_restart_state(refinement_state, prior_refinement_steps, model_id)
         refinement_trajectory = Trajectory(
             out_dir / "neb-refinement.traj",
             mode="a" if config.resume and (out_dir / "neb-refinement.traj").exists() else "w",
@@ -556,10 +559,7 @@ def sample_neb_candidates(
             0, refinement_optimizer.get_number_of_steps() - starting_refinement_steps
         )
         optimization_steps += refinement_steps
-        refinement_state.write_text(
-            json.dumps({"optimization_steps": refinement_steps}, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        _write_restart_state(refinement_state, refinement_steps, model_id)
         optimizer = refinement_optimizer
         refinement_stage_used = True
 
