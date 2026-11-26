@@ -26,8 +26,8 @@ ERRORS = [0.0, 0.03, 0.02, 0.04, 0.03, 0.0]
 
 def _pair():
     initial, config = generate_vacancy(PARENT, "p", 0)
-    mover = vacancy_neighbors(initial, config, A)[0]
-    return generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    return generate_vacancy_hop(initial, config, PARENT, mover)
 
 
 def _cfg(tmp_path, **over):

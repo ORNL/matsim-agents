@@ -36,20 +36,20 @@ def _load(config: Path):
         data = yaml.safe_load(config.read_text())
         if not isinstance(data, dict):
             raise ValueError("the config must be a mapping")
-        unknown = set(data) - {"parent", "defect", "lattice_parameter", "qe", "images", "method_id"}
+        unknown = set(data) - {"parent", "defect", "hop_distance", "qe", "images", "method_id"}
         if unknown:
             raise ValueError(f"unknown keys {sorted(unknown)}")
         parent = generate_alloy(AlloySpec(**data["parent"]))
-        lattice = float(data["lattice_parameter"])
+        hop = None if data.get("hop_distance") is None else float(data["hop_distance"])
         defect = data["defect"]
         kind = defect["mechanism"]
         initial, defect_config = generate_vacancy(parent, "parent", int(defect["site"]))
         if kind == "vacancy_hop":
-            neighbors = vacancy_neighbors(initial, defect_config, lattice)
+            neighbors = vacancy_neighbors(initial, defect_config, hop)
             if not neighbors:
                 raise ValueError("the vacancy has no nearest neighbours")
             mover = int(defect.get("mover", neighbors[0]))
-            pair = generate_vacancy_hop(initial, defect_config, parent, mover, lattice)
+            pair = generate_vacancy_hop(initial, defect_config, parent, mover, hop)
         elif kind == "frenkel_recombination":
             raise ValueError(
                 "frenkel_recombination needs an interstitial start; build the pair in Python"

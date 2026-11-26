@@ -34,8 +34,8 @@ def build_outcome(n_images: int):
         AlloySpec(counts={"Li": 16}, repeats=(2, 2, 2), seed=0, lattice_parameter=LATTICE_A)
     )
     initial, defect = generate_vacancy(parent, "li-parent", 0)
-    mover = vacancy_neighbors(initial, defect, LATTICE_A)[0]
-    pair = generate_vacancy_hop(initial, defect, parent, mover, LATTICE_A)
+    mover = vacancy_neighbors(initial, defect)[0]
+    pair = generate_vacancy_hop(initial, defect, parent, mover)
     linear = generate_linear_images(pair.initial, pair.final, n_images)
     result = NebResult(
         state="converged_unqualified",

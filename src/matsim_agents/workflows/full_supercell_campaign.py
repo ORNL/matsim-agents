@@ -284,17 +284,17 @@ def build_structures(cfg: FullSupercellCampaign) -> dict[str, Any]:
     for atoms, config in defects.values():
         validate_defect(atoms, config, cfg, fp)
 
-    mover = vacancy_neighbors(vac, vac_cfg, a)[0]
+    mover = vacancy_neighbors(vac, vac_cfg)[0]
     inter_id = next(s.atom_id for s in inter_cfg.sites if s.role == "interstitial")
     # Adjacent octahedral site, a/sqrt(2) away through the tetrahedral site.
     target = inter.get_positions()[-1] + np.array([-a / 2, a / 2, 0.0])
     target = inter.cell.scaled_positions(target[None]) % 1.0 @ inter.cell.array
     nebs = {
-        "neb_vacancy": generate_vacancy_hop(vac, vac_cfg, parent, mover, a),
+        "neb_vacancy": generate_vacancy_hop(vac, vac_cfg, parent, mover),
         "neb_interstitial": generate_interstitial_migration(
             inter, inter_cfg, {inter_id: tuple(float(x) for x in target[0])}
         ),
-        "neb_recombination": generate_frenkel_recombination(frenkel, frenkel_cfg, parent, a),
+        "neb_recombination": generate_frenkel_recombination(frenkel, frenkel_cfg, parent),
     }
     for key, pair in nebs.items():
         delta = {"neb_vacancy": -1, "neb_interstitial": 1, "neb_recombination": 0}[key]

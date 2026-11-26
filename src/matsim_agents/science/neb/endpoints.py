@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from math import sqrt
 
 import numpy as np
 from ase import Atoms
@@ -37,7 +36,8 @@ from matsim_agents.science.neb.contracts import (
 )
 from matsim_agents.science.neb.paths import minimum_image
 
-NEIGHBOR_TOLERANCE = 0.1  # relative tolerance on the BCC nearest-neighbour distance
+NEIGHBOR_TOLERANCE = 0.1  # relative tolerance on the hop (first-shell) distance
+_SAME_SITE = 1e-6  # distances below this (A) are the site itself, not a neighbour
 
 
 @dataclass(frozen=True)
@@ -76,10 +76,17 @@ def _check_parent(parent: Atoms, config: DefectConfiguration) -> None:
         raise ValueError("parent cell differs from the defect configuration cell")
 
 
-def _nn_distance(lattice_parameter: float) -> float:
-    if not (np.isfinite(lattice_parameter) and lattice_parameter > 0):
-        raise ValueError(f"lattice_parameter must be positive and finite, got {lattice_parameter}")
-    return sqrt(3.0) / 2.0 * float(lattice_parameter)
+def _hop_distance(position: np.ndarray, atoms: Atoms, override: float | None) -> float:
+    """The explicit hop distance, else the shortest distance from ``position`` to an atom."""
+    if override is not None:
+        if not (np.isfinite(override) and override > 0):
+            raise ValueError(f"hop_distance must be positive and finite, got {override}")
+        return float(override)
+    _, distances = get_distances(position, atoms.positions, cell=atoms.cell, pbc=atoms.pbc)
+    others = distances[0][distances[0] > _SAME_SITE]
+    if others.size == 0:
+        raise ValueError("no atom to measure the hop distance against; pass hop_distance")
+    return float(others.min())
 
 
 def _mic_vector(atoms_cell: Atoms, source: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -187,11 +194,14 @@ def generate_vacancy_hop(
     config: DefectConfiguration,
     parent: Atoms,
     mover_atom_id: int,
-    lattice_parameter: float,
+    hop_distance: float | None = None,
 ) -> MigrationPair:
     """Move the nearest-neighbour atom ``mover_atom_id`` into the vacancy.
 
-    The mover must sit one BCC nearest-neighbour distance from the vacancy. The final vacancy is
+    Works for any crystal structure. The mover must sit one hop distance from the vacancy;
+    ``hop_distance`` defaults to the shortest vacancy-atom distance in ``initial`` (the first
+    shell) and must be given when the hop is not to the nearest atom (for example the same
+    sublattice of a compound), within ``NEIGHBOR_TOLERANCE``. The final vacancy is
     at the mover's former parent site. In an alloy the hop changes the occupation of both sites;
     this is recorded as ``occupant_exchange`` (the site the mover enters held a different
     species in the parent). The displacement is the minimum-image vector. Nothing is relaxed.
@@ -199,10 +209,10 @@ def generate_vacancy_hop(
     _require_identities(initial, config)
     _check_parent(parent, config)
     vacancy = _single_vacancy(config)
-    nn = _nn_distance(lattice_parameter)
+    vacancy_position = np.array(vacancy.position)
+    nn = _hop_distance(vacancy_position, initial, hop_distance)
     tolerance = NEIGHBOR_TOLERANCE * nn
     index = _index_of(initial, int(mover_atom_id))
-    vacancy_position = np.array(vacancy.position)
     mover_position = initial.positions[index].copy()
     distance = _distance(initial, mover_position, vacancy_position)
     if abs(distance - nn) > tolerance:
@@ -257,7 +267,7 @@ def generate_vacancy_hop(
         "displacement_y": float(vector[1]),
         "displacement_z": float(vector[2]),
         "occupant_exchange": bool(parent[int(vacancy.lattice_site)].symbol != mover_species),
-        "lattice_parameter": float(lattice_parameter),
+        "hop_distance": float(nn),
     }
     mechanism = MigrationMechanism(
         kind="vacancy_hop",
@@ -269,12 +279,15 @@ def generate_vacancy_hop(
 
 
 def vacancy_neighbors(
-    initial: Atoms, config: DefectConfiguration, lattice_parameter: float
+    initial: Atoms, config: DefectConfiguration, hop_distance: float | None = None
 ) -> tuple[int, ...]:
-    """``atom_id`` of every atom one nearest-neighbour distance from the vacancy, sorted."""
+    """``atom_id`` of every atom one hop distance from the vacancy, sorted.
+
+    ``hop_distance`` defaults to the shortest vacancy-atom distance (the first shell).
+    """
     _require_identities(initial, config)
     vacancy = _single_vacancy(config)
-    nn = _nn_distance(lattice_parameter)
+    nn = _hop_distance(np.array(vacancy.position), initial, hop_distance)
     _, distances = get_distances(
         np.array(vacancy.position), initial.positions, cell=initial.cell, pbc=initial.pbc
     )
@@ -393,7 +406,7 @@ def generate_frenkel_recombination(
     initial: Atoms,
     config: DefectConfiguration,
     parent: Atoms,
-    lattice_parameter: float,
+    hop_distance: float | None = None,
     *,
     exchange_with: int | None = None,
 ) -> MigrationPair:
@@ -413,7 +426,8 @@ def generate_frenkel_recombination(
         raise ValueError(f"recombination needs a Frenkel pair, got {config.defect_type}")
     vacancy = next(s for s in config.sites if s.role == "vacancy")
     interstitial = next(s for s in config.sites if s.role == "interstitial")
-    nn = _nn_distance(lattice_parameter)
+    # The pristine parent gives the lattice hop distance; the interstitial would distort it.
+    nn = _hop_distance(np.array(vacancy.position), parent, hop_distance)
     tolerance = NEIGHBOR_TOLERANCE * nn
     mover_id = interstitial.atom_id
     mover_index = _index_of(initial, mover_id)
@@ -452,7 +466,7 @@ def generate_frenkel_recombination(
         "separation": float(
             _distance(initial, initial.positions[mover_index], target),
         ),
-        "lattice_parameter": float(lattice_parameter),
+        "hop_distance": float(nn),
     }
     mechanism = MigrationMechanism(
         kind="frenkel_recombination",
