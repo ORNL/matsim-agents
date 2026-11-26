@@ -565,6 +565,19 @@ def test_pathway_uncertainty_gate_requires_an_interval_and_ensemble(tmp_path):
         sample_neb_candidates(config, EMT(), tmp_path / "uq", uncertainty_calculators=())
 
 
+def test_mc_dropout_pathway_uncertainty_requires_an_explicit_seed(tmp_path):
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(initial_path=initial, final_path=final, n_images=4, max_steps=1)
+    with pytest.raises(ValueError, match="requires uncertainty_seed"):
+        sample_neb_candidates(
+            config,
+            EMT(),
+            tmp_path / "unseeded",
+            uncertainty_mode="mc_dropout",
+            dropout_passes=2,
+        )
+
+
 def test_mixed_sampling_configuration_accepts_neb_only_and_combined():
     neb = {
         "method": "neb",

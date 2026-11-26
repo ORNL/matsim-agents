@@ -91,7 +91,7 @@ jobs:
       - name: Install package + all CI extras
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev,mcp]"
+          pip install -e ".[dev,mcp,spectra-pka]"
           pip install langchain-ollama langchain-openai langchain-anthropic
 
       - name: Install CPU PyTorch for MLIP regression tests

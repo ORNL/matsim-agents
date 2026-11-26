@@ -321,7 +321,7 @@ def sample_neb_candidates(
     uncertainty_mode: str | None = None,
     dropout_passes: int = 0,
     dropout_probability: float = 0.1,
-    uncertainty_seed: int = 0,
+    uncertainty_seed: int | None = None,
 ) -> NebSamplingOutcome:
     """Optimize one MLIP NEB pathway and return its interior images as candidates."""
     from ase.io.trajectory import Trajectory
@@ -433,6 +433,8 @@ def sample_neb_candidates(
         if uncertainty_mode == "ensemble":
             return score_ensemble_pathway(images, uncertainty_calculators)
         if uncertainty_mode == "mc_dropout":
+            if uncertainty_seed is None:
+                raise ValueError("mc_dropout pathway uncertainty requires uncertainty_seed")
             return score_mc_dropout_pathway(
                 images,
                 calculator,
