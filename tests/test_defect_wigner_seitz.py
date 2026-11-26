@@ -211,6 +211,10 @@ def test_input_validation():
     nan.positions[0, 0] = np.nan
     with pytest.raises(ValueError, match="non-finite"):
         wigner_seitz_analysis(REF, nan)
+    bad_ref = REF.copy()
+    bad_ref.positions[0, 0] = np.inf
+    with pytest.raises(ValueError, match="reference structure has non-finite"):
+        wigner_seitz_analysis(bad_ref, REF)
     with pytest.raises(ValueError, match="no atoms"):
         wigner_seitz_analysis(REF, Atoms(cell=REF.cell, pbc=True))
 

@@ -38,6 +38,10 @@ fi
 
 ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 
+# module reset does not clear an exported LD_LIBRARY_PATH; the Python venv's bundled libtinfo
+# would shadow the system one (see run-pw-gpu-frontier.sh).
+unset LD_LIBRARY_PATH
+
 module reset
 module load PrgEnv-cray
 module load cce

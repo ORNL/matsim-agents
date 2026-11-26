@@ -81,7 +81,8 @@ def weighted_estimate(
         if n_bootstrap < 100:
             raise ValueError("n_bootstrap must be at least 100")
         rng = np.random.default_rng(seed)
-        draws = rng.integers(0, len(x), size=(n_bootstrap, len(x)))
+        support = np.flatnonzero(w > 0)  # zero-weight draws would give 0/0
+        draws = support[rng.integers(0, len(support), size=(n_bootstrap, len(support)))]
         means = np.sum(w[draws] * x[draws], axis=1) / np.sum(w[draws], axis=1)
         low, high = np.quantile(means, [0.5 - confidence / 2, 0.5 + confidence / 2])
         low, high, used_seed = float(low), float(high), seed

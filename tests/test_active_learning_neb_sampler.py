@@ -127,6 +127,28 @@ def test_neb_resume_refuses_a_path_from_a_different_mlip(tmp_path):
         sample_neb_candidates(config, EMT(), tmp_path / "neb", model_id="mlip-b")
 
 
+def test_fresh_run_removes_stale_restart_artifacts_before_writing_provenance(tmp_path, monkeypatch):
+    import matsim_agents.workflows.active_learning.neb_sampler as neb_sampler
+
+    initial, final = _endpoints(tmp_path)
+    config = NebSamplingConfig(
+        initial_path=initial, final_path=final, n_images=4, max_steps=2, min_distance_A=0.5
+    )
+    out = tmp_path / "neb"
+    sample_neb_candidates(config, EMT(), out, model_id="mlip-a")
+    for name in neb_sampler._RESTART_ARTIFACTS:
+        (out / name).write_text("stale", encoding="utf-8")
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(neb_sampler, "_write_restart_state", interrupted)
+    fresh = config.model_copy(update={"resume": False})
+    with pytest.raises(KeyboardInterrupt):
+        sample_neb_candidates(fresh, EMT(), out, model_id="mlip-b")
+    assert not [n for n in neb_sampler._RESTART_ARTIFACTS if (out / n).exists()]
+
+
 def test_independent_neb_pathways_use_configured_worker_pool(tmp_path, monkeypatch):
     import matsim_agents.workflows.active_learning.neb_sampler as neb_sampler
 

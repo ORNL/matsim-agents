@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         IterationState(iteration=0),
         completed_dft_neb=0,
         env=None,
+        timeout_sec=args.timeout_sec,
     )
     summary = {
         "decision": record["decision"],

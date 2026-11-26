@@ -125,6 +125,16 @@ def _relax_endpoints(
     return relaxed[0], relaxed[1]
 
 
+_RESTART_ARTIFACTS = (
+    "neb-images.extxyz",
+    "neb-optimization-state.json",
+    "neb-optimizer.json",
+    "neb-refinement-images.extxyz",
+    "neb-refinement-state.json",
+    "neb-refinement-optimizer.json",
+)
+
+
 def _write_restart_state(state_path: Path, steps: int, model_id: str | None) -> None:
     payload = {"optimization_steps": steps, "model_id": model_id or "unspecified"}
     state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -403,6 +413,10 @@ def sample_neb_candidates(
     state_path = out_dir / "neb-optimization-state.json"
     if config.resume:
         _check_restart_model(state_path, checkpoint_path, model_id)
+    else:
+        # A fresh run must not leave another model's checkpoints to be relabelled by new provenance.
+        for stale in _RESTART_ARTIFACTS:
+            (out_dir / stale).unlink(missing_ok=True)
     images = (
         _load_restart(checkpoint_path, config.n_images, generated.images) if config.resume else None
     )

@@ -157,7 +157,19 @@ else
     echo "  HEAD = $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
     if [[ "${QE_VERSION}" == "develop" ]] \
        && [[ "$(cd "${SRC_DIR}" && git rev-parse HEAD)" != "$(cd "${SRC_DIR}" && git rev-parse "${QE_COMMIT}^{commit}" 2>/dev/null)" ]]; then
-        echo "  WARNING: HEAD is not the pinned QE_COMMIT ${QE_COMMIT}; patches may not apply."
+        if [[ "${QE_COMMIT}" == "develop" ]]; then
+            echo "  WARNING: HEAD is not the tip of develop; patches may not apply."
+        else
+            echo "ERROR: ${SRC_DIR} is not at the pinned QE_COMMIT ${QE_COMMIT}." >&2
+            echo "  Use a clean SRC_DIR so the clone is checked out at the pin, or check it out yourself." >&2
+            exit 1
+        fi
+    fi
+    # A tree patched by an earlier revision keeps its unconditional allocations (aborts neb.x).
+    if grep -q 'Frontier/cce-18.0.1 workaround' "${SRC_DIR}/Modules/qes_init_module.f90" 2>/dev/null \
+       && ! grep -q 'the default component initializers' "${SRC_DIR}/PW/src/pw_init_qexsd_input.f90" 2>/dev/null; then
+        echo "ERROR: ${SRC_DIR} carries a superseded descriptor patch; use a clean SRC_DIR." >&2
+        exit 1
     fi
 fi
 

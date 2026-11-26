@@ -1118,6 +1118,7 @@ def _apply_neb_escalation(
     state: IterationState,
     completed_dft_neb: int,
     env: Mapping[str, str] | None = None,
+    timeout_sec: float | None = None,
 ) -> tuple[dict[str, Any], bool]:
     result = outcome.result
     uncertainty = result.pathway_uncertainty_eV
@@ -1197,6 +1198,7 @@ def _apply_neb_escalation(
         pathway_directory / f"{transition.transition_id}-dft-neb",
         dispatch=True,
         allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
+        timeout_sec=timeout_sec,
         env=env,
         images=start_images,
     )

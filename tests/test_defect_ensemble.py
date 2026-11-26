@@ -37,6 +37,13 @@ def test_zero_weight_realization_does_not_contribute():
     assert weighted_estimate(x, w).mean == pytest.approx(weighted_estimate(x[:3]).mean)
 
 
+def test_bootstrap_ignores_zero_weight_realizations():
+    x, w = [2.0, 4.0, 6.0, 1000.0], [1.0, 1.0, 1.0, 0.0]
+    with_zero = weighted_estimate(x, w, method="bootstrap", seed=3)
+    assert np.isfinite([with_zero.ci_low, with_zero.ci_high]).all()
+    assert with_zero.ci_high < 10.0
+
+
 def test_bootstrap_is_reproducible_and_seed_dependent():
     x = np.random.default_rng(1).poisson(6.0, 40).astype(float)
     a = weighted_estimate(x, method="bootstrap", seed=5)

@@ -130,12 +130,14 @@ def test_missing_uncertainty_escalates_to_existing_qe_neb_workflow(tmp_path, mon
         iteration_dir / "neb",
         IterationState(iteration=0),
         completed_dft_neb=0,
+        timeout_sec=123.0,
     )
 
     assert dispatched
     assert record["decision"] == "dft_neb_complete"
     assert record["dft_result"]["method_id"] == "qe-neb"
     assert calls[0][3]["dispatch"] is True
+    assert calls[0][3]["timeout_sec"] == 123.0
     assert calls[0][0].transition.transition_id == "transition-1"
     assert (iteration_dir / "state.json").is_file()
 

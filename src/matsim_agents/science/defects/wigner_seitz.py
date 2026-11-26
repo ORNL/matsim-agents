@@ -124,6 +124,8 @@ def _validate(reference: Atoms, current: Atoms, cell_mode: str, align: str) -> N
         raise ValueError("Wigner-Seitz analysis requires fully periodic structures")
     if not np.isfinite(current.positions).all() or not np.isfinite(current.cell.array).all():
         raise ValueError("the analysed structure has non-finite coordinates or cell")
+    if not np.isfinite(reference.positions).all() or not np.isfinite(reference.cell.array).all():
+        raise ValueError("the reference structure has non-finite coordinates or cell")
     if (
         abs(np.linalg.det(reference.cell.array)) < 1e-12
         or abs(np.linalg.det(current.cell.array)) < 1e-12
