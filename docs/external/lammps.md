@@ -25,7 +25,7 @@ LAMMPS `potentials/` directory for both options).
 | Option A, Frontier `lammps/20240829.1-mpi-omp` (29 Aug 2024 Update 1, GCC 14.2, Cray MPICH 8.1.32; packages KSPACE MANYBODY MOLECULE RIGID) | job 6002098 on one compute node: W EAM single point matched ASE to 2.4e-10 eV/atom; NVE drift reported (see section 4) |
 | Option B, `build-lammps-frontier.sh` (`stable_22Jul2025_update6`, commit `9c5ab448`, GCC 14.2, Cray MPICH 8.1.32, CPU MPI + OpenMP) | built and installed on a Frontier login node from a fresh clone; `lmp -h` probe passed; job 6002498 on one compute node gave the same single point and NVE numbers as option A (section 4) |
 | Option B on other machines (`deployments/common/setup/lammps/build-lammps.sh`) | not run anywhere except through the Frontier wrapper |
-| ML-IAP + PYTHON, `setup/lammps/build-lammps-mliap-frontier.sh` (same tag and commit, embedded `.venv` Python 3.11.18, CPU) | built on a Frontier login node into `external/lammps/install-mliap`; the upstream unified-LJ example reproduced its reference thermo at steps 0, 50 and 100. No matsim-agents MLIP has been run through it yet |
+| ML-IAP + PYTHON, `setup/lammps/build-lammps-mliap-frontier.sh` (same tag and commit, embedded `.venv` Python 3.11.18, CPU) | built on a Frontier login node into `external/lammps/install-mliap`; the upstream unified-LJ example reproduced its reference thermo at steps 0, 50 and 100. matsim-agents MLIPs run through it with the bridge in section 5 (login-node parity: EMT, MACE-MP-0 small; compute-node job not yet run) |
 | GPU (KOKKOS/HIP or GPU package) builds | not built; `LAMMPS_KOKKOS=hip` and `LAMMPS_CMAKE_ARGS` pass the flags, but no such build has been made or tested |
 
 Neither option has produced a cascade or any physical result. A passing check means the binary
@@ -180,10 +180,43 @@ gave the same numbers.
 This tests the binary and the adapter for one EAM potential. It is not a cascade and says nothing
 about the potential's physics.
 
+## 5. MLIPs inside LAMMPS (ML-IAP bridge)
+
+`backends/external/lammps/mliap/bridge.py` (`CalculatorMLIAP`) is an ML-IAP unified object that
+hands the local atoms to any matsim-agents ASE calculator (MACE, UMA, HydraGNN, or a
+`SumCalculator` with additive ZBL) each step and adds the returned forces and energy. LAMMPS owns
+the dynamics and the calculator owns the physics, so ZBL goes through the same
+`build_short_range_calculator` path as in ASE. `parity.py` compares one ASE evaluation against one
+LAMMPS evaluation and `write_export_record` stores the checkpoint sha256, species and short-range
+choice next to the result. `UncertaintyGate` scores force disagreement across an ensemble every
+`every` force calls; `run_with_gate` stops the run when it fires so the caller can fine-tune,
+re-export and rerun the parity check (the fine-tune and re-export steps are not automated here).
+
+```bash
+source external/lammps/activate-mliap.sh
+PYTHONPATH=$PWD/src .venv-mace/bin/python scripts/lammps/mliap_parity.py \
+    --calc mace --model small --a 2.3 --rattle 0.02 --zbl --out outputs/mliap-parity/mace.json
+```
+
+Login-node results (108-atom rattled Cu, CPU, tolerance 1e-4 eV and 1e-4 eV/A):
+
+| Calculator | Case | Energy diff (eV) | Max force diff (eV/A) |
+|---|---|---|---|
+| EMT | a=3.6 | 1.2e-14 | 3.9e-14 |
+| EMT + ZBL | a=2.3 (ZBL active) | 2.7e-12 | 8.0e-13 |
+| EMT, then EMT + ZBL | a=2.0 (3659 eV, then 5407 eV) | 0.0, then 9.1e-13 | 2.3e-12, then 4.5e-12 |
+| MACE-MP-0 small | a=3.6 | 0.0 | 1.7e-14 |
+| MACE-MP-0 small + ZBL | a=2.3 (ZBL active) | 3.5e-10 | 9.2e-11 |
+
+Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-parity-frontier.sh`.
+
 ## Limits
 
-- No MLIP runs inside LAMMPS: that needs ML-IAP with Python coupling (or a model-specific pair
-  style) built against the same Python and Torch as the MLIP. Not attempted.
+- The bridge is single-rank and CPU: forces are written to local atoms only, so use NVE/NVT
+  (pressure and virial are not reported) and one MPI rank. Multi-rank, GPU/KOKKOS and per-pair
+  ML-IAP coupling are not implemented. The parity check covers a single point, not MD stability.
+- UMA and HydraGNN go through the same bridge but were not run: no UMA weights on Frontier and no
+  HydraGNN checkpoint was tried. Aurora and Perlmutter are untested.
 - Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are
   not covered by the scripts' defaults.
 - The common script is validated only through the Frontier wrapper; other machines need their
