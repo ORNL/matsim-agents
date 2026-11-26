@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -55,6 +56,10 @@ def lammps_data_text(atoms: Atoms, species: list[str]) -> str:
 
 def run_lammps_once(atoms: Atoms, calculator, species: list[str], gate=None):
     """Evaluate `atoms` once through LAMMPS ML-IAP; returns (energy, forces by atom id)."""
+    if not all(atoms.pbc):
+        raise ValueError(
+            "parity evaluation needs a fully periodic structure (pbc=True on all axes)"
+        )
     import lammps
     import lammps.mliap
 
@@ -62,12 +67,12 @@ def run_lammps_once(atoms: Atoms, calculator, species: list[str], gate=None):
     lammps.mliap.activate_mliappy(lmp)
     obj = CalculatorMLIAP(calculator, species, lmp=lmp, gate=gate)
     lammps.mliap.load_unified(obj)
-    data_path = Path("parity.data")
-    data_path.write_text(lammps_data_text(atoms, species))
-    try:
+    with tempfile.TemporaryDirectory(prefix="matsim-parity-") as tmp:
+        data_path = Path(tmp) / "parity.data"
+        data_path.write_text(lammps_data_text(atoms, species))
         lmp.commands_string(
             "units metal\natom_style atomic\nboundary p p p\n"
-            "read_data parity.data\n"
+            f'read_data "{data_path}"\n'
             + "".join(f"mass {i + 1} {_mass(s)}\n" for i, s in enumerate(species))
             + "pair_style mliap unified EXISTS 0\n"
             f"pair_coeff * * {' '.join(species)}\n"
@@ -76,8 +81,6 @@ def run_lammps_once(atoms: Atoms, calculator, species: list[str], gate=None):
         energy = float(lmp.get_thermo("pe"))
         tags = np.array(lmp.numpy.extract_atom("id")[: len(atoms)], dtype=int)
         f = np.array(lmp.numpy.extract_atom("f")[: len(atoms)], dtype=float)
-    finally:
-        data_path.unlink(missing_ok=True)
     out = np.zeros_like(f)
     out[tags - 1] = f
     return energy, out

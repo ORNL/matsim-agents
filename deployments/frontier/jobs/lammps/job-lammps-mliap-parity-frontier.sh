@@ -26,6 +26,7 @@ source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 XALT_EXECUTABLE_TRACKING=no OMP_NUM_THREADS=1
 export PYTHONPATH="$REPO/src:$REPO${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
 cd "$OUT"
 
 status=0

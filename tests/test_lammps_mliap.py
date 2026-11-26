@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from ase.build import bulk
 from ase.calculators.emt import EMT
 from ase.calculators.lj import LennardJones
@@ -16,6 +17,7 @@ from matsim_agents.backends.external.lammps.mliap.bridge import (
 )
 from matsim_agents.backends.external.lammps.mliap.parity import (
     lammps_data_text,
+    run_lammps_once,
     write_export_record,
 )
 
@@ -60,6 +62,35 @@ def test_gate_fires_on_disagreement_and_stops_run():
     obj.compute_forces(_data(atoms))
     assert gate.triggered and gate.events[0].score_eV_per_A > 1e-3
     assert run_with_gate(lmp, steps=100, chunk=10, obj=obj) == 10
+
+
+class _NaNForces(EMT):
+    def calculate(self, atoms=None, properties=None, system_changes=None):
+        super().calculate(atoms, properties, system_changes)
+        self.results["forces"] = np.full((len(atoms), 3), np.nan)
+
+
+def test_gate_rejects_a_non_finite_score():
+    atoms = bulk("Cu", "fcc", a=3.6, cubic=True).repeat(2)
+    gate = UncertaintyGate([EMT(), _NaNForces()], 1e-3, every=1)
+    with pytest.raises(FloatingPointError, match="non-finite"):
+        gate.check(0, atoms)
+
+
+def test_run_with_gate_rejects_a_nonpositive_chunk():
+    atoms = bulk("Cu", "fcc", a=3.6, cubic=True)
+    lmp = FakeLammps(atoms)
+    obj = CalculatorMLIAP(EMT(), ["Cu"], lmp=lmp)
+    with pytest.raises(ValueError, match="chunk"):
+        run_with_gate(lmp, steps=10, chunk=0, obj=obj)
+    assert lmp.commands == []
+
+
+def test_parity_evaluation_rejects_a_non_periodic_structure():
+    atoms = bulk("Cu", "fcc", a=3.6, cubic=True)
+    atoms.pbc = [True, True, False]
+    with pytest.raises(ValueError, match="periodic"):
+        run_lammps_once(atoms, EMT(), ["Cu"])
 
 
 def test_gate_stays_quiet_when_models_agree():

@@ -63,6 +63,8 @@ class UncertaintyGate:
 
     def check(self, step: int, atoms: Atoms) -> None:
         score = self.score(atoms)
+        if not np.isfinite(score):
+            raise FloatingPointError("non-finite ensemble force-disagreement score")
         if score > self.threshold_eV_per_A:
             self.events.append(UncertaintyEvent(step, score))
 
@@ -137,6 +139,8 @@ class CalculatorMLIAP(_Base):
 
 def run_with_gate(lmp, steps: int, chunk: int, obj: CalculatorMLIAP) -> int:
     """Run `steps` in chunks; stop early once the gate fires. Returns steps done."""
+    if chunk <= 0:
+        raise ValueError(f"chunk must be positive, got {chunk}")
     done = 0
     while done < steps:
         n = min(chunk, steps - done)
