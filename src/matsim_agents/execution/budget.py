@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from matsim_agents.core.fileio import atomic_write_text
 
 Category = Literal[
     "lower_foundations",
@@ -298,12 +299,7 @@ class BudgetLedger(BaseModel):
 
     # --- persistence ----------------------------------------------------------------------
     def save(self, path: str | os.PathLike) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".ledger-", suffix=".tmp")
-        with os.fdopen(fd, "w") as fh:
-            fh.write(self.model_dump_json(indent=2))
-        os.replace(tmp, path)
+        atomic_write_text(path, self.model_dump_json(indent=2))
 
     @classmethod
     def load(cls, path: str | os.PathLike) -> BudgetLedger:

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
@@ -28,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from matsim_agents.backends.dft.process import run_launcher
 from matsim_agents.backends.dft.qe_neb import QENebConfig
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.science.defects.point_defects import generate_vacancy
 from matsim_agents.science.kinetics.contracts import NetworkProvenance
@@ -139,15 +139,8 @@ class RadiationDamageRun(BaseModel):
 
 
 def _write_state(root: Path, state: RunState) -> None:
-    handle, staging = tempfile.mkstemp(prefix=".rd-run-", dir=root)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(state.model_dump(mode="json", by_alias=True), stream, indent=2)
-            stream.write("\n")
-        os.replace(staging, root / STATE_FILE)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    text = json.dumps(state.model_dump(mode="json", by_alias=True), indent=2) + "\n"
+    atomic_write_text(root / STATE_FILE, text)
 
 
 def read_state(directory: str | os.PathLike) -> RunState:

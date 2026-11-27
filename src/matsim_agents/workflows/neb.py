@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -34,6 +33,7 @@ from matsim_agents.backends.dft.qe_neb_stages import (
     run_stage,
 )
 from matsim_agents.core.contracts import EvidenceLevel
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
@@ -111,15 +111,7 @@ class NebWorkflowOutcome(BaseModel):
 
 
 def _write_json(path: Path, data: Mapping) -> None:
-    handle, staging = tempfile.mkstemp(prefix=".neb-wf-", dir=path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(data, stream, indent=2, sort_keys=True, allow_nan=False)
-            stream.write("\n")
-        os.replace(staging, path)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
 def _read_plan(directory: Path) -> NebPlan:

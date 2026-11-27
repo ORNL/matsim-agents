@@ -13,9 +13,7 @@ data supplied; absent data is ``NOT_YET_ESTABLISHED``.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-import tempfile
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Literal
@@ -23,6 +21,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.budget import (
     CATEGORIES,
     BudgetLedger,
@@ -191,14 +190,6 @@ class CampaignState(BaseModel):
     log: list[str] = Field(default_factory=list)
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix=".tmp")
-    with os.fdopen(fd, "w") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
-
-
 class CampaignWorkspace:
     """State directory; ``save`` is atomic so an interrupted run never leaves a torn file."""
 
@@ -231,7 +222,7 @@ class CampaignWorkspace:
         return state, ledger
 
     def save(self) -> None:
-        _atomic_write(self.state_path, self.state.model_dump_json(indent=2))
+        atomic_write_text(self.state_path, self.state.model_dump_json(indent=2))
         self.ledger.save(self.ledger_path)
 
 

@@ -12,6 +12,7 @@ from typing import Any
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig, VASPConfig
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
 from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.execution.placement import ProcessLaunch
 
 
@@ -19,11 +20,7 @@ def path_identity(path: Path | None) -> dict[str, Any] | None:
     if path is None:
         return None
     if path.is_file():
-        digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return {"name": path.name, "sha256": digest.hexdigest()}
+        return {"name": path.name, "sha256": sha256_file(path)}
     if path.is_dir():
         digest = hashlib.sha256()
         for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):

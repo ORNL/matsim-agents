@@ -8,7 +8,6 @@ those are supplied by the caller or reported as missing.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from collections.abc import Mapping
@@ -17,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.science.irradiation.contracts import RecoilSpecies
 from matsim_agents.science.irradiation.nuclear_evidence import (
     ExternalNuclearEvidence,
@@ -111,14 +111,6 @@ def parse_inventory(data: Mapping[str, Any], *, source_sha256: str = "") -> Fisp
         raise NuclearEvidenceError(f"not a FISPACT-II inventory JSON: {exc!r}") from None
     except ValidationError as exc:
         raise NuclearEvidenceError(f"invalid FISPACT-II inventory: {exc}") from None
-
-
-def sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def read_inventory(path: str | Path) -> FispactInventory:

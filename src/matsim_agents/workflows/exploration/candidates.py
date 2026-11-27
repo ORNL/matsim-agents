@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -20,6 +19,7 @@ import numpy as np
 from ase import Atoms
 from pydantic import BaseModel, ConfigDict, Field
 
+from matsim_agents.core.fileio import append_line
 from matsim_agents.science.magnetism.config import MagneticConfiguration
 
 Status = Literal["generated", "queued", "running", "done", "failed", "skipped"]
@@ -149,11 +149,9 @@ class CandidateManifest:
             raise KeyError(event["event"])
 
     def _append(self, event: dict[str, Any]) -> None:
-        line = json.dumps(event, sort_keys=True, default=str, separators=(",", ":")) + "\n"
-        with self.path.open("a") as handle:
-            handle.write(line)
-            handle.flush()
-            os.fsync(handle.fileno())
+        append_line(
+            self.path, json.dumps(event, sort_keys=True, default=str, separators=(",", ":"))
+        )
 
     def __len__(self) -> int:
         return len(self.records)

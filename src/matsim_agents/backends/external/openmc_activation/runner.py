@@ -6,7 +6,6 @@ held fixed for the whole run. OpenMC is imported only when a run starts.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -17,18 +16,11 @@ from matsim_agents.backends.external.openmc_activation.inventory import (
     OpenMCInventory,
     OpenMCStep,
 )
+from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.science.irradiation.nuclear_evidence import NuclearEvidenceError
 
 MATERIAL_ID = "1"
 _MATERIAL_VOLUME_CM3 = 1.0  # makes the [n-cm/src] flux of the operator equal n/cm2/s per source n
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _neutron_file_hashes(xs_xml: Path, nuclides: set[str]) -> dict[str, str]:

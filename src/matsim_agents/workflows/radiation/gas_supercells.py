@@ -21,7 +21,6 @@ import json
 import math
 import os
 import subprocess
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +32,7 @@ from ase.geometry import get_distances
 from ase.io import write as ase_write
 
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.execution.budget import BudgetLedger
 from matsim_agents.science.defects.gas import (
@@ -221,15 +221,7 @@ def _composition(atoms: Atoms) -> dict[str, int]:
 
 
 def _atomic_json(path: Path, payload: Any) -> None:
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".gas-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def prepare_gas_campaign(

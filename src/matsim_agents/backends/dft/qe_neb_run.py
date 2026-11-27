@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +26,7 @@ from pydantic import BaseModel, ConfigDict
 
 from matsim_agents.backends.dft.process import TIMEOUT_RETURN_CODE, run_launcher
 from matsim_agents.backends.dft.qe_neb import QENebConfig
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as _sha256
 
 RunStatus = Literal["not_started", "exited_zero", "exited_nonzero", "timed_out"]
@@ -80,16 +80,8 @@ def _now() -> str:
 
 def write_run_record(record: NebRunRecord, path: str | os.PathLike) -> None:
     """Atomically write ``record`` as JSON."""
-    target = Path(path)
-    handle, staging = tempfile.mkstemp(prefix=".neb-record-", dir=target.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(record.model_dump(mode="json"), stream, sort_keys=True, indent=2)
-            stream.write("\n")
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    text = json.dumps(record.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
+    atomic_write_text(path, text)
 
 
 def run_neb(

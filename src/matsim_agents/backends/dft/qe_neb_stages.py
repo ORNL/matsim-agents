@@ -42,6 +42,7 @@ from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_neb_input import write_neb_input
 from matsim_agents.backends.dft.qe_neb_parse import parse_neb_output
 from matsim_agents.backends.dft.qe_neb_run import NebRunRecord, run_neb
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as _sha256
 
 SCHEMA = "matsim-neb-stages/1"
@@ -146,16 +147,8 @@ def load_history(workdir: str | os.PathLike) -> StageHistory:
 
 
 def _save_history(workdir: str | os.PathLike, history: StageHistory) -> None:
-    target = history_path(workdir)
-    handle, staging = tempfile.mkstemp(prefix=".neb-stages-", dir=target.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(history.model_dump(mode="json", by_alias=True), stream, indent=2)
-            stream.write("\n")
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    text = json.dumps(history.model_dump(mode="json", by_alias=True), indent=2) + "\n"
+    atomic_write_text(history_path(workdir), text)
 
 
 def derive_stage_config(

@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.execution.slurm_jobs import JobEntry, summarize
 from matsim_agents.workflows.qualification_matrix import (
@@ -198,14 +198,7 @@ def write_final_report(
     targets = (root / "final-report.json", root / "final-report.md")
     payloads = (json.dumps(report, indent=2, allow_nan=False) + "\n", render_markdown(report))
     for target, text in zip(targets, payloads, strict=True):
-        handle, staging = tempfile.mkstemp(prefix=".rd-final-", dir=root)
-        try:
-            with os.fdopen(handle, "w", encoding="utf-8") as stream:
-                stream.write(text)
-            os.replace(staging, target)
-        except BaseException:
-            Path(staging).unlink(missing_ok=True)
-            raise
+        atomic_write_text(target, text)
     return targets
 
 

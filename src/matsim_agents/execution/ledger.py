@@ -35,6 +35,7 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.core.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.execution.locking import exclusive_lock
 
@@ -401,12 +402,9 @@ class EvidenceLedger:
             )
 
     def _write_head(self) -> None:
-        temporary = self.head_path.with_name(self.head_path.name + ".tmp")
-        with temporary.open("w", encoding="utf-8") as stream:
-            stream.write(_canonical({"seq": len(self._order), "tip": self._tip}) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, self.head_path)
+        atomic_write_text(
+            self.head_path, _canonical({"seq": len(self._order), "tip": self._tip}) + "\n"
+        )
 
     def _index(self, record: LedgerRecord) -> None:
         identifier = record_id(record)
