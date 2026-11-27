@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import tempfile
 
 import numpy as np
 import pytest
@@ -9,8 +10,12 @@ from ase import Atoms
 
 from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_neb_input import render_neb_input, write_neb_input
+from tests.synthetic_upf import write_synthetic_upf
 
 SPECIES = ("Mo", "W")
+_PSEUDO_DIR = tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in SPECIES:
+    write_synthetic_upf(_PSEUDO_DIR, f"{_el}.upf", _el)
 
 
 def _images(n=5):
@@ -32,7 +37,7 @@ def _cfg(n=5, **over):
     base = {
         "n_images": n,
         "species": SPECIES,
-        "pseudo_dir": "/pseudos",
+        "pseudo_dir": _PSEUDO_DIR,
         "pseudopotentials": {"Mo": "Mo.upf", "W": "W.upf"},
         "ecutwfc_ry": 50.0,
         "ecutrho_ry": 400.0,
@@ -256,7 +261,7 @@ BEGIN_ENGINE_INPUT
 &CONTROL
   calculation = 'relax'
   prefix      = 'neb'
-  pseudo_dir  = '/pseudos'
+  pseudo_dir  = '{pseudo_dir}'
   outdir      = './tmp'
   tprnfor     = .true.
   verbosity   = 'high'
@@ -313,4 +318,4 @@ K_POINTS automatic
 END_ENGINE_INPUT
 END
 """
-    assert render_neb_input(cfg, images) == expected
+    assert render_neb_input(cfg, images) == expected.replace("{pseudo_dir}", _PSEUDO_DIR)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tempfile as _tempfile
 
 import numpy as np
 import pytest
@@ -11,6 +12,15 @@ from ase.build import bulk
 from matsim_agents.backends.dft.qe import _write_pw_from_template
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.science.magnetism import generators as gen
+from tests.synthetic_upf import write_synthetic_upf
+
+PP_DIR = _tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in ("Fe", "Cr"):
+    write_synthetic_upf(PP_DIR, f"{_el}.pbe.UPF", _el)
+
+PP_DIR = _tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in ("Fe", "Cr"):
+    write_synthetic_upf(PP_DIR, f"{_el}.pbe.UPF", _el)
 
 A = 2.87
 PSEUDOS = {"Fe": "Fe.pbe.UPF", "Cr": "Cr.pbe.UPF"}
@@ -49,7 +59,7 @@ def _polar(cfg):
 
 def _settings(**extra):
     return QESettings(
-        pseudo_dir="/tmp/pp",
+        pseudo_dir=PP_DIR,
         ecutwfc_ry=40.0,
         ecutrho_ry=320.0,
         occupations="smearing",
@@ -123,7 +133,7 @@ def _render(tmp_path, atoms, cfg, body=TEMPLATE):
     _write_pw_from_template(
         template_path=_template(tmp_path, body),
         atoms=atoms,
-        pseudo_dir="/tmp/pp",
+        pseudo_dir=PP_DIR,
         kpts=(2, 2, 2),
         koffset=(0, 0, 0),
         pseudopotentials=dict(PSEUDOS),

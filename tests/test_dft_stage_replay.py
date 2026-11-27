@@ -15,6 +15,7 @@ from matsim_agents.workflows.relaxation import (
     ScientificRelaxationConfig,
     run_relaxation,
 )
+from tests.synthetic_upf import write_synthetic_upf
 
 DATA = Path(__file__).parent / "data" / "dft_outputs"
 LAUNCHER = str(DATA / "replay_launcher.py")
@@ -40,7 +41,7 @@ def _relax(tmp_path, backend, recorded, *, relax_cell, **dft):
 def pseudo_dir(tmp_path):
     path = tmp_path / "pseudo"
     path.mkdir()
-    (path / "Si.upf").write_text("placeholder\n")
+    write_synthetic_upf(path, "Si.upf", "Si")
     return path
 
 

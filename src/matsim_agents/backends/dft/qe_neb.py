@@ -116,6 +116,9 @@ class QENebConfig(BaseModel):
     species: tuple[str, ...] = Field(min_length=1)
     pseudo_dir: str = Field(min_length=1)
     pseudopotentials: Mapping[str, str]
+    functional: str = "PBE"
+    # Diagnostic-only: allows cutoffs below the pseudopotential recommendation; never qualifies.
+    cutoff_override_reason: str | None = None
     ecutwfc_ry: float
     ecutrho_ry: float
     occupations: Occupations

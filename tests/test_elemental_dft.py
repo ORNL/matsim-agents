@@ -27,6 +27,7 @@ from matsim_agents.workflows.active_learning.elemental_dft import (
     prepare_elemental_references,
 )
 from matsim_agents.workflows.active_learning.training_references import resolve_training_references
+from tests.synthetic_upf import write_synthetic_upf
 
 LAUNCH = ProcessLaunch(hosts=("node0",), devices=(0,), ranks_per_node=1, threads_per_rank=1)
 
@@ -36,7 +37,7 @@ def setup_references(tmp_path, monkeypatch):
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir()
     for element in ("Si", "O"):
-        (pseudo / f"{element}.upf").write_text(f"synthetic-{element}")
+        write_synthetic_upf(pseudo, f"{element}.upf", element)
     binary = tmp_path / "pw.x"
     binary.write_text("synthetic executable")
     dft = DFTConfig.model_validate(
@@ -840,7 +841,7 @@ def test_cache_invalidates_scientific_changes(setup_references, change):
         atoms.positions[0, 0] += 0.01
         write(path, atoms)
     elif change == "pseudo":
-        (setup.dft.qe.pseudo_dir / "Si.upf").write_text("changed pseudo")
+        write_synthetic_upf(setup.dft.qe.pseudo_dir, "Si.upf", "Si", z=5.0)
     elif change == "spin":
         setup.plan.phases[0].qe_magnetic_settings = {"nspin": 2}
     else:

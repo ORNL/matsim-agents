@@ -39,10 +39,15 @@ qe:
     Os: Os.pbe-spn-kjpaw_psl.1.0.0.UPF
     H: H.pbe-kjpaw_psl.1.0.0.UPF
     He: He.pbe-kjpaw_psl.1.0.0.UPF
-  # Max of the UPF header suggestions (W 50.4 wfc, V 645 rho), rounded up; not convergence-tested.
-  # Os suggests 53.8 Ry wfc, above this value; Re/Os/H/He cells need a cutoff check first.
-  ecutwfc_ry: 51.0
-  ecutrho_ry: 650.0
+  # Cutoff classes, kept apart on purpose:
+  #  1. Pseudopotential-recommended minima (UPF headers, this library): wfc max 53.8 Ry (Os),
+  #     rho max 645 Ry (V). Enforced by backends.dft.pseudo_validation; below these is rejected.
+  #  2. Provisional qualification values below. They only clear (1); they are NOT converged.
+  #  3. Numerically converged production values: none yet. They come from the cutoff study
+  #     (workflows/numerical_convergence.py) and are recorded in the qualification matrix.
+  # The former 51/650 Ry sat below the Os wfc recommendation and is diagnostic-only.
+  ecutwfc_ry: 60.0
+  ecutrho_ry: 720.0
   smearing: mv
   degauss_ry: 0.02
   kpts: [2, 2, 2]

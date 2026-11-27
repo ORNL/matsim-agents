@@ -6,6 +6,8 @@ KMC admission and proves nothing about real magnetic energetics, so nothing is c
 
 from __future__ import annotations
 
+import tempfile as _tempfile
+
 import numpy as np
 from ase.build import bulk
 
@@ -30,6 +32,11 @@ from matsim_agents.science.magnetism.results import (
     parse_qe_magnetic_output,
     result_from_moments,
 )
+from tests.synthetic_upf import write_synthetic_upf
+
+PP_DIR = _tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in ("Fe", "Cr"):
+    write_synthetic_upf(PP_DIR, f"{_el}.pbe.UPF", _el)
 
 METHOD = {"functional": "pbe", "ecutwfc": 40, "kpts": [2, 2, 2], "code": "synthetic"}
 SYNTHETIC_ENERGY = {"ferromagnetic": -100.00, "custom_collinear": -100.02, "nonmagnetic": -99.5}
@@ -99,7 +106,7 @@ def test_input_generation_uses_the_policy_configuration(tmp_path):
         update={"qe_starting_magnetization": tuple(m / 8.0 for m in custom.initial_moments_muB)}
     )
     settings = QESettings(
-        pseudo_dir="/tmp/pp",
+        pseudo_dir=PP_DIR,
         ecutwfc_ry=40.0,
         ecutrho_ry=320.0,
         occupations="smearing",

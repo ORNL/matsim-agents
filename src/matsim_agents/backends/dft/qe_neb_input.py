@@ -28,13 +28,15 @@ from __future__ import annotations
 
 import hashlib
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
 
+from matsim_agents.backends.dft.pseudo_validation import require_valid_pseudopotentials
 from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_relax import _ATOMIC_MASS, _fortran, _namelist
 from matsim_agents.core.fileio import atomic_write_text
@@ -79,12 +81,26 @@ def _positions_card(image: Atoms) -> list[str]:
     return lines
 
 
-def render_neb_input(config: QENebConfig, images: Sequence[Atoms]) -> str:
+def render_neb_input(
+    config: QENebConfig,
+    images: Sequence[Atoms],
+    *,
+    pseudo_manifest: Mapping[str, Any] | None = None,
+) -> str:
     """Return the ``neb.x`` input text; raises ``ValueError`` for any inconsistency."""
     images = list(images)
     if not images:
         raise ValueError("no images supplied")
     _check_images(config, images)
+    require_valid_pseudopotentials(
+        {s: config.pseudopotentials[s] for s in sorted(set(images[0].get_chemical_symbols()))},
+        config.pseudo_dir,
+        ecutwfc_ry=config.ecutwfc_ry,
+        ecutrho_ry=config.ecutrho_ry,
+        manifest=pseudo_manifest,
+        functional=config.functional,
+        override_reason=config.cutoff_override_reason,
+    )
     if config.restart_mode == "from_scratch" and config.ci_scheme != "no-CI":
         raise ValueError(
             "a from_scratch NEB must use ci_scheme 'no-CI'; enable climbing images in a "
@@ -184,13 +200,14 @@ def write_neb_input(
     input_path: str | os.PathLike,
     *,
     overwrite: bool = False,
+    pseudo_manifest: Mapping[str, Any] | None = None,
 ) -> NebInput:
     """Write ``input_path`` atomically and return its path and SHA-256.
 
     An existing file is kept unless ``overwrite`` is true, and is replaced only after the new
     content has been written completely.
     """
-    text = render_neb_input(config, images)
+    text = render_neb_input(config, images, pseudo_manifest=pseudo_manifest)
     target = Path(input_path)
     if target.exists() and not overwrite:
         raise FileExistsError(f"{target} exists; pass overwrite=True to replace it")

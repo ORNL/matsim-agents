@@ -20,6 +20,7 @@ from matsim_agents.workflows.active_learning.campaign_init import (
 )
 from matsim_agents.workflows.active_learning.config import TrainerConfig
 from matsim_agents.workflows.active_learning.elemental_dft import ElementalReferencePlan
+from tests.synthetic_upf import write_synthetic_upf
 
 ROOT = Path(__file__).resolve().parents[1]
 UMA = ROOT / "examples/mlip/uma-s-1p1-omat.yaml"
@@ -131,7 +132,7 @@ def test_cr_reference_is_a_declared_two_site_antiferromagnet(tmp_path):
 
     atoms, config = _site_magnetism(cr, read(cr.structure_path))
     assert len(atoms) == 2 and config.mode == "antiferromagnetic"
-    (tmp_path / "Cr.UPF").write_text("")
+    write_synthetic_upf(tmp_path, "Cr.UPF", "Cr")
     settings = QESettings(pseudo_dir=str(tmp_path), pseudopotentials={"Cr": "Cr.UPF"})
     text = Path(
         write_pw_input(atoms, settings, str(tmp_path / "pw.in"), magnetic_config=config)

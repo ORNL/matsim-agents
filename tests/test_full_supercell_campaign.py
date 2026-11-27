@@ -10,6 +10,7 @@ import pytest
 from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows import full_supercell_campaign as fsc
+from tests.synthetic_upf import write_synthetic_upf
 
 CONFIG = Path(__file__).parents[1] / "examples/fusion_bcc_1024/campaign.yaml"
 
@@ -123,7 +124,7 @@ def test_full_size_inputs_and_manifest(cfg, tmp_path):
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir()
     for el in cfg.parent_supercell.composition:
-        (pseudo / f"{el}.pbe.UPF").write_text("dummy, input-writer test only\n")
+        write_synthetic_upf(pseudo, f"{el}.pbe.UPF", el)
     qe = cfg.qe.model_copy(
         update={
             "pseudo_dir": str(pseudo),
