@@ -30,6 +30,7 @@ def unverified_hydragnn_source(monkeypatch):
     import matsim_agents.backends.mlip.hydragnn_source as source
 
     monkeypatch.setattr(source, "verify_hydragnn_source", lambda logdir: {})
+    monkeypatch.setattr(source, "imported_hydragnn_root", lambda: Path("/nonexistent/HydraGNN"))
 
 
 @pytest.fixture
