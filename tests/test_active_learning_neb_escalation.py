@@ -15,12 +15,13 @@ from matsim_agents.science.neb.contracts import (
     build_correspondence,
     endpoint_from_atoms,
 )
+from matsim_agents.workflows.active_learning import neb_escalation as al_neb_escalation
 from matsim_agents.workflows.active_learning.config import (
     NebEscalationConfig,
     NebKineticsConfig,
 )
-from matsim_agents.workflows.active_learning.loop import (
-    IterationState,
+from matsim_agents.workflows.active_learning.iteration_state import IterationState
+from matsim_agents.workflows.active_learning.neb_escalation import (
     _apply_neb_escalation,
     _completed_dft_neb_count,
     _write_neb_kinetics,
@@ -160,7 +161,7 @@ def test_unavailable_uncertainty_is_never_treated_as_low_even_when_the_limit_is_
 
 def test_neb_image_labels_are_marked_single_points_not_a_dft_mep(tmp_path):
     from matsim_agents.workflows.active_learning.candidates import Candidate
-    from matsim_agents.workflows.active_learning.loop import _record_provenance
+    from matsim_agents.workflows.active_learning.labelling import _record_provenance
 
     image = Atoms("Cu2", positions=[[1, 1, 1], [3, 1, 1]], cell=[8, 8, 8], pbc=True)
     candidate = Candidate(
@@ -369,7 +370,6 @@ def test_escalation_passes_optimized_images_endpoints_and_dft_environment(tmp_pa
 def test_escalation_environment_is_local_only_without_a_qe_launcher(
     tmp_path, monkeypatch, launcher, expected_local
 ):
-    import matsim_agents.workflows.active_learning.loop as loop
 
     seen = []
 
@@ -385,7 +385,7 @@ def test_escalation_environment_is_local_only_without_a_qe_launcher(
         received.append(env)
         return {"decision": "not_configured"}, False
 
-    monkeypatch.setattr(loop, "_apply_neb_escalation", fake_apply)
+    monkeypatch.setattr(al_neb_escalation, "_apply_neb_escalation", fake_apply)
     policy = _escalation_policy()
     policy = policy.model_copy(
         update={"dft_neb": policy.dft_neb.model_copy(update={"launcher": launcher})}
@@ -397,7 +397,7 @@ def test_escalation_environment_is_local_only_without_a_qe_launcher(
         parameters=SimpleNamespace(kinetics=None),
     )
 
-    loop._escalate_neb_pathways(
+    al_neb_escalation._escalate_neb_pathways(
         cfg, [pathway], tmp_path, tmp_path, IterationState(iteration=0), 0, placement
     )
 

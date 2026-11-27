@@ -18,6 +18,7 @@ from matsim_agents.data.energy_alignment import (
 )
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.workflows.active_learning import surrogate as al_surrogate
 
 # -- energy alignment -----------------------------------------------------------
 
@@ -234,9 +235,9 @@ def surrogate(monkeypatch):
         def close(self):
             self.closed = True
 
-    monkeypatch.setattr(loop_mod, "make_mlip_calculator", make)
-    monkeypatch.setattr(loop_mod, "release_device_memory", lambda: releases.append(1))
-    monkeypatch.setattr(loop_mod.MLIPWorkerPool, "from_placement", lambda placement: Pool())
+    monkeypatch.setattr(al_surrogate, "make_mlip_calculator", make)
+    monkeypatch.setattr(al_surrogate, "release_device_memory", lambda: releases.append(1))
+    monkeypatch.setattr(al_surrogate.MLIPWorkerPool, "from_placement", lambda placement: Pool())
     return loop_mod._SurrogateModels, loads, releases, pools
 
 

@@ -22,6 +22,7 @@ from matsim_agents.backends.external.lammps.mliap.parity import (
     run_lammps_once,
     write_export_record,
 )
+from matsim_agents.workflows.active_learning import promotion as al_promotion
 
 
 class FakeLammps:
@@ -269,7 +270,6 @@ def test_export_requires_an_existing_checkpoint_file(tmp_path, monkeypatch):
 
 def test_loop_export_is_opt_in_and_never_blocks_promotion(tmp_path, monkeypatch):
     from matsim_agents.backends.external.lammps.mliap import export
-    from matsim_agents.workflows.active_learning import loop
 
     calls = []
     monkeypatch.setattr(
@@ -281,11 +281,11 @@ def test_loop_export_is_opt_in_and_never_blocks_promotion(tmp_path, monkeypatch)
         mlip=object(), random_seed=9, trainer=SimpleNamespace(lammps_export_species=[])
     )
     state = SimpleNamespace(candidate_model_path=str(tmp_path / "m.model"), lammps_export=None)
-    loop._export_for_lammps(cfg, state)
+    al_promotion._export_for_lammps(cfg, state)
     assert calls == [] and state.lammps_export is None
 
     cfg.trainer.lammps_export_species = ["Cu"]
-    loop._export_for_lammps(cfg, state)
+    al_promotion._export_for_lammps(cfg, state)
     assert calls[0]["species"] == ["Cu"] and calls[0]["seed"] == 9
     assert state.lammps_export == {"approved": True}
 
@@ -293,5 +293,5 @@ def test_loop_export_is_opt_in_and_never_blocks_promotion(tmp_path, monkeypatch)
         raise RuntimeError("no lammps")
 
     monkeypatch.setattr(export, "export_checkpoint_for_lammps", boom)
-    loop._export_for_lammps(cfg, state)
+    al_promotion._export_for_lammps(cfg, state)
     assert state.lammps_export == {"approved": False, "error": "no lammps"}

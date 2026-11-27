@@ -10,7 +10,7 @@ As in production, device-pool tasks are not retried.
 
 Qualification reuses the production acceptance rules: a DFT label must be
 converged with finite, correctly shaped forces at the unchanged geometry
-(``active_learning.loop._audit_force_errors``); an MLIP relaxation must be
+(``active_learning.labelling._audit_force_errors``); an MLIP relaxation must be
 converged with finite energy and a maximum force at or below ``fmax``.
 """
 
