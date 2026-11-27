@@ -437,7 +437,9 @@ def _label_with_dft(
         if result.converged:
             _save_dft_label(ledger, _dft_label_key(cfg, spec), result)
 
-    run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
+    returned = run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
+    for spec, result in zip(pending, returned, strict=True):
+        by_job.setdefault(spec.job_id, result)
     results = [by_job[spec.job_id] for spec in specs]
     n_ok = sum(1 for r in results if r.converged)
     state.n_dft_converged = n_ok
@@ -487,12 +489,8 @@ def _load_dft_labels(ledger: Path) -> dict[str, Any]:
 def _save_dft_label(ledger: Path, key: str, result: Any) -> None:
     from ase.io.jsonio import encode
 
-    ledger.parent.mkdir(parents=True, exist_ok=True)
     line = encode({"key": key, "result": asdict(result)})
-    with ledger.open("a", encoding="utf-8") as handle:
-        handle.write(line.replace("\n", " ") + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    append_line(ledger, line.replace("\n", " "))
 
 
 def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:

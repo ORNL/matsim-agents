@@ -359,7 +359,7 @@ def test_geometry_worker_uses_and_records_promoted_checkpoint(tmp_path, monkeypa
             assert args.max_cell_step_strain is None
             assert args.max_cell_total_strain is None
             assert args.stress_tolerance_eV_per_A3 is None
-            return SimpleNamespace(calculator=EMT())
+            return EMT()
 
     def relax(args, **kwargs):
         return RelaxationResult(
