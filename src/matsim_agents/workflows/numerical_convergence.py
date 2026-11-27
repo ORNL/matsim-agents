@@ -20,7 +20,7 @@ import math
 import platform
 import re
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -331,8 +331,11 @@ def submit(
     return sent
 
 
-def collect(runs: Sequence[PlannedRun], log: KeyedResultLog) -> dict[str, Any]:
-    """Parse every finished output once; record unusable outputs as such."""
+def collect(
+    runs: Sequence[PlannedRun], log: KeyedResultLog, ended: Collection[str] = ()
+) -> dict[str, Any]:
+    """Parse each finished output once. An output counts as finished when it ends in JOB DONE or
+    its run key is in ``ended`` (the scheduler stopped the job); a partial output stays pending."""
     known = log.load()
     versions: dict[str, str] = {}
     pending = 0
@@ -340,6 +343,9 @@ def collect(runs: Sequence[PlannedRun], log: KeyedResultLog) -> dict[str, Any]:
         if run.key in known:
             continue
         if not run.output_path.is_file():
+            pending += 1
+            continue
+        if run.key not in ended and "JOB DONE" not in run.output_path.read_text(errors="replace"):
             pending += 1
             continue
         observed = parse_observables(run.output_path, run.natoms)
@@ -421,8 +427,20 @@ def report(
     return data
 
 
+def ended_run_keys(config: ConvergenceConfig, manifest: str | Path) -> set[str]:
+    """Run keys whose scheduler job has stopped, from one refresh of the job manifest."""
+    from matsim_agents.execution.slurm_jobs import refresh_manifest
+
+    submitted = json.loads((Path(config.out_dir) / "submitted.json").read_text())
+    stopped = {e.job_id for e in refresh_manifest(manifest) if e.terminal}
+    return {key for key, job_id in submitted.items() if job_id in stopped}
+
+
 def run_stage(
-    config: ConvergenceConfig, stage: str, submitter: Submitter | None = None
+    config: ConvergenceConfig,
+    stage: str,
+    submitter: Submitter | None = None,
+    ended: Collection[str] = (),
 ) -> dict[str, Any]:
     """Run one stage (or ``all`` without dispatch) and return its summary."""
     out = Path(config.out_dir)
@@ -436,7 +454,7 @@ def run_stage(
         sent = submit(runs, log, submitter)
         atomic_write_text(out / "submitted.json", json.dumps(sent, indent=2))
         return {"submitted": len(sent)}
-    collected = collect(runs, log)
+    collected = collect(runs, log, ended)
     if stage == "collect":
         return collected
     outcomes = analyse(config, runs, log)
@@ -455,7 +473,8 @@ def main(argv: list[str] | None = None) -> int:
         if not args.job_manifest:
             parser.error("submit needs --job-manifest")
         submitter = slurm_submitter(config, args.job_manifest)
-    result = run_stage(config, args.stage, submitter)
+    ended = ended_run_keys(config, args.job_manifest) if args.job_manifest else ()
+    result = run_stage(config, args.stage, submitter, ended)
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("status", "ok") != "not_converged" else 1
 

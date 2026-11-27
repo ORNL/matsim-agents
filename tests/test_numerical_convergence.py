@@ -231,3 +231,14 @@ def test_planned_decks_have_unquoted_logicals_and_forces_and_stress(config_path)
     text = runs[0].input_path.read_text()
     assert "tprnfor" in text and "tstress" in text
     assert "'.true.'" not in text and "'.false.'" not in text
+
+
+def test_partial_output_of_a_running_job_stays_pending(config_path):
+    config = nc.load_config(config_path)
+    runs = nc.plan(config)
+    log = KeyedResultLog(Path(config.out_dir) / "results.jsonl")
+    partial = pw_out(-100.0).replace("JOB DONE.", "")
+    runs[0].output_path.write_text(partial)
+    assert nc.collect(runs, log)["pending"] == len(runs)
+    assert runs[0].key not in log.load()
+    assert nc.collect(runs, log, ended={runs[0].key})["pending"] == len(runs) - 1
