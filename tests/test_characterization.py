@@ -595,7 +595,7 @@ def test_the_assessment_is_saved_and_not_repeated(system, monkeypatch):
         contract, relax=FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
     )
     assert outstanding_steps(contract) == []
-    import matsim_agents.workflows.characterization as module
+    import matsim_agents.workflows.characterization.assessment as module
 
     def fail(*_args, **_kwargs):
         raise AssertionError("the hull was recomputed")
