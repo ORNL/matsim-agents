@@ -5,7 +5,7 @@
 # 3. ... submit --job-manifest $OUT/jobs.jsonl, then collect, then analyse
 #
 # Each run is one job on one node and one GCD (the validation-job limit in execution/slurm_jobs):
-# a 54-site cell on one GCD is slow, so time_limit is the 2 h debug maximum; a run that hits it
+# a 54-site cell on one GCD is slow, so time_limit is the 2 h job-spec maximum; a run that hits it
 # is recorded as unusable, never as converged. Larger cells need a non-debug queue and their own
 # submitter. The cutoffs, k-spacing and cell sizes here are starting values, not results.
 protocol: point_defects
@@ -49,6 +49,6 @@ resources:
     - "NRANKS=1 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} > {output} 2> {output}.err"
   time_limit: "02:00:00"
   account: LRN110
-  qos: debug
+  qos: normal
   partition: batch
   gpus: 1
