@@ -6,7 +6,7 @@ parameter counts for each fine-tuning run so the paper can report the
 
 Two capture paths are supported because the two backends run differently:
 
-* **In-process** (HydraGNN routed-head fine-tune): use :func:`track_cost`,
+* **In-process** (HydraGNN branch-7 fine-tune): use :func:`track_cost`,
   which measures wall time and reads ``torch.cuda`` peak-memory counters
   directly.
 * **Subprocess** (UMA via the ``fairchem`` CLI): wrap the subprocess in

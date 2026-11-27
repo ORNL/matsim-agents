@@ -35,7 +35,12 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
     """Leave unmarked foundation models unchanged; verify and restore marked ones."""
     path = logdir / "energy-convention.json"
     if not path.exists():
-        for metadata_name in ("routing.json", "newhead.json"):
+        if (logdir / "routing.json").exists():
+            raise ValueError(
+                "Routed BranchWeightMLP HydraGNN checkpoints are forbidden; "
+                "matsim-agents uses only branch-7 (OMat24)"
+            )
+        for metadata_name in ("newhead.json",):
             metadata_path = logdir / metadata_name
             if metadata_path.exists():
                 metadata = json.loads(metadata_path.read_text())
@@ -84,38 +89,16 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
     newhead_artifact = logdir / "newhead.json"
     if newhead_artifact.exists() and "newhead.json" not in artifact_hashes:
         raise ValueError("HydraGNN single-head checkpoint requires verified newhead.json")
-    routing_artifact = logdir / "routing.json"
     if (
         "routed_branches" in metadata
-        or "routing.json" in metadata.get("inference_artifact_sha256", {})
-        or routing_artifact.exists()
+        or "branch_mlp_checkpoint" in metadata
+        or "routing.json" in artifact_hashes
+        or (logdir / "routing.json").exists()
     ):
-        if (
-            "routing.json" not in metadata.get("inference_artifact_sha256", {})
-            or not routing_artifact.exists()
-        ):
-            raise ValueError("HydraGNN routed checkpoint requires verified routing.json")
-        routing_metadata = json.loads(routing_artifact.read_text())
-        if metadata.get("routed_branches") != routing_metadata.get("routed_branches"):
-            raise ValueError(
-                "HydraGNN checkpoint routed branches do not match verified routing.json"
-            )
-        branch_mlp_name = metadata.get("branch_mlp_checkpoint")
-        branch_mlp_digest = metadata.get("branch_mlp_sha256")
-        if (
-            not isinstance(branch_mlp_name, str)
-            or not branch_mlp_name.strip()
-            or not isinstance(branch_mlp_digest, str)
-            or not branch_mlp_digest.strip()
-        ):
-            raise ValueError("HydraGNN routed checkpoint requires verified branch MLP checkpoint")
-        mlp_path = logdir / branch_mlp_name
-        if (
-            Path(branch_mlp_name).name != branch_mlp_name
-            or not mlp_path.is_file()
-            or sha256_file(mlp_path) != branch_mlp_digest
-        ):
-            raise ValueError("HydraGNN routing MLP differs from training artifact")
+        raise ValueError(
+            "Routed BranchWeightMLP HydraGNN checkpoints are forbidden; "
+            "matsim-agents uses only branch-7 (OMat24)"
+        )
     if any(metadata.get(key) != value for key, value in snapshot_metadata.items()):
         raise ValueError("HydraGNN checkpoint convention differs from training provenance")
     _, _, references = load_elemental_reference_manifest(

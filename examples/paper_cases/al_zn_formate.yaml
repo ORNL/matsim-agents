@@ -46,11 +46,11 @@ mlip:
   # replace this block at run time, with no file edits:
   #   matsim-agents al run <cfg> --mlip-config examples/mlip/<model>.yaml
   backend: hydragnn
-  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  fine_tuner: finetune_hydragnn_newhead  # fine-tunes branch-7 (OMat24) only
   logdir:         ${INITIAL_LOGDIR}
   hydragnn_root:  ${HYDRAGNN_DIR}
   checkpoint:     best_model.pt
-  mlp_checkpoint: null
+  inference_head: OMat24   # only branch-7 (OMat24) is allowed
   precision:  fp32
   device: cuda
   ensemble_models: []

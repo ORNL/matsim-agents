@@ -37,12 +37,12 @@ mlip:
   # Default model. Replace it with --mlip-config FILE (an `mlip:` block with
   # device: xpu); UMA and MACE run from .venv-uma / .venv-mace.
   backend: hydragnn
-  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  fine_tuner: finetune_hydragnn_newhead  # fine-tunes branch-7 (OMat24) only
   hydragnn_root: ${HYDRAGNN_DIR}
   ft_repo: ${HYDRAGNN_FT_REPO}
   logdir:         ${INITIAL_LOGDIR}
   checkpoint:     best_model.pt
-  mlp_checkpoint: null
+  inference_head: OMat24   # only branch-7 (OMat24) is allowed
   precision:  fp32
   device: xpu
   ensemble_models: []

@@ -57,9 +57,8 @@ driver forwards its existing elemental manifest to both fine-tuners.
 Force labels are read without applying ASE constraints, so constrained atoms
 retain their raw DFT forces in both the snapshot and fine-tuning targets.
 
-The shipped AL YAMLs use `finetune_hydragnn_newhead.py` and one process for
-formation-aware retraining. Configurations that train with a branch-weighting
-MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint.
+HydraGNN fine-tuning uses only `finetune_hydragnn_newhead.py` on branch-7
+(OMat24), with one process for formation-aware retraining.
 HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
 fine-tuner, and is not used by these configurations.
 AL forwards the configured charge/spin conditioning to both built-in trainers
@@ -122,19 +121,15 @@ for dry-run, optimization, and validation losses. BF16 keeps FP32 master
 parameters and uses autocast for compute; single-head checkpoint inference
 also honors that setting. FP32/FP64 paths do not enable autocast.
 
-The fine-tuning recipe belongs to the model: `mlip.fine_tuner` is
-`finetune_hydragnn` (default; routed multi-head, needs `mlp_checkpoint`) or
-`finetune_hydragnn_newhead` (drops all heads and trains one new head). The
+The fine-tuning recipe belongs to the model: for HydraGNN
+`mlip.fine_tuner` is always `finetune_hydragnn_newhead` (branch-7 OMat24 only). The
 fine-tuners are single-process, so configure one node/one rank for the
 `training` pool.
 
 ### Approved elemental DFT prerequisite
 
-Declared HydraGNN checkpoints with bundled routing artifacts can be used by
-direct relaxation, chat, and the LangGraph executor without an external
-BranchWeightMLP path. Artifact integrity is still verified when loading the
-calculator. Branch-weight confidence is unavailable when fewer than two trained
-branches are active; relaxation reports no `top_branch_weight` in that case.
+HydraGNN checkpoints with routing or branch-weight MLP artifacts are rejected.
+Branch-7 relaxation reports no `top_branch_weight`.
 
 `matsim_agents.workflows.active_learning.elemental_dft` calculates or reuses reference
 energies for an approved phase list. Every phase explicitly declares whether its

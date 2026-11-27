@@ -60,6 +60,12 @@ HYDRAGNN_DATASET_HEADS = (
     "QM7X",
     "transition1x",
 )
+# matsim-agents uses ONLY HydraGNN branch-7 (OMat24); every other head and the
+# BranchWeightMLP are discarded (all branches add energy but only one adds forces).
+HYDRAGNN_INFERENCE_HEAD_INDEX = 7
+HYDRAGNN_INFERENCE_HEAD = HYDRAGNN_DATASET_HEADS[HYDRAGNN_INFERENCE_HEAD_INDEX]
+assert HYDRAGNN_INFERENCE_HEAD == "OMat24"
+_FORBIDDEN_HYDRAGNN_KEYS = ("mlp_checkpoint", "mlp_precision")
 
 
 def _compact_json(value: dict[str, Any]) -> str:
@@ -73,28 +79,22 @@ def _resolve_path(base: Path, value: object) -> object:
     return str(path if path.is_absolute() else (base / path).resolve())
 
 
-def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
-    """Resolve a dataset name, head index, or ``branch-N`` alias to its canonical index."""
+def resolve_hydragnn_inference_head(value: str | int | None = None) -> int:
+    """Return 7 for ``None``, ``7``, ``"OMat24"`` or ``"branch-7"``; reject every other head."""
     if value is None:
-        return None
-    if isinstance(value, int) or str(value).strip().isdigit():
-        index = int(value)
-        if 0 <= index < len(HYDRAGNN_DATASET_HEADS):
-            return index
-        raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
-    normalized = str(value).strip().casefold()
-    if normalized.startswith("branch-") and normalized[7:].isdigit():
-        index = int(normalized[7:])
-        if 0 <= index < len(HYDRAGNN_DATASET_HEADS):
-            return index
-        raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
-    by_name = {name.casefold(): index for index, name in enumerate(HYDRAGNN_DATASET_HEADS)}
-    if normalized not in by_name:
+        return HYDRAGNN_INFERENCE_HEAD_INDEX
+    if isinstance(value, bool):
+        raise ValueError(f"invalid HydraGNN head {value!r}")
+    text = str(value).strip().casefold()
+    if text.startswith("branch-"):
+        text = text[len("branch-") :]
+    allowed = {str(HYDRAGNN_INFERENCE_HEAD_INDEX), HYDRAGNN_INFERENCE_HEAD.casefold()}
+    if text not in allowed:
         raise ValueError(
-            f"unknown HydraGNN inference head {value!r}; expected a branch index or one of "
-            f"{', '.join(HYDRAGNN_DATASET_HEADS)}"
+            f"HydraGNN head {value!r} is forbidden: matsim-agents uses only branch-7 "
+            f"({HYDRAGNN_INFERENCE_HEAD}); all other heads and the BranchWeightMLP are discarded"
         )
-    return by_name[normalized]
+    return HYDRAGNN_INFERENCE_HEAD_INDEX
 
 
 class MCDropoutInjectionConfig(BaseModel):
@@ -280,7 +280,7 @@ class MLIPBackendConfig(BaseModel, ABC):
 
 
 class HydraGNNConfig(MLIPBackendConfig):
-    """A HydraGNN multi-head model loaded from a training logdir."""
+    """HydraGNN branch-7 (OMat24) loaded from a training logdir; no other head is ever used."""
 
     backend: Literal["hydragnn"] = "hydragnn"
     logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
@@ -289,18 +289,11 @@ class HydraGNNConfig(MLIPBackendConfig):
         description="HydraGNN source checkout used by built-in fine-tuners.",
     )
     checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
-    mlp_checkpoint: Path | None = Field(
-        None,
-        description="Optional auxiliary BranchWeightMLP checkpoint.",
-    )
     newhead_ft_config: Path | None = Field(
         None,
         description=(
-            "For the 'drop-all-heads + new head' fine-tune: path to the "
-            "``newhead.json`` produced by finetune_hydragnn_newhead. When set, "
-            "the calculator rebuilds the backbone from ``config.json``, re-applies "
-            "the single-branch head surgery, loads ``checkpoint`` and uses direct "
-            "single-head inference (no BranchWeightMLP)."
+            "``newhead.json`` of a finetune_hydragnn_newhead model (branch-7 kept as its "
+            "single head). The calculator re-applies the head surgery and loads ``checkpoint``."
         ),
     )
     ft_repo: Path | None = Field(
@@ -312,24 +305,14 @@ class HydraGNNConfig(MLIPBackendConfig):
     charge: float = 0.0
     spin: float = 0.0
     precision: str | None = Field(None, description="Model precision (fp32|fp64|bf16).")
-    mlp_precision: str | None = Field(
-        None, description="BranchWeightMLP precision override (fp32|fp64|bf16)."
-    )
-    inference_head: str | int | None = Field(
-        None,
-        description=(
-            "Optional decoding head selected by canonical dataset name, index 0..15, "
-            "or a 'branch-N' name. "
-            "When set, inference bypasses BranchWeightMLP and uses only that head."
-        ),
+    inference_head: Literal["OMat24"] = Field(
+        HYDRAGNN_INFERENCE_HEAD,
+        description="Always branch-7 (OMat24); any other head is rejected.",
     )
 
-    fine_tuner: Literal["finetune_hydragnn", "finetune_hydragnn_newhead"] = Field(
-        "finetune_hydragnn",
-        description=(
-            "Fine-tuning recipe: finetune_hydragnn (routed multi-head, needs mlp_checkpoint) "
-            "or finetune_hydragnn_newhead (drop all heads and train one new head)."
-        ),
+    fine_tuner: Literal["finetune_hydragnn_newhead"] = Field(
+        "finetune_hydragnn_newhead",
+        description="Fine-tunes branch-7 (OMat24) as the single head; no other recipe exists.",
     )
 
     required_modules: ClassVar[tuple[str, ...]] = ("hydragnn", "torch_geometric")
@@ -337,36 +320,33 @@ class HydraGNNConfig(MLIPBackendConfig):
     path_fields: ClassVar[tuple[str, ...]] = (
         "logdir",
         "hydragnn_root",
-        "mlp_checkpoint",
         "newhead_ft_config",
         "ft_repo",
     )
 
-    @model_validator(mode="after")
-    def _validate_inference_head(self) -> HydraGNNConfig:
-        resolve_hydragnn_inference_head(self.inference_head)
-        if self.inference_head is not None and self.newhead_ft_config is not None:
-            raise ValueError("inference_head cannot be combined with a single new-head model")
-        return self
-
-    def check_loadable(self) -> None:
-        from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
-
-        if (
-            self.mlp_checkpoint is None
-            and self.inference_head is None
-            and not has_declared_hydragnn_checkpoint(str(self.logdir))
-        ):
+    @model_validator(mode="before")
+    @classmethod
+    def _only_branch_7(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for key in _FORBIDDEN_HYDRAGNN_KEYS:
+            if key in data:
+                raise ValueError(
+                    f"mlip.{key} is forbidden: matsim-agents uses only HydraGNN branch-7 "
+                    f"({HYDRAGNN_INFERENCE_HEAD}), never the BranchWeightMLP"
+                )
+        if data.get("fine_tuner") not in (None, "finetune_hydragnn_newhead"):
             raise ValueError(
-                "HydraGNN requires mlp_checkpoint (BranchWeightMLP), an inference_head, "
-                "or a declared checkpoint."
+                f"mlip.fine_tuner={data['fine_tuner']!r} is forbidden: HydraGNN fine-tuning "
+                f"only uses finetune_hydragnn_newhead on branch-7 ({HYDRAGNN_INFERENCE_HEAD})"
             )
+        resolve_hydragnn_inference_head(data.get("inference_head"))
+        data["inference_head"] = HYDRAGNN_INFERENCE_HEAD
+        return data
 
     def required_paths(self) -> list[Path]:
-        paths = [self.logdir, *super().required_paths()]
-        if self.mlp_checkpoint is not None:
-            paths.append(self.mlp_checkpoint)
-        return paths
+        return [self.logdir, *super().required_paths()]
 
     def fine_tune_args(
         self,
@@ -388,16 +368,13 @@ class HydraGNNConfig(MLIPBackendConfig):
             "--device", self.device,
             "--charge", str(self.charge),
             "--spin", str(self.spin),
+            "--head", HYDRAGNN_INFERENCE_HEAD,
         ]  # fmt: skip
-        if self.fine_tuner == "finetune_hydragnn":
-            if self.mlp_checkpoint is None:
-                raise ValueError("finetune_hydragnn requires mlp_checkpoint (BranchWeightMLP)")
-            args += ["--branch-mlp", str(self.mlp_checkpoint)]
         if self.checkpoint is not None:
             args += ["--gfm-checkpoint", self.checkpoint]
         if self.hydragnn_root is not None:
             args += ["--hydragnn-root", str(self.hydragnn_root)]
-        if self.fine_tuner == "finetune_hydragnn_newhead" and self.ft_repo is not None:
+        if self.ft_repo is not None:
             args += ["--ft-repo", str(self.ft_repo)]
         return args
 
@@ -413,14 +390,11 @@ class HydraGNNConfig(MLIPBackendConfig):
         return self.model_copy(update={"logdir": Path(model)})
 
     def model_identifier(self) -> str:
-        identifier = f"hydragnn:{self.logdir}:checkpoint={self.checkpoint or 'auto/latest'}"
-        head_index = resolve_hydragnn_inference_head(self.inference_head)
-        if head_index is not None:
-            identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
+        identifier = (
+            f"hydragnn:{self.logdir}:checkpoint={self.checkpoint or 'auto/latest'}"
+            f":head={HYDRAGNN_INFERENCE_HEAD}"
+        )
         settings = {
-            "branch_mlp_checkpoint": (
-                str(self.mlp_checkpoint) if self.mlp_checkpoint is not None else None
-            ),
             "charge": self.charge,
             "max_neighbours": self.max_neighbours,
             "newhead_ft_config": (
@@ -454,15 +428,12 @@ class HydraGNNConfig(MLIPBackendConfig):
                 "mlip.checkpoint so the model can be identified"
             )
         files = [self.logdir / "config.json", checkpoint]
-        # Training metadata the loader applies (energy convention, routing, new head).
-        for name in ("energy-convention.json", "routing.json", "newhead.json"):
+        # Training metadata the loader applies (energy convention, new head).
+        for name in ("energy-convention.json", "newhead.json"):
             if (self.logdir / name).is_file():
                 files.append(self.logdir / name)
-        if "branch_mlp_checkpoint" in convention:
-            files.append(self.logdir / convention["branch_mlp_checkpoint"])
-        for path in (self.mlp_checkpoint, self.newhead_ft_config):
-            if path is not None:
-                files.append(path)
+        if self.newhead_ft_config is not None:
+            files.append(self.newhead_ft_config)
         return sorted(set(files))
 
     def relaxation_calculator(self) -> RelaxCalculator:

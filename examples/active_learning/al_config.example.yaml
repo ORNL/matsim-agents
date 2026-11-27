@@ -57,12 +57,12 @@ vars:
 
 mlip:
   backend: hydragnn
-  fine_tuner: finetune_hydragnn_newhead  # drop all heads, train one new head
+  fine_tuner: finetune_hydragnn_newhead  # fine-tunes branch-7 (OMat24) only
   hydragnn_root: ${HYDRAGNN_DIR}
   ft_repo: ${HYDRAGNN_FT_REPO}
   logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt           # filename inside logdir, OR absolute path
-  mlp_checkpoint: null                 # set if your model uses BranchWeightMLP
+  inference_head: OMat24   # only branch-7 (OMat24) is allowed
   charge: 0.0
   spin: 0.0
   precision: fp32

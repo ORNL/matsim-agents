@@ -25,11 +25,11 @@ from typing import Any
 
 from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
+    HYDRAGNN_INFERENCE_HEAD_INDEX,
     HydraGNNConfig,
     MACEConfig,
     UMAConfig,
     parse_mlip_config,
-    resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.devices import default_torch_device
 from matsim_agents.backends.mlip.uma_artifacts import (
@@ -61,11 +61,9 @@ def _build_single_head_calculator(
     spin,
     autocast_dtype=None,
 ):
-    """ASE calculator for a single-branch (``num_branches==1``) HydraGNN model.
+    """ASE calculator for a fine-tuned single-branch model whose only head derives from branch-7.
 
-    Bypasses the BranchWeightMLP entirely: the decoder uses ``branch-0``
-    directly, so energy = ``model(data)[0]`` and forces = ``-dE/dx`` via autograd.
-    Used for the 'drop-all-heads + new head' fine-tune models.
+    Energy = ``model(data)[0]`` and forces = ``-dE/dx`` via autograd.
     """
     import torch
     from ase.calculators.calculator import Calculator, all_changes
@@ -114,8 +112,11 @@ def _build_selected_head_calculator(
     charge,
     spin,
 ):
-    """ASE calculator pinned to one decoding head of a multi-branch HydraGNN."""
+    """ASE calculator pinned to branch-7 (OMat24) of the multi-branch HydraGNN."""
     import torch
+
+    if head_index != HYDRAGNN_INFERENCE_HEAD_INDEX:
+        raise ValueError(f"HydraGNN head {head_index} is forbidden; only branch-7 (OMat24)")
     from ase.calculators.calculator import Calculator, all_changes
 
     from matsim_agents.backends.mlip.relaxation import atoms_to_graph
@@ -172,21 +173,15 @@ def _apply_energy_convention(
         return cfg, None
     cfg = cfg.model_copy(deep=True)
     convention = json.loads(convention_path.read_text())
+    if "branch_mlp_checkpoint" in convention or "routed_branches" in convention:
+        raise ValueError(
+            f"{convention_path} is a routed BranchWeightMLP model; matsim-agents uses only "
+            "HydraGNN branch-7 (OMat24)"
+        )
     if cfg.checkpoint is None:
         cfg.checkpoint = convention["checkpoint"]
     if (logdir / "newhead.json").exists():
         cfg.newhead_ft_config = logdir / "newhead.json"
-        cfg.inference_head = None
-    if "branch_mlp_checkpoint" in convention:
-        from matsim_agents.core.hashing import sha256_file
-
-        cfg.mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
-        cfg.newhead_ft_config = None
-        if sha256_file(cfg.mlp_checkpoint) != convention["branch_mlp_sha256"]:
-            raise ValueError("HydraGNN routing MLP differs from training artifact")
-        selected = resolve_hydragnn_inference_head(cfg.inference_head)
-        if selected is not None and selected not in convention["routed_branches"]:
-            raise ValueError("Selected HydraGNN head was not trained in this energy convention")
     return cfg, convention
 
 
@@ -197,7 +192,7 @@ def _add_hydragnn_example_dirs(logdir: Path) -> None:
     logdir (``.../multidataset_hpo_sc26/<gfm_logdir>``). Adding it here makes the
     eval path self-sufficient instead of relying on the caller (or the fine-tune
     module) having imported it first. ``HYDRAGNN_ROOT`` is honoured as well,
-    matching finetune_hydragnn's resolution.
+    matching the fine-tune's resolution.
     """
     import sys
 
@@ -210,8 +205,10 @@ def _add_hydragnn_example_dirs(logdir: Path) -> None:
             sys.path.insert(0, str(directory))
 
 
-def _selected_head_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, selected_head: int):
-    """Calculator that evaluates one pretrained head of the multi-branch model."""
+def _selected_head_hydragnn_calculator(
+    cfg: HydraGNNConfig, logdir: Path, selected_head: int = HYDRAGNN_INFERENCE_HEAD_INDEX
+):
+    """Calculator that evaluates pretrained branch-7 (OMat24) of the multi-branch model."""
     from inference_random_structures import find_checkpoint, load_config_and_model
 
     from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
@@ -247,13 +244,10 @@ def _selected_head_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, select
 
 
 def _newhead_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path):
-    """Calculator for a single ``branch-0`` head model from finetune_hydragnn_newhead.
+    """Calculator for a finetune_hydragnn_newhead model (single head initialised from branch-7).
 
-    The 16-branch decoder was replaced by a single fresh ``branch-0`` head.
-    Reproduce that surgery here (build the 16-branch backbone, apply ORNL
-    ``update_architecture``) so the checkpoint loads into a byte-identical
-    model, then use direct single-head inference (no branch-MLP). This bespoke
-    path cannot go through ``load_fused_stack``, so it builds the model inline.
+    Reproduces the head surgery (16-branch backbone + ORNL ``update_architecture``)
+    so the checkpoint loads into a byte-identical model.
     """
     import json
 
@@ -302,6 +296,11 @@ def _newhead_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path):
 
     with open(cfg.newhead_ft_config) as f:
         newhead = json.load(f)
+    if newhead.get("head_index") != HYDRAGNN_INFERENCE_HEAD_INDEX:
+        raise ValueError(
+            f"{cfg.newhead_ft_config}: head_index={newhead.get('head_index')!r}; only models "
+            "fine-tuned from branch-7 (OMat24) are allowed"
+        )
     model = apply_newhead_surgery(model, newhead["ft_config"], ft_repo=cfg.ft_repo, freeze=False)
     torch.set_default_dtype(param_dtype)
     model = model.to(dtype=param_dtype, device=device)
@@ -332,116 +331,16 @@ def _newhead_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path):
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
-def _mask_to_routed_branches(mlp, routed: list[int], num_branches: int):
-    """Wrap the branch-weight MLP so only the trained (routed) branches get weight."""
-    import torch
-
-    if not routed or any(type(head) is not int or not 0 <= head < num_branches for head in routed):
-        raise ValueError("Invalid HydraGNN trained branch selection")
-    original_mlp = mlp
-
-    class RoutedMLP(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.original = original_mlp
-
-        def forward(self, composition):
-            logits = self.original(composition)
-            mask = torch.ones(num_branches, dtype=torch.bool, device=logits.device)
-            mask[routed] = False
-            return logits.masked_fill(mask, -torch.inf)
-
-    return RoutedMLP()
-
-
-def _fused_stack_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, convention: dict | None):
-    """Calculator for the multi-branch model weighted by its BranchWeightMLP.
-
-    Delegates to the authoritative fused-stack loader shipped alongside the
-    HydraGNN example (also used by MLIP relaxation). It builds the model,
-    reconstructs the BranchWeightMLP from its checkpoint, and returns matching
-    dtypes/device/autocast contexts. Reimplementing this here previously drifted
-    from the proven path (wrong model-build API, unstripped DDP "module." keys,
-    int radius that vesin rejects, and a raw state-dict passed as the MLP).
-    """
-    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-    from matsim_agents.backends.mlip.relaxation import _build_calculator, _load_fused_stack
-
-    mlp_checkpoint = str(cfg.mlp_checkpoint) if cfg.mlp_checkpoint is not None else None
-
-    (
-        model,
-        mlp,
-        config,
-        device,
-        autocast_ctx,
-        param_dtype,
-        num_branches,
-        mlp_device,
-        mlp_autocast_ctx,
-        unified_mlp_gnn_stack,
-        _gnn_prec,
-        _mlp_prec,
-    ) = _load_fused_stack(
-        str(logdir),
-        cfg.checkpoint,
-        mlp_checkpoint,
-        cfg.precision,
-        cfg.precision,
-        cfg.device,
-    )
-
-    if convention is not None:
-        from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
-
-        restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
-
-    routed = None
-    if convention is not None and "routed_branches" in convention:
-        routed = convention["routed_branches"]
-        mlp = _mask_to_routed_branches(mlp, routed, num_branches)
-
-    arch = config["NeuralNetwork"]["Architecture"]
-    radius = float(cfg.radius) if cfg.radius is not None else float(arch.get("radius", 5.0))
-    max_neighbours = (
-        int(cfg.max_neighbours)
-        if cfg.max_neighbours is not None
-        else int(arch.get("max_neighbours", 20))
-    )
-
-    calculator = _build_calculator(
-        model=model,
-        mlp=mlp,
-        radius=radius,
-        max_neighbours=max_neighbours,
-        param_dtype=param_dtype,
-        autocast_ctx=autocast_ctx,
-        device=device,
-        num_branches=num_branches,
-        mlp_device=mlp_device,
-        mlp_autocast_ctx=mlp_autocast_ctx,
-        unified_mlp_gnn_stack=unified_mlp_gnn_stack,
-        charge=cfg.charge,
-        spin=cfg.spin,
-    )
-    calculator.active_branch_count = len(set(routed)) if routed is not None else num_branches
-    return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
-
-
 def build_hydragnn_calculator(cfg: HydraGNNConfig):
     """Build a ready-to-use ASE calculator from a HydraGNN logdir."""
     logdir = cfg.logdir
     if not (logdir / "config.json").is_file():
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
-    cfg, convention = _apply_energy_convention(cfg, logdir)
+    cfg, _ = _apply_energy_convention(cfg, logdir)
     _add_hydragnn_example_dirs(logdir)
-
-    selected_head = resolve_hydragnn_inference_head(cfg.inference_head)
-    if selected_head is not None:
-        return _selected_head_hydragnn_calculator(cfg, logdir, selected_head)
     if cfg.newhead_ft_config is not None:
         return _newhead_hydragnn_calculator(cfg, logdir)
-    return _fused_stack_hydragnn_calculator(cfg, logdir, convention)
+    return _selected_head_hydragnn_calculator(cfg, logdir, HYDRAGNN_INFERENCE_HEAD_INDEX)
 
 
 def build_ensemble(cfg: Any, *, enable_mc_dropout: bool = False) -> list[Any]:

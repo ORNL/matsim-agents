@@ -1,28 +1,17 @@
-"""Alternative HydraGNN fine-tune: drop all 16 branch heads, grow ONE new head.
+"""The ONLY HydraGNN fine-tune: keep pretrained branch-7 (OMat24) as the single head.
 
-This is the second HydraGNN fine-tuning option (the first being the routed-head
-fine-tune in :mod:`matsim_agents.backends.mlip.training.finetune_hydragnn`). Instead of
-keeping the multi-branch decoder and adapting the routed head(s), we discard the
-entire 16-branch decoder and create a single fresh ``branch-0`` head on top of
-the pretrained backbone, then train it (with the backbone either trainable or
-frozen). This mirrors the capability in
-``ORNL/HydraGNN_GFM_FineTuning4Materials`` (``utils/update_model.py``): we reuse
-that repository's ``update_architecture`` / ``apply_freeze_mode`` directly so
-the head surgery matches the reference implementation exactly.
+matsim-agents uses only HydraGNN branch-7 (OMat24). The other 15 heads are
+discarded and pretrained branch-7 is re-keyed as ``branch-0`` on top of the
+pretrained backbone, then trained. The head surgery reuses
+``ORNL/HydraGNN_GFM_FineTuning4Materials`` (``utils/update_model.py``).
 
-Three strategies are supported:
+Strategies:
 
-* ``unfrozen``   -- load the pretrained backbone, replace the 16 heads with one
-  fresh (randomly-initialised) ``branch-0`` head, train the **whole** model.
-* ``frozen``     -- same head replacement, but **freeze the message-passing
-  backbone** (``freeze_mode="message_passing"``) and train only the new head.
-* ``scratch``    -- do **not** load any pretrained weights; the backbone and the
-  new head are both randomly initialised (a from-scratch baseline).
+* ``unfrozen`` -- train backbone + branch-7 head.
+* ``frozen``   -- freeze the message-passing backbone and train only the head.
 
-The objective is the same energy+force MLIP loss used by the routed fine-tune
-(per-atom energy MSE + force MSE, forces via ``autograd``), but with a single
-branch there is no branch-weighting MLP -- when ``num_branches == 1`` HydraGNN's
-decoder uses ``branch-0`` directly (see ``hydragnn/models/Base.py``).
+The objective is per-atom energy MSE + force MSE (forces via ``autograd``);
+with ``num_branches == 1`` HydraGNN's decoder uses ``branch-0`` directly.
 
 Saved artifacts (in ``output_dir``):
 
@@ -49,6 +38,10 @@ from typing import Any
 
 import numpy as np
 
+from matsim_agents.backends.mlip.config import (
+    HYDRAGNN_DATASET_HEADS,
+    resolve_hydragnn_inference_head,
+)
 from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 from matsim_agents.backends.mlip.hydragnn_newhead import (
@@ -56,7 +49,7 @@ from matsim_agents.backends.mlip.hydragnn_newhead import (
     load_update_model,
 )
 from matsim_agents.backends.mlip.training.cost import CostReport, count_parameters, track_cost
-from matsim_agents.backends.mlip.training.finetune_hydragnn import (
+from matsim_agents.backends.mlip.training.hydragnn_data import (
     _atoms_to_data,
     _resolve_hydragnn_paths,
     _split,
@@ -67,64 +60,20 @@ from matsim_agents.core.seeding import seed_process
 
 log = logging.getLogger(__name__)
 
-STRATEGIES = ("unfrozen", "frozen", "scratch")
+STRATEGIES = ("unfrozen", "frozen")
 
 # Map our user-facing strategy -> (load_pretrained, ORNL freeze_mode).
 _STRATEGY_SPEC = {
     "unfrozen": (True, "none"),
     "frozen": (True, "message_passing"),
-    "scratch": (False, "none"),
 }
 
-# The GFM's 16 pretrained branch heads, in decoder order, each trained on a
-# specific upstream dataset. Selecting one of these (instead of growing a fresh
-# random head) lets us fine-tune a readout that already knows the right physics
-# -- e.g. ``MPTrj``/``Alexandria``/``OMat24`` for bulk (transition-metal) solids.
-GFM_HEAD_DATASETS = (
-    "Alexandria",  # 0
-    "ANI1x",  # 1
-    "MPTrj",  # 2
-    "OC2020",  # 3
-    "OC2022",  # 4
-    "OC25",  # 5
-    "ODAC23",  # 6
-    "OMat24",  # 7
-    "OMol25",  # 8
-    "OMol25-neutral",  # 9
-    "OMol25-non-neutral",  # 10
-    "OPoly2026",  # 11
-    "Nabla2DFT",  # 12
-    "QCML",  # 13
-    "QM7X",  # 14
-    "transition1x",  # 15
-)
+GFM_HEAD_DATASETS = HYDRAGNN_DATASET_HEADS
 
 
-def _resolve_head_index(head) -> int | None:
-    """Map a head selector (``None`` | int | dataset name) to a branch index.
-
-    ``None`` -> ``None`` (grow a fresh, randomly-initialised ``branch-0``, the
-    default behaviour). An int (or digit string) is validated against the 16
-    pretrained branches. A name is matched case-insensitively against
-    :data:`GFM_HEAD_DATASETS` (e.g. ``"MPTrj"`` -> ``2``).
-    """
-    if head is None:
-        return None
-    if isinstance(head, bool):  # guard: bool is an int subclass
-        raise TypeError(f"invalid head selector {head!r}")
-    if isinstance(head, int) or (isinstance(head, str) and head.strip().lstrip("-").isdigit()):
-        idx = int(head)
-        if not 0 <= idx < len(GFM_HEAD_DATASETS):
-            raise ValueError(f"head index {idx} out of range 0..{len(GFM_HEAD_DATASETS) - 1}")
-        return idx
-    key = str(head).strip().lower()
-    for i, name in enumerate(GFM_HEAD_DATASETS):
-        if name.lower() == key:
-            return i
-    raise ValueError(
-        f"unknown head {head!r}; expected an index 0..{len(GFM_HEAD_DATASETS) - 1} "
-        f"or one of {GFM_HEAD_DATASETS}"
-    )
+def _resolve_head_index(head=None) -> int:
+    """Always 7 (OMat24); any other head raises."""
+    return resolve_hydragnn_inference_head(head)
 
 
 # --------------------------------------------------------------------------- #
@@ -340,10 +289,7 @@ class _LossSpec:
 def _finetune_protocol(
     strategy: str, head_index: int | None, freeze_mode: str, *, resumed_from: Path | None
 ) -> dict:
-    if resumed_from is not None:
-        head_init = "resumed"
-    else:
-        head_init = "pretrained" if head_index is not None else "random"
+    head_init = "resumed" if resumed_from is not None else "pretrained"
     protocol = {
         "backend": "hydragnn",
         "protocol": f"newhead-finetune-{strategy}",
@@ -372,9 +318,12 @@ def _load_resume_metadata(
     previous = json.loads((gfm_logdir / "energy-convention.json").read_text())
     gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
     resume_metadata = json.loads((gfm_logdir / "newhead.json").read_text())
-    if head_arch is not None or (
-        head_index is not None and head_index != resume_metadata["head_index"]
-    ):
+    if resume_metadata.get("head_index") != head_index:
+        raise ValueError(
+            f"Cannot resume {gfm_logdir}: head_index={resume_metadata.get('head_index')!r}; "
+            "only models fine-tuned from branch-7 (OMat24) are allowed"
+        )
+    if head_arch is not None:
         raise ValueError("Resuming a single-head checkpoint cannot replace its head architecture")
     return resume_metadata, gfm_checkpoint, resume_metadata["head_index"]
 
@@ -416,18 +365,17 @@ def _build_single_head_model(
     model = create_model_config(config=hcfg["NeuralNetwork"], verbosity=0)
     torch.set_default_dtype(param_dtype)
     model = model.to(dtype=param_dtype, device=dev)
-    if load_pretrained:
-        ckpt_path, state_dict = load_gfm_state_dict(gfm_logdir, gfm_checkpoint, dev)
-        if resume_metadata is None:
-            load_hydragnn_state_dict(model, state_dict, strict=False)
-        log.info("Loaded pretrained backbone from %s", ckpt_path.name)
-    else:
-        log.info("strategy=scratch: skipping pretrained checkpoint load")
+    if not load_pretrained:
+        raise ValueError("HydraGNN fine-tuning must start from pretrained branch-7 (OMat24)")
+    ckpt_path, state_dict = load_gfm_state_dict(gfm_logdir, gfm_checkpoint, dev)
+    if resume_metadata is None:
+        load_hydragnn_state_dict(model, state_dict, strict=False)
+    log.info("Loaded pretrained backbone from %s", ckpt_path.name)
 
     # The recorded ``ft_config`` always describes a single branch-0 head with the
     # GFM's head architecture, so the eval/calculator path rebuilds a matching
     # shape and loads the fine-tuned checkpoint over it regardless of how the
-    # head was initialised here (fresh-random vs. kept-pretrained).
+    # head was initialised here.
     ft_config = build_newhead_ft_config(hcfg, freeze_mode=freeze_mode, head_arch=head_arch)
     if resume_metadata is not None:
         ft_config = resume_metadata["ft_config"]
@@ -435,10 +383,7 @@ def _build_single_head_model(
             model, state_dict, ft_config, ft_repo=ft_repo, freeze_mode=freeze_mode
         )
         log.info("Resumed fine-tuned backbone and single head without reinitializing readout")
-    elif head_index is not None:
-        # Keep the SELECTED pretrained readout (its trained weights) and re-key
-        # it as branch-0, instead of growing a random head that must bootstrap
-        # force learning from scratch.
+    else:
         model = apply_pretrained_head_surgery(
             model, head_index, ft_repo=ft_repo, freeze_mode=freeze_mode
         )
@@ -446,10 +391,6 @@ def _build_single_head_model(
             "Kept pretrained head branch-%d (%s) as branch-0",
             head_index,
             GFM_HEAD_DATASETS[head_index],
-        )
-    else:
-        model = apply_newhead_surgery(
-            model, ft_config, ft_repo=ft_repo, freeze=(freeze_mode != "none")
         )
     # update_architecture builds new Linear layers with the default dtype; make
     # sure the whole model (backbone + new head) is on the training precision.
@@ -506,7 +447,7 @@ def finetune_hydragnn_newhead(
     *,
     gfm_logdir: str | Path,
     strategy: str = "unfrozen",
-    head: str | int | None = None,
+    head: str | int = "OMat24",
     gfm_checkpoint: str | None = None,
     head_arch: dict | None = None,
     epochs: int = 20,
@@ -529,27 +470,16 @@ def finetune_hydragnn_newhead(
     elemental_reference_manifest: str | Path | None = None,
     validation_dataset: str | Path | None = None,
 ) -> Path:
-    """Drop all 16 heads, grow one new ``branch-0`` head, and fine-tune it.
+    """Keep pretrained branch-7 (OMat24) as the single head and fine-tune it.
 
-    ``strategy`` is one of ``{"unfrozen", "frozen", "scratch"}``. When ``head``
-    is given (a branch index ``0..15`` or a dataset name from
-    :data:`GFM_HEAD_DATASETS`, e.g. ``"MPTrj"``), the *selected pretrained* head
-    is kept and fine-tuned instead of growing a randomly-initialised one -- the
-    MACE/UMA-style readout adaptation. Head selection requires a pretrained
-    backbone (``strategy`` ``unfrozen`` or ``frozen``); it is invalid with
-    ``scratch``. Returns the output logdir (``config.json`` + ``newhead.json`` +
-    ``checkpoint_name``). With ``run=False`` only a single forward/loss step runs
-    (dry-run wiring check).
+    ``strategy`` is ``"unfrozen"`` or ``"frozen"``; ``head`` must be branch-7.
+    Returns the output logdir (``config.json`` + ``newhead.json`` +
+    ``checkpoint_name``). With ``run=False`` only one forward/loss step runs.
     """
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy must be one of {STRATEGIES}; got {strategy!r}")
     load_pretrained, freeze_mode = _STRATEGY_SPEC[strategy]
     head_index = _resolve_head_index(head)
-    if head_index is not None and not load_pretrained:
-        raise ValueError(
-            f"head selection ({head!r}) requires a pretrained backbone; "
-            f"strategy={strategy!r} does not load pretrained weights"
-        )
 
     from matsim_agents.data.formation_training import (
         prepare_hydragnn_training_frames,
@@ -574,7 +504,7 @@ def finetune_hydragnn_newhead(
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
     resume_metadata = None
-    if load_pretrained and (gfm_logdir / "newhead.json").exists():
+    if (gfm_logdir / "newhead.json").exists():
         resume_metadata, gfm_checkpoint, head_index = _load_resume_metadata(
             gfm_logdir, gfm_checkpoint, head_arch=head_arch, head_index=head_index
         )
@@ -617,7 +547,7 @@ def finetune_hydragnn_newhead(
         head_index=head_index,
         ft_repo=ft_repo,
     )
-    # When the backbone is trainable (unfrozen/scratch) it must run in train()
+    # When the backbone is trainable (unfrozen) it must run in train()
     # mode so its norm layers update; a frozen backbone stays in eval() to keep
     # its pretrained running stats fixed. Running a trainable backbone in eval()
     # was a key reason the new-head fine-tune failed to move off zero-shot.
@@ -686,7 +616,7 @@ def finetune_hydragnn_newhead(
         frozen_params=total_params - trainable_params,
         extra={
             "strategy": strategy,
-            "head": (GFM_HEAD_DATASETS[head_index] if head_index is not None else None),
+            "head": GFM_HEAD_DATASETS[head_index],
             "head_index": head_index,
             "freeze_mode": freeze_mode,
             "load_pretrained": load_pretrained,
@@ -733,7 +663,7 @@ def finetune_hydragnn_newhead(
         checkpoint_name=checkpoint_name,
         metadata={
             "strategy": strategy,
-            "head": (GFM_HEAD_DATASETS[head_index] if head_index is not None else None),
+            "head": GFM_HEAD_DATASETS[head_index],
             "head_index": head_index,
             "freeze_mode": freeze_mode,
             "load_pretrained": load_pretrained,
@@ -776,11 +706,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gfm-logdir", required=True, help="GFM dir (config.json + .pk).")
     parser.add_argument("--strategy", default="unfrozen", choices=list(STRATEGIES))
     parser.add_argument(
-        "--head",
-        default=None,
-        help="Fine-tune a PRETRAINED head instead of a fresh random one: a branch "
-        "index 0..15 or a dataset name (e.g. MPTrj, Alexandria, OMat24). "
-        "Requires --strategy unfrozen|frozen. Default: grow a random head.",
+        "--head", default="OMat24", choices=["OMat24", "7", "branch-7"], help="Always branch-7."
     )
     parser.add_argument("--gfm-checkpoint", default=None, help="GFM .pk filename/path.")
     parser.add_argument("--epochs", type=int, default=20)

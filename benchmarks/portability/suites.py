@@ -144,7 +144,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
             "mlip": {
                 "backend": "hydragnn",
                 "logdir": str(output / "model"),
-                "mlp_checkpoint": str(output / "branch.pt"),
+                "inference_head": "OMat24",
                 "device": "cpu",
             },
             "md": {"seed_source": {"kind": "paths", "paths": [str(structure)]}},

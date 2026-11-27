@@ -12,7 +12,6 @@ from matsim_agents.backends.mlip.config import HydraGNNConfig
 
 mlip = HydraGNNConfig(
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
 )
 ```
 

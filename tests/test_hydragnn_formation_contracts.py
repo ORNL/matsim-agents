@@ -96,20 +96,18 @@ class FormationCalculator(Calculator):
         }
 
 
-@pytest.mark.parametrize("trainer_name", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
+@pytest.mark.parametrize("trainer_name", ["finetune_hydragnn_newhead"])
 def test_trainers_reject_missing_references_before_model_import(tmp_path, trainer_name):
     from importlib import import_module
 
     module = import_module(f"matsim_agents.backends.mlip.training.{trainer_name}")
     kwargs = {"gfm_logdir": tmp_path / "missing-foundation", "seed": 0}
-    if trainer_name == "finetune_hydragnn":
-        kwargs["branch_mlp_path"] = tmp_path / "missing-mlp"
     with pytest.raises(ValueError, match="elemental_reference_manifest"):
         getattr(module, trainer_name)(tmp_path / "missing-data", tmp_path / "output", **kwargs)
     assert not (tmp_path / "output").exists()
 
 
-@pytest.mark.parametrize("trainer_name", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
+@pytest.mark.parametrize("trainer_name", ["finetune_hydragnn_newhead"])
 def test_both_trainers_prepare_physical_labels_before_graphs(
     tmp_path, training_inputs, monkeypatch, trainer_name
 ):
@@ -128,17 +126,13 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
 
     monkeypatch.setattr(module, "_resolve_hydragnn_paths", check_preparation)
     kwargs = {"gfm_logdir": tmp_path, "elemental_reference_manifest": manifest, "seed": 0}
-    if trainer_name == "finetune_hydragnn":
-        kwargs["branch_mlp_path"] = tmp_path / "mlp"
     with pytest.raises(RuntimeError, match="verified physical frames"):
         getattr(module, trainer_name)(dataset, model, **kwargs)
 
 
-@pytest.mark.parametrize("routed", [False, True])
-def test_losses_use_physical_energy_without_second_subtraction(routed):
+def test_losses_use_physical_energy_without_second_subtraction():
     import torch
 
-    from matsim_agents.backends.mlip.training.finetune_hydragnn import _batch_loss
     from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import (
         _batch_loss_single_head,
     )
@@ -158,23 +152,11 @@ def test_losses_use_physical_energy_without_second_subtraction(routed):
         return ((graph.pos**2).sum() - 3).reshape(1, 1)
 
     def loss():
-        if routed:
-            return _batch_loss(
-                model,
-                lambda _: torch.zeros((1, 16)),
-                batch,
-                torch.tensor([7]),
-                1,
-                1,
-                torch.float64,
-            )
         return _batch_loss_single_head(model, batch, 1, 1)
 
     assert loss().item() == pytest.approx(0)
     batch.energy = torch.tensor([-2.0])
     assert loss().item() == pytest.approx(1 / 9)
-    if routed:
-        assert batch.dataset_name.item() == 7
 
 
 def test_single_head_resume_loads_readout_after_surgery(monkeypatch):
@@ -282,7 +264,7 @@ def test_finetune_protocol_is_recorded_and_still_restores(tmp_path, training_inp
 
 @pytest.mark.parametrize(
     "head_index,resumed,expected",
-    [(None, False, "random"), (0, False, "pretrained"), (None, True, "resumed")],
+    [(7, False, "pretrained"), (7, True, "resumed")],
 )
 def test_newhead_protocol_distinguishes_resumed_readout(tmp_path, head_index, resumed, expected):
     from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import _finetune_protocol
@@ -292,7 +274,7 @@ def test_newhead_protocol_distinguishes_resumed_readout(tmp_path, head_index, re
     )
     assert record["head_init"] == expected
     assert record.get("resumed_from") == (str(tmp_path) if resumed else None)
-    assert bool(record["pretrained_heads"]) == (head_index is not None)
+    assert record["pretrained_heads"] == ["OMat24"]
 
 
 def test_missing_elements_and_double_wrapping_fail(tmp_path, training_inputs):
@@ -321,11 +303,22 @@ def test_evaluation_formation_subtracts_model_references_once(tmp_path, training
     ) == pytest.approx(0)
 
 
-@pytest.mark.parametrize("name", ["routing.json", "newhead.json"])
-def test_legacy_fitted_offsets_are_not_silently_ignored(tmp_path, name):
-    (tmp_path / name).write_text(json.dumps({"reference_energies": {"8": -5}}))
+def test_legacy_fitted_offsets_are_not_silently_ignored(tmp_path):
+    (tmp_path / "newhead.json").write_text(json.dumps({"reference_energies": {"8": -5}}))
     with pytest.raises(ValueError, match="retrain"):
         restore_hydragnn_total_energy(FormationCalculator(), tmp_path)
+
+
+def test_routed_checkpoints_are_rejected(tmp_path, training_inputs):
+    (tmp_path / "routing.json").write_text(json.dumps({"reference_energies": {"8": -5}}))
+    with pytest.raises(ValueError, match="BranchWeightMLP HydraGNN checkpoints are forbidden"):
+        restore_hydragnn_total_energy(FormationCalculator(), tmp_path)
+    model = _checkpoint(tmp_path / "routed", training_inputs)
+    save_hydragnn_energy_convention(
+        model, model / "ft_model.pk", inference_metadata={"routed_branches": [7]}
+    )
+    with pytest.raises(ValueError, match="BranchWeightMLP HydraGNN checkpoints are forbidden"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
 
 
 def test_unmarked_foundation_retains_existing_behavior(tmp_path):
@@ -366,87 +359,39 @@ def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, 
     assert Atoms("NbO2", calculator=calculator).get_potential_energy() == pytest.approx(-23)
 
 
-@pytest.mark.parametrize("newhead", [False, True])
-def test_fused_and_auto_newhead_reload_restore_totals(
-    tmp_path, training_inputs, monkeypatch, newhead
-):
+def test_auto_newhead_reload_restores_totals(tmp_path, training_inputs, monkeypatch):
     import torch
 
     import matsim_agents.backends.mlip.calculator as factory
     import matsim_agents.backends.mlip.hydragnn_newhead as newhead_surgery
-    import matsim_agents.backends.mlip.relaxation as relaxation
 
     model_dir = _checkpoint(tmp_path, training_inputs)
-    captured = {}
     model = torch.nn.Linear(1, 1)
     monkeypatch.setattr(torch, "load", lambda *a, **kw: model.state_dict())
-    if newhead:
-        config = {
-            "NeuralNetwork": {
-                "Architecture": {"radius": 5, "max_neighbours": 20},
-                "Training": {"precision": "fp64"},
-            },
-        }
-        (model_dir / "config.json").write_text(json.dumps(config))
-        (model_dir / "newhead.json").write_text(json.dumps({"ft_config": {}}))
-        create = ModuleType("hydragnn.models.create")
-        create.create_model_config = lambda **kw: model
-        precision = ModuleType("hydragnn.train.train_validate_test")
-        precision.resolve_precision = lambda _: (None, torch.float64, nullcontext())
-        monkeypatch.setitem(sys.modules, "hydragnn.models.create", create)
-        monkeypatch.setitem(sys.modules, "hydragnn.train.train_validate_test", precision)
-        monkeypatch.setattr(newhead_surgery, "apply_newhead_surgery", lambda m, *_args, **kw: m)
-        monkeypatch.setattr(
-            factory, "_build_single_head_calculator", lambda **kw: FormationCalculator()
-        )
-        save_hydragnn_energy_convention(model_dir, model_dir / "ft_model.pk")
-    else:
-        inference = ModuleType("inference_fused")
-        inference.load_fused_stack = lambda *a: (
-            model,
-            torch.nn.Linear(118, 16),
-            {"NeuralNetwork": {"Architecture": {"radius": 5, "max_neighbours": 20}}},
-            "cpu",
-            nullcontext(),
-            torch.float64,
-            16,
-            "cpu",
-            nullcontext(),
-            True,
-            "fp64",
-            "fp64",
-        )
-        monkeypatch.setitem(sys.modules, "inference_fused", inference)
-
-        def build(**kw):
-            captured.update(kw)
-            return FormationCalculator()
-
-        monkeypatch.setattr(relaxation, "_build_calculator", build)
-        branch_mlp = model_dir / "branch-mlp.pt"
-        branch_mlp.write_text("routing-checkpoint")
-        (model_dir / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
-        from matsim_agents.core.hashing import sha256_file
-
-        save_hydragnn_energy_convention(
-            model_dir,
-            model_dir / "ft_model.pk",
-            inference_metadata={
-                "routed_branches": [7],
-                "branch_mlp_checkpoint": branch_mlp.name,
-                "branch_mlp_sha256": sha256_file(branch_mlp),
-            },
-        )
+    config = {
+        "NeuralNetwork": {
+            "Architecture": {"radius": 5, "max_neighbours": 20},
+            "Training": {"precision": "fp64"},
+        },
+    }
+    (model_dir / "config.json").write_text(json.dumps(config))
+    (model_dir / "newhead.json").write_text(json.dumps({"ft_config": {}, "head_index": 7}))
+    create = ModuleType("hydragnn.models.create")
+    create.create_model_config = lambda **kw: model
+    precision = ModuleType("hydragnn.train.train_validate_test")
+    precision.resolve_precision = lambda _: (None, torch.float64, nullcontext())
+    monkeypatch.setitem(sys.modules, "hydragnn.models.create", create)
+    monkeypatch.setitem(sys.modules, "hydragnn.train.train_validate_test", precision)
+    monkeypatch.setattr(newhead_surgery, "apply_newhead_surgery", lambda m, *_args, **kw: m)
+    monkeypatch.setattr(
+        factory, "_build_single_head_calculator", lambda **kw: FormationCalculator()
+    )
+    save_hydragnn_energy_convention(model_dir, model_dir / "ft_model.pk")
     try:
         calculator = factory.build_hydragnn_calculator(
-            HydraGNNConfig(logdir=model_dir, inference_head=7 if newhead else None)
+            HydraGNNConfig(logdir=model_dir, inference_head=7)
         )
         assert Atoms("NbO2", calculator=calculator).get_potential_energy() == pytest.approx(-23)
-        if not newhead:
-            assert calculator.active_branch_count == 1
-            weights = torch.softmax(captured["mlp"](torch.zeros((1, 118))), dim=-1)
-            assert weights[0, 7].item() == pytest.approx(1)
-            assert weights.sum().item() == pytest.approx(1)
     finally:
         torch.set_default_dtype(torch.float32)
 
@@ -599,7 +544,7 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
 
 
 @pytest.mark.parametrize("launcher", [False, True])
-@pytest.mark.parametrize("fine_tuner", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
+@pytest.mark.parametrize("fine_tuner", ["finetune_hydragnn_newhead"])
 def test_retrain_hook_forwards_references_and_verifies_output(
     tmp_path, training_inputs, monkeypatch, fine_tuner, launcher
 ):
@@ -640,7 +585,6 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         HydraGNNConfig(
             logdir=tmp_path,
             checkpoint="incumbent.pk",
-            mlp_checkpoint=tmp_path / "mlp.pt",
             ft_repo=tmp_path / "fine tuning repo",
             hydragnn_root=tmp_path / "HydraGNN source",
             charge=-2.5,
@@ -674,12 +618,8 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     assert flags["--charge"] == "-2.5"
     assert flags["--spin"] == "3.0"
     assert flags["--hydragnn-root"] == str(tmp_path / "HydraGNN source")
-    if fine_tuner == "finetune_hydragnn_newhead":
-        assert flags["--ft-repo"] == str(tmp_path / "fine tuning repo")
-        assert "--branch-mlp" not in argv
-    else:
-        assert flags["--branch-mlp"] == str(tmp_path / "mlp.pt")
-        assert "--ft-repo" not in argv
+    assert flags["--ft-repo"] == str(tmp_path / "fine tuning repo")
+    assert "--branch-mlp" not in argv
     (output / "ft_model.pk").write_text("broken")
     with pytest.raises(ValueError, match="checkpoint"):
         retrain_hydragnn(
@@ -687,7 +627,6 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             HydraGNNConfig(
                 logdir=tmp_path,
                 checkpoint="incumbent.pk",
-                mlp_checkpoint=tmp_path / "mlp.pt",
                 fine_tuner=fine_tuner,
             ),
             dataset,
@@ -794,72 +733,6 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
             launch=two_nodes,
             seed=0,
         )
-
-
-def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
-    from matsim_agents.core.hashing import sha256_file
-
-    model = _checkpoint(tmp_path, training_inputs)
-    branch_mlp = model / "branch-mlp.pt"
-    branch_mlp.write_text("routing-checkpoint")
-    (model / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
-    save_hydragnn_energy_convention(
-        model,
-        model / "ft_model.pk",
-        inference_metadata={
-            "routed_branches": [7],
-            "branch_mlp_checkpoint": branch_mlp.name,
-            "branch_mlp_sha256": sha256_file(branch_mlp),
-        },
-    )
-
-    # Valid checkpoint succeeds
-    restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # The inference configuration hash is mandatory, not merely an optional map entry.
-    convention_file = model / "energy-convention.json"
-    convention_data = json.loads(convention_file.read_text())
-    convention_data["inference_artifact_sha256"].pop("config.json")
-    convention_file.write_text(json.dumps(convention_data))
-    with pytest.raises(ValueError, match="requires a verified config.json"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # Mismatch 1: energy-convention.json has tampered routed_branches
-    convention_data = json.loads(convention_file.read_text())
-    convention_data["inference_artifact_sha256"]["config.json"] = sha256_file(model / "config.json")
-    convention_data["routed_branches"] = [8]
-    convention_file.write_text(json.dumps(convention_data))
-    with pytest.raises(ValueError, match="routed branches do not match"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # Mismatch 2: routing.json deleted from disk while in artifact hash
-    convention_data["routed_branches"] = [7]
-    convention_file.write_text(json.dumps(convention_data))
-    (model / "routing.json").unlink()
-    with pytest.raises(ValueError, match="inference artifact hash mismatch: routing.json"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # Mismatch 3: routing.json omitted from artifact hash when routed_branches is declared
-    convention_data["inference_artifact_sha256"].pop("routing.json", None)
-    convention_file.write_text(json.dumps(convention_data))
-    with pytest.raises(ValueError, match="requires verified routing.json"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # Mismatch 4: branch_mlp_checkpoint missing or not declared
-    routing_json = model / "routing.json"
-    routing_json.write_text(json.dumps({"routed_branches": [7]}))
-    convention_data["inference_artifact_sha256"]["routing.json"] = sha256_file(routing_json)
-    convention_data.pop("branch_mlp_checkpoint", None)
-    convention_file.write_text(json.dumps(convention_data))
-    with pytest.raises(ValueError, match="requires verified branch MLP checkpoint"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
-
-    # Mismatch 5: branch MLP file tampered on disk
-    convention_data["branch_mlp_checkpoint"] = branch_mlp.name
-    convention_file.write_text(json.dumps(convention_data))
-    branch_mlp.write_text("tampered-routing-mlp")
-    with pytest.raises(ValueError, match="routing MLP differs from training artifact"):
-        restore_hydragnn_total_energy(FormationCalculator(), model)
 
 
 @pytest.mark.parametrize(

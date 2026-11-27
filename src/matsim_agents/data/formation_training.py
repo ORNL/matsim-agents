@@ -215,7 +215,7 @@ def save_hydragnn_energy_convention(
     )
     metadata["inference_artifact_sha256"] = {
         name: sha256_file(output_dir / name)
-        for name in ("config.json", "newhead.json", "routing.json")
+        for name in ("config.json", "newhead.json")
         if (output_dir / name).exists()
     }
     if inference_metadata is not None:

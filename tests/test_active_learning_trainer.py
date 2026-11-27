@@ -250,14 +250,13 @@ def test_direct_training_must_be_local_and_single_process(tmp_path, backend):
 
 
 def _hydragnn(tmp_path, **extra):
-    return HydraGNNConfig(logdir=tmp_path / "gfm", mlp_checkpoint=tmp_path / "mlp.pt", **extra)
+    return HydraGNNConfig(logdir=tmp_path / "gfm", **extra)
 
 
 @pytest.mark.parametrize(
     ("backend", "module"),
     [
-        ("hydragnn", "matsim_agents.backends.mlip.training.finetune_hydragnn"),
-        ("hydragnn-newhead", "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead"),
+        ("hydragnn", "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead"),
         ("uma", "matsim_agents.backends.mlip.training.finetune_uma"),
         ("mace", "matsim_agents.backends.mlip.training.finetune_mace"),
     ],
@@ -266,7 +265,6 @@ def _hydragnn(tmp_path, **extra):
 def test_fine_tune_argv_runs_each_backends_module(tmp_path, references, backend, module, launcher):
     mlip = {
         "hydragnn": lambda: _hydragnn(tmp_path),
-        "hydragnn-newhead": lambda: _hydragnn(tmp_path, fine_tuner="finetune_hydragnn_newhead"),
         "uma": lambda: UMAConfig(),
         "mace": lambda: MACEConfig(),
     }[backend]()
@@ -318,22 +316,9 @@ def test_swapping_the_mlip_block_swaps_the_fine_tuner(tmp_path, references):
         return argv[argv.index("-m") + 1]
 
     hydragnn = _hydragnn(tmp_path)
-    assert module(hydragnn) == "matsim_agents.backends.mlip.training.finetune_hydragnn"
+    assert module(hydragnn) == "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead"
     assert module(UMAConfig()) == "matsim_agents.backends.mlip.training.finetune_uma"
     assert module(MACEConfig()) == "matsim_agents.backends.mlip.training.finetune_mace"
-
-
-def test_routed_hydragnn_fine_tune_requires_a_branch_mlp(tmp_path, references):
-    with pytest.raises(ValueError, match="requires mlp_checkpoint"):
-        _fine_tune_argv(
-            _trainer(references),
-            HydraGNNConfig(logdir=tmp_path / "gfm"),
-            LAUNCH,
-            dataset=tmp_path / "d.extxyz",
-            out_dir=tmp_path / "out",
-            references=tmp_path / "refs.json",
-            seed=0,
-        )
 
 
 @pytest.mark.parametrize(
@@ -341,7 +326,7 @@ def test_routed_hydragnn_fine_tune_requires_a_branch_mlp(tmp_path, references):
     [
         (trainer_module.retrain_uma, UMAConfig()),
         (trainer_module.retrain_mace, MACEConfig()),
-        (trainer_module.retrain_hydragnn, HydraGNNConfig(logdir="/l", mlp_checkpoint="/m.pt")),
+        (trainer_module.retrain_hydragnn, HydraGNNConfig(logdir="/l")),
     ],
     ids=["uma", "mace", "hydragnn"],
 )
@@ -364,7 +349,7 @@ def test_multirank_fine_tunes_are_rejected_before_any_setup(
 @pytest.mark.parametrize(
     ("mlip", "supported"),
     [
-        (HydraGNNConfig(logdir="/l", mlp_checkpoint="/m.pt", device="xpu"), True),
+        (HydraGNNConfig(logdir="/l", device="xpu"), True),
         (UMAConfig(device="xpu"), False),
         (MACEConfig(device="xpu"), False),
     ],

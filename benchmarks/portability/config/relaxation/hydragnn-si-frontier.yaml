@@ -16,7 +16,7 @@ geometry:
 mlip:
   backend: hydragnn
   logdir: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
-  mlp_checkpoint: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  inference_head: OMat24
   device: cuda  # ROCm PyTorch exposes the MI250X through the "cuda" device API
 
 max_steps: 200

@@ -317,7 +317,7 @@ def hydragnn(repo: Path, root: Path) -> dict:
 
 
 def hydragnn_finetune(repo: Path, root: Path) -> dict:
-    """Fine-tune with both built-in HydraGNN trainers, reload, infer, and relax."""
+    """Fine-tune HydraGNN branch-7 (OMat24), reload, infer, and relax."""
     import os
 
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
@@ -329,11 +329,10 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
     hydragnn_root = repo / "HydraGNN"
     example = hydragnn_root / "examples/multidataset_hpo_sc26"
     gfm = example / "multidataset_hpo-BEST6-fp64"
-    branch_mlp = example / "mlp_branch_weights.pt"
     ft_repo = Path(
         os.environ.get("HYDRAGNN_FT_REPO", repo.parent / "HydraGNN_GFM_FineTuning4Materials")
     )
-    require((gfm / "config.json").is_file() and branch_mlp.is_file(), "HydraGNN assets missing")
+    require((gfm / "config.json").is_file(), "HydraGNN assets missing")
     seed = root / "Si.extxyz"
     results: dict = {}
 
@@ -355,18 +354,11 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
         require(outcome.num_steps >= 1, f"HydraGNN {label} relaxation took no steps")
         return outcome.model_dump(mode="json")
 
-    results["relax_pretrained_routed"] = relax(
-        "pretrained-routed",
-        HydraGNNConfig(
-            logdir=gfm,
-            checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
-            mlp_checkpoint=branch_mlp,
-        ),
+    results["relax_pretrained_omat24"] = relax(
+        "pretrained-omat24",
+        HydraGNNConfig(logdir=gfm, checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk"),
     )
-    for script, extra in (
-        ("finetune_hydragnn_newhead", {"ft_repo": ft_repo}),
-        ("finetune_hydragnn", {"mlp_checkpoint": branch_mlp}),
-    ):
+    for script, extra in (("finetune_hydragnn_newhead", {"ft_repo": ft_repo}),):
         out = root / f"hydragnn-{script}"
         require(not out.exists(), f"{out} already exists")
         trainer = cfg.trainer.model_copy(

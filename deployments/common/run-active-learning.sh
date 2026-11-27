@@ -6,12 +6,11 @@ set -euo pipefail
 : "${RUN_DIR:?set RUN_DIR}"
 : "${MATSIM_SEED_STRUCTURES:?colon-separated ASE-readable seed paths required}"
 : "${LOGDIR:?set LOGDIR}"
-: "${HYDRAGNN_BRANCH_MLP_CHECKPOINT:?set HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 : "${MATSIM_DFT_BACKEND:=qe}"
 : "${MATSIM_RESOURCES:?set MATSIM_RESOURCES to a resource layout, e.g. deployments/<facility>/resources/active-learning-sequential.yaml}"
 
 AL_CONFIG="${RUN_DIR}/active-learning-config.json"
-export AL_CONFIG RUN_DIR LOGDIR HYDRAGNN_BRANCH_MLP_CHECKPOINT MATSIM_RESOURCES
+export AL_CONFIG RUN_DIR LOGDIR MATSIM_RESOURCES
 python3 -c '
 import json, os
 from pathlib import Path
@@ -54,7 +53,7 @@ cfg = {
     "mlip": {
         "backend": "hydragnn",
         "logdir": os.environ["LOGDIR"],
-        "mlp_checkpoint": os.environ["HYDRAGNN_BRANCH_MLP_CHECKPOINT"],
+        "inference_head": "OMat24",
         "device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
     },
     "md": {"seed_source": {"kind": "paths", "paths": os.environ["MATSIM_SEED_STRUCTURES"].split(":")},

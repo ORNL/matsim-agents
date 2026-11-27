@@ -45,17 +45,9 @@ TOOLS: dict[str, tuple[str, str]] = {
         "matsim_agents.backends.mlip.training.finetune_uma",
         "Fine-tune a UMA (FairChem) foundation model on an AL dataset",
     ),
-    "finetune-hydragnn": (
-        "matsim_agents.backends.mlip.training.finetune_hydragnn",
-        "Fine-tune the multi-branch HydraGNN foundation model",
-    ),
     "finetune-hydragnn-newhead": (
         "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead",
-        "Fine-tune HydraGNN with one new head instead of the branch heads",
-    ),
-    "branch-routing": (
-        "matsim_agents.backends.mlip.training.branch_routing",
-        "Map AL datasets to HydraGNN branch heads",
+        "Fine-tune HydraGNN branch-7 (OMat24), the only HydraGNN head used",
     ),
 }
 

@@ -15,7 +15,7 @@ from the request's description.
 - `relax_with_mlip`: existing ASE FIRE/BFGS/BFGSLineSearch implementation and
   trajectory/CSV/result handling. This benchmark calls it unchanged, using
   FIRE, fixed cell, fmax=0.02 eV/A, maxiter=200, maxstep=0.01 A.
-- HydraGNN fused ASE calculator predicts energy and analytical forces; its
+- HydraGNN branch-7 (OMat24) ASE calculator predicts energy and analytical forces; its
   force path uses negative autograd energy gradients. It provides no native
   stress requirement for this fixed-cell benchmark.
 - `ResourcePlan` Aurora preset describes 12 logical XPU tiles. Device counts
@@ -38,8 +38,8 @@ A separate checkout was created at
 `/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/HydraGNN-e4b-frozen-81d5b883`.
 The original checkout and installed environments were preserved. Upload the
 model files under that checkout's `examples/multidataset_hpo_sc26`:
-`mlp_branch_weights.pt` and
 `multidataset_hpo-BEST6-fp64/{config.json,multidataset_hpo-BEST6-fp64_epoch_97.pk}`.
+Only branch-7 (OMat24) is used; the other heads and the BranchWeightMLP are discarded.
 The user uploaded all three model files, and the CPU-only audit on
 2026-11-08 verified the checkpoint and branch-weight hashes against the
 previously inspected files. The configuration parsed successfully and the
@@ -49,8 +49,8 @@ the checkout after any further upload; historical audit hashes do not
 automatically approve new files. Execution verifies code revision and
 that the imported HydraGNN package originates from the pinned checkout.
 
-The default Aurora job names `multidataset_hpo-BEST6-fp64` plus
-`mlp_branch_weights.pt` in HydraGNN's multidataset example. The mounted model is
+The default Aurora job names `multidataset_hpo-BEST6-fp64` (branch-7, OMat24)
+in HydraGNN's multidataset example. The mounted model is
 PAINN, hidden_dim=337, two convolution layers, radius=5 A, max_neighbours=20,
 graph-attribute conditioning, fp64, epoch 97. `prepare` records the full
 architecture, exact file hashes, HydraGNN revision and software versions without
@@ -214,7 +214,7 @@ model, so its keys are `module.model...`. The frozen upstream loader calls
 silently left all 200 GNN tensors uninitialized in pilot job 9051385 while
 still printing "Loaded checkpoint". That run's numbers are invalid.
 
-`_load_fused_stack` now reapplies the weights through the existing
+The calculator loader now reapplies the weights through the existing
 `restore_hydragnn_checkpoint` helper: one leading `module.` is removed, `model.`
 and lazily created conditioning modules are preserved, and loading is strict
 (missing, unexpected, or mis-shaped tensors raise before inference). The pilot
@@ -241,7 +241,7 @@ choosing production walltime; no runtime estimate is fabricated beforehand.
 
 ## Timing and correctness
 
-The fused path reuses the strict DDP checkpoint helper: only one leading
+The calculator reuses the strict DDP checkpoint helper: only one leading
 `module.` wrapper prefix is removed; `model.` and lazy conditioning modules are
 preserved. Restoration must succeed before inference. The pilot checks the
 normalized state keys before each numerical operation and records
@@ -251,10 +251,10 @@ The worker calculator cache remains active: strict restoration occurs only on
 calculator creation, not for each structure or warm inference. The upstream
 stack constructor still opens the checkpoint before the helper restores it;
 this additional initial read is part of measured cold model-load time, not a
-warm-inference cost. Original GNN and branch-MLP files are never rewritten.
+warm-inference cost. Original GNN files are never rewritten.
 
 Each process verifies it sees exactly one XPU tile, sets local device 0, and
-verifies the model (and branch MLP) resides on XPU. No CPU fallback is allowed.
+verifies the branch-7 model resides on XPU. No CPU fallback is allowed.
 The parent never loads calculators. Every slot performs an untimed workload
 warmup, recording process-entry latency, checkpoint initialization and a cold
 energy/force operation; all workers finish warmup before the steady timer.

@@ -161,7 +161,6 @@ def test_trainer_command_reaches_the_fine_tuner_through_the_launcher(tmp_path):
 
     mlip = HydraGNNConfig(
         logdir=tmp_path / "gfm logdir",
-        mlp_checkpoint=tmp_path / "branch mlp.pt",
         checkpoint="incumbent.pk",
         charge=-2.5,
     )

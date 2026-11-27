@@ -145,9 +145,7 @@ def test_mace_family_defaults_and_validation():
 @pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
 def test_model_configs_forward_xpu_through_relaxation_schema(tmp_path, backend):
     models = {
-        "hydragnn": HydraGNNConfig(
-            logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", device="xpu"
-        ),
+        "hydragnn": HydraGNNConfig(logdir=tmp_path, device="xpu"),
         "uma": UMAConfig(device="xpu"),
         "mace": MACEConfig(device="xpu"),
     }

@@ -34,9 +34,9 @@ def verify_model_residency(calculator, backend: str) -> list[str]:
     from matsim_agents.backends.mlip.calculator import _find_torch_module
 
     if backend == "hydragnn":
-        roots = [getattr(calculator, name, None) for name in ("model", "mlp")]
-        if any(_find_torch_module(root) is None for root in roots):
-            raise RuntimeError("Fused HydraGNN qualification requires both GNN and MLP models")
+        roots = [getattr(calculator, "model", None)]
+        if _find_torch_module(roots[0]) is None:
+            raise RuntimeError("HydraGNN qualification requires the branch-7 (OMat24) GNN model")
     else:
         roots = [calculator, getattr(calculator, "predictor", None)]
         roots.extend(getattr(calculator, "models", []) or [])

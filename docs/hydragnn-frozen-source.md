@@ -67,7 +67,6 @@ Upload the pretrained files under:
 
 ```text
 <HYDRAGNN_DIR>/examples/multidataset_hpo_sc26/
-  mlp_branch_weights.pt
   multidataset_hpo-BEST6-fp64/
     config.json
     multidataset_hpo-BEST6-fp64_epoch_97.pk

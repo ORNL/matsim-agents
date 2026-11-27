@@ -50,15 +50,15 @@ mlip_backend_venv() {
 }
 
 # Print MLIP_CONFIG, or write and print a HydraGNN foundation-model selection
-# (LOGDIR weighted by its BranchWeightMLP) in RUN_DIR when it is unset.
+# (LOGDIR, branch-7 OMat24 head only) in RUN_DIR when it is unset.
 default_mlip_config() {
-  local run_dir=$1 logdir=$2 branch_mlp=$3
+  local run_dir=$1 logdir=$2
   if [[ -n "${MLIP_CONFIG:-}" ]]; then
     printf '%s\n' "${MLIP_CONFIG}"
     return 0
   fi
-  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n' \
-    "${logdir}" "${branch_mlp}" >"${run_dir}/mlip.yaml"
+  printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  inference_head: OMat24\n' \
+    "${logdir}" >"${run_dir}/mlip.yaml"
   printf '%s\n' "${run_dir}/mlip.yaml"
 }
 

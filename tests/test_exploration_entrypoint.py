@@ -107,13 +107,10 @@ def _backend_mlip_block(backend: str, root: Path) -> dict:
         logdir.mkdir()
         (logdir / "config.json").write_text("{}")
         (logdir / "best_model.pk").write_bytes(b"test weights, never deserialized")
-        mlp = root / "branch.pt"
-        mlp.write_bytes(b"test branch weights, never deserialized")
         return {
             "backend": "hydragnn",
             "logdir": "hydragnn-logdir",
             "checkpoint": "best_model.pk",
-            "mlp_checkpoint": "branch.pt",
         }
     if backend == "uma":
         return {"backend": "uma", "model_name": "uma-s-1p1", "device": "cpu"}
@@ -163,11 +160,10 @@ def test_every_mlip_backend_runs_the_same_exploration(tmp_path, emt_workflow, mo
     if backend == "hydragnn":
         logdir = tmp_path / "hydragnn-logdir"
         assert requests[0].mlip.logdir == logdir
-        assert requests[0].mlip.mlp_checkpoint == tmp_path / "branch.pt"
+        assert requests[0].mlip.inference_head == "OMat24"
         assert set(check.model_files) == {
             str(logdir / "config.json"),
             str(logdir / "best_model.pk"),
-            str(tmp_path / "branch.pt"),
         }
     elif backend == "uma":
         assert check.model_files == {}
@@ -608,7 +604,7 @@ def test_relative_model_paths_are_persisted_absolute(tmp_path, emt_workflow, mon
     run = Path(summary.run_directory)
     stored = json.loads((run / "resolved_config.json").read_text())["mlip"]
     assert stored["logdir"] == str(work / "hydragnn-logdir")
-    assert stored["mlp_checkpoint"] == str(work / "branch.pt")
+    assert stored["inference_head"] == "OMat24"
     monkeypatch.chdir(tmp_path)
     assert summarize_exploration(run) == summary
     assert resume_exploration(run) == summary

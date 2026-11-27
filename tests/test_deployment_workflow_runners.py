@@ -213,7 +213,6 @@ def test_shared_relaxation_runner_generates_typed_config(tmp_path: Path) -> None
         "RUN_DIR": str(tmp_path / "run"),
         "STRUCTURE": str(ROOT / "tests/integration/data/Si.vasp"),
         "LOGDIR": str(tmp_path / "model"),
-        "HYDRAGNN_BRANCH_MLP_CHECKPOINT": str(tmp_path / "weights.pt"),
     }
     Path(env["RUN_DIR"]).mkdir()
     subprocess.run(
@@ -240,7 +239,6 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
         "MATSIM_SEED_STRUCTURES": ":".join(map(str, seeds)),
         "MATSIM_RANDOM_SEED": "17",
         "LOGDIR": str(tmp_path / "model"),
-        "HYDRAGNN_BRANCH_MLP_CHECKPOINT": str(tmp_path / "weights.pt"),
         "MATSIM_DFT_BACKEND": "qe",
         "MATSIM_PW_BIN": "/opt/qe/bin/pw.x",
         "MATSIM_PSEUDO_DIR": "/opt/qe/pseudo",
@@ -552,7 +550,7 @@ def test_chat_default_selection_is_the_hydragnn_foundation_model(tmp_path):
     helpers = ROOT / "deployments/common/runtime-env.sh"
     env = {k: v for k, v in os.environ.items() if k != "MLIP_CONFIG"}
     result = subprocess.run(
-        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm /gfm/mlp.pt'],
+        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm'],
         env=env,
         capture_output=True,
         text=True,
@@ -562,10 +560,10 @@ def test_chat_default_selection_is_the_hydragnn_foundation_model(tmp_path):
     assert yaml.safe_load(path.read_text())["mlip"] == {
         "backend": "hydragnn",
         "logdir": "/gfm",
-        "mlp_checkpoint": "/gfm/mlp.pt",
+        "inference_head": "OMat24",
     }
     chosen = subprocess.run(
-        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm /m'],
+        ["bash", "-c", f'source "{helpers}"; default_mlip_config "{tmp_path}" /gfm'],
         env={**env, "MLIP_CONFIG": "/my/uma.yaml"},
         capture_output=True,
         text=True,
@@ -577,7 +575,7 @@ def test_chat_default_selection_is_the_hydragnn_foundation_model(tmp_path):
 def test_selected_model_artifacts_are_staged(tmp_path, backend):
     """Offline jobs export the selected model's artifact location before loading it."""
     blocks = {
-        "hydragnn": "backend: hydragnn\n  logdir: /gfm\n  mlp_checkpoint: /gfm/mlp.pt",
+        "hydragnn": "backend: hydragnn\n  logdir: /gfm\n  inference_head: OMat24",
         "uma": "backend: uma\n  model_name: uma-s-1p1",
         "mace": "backend: mace\n  model: small",
     }

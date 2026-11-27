@@ -38,7 +38,7 @@ mlip:
   backend: hydragnn
   logdir:         ${INITIAL_LOGDIR}
   checkpoint:     best_model.pt
-  mlp_checkpoint: null
+  inference_head: OMat24   # only branch-7 (OMat24) is allowed
   precision:  fp32
   device: cuda
   ensemble_models: []

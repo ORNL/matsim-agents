@@ -18,7 +18,6 @@ without a VASP install or a HydraGNN checkpoint::
     MATSIM_VASP_POTCAR_DIR     # directory with per-element POTCARs
                                # (e.g. <dir>/Si/POTCAR, <dir>/Mg/POTCAR ...)
     MATSIM_HYDRAGNN_LOGDIR     # HydraGNN logdir (config.json + checkpoint)
-    HYDRAGNN_BRANCH_MLP_CHECKPOINT   # BranchWeightMLP .pt checkpoint
 
 Optional::
 
@@ -76,8 +75,6 @@ def _missing_requirements() -> list[str]:
         missing.append("MATSIM_VASP_POTCAR_DIR (not a directory)")
     if _env("MATSIM_HYDRAGNN_LOGDIR") is None:
         missing.append("MATSIM_HYDRAGNN_LOGDIR")
-    if _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT") is None:
-        missing.append("HYDRAGNN_BRANCH_MLP_CHECKPOINT")
     return missing
 
 
@@ -146,7 +143,6 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
             key: value
             for key, value in {
                 "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
-                "mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
                 "device": _env("MATSIM_VASP_MLP_DEVICE") or "cuda",
             }.items()
             if value is not None

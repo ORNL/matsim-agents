@@ -37,7 +37,6 @@ PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 init_run_dirs "$PROJ" "discovery-chat" "${SLURM_JOB_ID}"
 export MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 export PROJECT_ROOT="$REPO"
@@ -48,7 +47,7 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 # The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
 # or the HydraGNN foundation model above. The client runs in that backend's environment.
-MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR")"
 VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
 activate_python_env "$VENV"
 

@@ -114,7 +114,7 @@ export PYTHONPATH="${REPO}/src:${PYTHONPATH:-}"
 source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mlip_model_artifacts "${REPO}" python "${MLIP_CONFIG}"
 case "${BACKEND}" in
-  # HydraGNN package + example dir (inference_fused / branch MLP) on the path.
+  # HydraGNN package + example dir (inference_fused) on the path.
   hydragnn) export PYTHONPATH="${HYDRAGNN_ROOT}:${PYTHONPATH}" ;;
   uma)
     if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then

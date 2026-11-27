@@ -43,7 +43,7 @@ def build_calculator(kind: str, model: str, zbl: bool):
         cfg = HydraGNNConfig(
             logdir=logdir,
             checkpoint=str(ckpt),
-            mlp_checkpoint=ex / "mlp_branch_weights.pt",
+            inference_head="OMat24",
             hydragnn_root=root,
             precision="fp64",
             device="cpu",

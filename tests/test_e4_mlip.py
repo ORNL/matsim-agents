@@ -138,7 +138,6 @@ def test_model_species_and_operations_are_gated(tmp_path):
     file = {"path": str(path), "sha256": sha256(path)}
     metadata = {
         "checkpoint": file,
-        "branch_checkpoint": file,
         "config": file,
         "backend": "hydragnn",
         "supported_species": [],
@@ -173,7 +172,6 @@ def test_dry_run_never_calls_gpu_or_worker(sources, tmp_path, monkeypatch):
         json.dumps(
             {
                 "checkpoint": file,
-                "branch_checkpoint": file,
                 "config": file,
                 "backend": "hydragnn",
                 "supported_species": [],
@@ -452,11 +450,7 @@ def test_pilot_dry_run_does_not_execute_model(sources, tmp_path, monkeypatch):
     checkpoint.write_text("CPU fixture")
     file = {"path": str(checkpoint), "sha256": sha256(checkpoint)}
     metadata = tmp_path / "metadata.json"
-    metadata.write_text(
-        json.dumps(
-            {"checkpoint": file, "config": file, "branch_checkpoint": file, "backend": "hydragnn"}
-        )
-    )
+    metadata.write_text(json.dumps({"checkpoint": file, "config": file, "backend": "hydragnn"}))
     monkeypatch.setattr(
         pilot, "execute", lambda *args: pytest.fail("No pilot execution authorized")
     )
@@ -554,7 +548,6 @@ def test_systems_pilot_approval_does_not_assert_units(sources, tmp_path, monkeyp
                 "backend": "hydragnn",
                 "pilot_scope": "approved_controlled_systems_only",
                 "checkpoint": file,
-                "branch_checkpoint": file,
                 "config": file,
                 "energy_convention_verified": False,
             }

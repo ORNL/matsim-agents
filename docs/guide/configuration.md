@@ -8,7 +8,7 @@ Every command that runs an MLIP reads one flat `mlip:` block, usually from
 `${VAR}` references are expanded from the environment and the file's `vars:`
 mapping. Relative paths resolve differently by backend:
 
-- `hydragnn`: `logdir`, `hydragnn_root`, `mlp_checkpoint`, `newhead_ft_config`,
+- `hydragnn`: `logdir`, `hydragnn_root`, `newhead_ft_config`,
   and `ft_repo` resolve against the YAML file; `checkpoint` resolves against
   `logdir`.
 - `uma`: `model_name` is a registry name unless it names an existing file
@@ -20,17 +20,13 @@ Ready-made files are in [examples/mlip/](../../examples/mlip/).
 
 | Backend | Fields |
 |---|---|
-| `hydragnn` | `logdir` (with `config.json` and checkpoint), `checkpoint`, `mlp_checkpoint` (BranchWeightMLP `.pt`), `inference_head`, `precision`, `mlp_precision`, `hydragnn_root`, `newhead_ft_config`, `ft_repo`, `radius`, `max_neighbours`, `charge`, `spin` |
+| `hydragnn` | `logdir` (with `config.json` and checkpoint), `checkpoint`, `inference_head` (only `OMat24`/`7`/`branch-7`), `precision`, `hydragnn_root`, `newhead_ft_config`, `ft_repo`, `radius`, `max_neighbours`, `charge`, `spin` |
 | `uma` | `model_name`, `task_name` (`omat`, `omol`, `oc20`, `odac`, `omc`), `precision`, `charge`, `spin`, `dropout` |
 | `mace` | `family`, `model`, `head`, `precision`, `dispersion`, `dropout` |
 | all | `device` (`cuda`, `cpu`, `xpu`), `ensemble_models`, `fine_tuner` |
 
-HydraGNN uses fused 16-head inference by default, which requires
-`mlp_checkpoint`. To pin one head for MLIP inference, set `inference_head` to a
-case-insensitive dataset name, its index, or a `branch-N` alias (for example,
-`inference_head: branch-7` selects the OMat24 head). Pinned mode invokes only
-that decoder, does not require the branch MLP, and does not report branch-weight
-uncertainty. It preserves
+HydraGNN uses only branch-7 (OMat24). Other heads, branch-weight MLPs, and
+routed or fused multi-head checkpoints are rejected. Inference preserves
 the loader's precision/autocast context, including `bf16`, during energy and
 force inference.
 
