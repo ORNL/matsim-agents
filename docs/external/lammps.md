@@ -266,10 +266,23 @@ velocity-Verlet run from the same state. On the 108-atom cell, 20 to 200 steps a
 | MACE-MP-0 small, 4 MPI ranks (job 6005236) | 20 | 7.7e-7 | 1.4e-9 |
 | HydraGNN BEST6, 4 MPI ranks (job 6005236) | 20 | 1.8e-5 | 3.0e-10 |
 | UMA uma-s-1p1, 4 MPI ranks (job 6005236) | 20 | 9.8e-8 | 6.4e-9 |
+| MACE-MP-0 small + ZBL, 200 eV recoil, 4 ranks (job 6005920) | 200 at 0.2 fs | 1.3e-3 (fails 1e-3) | 1.0e-7 |
+| HydraGNN BEST6 + ZBL, 200 eV recoil, 4 ranks (job 6005920) | 200 at 0.2 fs | 6.7e-3 (fails) | 1.3e-7 |
+| UMA uma-s-1p1 + ZBL, 200 eV recoil, 4 ranks (job 6005920) | 200 at 0.2 fs | 1.6e-3 (fails) | 1.1e-7 |
+| MACE-MP-0 small + ZBL, 200 eV recoil, 4 ranks (job 6006217) | 200 at 0.05 fs | 8.4e-5 | 1.1e-8 |
+| HydraGNN BEST6 + ZBL, 200 eV recoil, 4 ranks (job 6006217) | 200 at 0.05 fs | 1.4e-3 (fails 1e-3) | 1.2e-8 |
+| UMA uma-s-1p1 + ZBL, 200 eV recoil, 4 ranks (job 6006217) | 200 at 0.05 fs | 1.0e-4 | 9.8e-9 |
 
 The recoil runs (`--pka-eV`) show that the bridge reproduces ASE integration of a high-energy
-recoil with the same calculator. They are software checks of the bridge, not cascade physics: no
-stopping, no thermostat, one geometry, EMT only.
+recoil with the same calculator (positions agree to about 1e-7 A at 0.2 fs and 1e-8 A at 0.05 fs;
+the energy and force parity before the recoil passes for all three). They are software checks of
+the bridge, not cascade physics: no stopping, no thermostat, one geometry, one seed, one PKA energy
+and direction. ASE and LAMMPS drift alike, so the drift is integrator error from the stiff
+short-range repulsion, not a bridge error. At 0.2 fs MACE, HydraGNN and UMA all fail the
+1e-3 eV/atom drift limit; at 0.05 fs (10 fs of dynamics only) MACE and UMA pass and HydraGNN still
+fails at 1.4e-3 eV/atom, so no HydraGNN recoil passes. The limit was not loosened. Job script:
+`deployments/frontier/jobs/lammps/job-lammps-mliap-recoil-frontier.sh` (`MATSIM_MLIAP_TIMESTEP_FS`).
+The Slurm jobs are marked FAILED because of the drift check.
 
 ### Fine-tune and re-export
 
