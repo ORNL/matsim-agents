@@ -35,8 +35,8 @@ native implementations:
   state and human explanation, not scientific convergence.
 - [CLI commands](../../src/matsim_agents/cli/runs.py): thin wrappers over the
   runner; exit 0 finished, 1 failed, 2 invalid input, 3 blocked.
-- [Atomic run storage](../../src/matsim_agents/execution/run_directory.py):
-  shared JSON/text artifact writes.
+- [Run directories](../../src/matsim_agents/execution/run_directory.py):
+  collision-resistant run layout and the `events.jsonl` stream.
 
 For a new advanced workflow, register a `Handler` for its config kind whose
 preflight validates the native config without computation, and set `resume` only
@@ -48,6 +48,20 @@ than adding an unrestricted shell command.
 Keep CLI dependencies downward: persistence/execution cannot import orchestration,
 campaign, workflows, or CLI. Do not move machine-specific submission assumptions
 into scientific workflow modules.
+
+## Shared helpers in `core`
+
+Use these instead of a private copy:
+
+| Need | Use |
+| --- | --- |
+| Write a state or result file so a crash cannot leave it half written, or append one line to a log | `core.fileio.atomic_write_text`, `core.fileio.append_line` |
+| Hash a file, canonical JSON or a JSON value | `core.hashing.sha256_file`, `canonical_json`, `sha256_json` |
+| Read a YAML config that must be a mapping, with the file in the error | `core.yamlio.load_yaml_mapping`, `parse_yaml_mapping` |
+| Skip work a restarted run already finished, keyed on everything that would change the result | `core.restart.KeyedResultLog` |
+
+`backends/mcp/config.py` keeps its own YAML parse on purpose: PyYAML errors quote the offending source line, which can
+be a secret. `execution/ledger.py` keeps its own writer because its entries form a hash chain.
 
 ## Tests to add when behavior changes
 

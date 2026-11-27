@@ -47,6 +47,12 @@ must:
 5. retain failed calculations and their reasons;
 6. never promote a newly trained model without the configured approval.
 
+Done work is recorded with `core.restart.KeyedResultLog`, an append-only JSONL of `{key, result}` entries. The key
+holds every input and method setting that would change the result, so a changed configuration misses and reruns.
+Active-learning DFT labelling is its only user so far (`workflows/active_learning/labelling.py`). State and result
+files are written with `core.fileio.atomic_write_text` and log lines with `core.fileio.append_line`, so an interrupted
+run never leaves a half-written file.
+
 A configuration or dataset change should create a new run or a new versioned
 artifact with parent lineage. It must not rewrite the provenance of an older
 result.

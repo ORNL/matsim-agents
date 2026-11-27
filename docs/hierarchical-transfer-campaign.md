@@ -8,7 +8,7 @@ reference: Lupo Pasini et al., Comput. Mater. Sci. 257 (2025) 113908).
 > this campaign and nothing is numerically validated. Real-alloy transferability is
 > `NOT_YET_ESTABLISHED`.
 
-## Components (`src/matsim_agents/campaign/`)
+## Components (`src/matsim_agents/workflows/hierarchy/`)
 
 | Step | Module | Role |
 | --- | --- | --- |

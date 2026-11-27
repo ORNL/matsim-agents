@@ -17,15 +17,17 @@ the findings in [audit.md](audit.md).
 4. **Dependencies point downward** through the layers below and are enforced
    by `tests/test_package_boundaries.py`.
 5. **Backends are adapters.** Scientific methods do not import a specific DFT,
-   MLIP or LLM code; they depend on the protocols in `core.interfaces`.
+   MLIP or LLM code; they depend on the protocols owned by the layer that
+   defines them (see Core interfaces below).
 
 ## Package map
 
 ```text
 src/matsim_agents/
-  core/          contracts, interfaces (protocols), config loader, provenance,
-                 composition, structure identity, candidates, units, hashing,
-                 canonical JSON, stats, seeding, errors
+  core/          contracts, application schema, composition, energy
+                 conventions, relaxation results, hashing, atomic file writes
+                 (`fileio`), YAML mapping loader (`yamlio`), restart records
+                 (`restart`), stats, seeding, stress
   science/       backend-agnostic scientific methods
     structures/      alloy/SQS generation, prototypes, seed structures
     thermodynamics/  references, formation energy, convex hull, surrogate hull
@@ -80,8 +82,8 @@ Sublayers inside a row may not import each other unless listed.
 
 Additional rules enforced by architecture tests:
 
-* `science.*` must not import `backends.*`. It depends only on
-  `core.interfaces` protocols, so any backend can be plugged in.
+* `science.*` must not import `backends.*`. It takes calculators and
+  results as arguments, so any backend can be plugged in.
 * `backends.mlip` must not import `data`. Training-set construction is
   passed in by `workflows`.
 * Nothing under `src/` imports `examples`, `benchmarks`, `research`,
@@ -92,15 +94,16 @@ Additional rules enforced by architecture tests:
 * Removed modules stay removed: a list of old import paths must fail to
   import.
 
-## Core interfaces
+## Protocols
 
-`core.interfaces` holds the protocols every layer codes against:
+Protocols sit in the layer that owns the capability, so `core` stays free of
+backend and execution concepts:
 
-* `DFTBackend`, `MLIPBackend`, `LLMBackend`
-* `ExecutionPlatform` (scheduler + filesystem abstraction)
-* `RunStore` (artifacts, restarts, provenance)
-* `PropertyCalculator` (one property, any backend)
-* `AcquisitionPolicy` (ranks candidates)
+* `DFTBackend` in `backends/dft/base.py` and `MLIPBackend` in
+  `backends/mlip/__init__.py`
+* `ExecutionPlatform` in `execution/__init__.py` (scheduler + filesystem
+  abstraction)
+* `RunStore` in `execution/provenance.py` (artifacts, restarts, provenance)
 
 ## Configuration model
 
@@ -108,10 +111,8 @@ Additional rules enforced by architecture tests:
   `ApplicationConfig` (chemistry, structure generation, properties,
   objectives, budgets), `WorkflowConfig`, `BackendConfig`,
   `DeploymentConfig`.
-* One loader, `core.config.load`, resolves includes and environment
-  references, validates the result, and writes the resolved config into the
-  run provenance.
-* Templates ship as package data under `matsim_agents/core/templates/`.
+* YAML configs are read with `core.yamlio`; the resolved config is written into
+  the run provenance.
 * Application requirements become validation rules. For the fusion
   1024-site study these are `sites == 1024`, the exact composition, the
   (8,8,8) BCC supercell, and the element set.

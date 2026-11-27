@@ -32,6 +32,18 @@ active learning, fine-tuning, evaluation, benchmarks, deployments):
   `backends/mlip/hydragnn_sources.json` (`backends/mlip/hydragnn_source.py`). A logdir with
   neither is refused. Do not add registry entries without verifying the commit that loads them.
 
+## Layout and shared helpers
+
+- Import layers are enforced by `tests/test_package_boundaries.py`: `core`, then `execution` and `data`, then
+  `backends`, `science`, `backends.external`, `workflows`, `agents`, `cli`. A package imports only from lower layers;
+  `core` imports nothing from the package. Move shared code down rather than importing upward.
+- Write state files with `core.fileio.atomic_write_text` and log lines with `core.fileio.append_line`. Read YAML
+  configs with `core.yamlio`, hash with `core.hashing`, and record resumable work with `core.restart.KeyedResultLog`.
+  Do not add private copies.
+- Large workflows are packages split by stage under `workflows/` (`active_learning`, `characterization`,
+  `multi_formula`, `exploration`, `neb`, `radiation`). Add to the stage module that owns the behavior.
+- No composition, element, account, queue or path literals in `src/`; they come from configuration.
+
 ## Verify before claiming
 
 - Read a file or run a command before describing it. Do not cite files or line numbers that were
