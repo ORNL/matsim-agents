@@ -50,6 +50,10 @@ from matsim_agents.backends.mlip.hydragnn_newhead import (
     keep_only_branch_7,
     load_update_model,
 )
+from matsim_agents.backends.mlip.hydragnn_source import (
+    verify_hydragnn_source,
+    write_hydragnn_source_record,
+)
 from matsim_agents.backends.mlip.training.cost import CostReport, count_parameters, track_cost
 from matsim_agents.backends.mlip.training.hydragnn_data import (
     _atoms_to_data,
@@ -383,7 +387,13 @@ def _warmup_cosine_scheduler(optimizer, steps_per_epoch: int, epochs: int, warmu
 
 
 def _save_single_head_logdir(
-    model, output_dir: Path, *, config_path: Path, checkpoint_name: str, metadata: dict
+    model,
+    output_dir: Path,
+    *,
+    config_path: Path,
+    checkpoint_name: str,
+    metadata: dict,
+    source_record: dict,
 ) -> Path:
     """Write the checkpoint, the ORIGINAL GFM config, and ``newhead.json``."""
     import torch
@@ -393,6 +403,7 @@ def _save_single_head_logdir(
     # The original GFM config lets eval rebuild the backbone and re-apply surgery.
     shutil.copyfile(config_path, output_dir / "config.json")
     (output_dir / "newhead.json").write_text(json.dumps(metadata, indent=2))
+    write_hydragnn_source_record(output_dir, source_record)
     return ckpt_out
 
 
@@ -463,6 +474,7 @@ def finetune_hydragnn_newhead(
     root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
+    source_record = verify_hydragnn_source(gfm_logdir)
     resume_metadata = None
     if (gfm_logdir / "newhead.json").exists():
         resume_metadata, gfm_checkpoint, head_index = _load_resume_metadata(
@@ -621,6 +633,7 @@ def finetune_hydragnn_newhead(
         output_dir,
         config_path=config_path,
         checkpoint_name=checkpoint_name,
+        source_record=source_record,
         metadata={
             "strategy": strategy,
             "head": GFM_HEAD_DATASETS[head_index],

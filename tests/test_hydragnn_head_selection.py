@@ -111,7 +111,7 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
 
 @pytest.mark.parametrize("metadata_name", ["routing.json", "newhead.json", None])
 def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
-    tmp_path, monkeypatch, metadata_name
+    tmp_path, monkeypatch, metadata_name, unverified_hydragnn_source
 ):
     import matsim_agents.backends.mlip.relaxation as relaxation
 
@@ -151,7 +151,7 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
 
 @pytest.mark.parametrize("inference_head", ["OMat24", "branch-7"])
-def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head):
+def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head, unverified_hydragnn_source):
     import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"

@@ -25,6 +25,14 @@ def _no_ambient_scheduler(monkeypatch):
 
 
 @pytest.fixture
+def unverified_hydragnn_source(monkeypatch):
+    """For tests whose HydraGNN loaders are mocked, so no real checkout exists to verify."""
+    import matsim_agents.backends.mlip.hydragnn_source as source
+
+    monkeypatch.setattr(source, "verify_hydragnn_source", lambda logdir: {})
+
+
+@pytest.fixture
 def elemental_manifest(tmp_path):
     """Synthetic DFT-labelled fixed geometries; not real DFT qualification."""
 

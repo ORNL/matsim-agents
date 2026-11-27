@@ -46,8 +46,9 @@ installer create `matsim-agents/.venv-mace`. Frontier also accepts HydraGNN's
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
 environment.
 
-E4-B selects a specific model-code checkout rather than the default upstream
-source. Follow [the frozen HydraGNN source requirement](../docs/hydragnn-frozen-source.md)
+E4-B, and any job that loads BEST6, selects a specific model-code checkout rather than the
+default upstream source. Job scripts get its location from
+`deployments/common/hydragnn-env.sh`; they must not hard-code a HydraGNN path. Follow [the frozen HydraGNN source requirement](../docs/hydragnn-frozen-source.md)
 to request repository `allaffa/HydraGNN` at commit
 `81d5b88304f20bb45c840571e2e26c490d1b19da` through the Aurora installer's
 `HYDRAGNN_REPO`/`HYDRAGNN_REF` settings. Clone-only preparation does not require

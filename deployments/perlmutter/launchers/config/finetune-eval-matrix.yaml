@@ -8,8 +8,9 @@
 #
 # Used by submit-finetune-eval-matrix-perlmutter.sh (finetune_eval_matrix.py).
 vars:
-  HYDRAGNN_ROOT: ${PROJECT_ROOT}/../HydraGNN
-  GFM_LOGDIR: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
+  # Both come from deployments/common/hydragnn-env.sh, which the submit scripts source.
+  HYDRAGNN_ROOT: ${HYDRAGNN_ROOT:?source deployments/common/hydragnn-env.sh}
+  GFM_LOGDIR: ${HYDRAGNN_BEST6_LOGDIR:?source deployments/common/hydragnn-env.sh}
   GFM_CHECKPOINT: multidataset_hpo-BEST6-fp64_epoch_97.pk
   FT_REPO: ${PROJECT_ROOT}/../HydraGNN_GFM_FineTuning4Materials
 

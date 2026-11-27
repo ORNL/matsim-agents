@@ -150,18 +150,15 @@ def _apply_energy_convention(
 def _add_hydragnn_example_dirs(logdir: Path) -> None:
     """Put the HydraGNN example dir (with ``inference_fused``) on ``sys.path``.
 
-    ``inference_fused`` lives in the HydraGNN example dir alongside the GFM
-    logdir (``.../multidataset_hpo_sc26/<gfm_logdir>``). Adding it here makes the
-    eval path self-sufficient instead of relying on the caller (or the fine-tune
-    module) having imported it first. ``HYDRAGNN_ROOT`` is honoured as well,
-    matching the fine-tune's resolution.
+    The scripts come from the checkout whose ``hydragnn`` is imported, never from the
+    directory beside the logdir: the weights may sit in a different HydraGNN tree
+    than the commit recorded for them (``verify_hydragnn_source`` checks that commit).
     """
     import sys
 
-    example_dirs = [logdir.parent]
-    root_env = os.environ.get("HYDRAGNN_ROOT")
-    if root_env:
-        example_dirs.append(Path(root_env) / "examples" / "multidataset_hpo_sc26")
+    from matsim_agents.backends.mlip.hydragnn_source import imported_hydragnn_root
+
+    example_dirs = [imported_hydragnn_root() / "examples" / "multidataset_hpo_sc26"]
     for directory in example_dirs:
         if (directory / "inference_fused.py").is_file() and str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
@@ -298,6 +295,9 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig):
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
     cfg, _ = _apply_energy_convention(cfg, logdir)
     _add_hydragnn_example_dirs(logdir)
+    from matsim_agents.backends.mlip.hydragnn_source import verify_hydragnn_source
+
+    verify_hydragnn_source(logdir)
     if cfg.newhead_ft_config is not None:
         return _newhead_hydragnn_calculator(cfg, logdir)
     return _branch_7_hydragnn_calculator(cfg, logdir)

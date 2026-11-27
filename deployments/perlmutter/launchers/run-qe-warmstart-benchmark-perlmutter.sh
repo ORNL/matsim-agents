@@ -43,7 +43,8 @@ PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}
 PROJ="$(dirname "${PROJECT_ROOT}")"
 
 PSEUDO_DIR="${PSEUDO_DIR:-${PROJECT_ROOT}/external/quantum-espresso/src/pseudo}"
-HYDRAGNN_LOGDIR="${HYDRAGNN_LOGDIR:-$PROJ/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}"
+source "${PROJECT_ROOT}/deployments/common/hydragnn-env.sh"
+HYDRAGNN_LOGDIR="${HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}"
 FIXTURES="${FIXTURES:-Si_diamond}"
 QE_TIMEOUT_SEC="${QE_TIMEOUT_SEC:-3600}"
 
@@ -83,8 +84,7 @@ export MATSIM_WARMSTART_FIXTURES="${FIXTURES}"
 
 # inference_fused.py lives in the HydraGNN SC26 examples dir; add it so
 # HydraGNN's warm-start path can import it.
-HYDRAGNN_SC26_DIR="$PROJ/HydraGNN/examples/multidataset_hpo_sc26"
-export PYTHONPATH="${HYDRAGNN_SC26_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+hydragnn_export_pythonpath
 
 # Disable GPU-aware MPI for the pw.x sub-launch: the GTL library is not
 # linked in this batch job context, which causes all MPI ranks to abort.

@@ -35,8 +35,8 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 init_run_dirs "$PROJ" "discovery-chat" "${SLURM_JOB_ID}"
 export MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 export PROJECT_ROOT="$REPO"
@@ -56,7 +56,7 @@ source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mlip_model_artifacts "$REPO" python "$MLIP_CONFIG"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 
 # ── environment ──────────────────────────────────────────────────────────────
 export PYTHONNOUSERSITE=1

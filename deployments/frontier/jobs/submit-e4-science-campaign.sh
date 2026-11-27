@@ -27,8 +27,8 @@ VENV=${VENV_PATH:-$REPO/.venv}
 OUT=${E4_OUTPUT_ROOT:-$PROJ/runs/e4-framework}
 ACCOUNT=${E4_ACCOUNT:?set E4_ACCOUNT to your OLCF project}
 CONFIGS=$REPO/benchmarks/e4/framework/configs
-HYDRAGNN_DIR=${HYDRAGNN_DIR:-$PROJ/HydraGNN}
-HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_DIR/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 
 case $CODE in
   vasp)

@@ -76,8 +76,8 @@ export PYTHONUNBUFFERED=1
 
 # Make HydraGNN example utilities importable (inference_fused, etc.), which the
 # HydraGNN ASE calculator in backends/mlip/relaxation.py imports at build time.
-HYDRAGNN_EXAMPLE="${HYDRAGNN_DIR:-$PROJ/HydraGNN}/examples/multidataset_hpo_sc26"
-export PYTHONPATH="$HYDRAGNN_EXAMPLE:${HYDRAGNN_DIR:-$PROJ/HydraGNN}:${PYTHONPATH:-}"
+source "$REPO/deployments/common/hydragnn-env.sh"
+hydragnn_export_pythonpath
 
 echo "=========================================="
 echo "[Frontier AL DFT-scaling point]"

@@ -28,8 +28,8 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
-HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
-LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
+LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_BEST6_LOGDIR}}"
 STRUCTURE="${MATSIM_STRUCTURE:-${REPO}/tests/integration/data/Si.vasp}"
 
 JOBID="${PBS_JOBID:-$$}"
@@ -43,7 +43,7 @@ load_aurora_frameworks_modules
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 
-export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${PROJ}/HydraGNN:${PYTHONPATH:-}"
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-0}"

@@ -9,7 +9,7 @@ The single full-install entry point is:
 bash deployments/aurora/setup/install.sh
 ```
 
-For E4-B and its HydraGNN model stack, explicitly select
+For E4-B and any use of the BEST6 checkpoint, explicitly select
 `HYDRAGNN_REPO=https://github.com/allaffa/HydraGNN.git` and
 `HYDRAGNN_REF=81d5b88304f20bb45c840571e2e26c490d1b19da`, using a separate
 `HYDRAGNN_DIR`. See [the frozen-source requirement](../../../docs/hydragnn-frozen-source.md)

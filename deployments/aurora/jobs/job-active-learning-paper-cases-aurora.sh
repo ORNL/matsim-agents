@@ -46,7 +46,7 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
 PROJ="$(dirname "${REPO}")"
 export PROJ_ROOT="${REPO}"
 export RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-export HYDRAGNN_DIR="${HYDRAGNN_DIR:-${PROJ}/HydraGNN}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
 export HYDRAGNN_FT_REPO="${HYDRAGNN_FT_REPO:-${PROJ}/HydraGNN_GFM_FineTuning4Materials}"
 
 # ── case -> AL YAML mapping ─────────────────────────────────────────────────
@@ -100,7 +100,7 @@ esac
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 
-export PYTHONPATH="${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26:${HYDRAGNN_DIR}:${PYTHONPATH:-}"
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export ZE_FLAT_DEVICE_HIERARCHY="${ZE_FLAT_DEVICE_HIERARCHY:-FLAT}"

@@ -48,8 +48,8 @@ PROJ="$(dirname "${REPO}")"
 source "${REPO}/deployments/common/runtime-env.sh"
 
 VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
-HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
-LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
+LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_BEST6_LOGDIR}}}"
 
 MODEL_DIR="${MATSIM_MODEL_DIR:-${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}}"
 MODEL_NAME="${MATSIM_MODEL_NAME:-${CHAT_MODEL_NAME:-$(basename "${MODEL_DIR}")}}"
@@ -76,7 +76,7 @@ if [[ -f "${VENV_PATH}/bin/activate" ]]; then
     activate_matsim_aurora_python "${REPO}" "${VENV_PATH}"
 fi
 
-export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${PROJ}/HydraGNN:${PYTHONPATH:-}"
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 # PBS sets TMPDIR to /var/tmp/pbs.<jobid>.<full-hostname>/<uuid>/ which is

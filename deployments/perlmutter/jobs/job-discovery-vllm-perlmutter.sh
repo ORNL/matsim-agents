@@ -40,8 +40,8 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv          # discovery client + HydraGNN MLFF
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 init_run_dirs "$PROJ" "discovery-vllm" "${SLURM_JOB_ID:-$$}"
 
 # ── placement: vLLM server and MLIP workers come from the resource layout ────
@@ -61,7 +61,7 @@ activate_python_env "$VENV"
 source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mlip_model_artifacts "$REPO" python "$MLIP_CONFIG"
 
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID

@@ -1,7 +1,7 @@
 # Frozen HydraGNN source for reproducible model execution
 
-For the E4-B HydraGNN benchmark and workflows using its model stack,
-MATSIM-AGENTS must use the following user-approved source version:
+The E4-B HydraGNN benchmark, and loading or fine-tuning the BEST6 checkpoint in any
+MATSIM-AGENTS workflow, must use the following user-approved source version:
 
 | Setting | Required value |
 | --- | --- |
@@ -13,7 +13,20 @@ MATSIM-AGENTS must use the following user-approved source version:
 The commit is the pin. Do not substitute the current branch tip, ORNL main,
 or a package version number for this source revision. If the commit cannot be
 retrieved, stop and report the failure rather than falling back to another
-version. This choice does not change the default source for unrelated workflows.
+version.
+
+The pin is enforced in two places:
+
+- `deployments/common/hydragnn-env.sh` is the one place job scripts get the code location from.
+  It exports `HYDRAGNN_ROOT` (alias `HYDRAGNN_DIR`), `HYDRAGNN_EXAMPLE`, `HYDRAGNN_WEIGHTS` and
+  `HYDRAGNN_BEST6_LOGDIR`, and fails unless `HYDRAGNN_ROOT` is at the pinned commit with no
+  changes to tracked files. `hydragnn_export_pythonpath` puts the checkout on `PYTHONPATH`.
+  `tests/test_hydragnn_env_single_source.py` rejects scripts that set these themselves.
+- `matsim_agents.backends.mlip.hydragnn_source` checks the commit of the `hydragnn` package that
+  is actually imported when a logdir is loaded or fine-tuned from. The expected commit comes from
+  `hydragnn-source.json` in the logdir, or from the checkpoint hash in
+  `src/matsim_agents/backends/mlip/hydragnn_sources.json`. A logdir with neither is refused.
+  Fine-tuning writes `hydragnn-source.json` into its output logdir.
 
 ## Clone only: preserve existing installations
 
@@ -76,10 +89,12 @@ These are the filenames expected by the current E4-B audit. If the uploaded
 checkpoint has a different layout or architecture, document and review that
 change rather than renaming it to imply equivalence.
 
-Set `HYDRAGNN_ROOT` to the frozen checkout and `HYDRAGNN_EXAMPLE` to its example
-directory for the generated E4-B PBS scripts. Those scripts put the selected
-source directories on `PYTHONPATH`; execution verifies both the source commit
-and the imported HydraGNN package location.
+The weights are data and need not sit in the frozen checkout. On Frontier and Perlmutter BEST6
+stays in the older `HydraGNN` tree, which cannot load it (different PAINN layer); the registry
+ties its checkpoint hash to the pinned commit. Set `HYDRAGNN_WEIGHTS` to override where
+`hydragnn-env.sh` looks for them. The generated E4-B PBS scripts use `HYDRAGNN_ROOT` and
+`HYDRAGNN_EXAMPLE`; execution verifies both the source commit and the imported HydraGNN package
+location.
 
 Re-audit after every checkpoint upload:
 

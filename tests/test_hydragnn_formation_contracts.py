@@ -324,7 +324,9 @@ def test_unmarked_foundation_retains_existing_behavior(tmp_path):
     assert restore_hydragnn_total_energy(calculator, tmp_path) is calculator
 
 
-def test_branch_7_factory_restores_total_energy(tmp_path, training_inputs, monkeypatch):
+def test_branch_7_factory_restores_total_energy(
+    tmp_path, training_inputs, monkeypatch, unverified_hydragnn_source
+):
     import torch
 
     import matsim_agents.backends.mlip.calculator as factory
@@ -367,7 +369,9 @@ def test_branch_7_factory_restores_total_energy(tmp_path, training_inputs, monke
     assert Atoms("NbO2", calculator=calculator).get_potential_energy() == pytest.approx(-23)
 
 
-def test_auto_newhead_reload_restores_totals(tmp_path, training_inputs, monkeypatch):
+def test_auto_newhead_reload_restores_totals(
+    tmp_path, training_inputs, monkeypatch, unverified_hydragnn_source
+):
     import torch
 
     import matsim_agents.backends.mlip.calculator as factory

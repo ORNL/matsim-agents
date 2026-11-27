@@ -39,14 +39,11 @@ run emt-mpi "$REPO/.venv/bin/python" --calc emt --md-steps 200 --md-timestep-fs 
 run mace-mpi "$REPO/.venv-mace/bin/python" --calc mace --model small --md-steps 20
 
 PROJ="$(dirname "$REPO")"
-HG_SRC="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
-HG_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
-if [[ -d "$HG_SRC/hydragnn" && -d "$HG_WEIGHTS/examples/multidataset_hpo_sc26" ]]; then
-    export HYDRAGNN_DIR="$HG_SRC" HYDRAGNN_WEIGHTS="$HG_WEIGHTS"
-    PYTHONPATH="$HG_SRC:$PYTHONPATH" run hydragnn-mpi "$REPO/.venv/bin/python" \
-        --calc hydragnn --md-steps 20
+if source "$REPO/deployments/common/hydragnn-env.sh" && [[ -d "$HYDRAGNN_BEST6_LOGDIR" ]]; then
+    PYTHONPATH="$HYDRAGNN_EXAMPLE:$HYDRAGNN_ROOT:$PYTHONPATH" run hydragnn-mpi \
+        "$REPO/.venv/bin/python" --calc hydragnn --md-steps 20
 else
-    echo "hydragnn: skipped (frozen source or weights missing)" | tee "$OUT/hydragnn-mpi.skipped"
+    echo "hydragnn: skipped (pinned source unavailable or BEST6 weights missing)" | tee "$OUT/hydragnn-mpi.skipped"
 fi
 
 export MATSIM_UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-$PROJ/models/artifacts/uma}"

@@ -21,8 +21,8 @@ if [[ "$STAGE" == "mace" ]]; then
   PYTHON="$REPO/.venv-mace/bin/python"
 elif [[ "$STAGE" == hydragnn* ]]; then
   PYTHON="$REPO/.venv/bin/python"
-  export HYDRAGNN_ROOT="$REPO/HydraGNN"
-  export PYTHONPATH="$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26:$HYDRAGNN_ROOT:$PYTHONPATH"
+  source "$SOURCE/deployments/common/hydragnn-env.sh"
+  hydragnn_export_pythonpath
 else
   configure_uma_model_artifacts "$REPO"
   PYTHON="$REPO/.venv-uma/bin/python"

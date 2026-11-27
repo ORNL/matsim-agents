@@ -720,7 +720,11 @@ def test_campaign_run_name_uses_the_configured_mlip_backend(config, expected):
             sys.executable,
             str(root / "deployments/perlmutter/jobs/config" / config),
         ],
-        env={**os.environ, "PROJECT_ROOT": str(root)},
+        env={
+            **os.environ,
+            "PROJECT_ROOT": str(root),
+            "HYDRAGNN_BEST6_LOGDIR": "/weights/BEST6",  # exported by hydragnn-env.sh
+        },
         text=True,
     )
     assert output.strip() == expected
