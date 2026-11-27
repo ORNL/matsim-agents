@@ -1,0 +1,55 @@
+# Quantum ESPRESSO numerical protocols and what each one is qualified for.
+#
+# A protocol is "qualified" only through a convergence report (workflows/numerical_convergence.py)
+# whose status is "qualified", whose label is empty (not "software verification only"), and
+# whose cells cover the protocol's domain. No such report exists yet: every protocol below is
+# unqualified, and the cutoffs in the campaign configs are provisional (pseudopotential
+# recommendation plus margin), not convergence results.
+#
+# settings are the numerical parameters a qualified report must have selected; null means not
+# yet determined. Cutoffs are never filled in here from a recommendation.
+criteria_default:
+  energy_per_atom_meV: 1.0
+  derived_energy_eV: 0.02
+  force_eV_per_A: 0.005
+  force_defect_eV_per_A: 0.01
+  stress_GPa: 0.1
+scans:
+  smearing_degauss_ry: [0.005, 0.010, 0.020, 0.030]
+  conv_thr_ry: [1.0e-6, 1.0e-7, 1.0e-8]
+protocols:
+  pristine_bulk:
+    domain: Pristine single-phase and alloy cells without defects; energy, force and stress.
+    case_kinds: [bulk]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  solute_bulk:
+    domain: Bulk cells with a dilute solute or transmutation product (for example Re or Os).
+    case_kinds: [bulk, substitution]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  point_defects:
+    domain: Vacancy, substitution and interstitial cells; formation and binding energies.
+    case_kinds: [bulk, vacancy, substitution, interstitial]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  gas_species:
+    domain: Isolated H and He atoms and molecules in a box, and their insertion energies.
+    case_kinds: [gas, interstitial]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  neb_barriers:
+    domain: Migration paths; endpoints and images; barrier energy.
+    case_kinds: [vacancy, neb_image]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  magnetic_states:
+    domain: Cells whose reference or defect state is magnetic; the magnetic state is recorded and must not change across a scan.
+    case_kinds: [bulk, vacancy, substitution]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
+  mlip_training_labels:
+    domain: Rattled, strained and defected configurations used as fine-tuning labels.
+    case_kinds: [bulk, vacancy, interstitial, gas]
+    status: unqualified
+    settings: {ecutwfc_ry: null, ecutrho_ry: null, kspacing_inv_A: null, degauss_ry: null, conv_thr_ry: null}
