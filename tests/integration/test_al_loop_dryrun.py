@@ -38,7 +38,11 @@ from matsim_agents.data.governance import (
     write_dataset_manifest,
 )
 from matsim_agents.execution.placement import ResourcePlan
+from matsim_agents.workflows.active_learning import labelling as al_labelling
+from matsim_agents.workflows.active_learning import promotion as al_promotion
+from matsim_agents.workflows.active_learning import surrogate as al_surrogate
 from matsim_agents.workflows.active_learning import trainer as trainer_mod
+from matsim_agents.workflows.active_learning import training as al_training
 from matsim_agents.workflows.active_learning.config import (
     AcquisitionConfig,
     ALConfig,
@@ -56,7 +60,7 @@ from matsim_agents.workflows.active_learning.md_sampler import Candidate
 
 
 def _campaign_elemental_manifest(cfg, elemental_manifest):
-    from matsim_agents.workflows.active_learning.loop import _dft_method_signature
+    from matsim_agents.workflows.active_learning.labelling import _dft_method_signature
 
     path = elemental_manifest({"Si": -1.0})
     manifest = json.loads(path.read_text())
@@ -100,7 +104,7 @@ def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, ma
         pytest.fail("disabled training must not train or compare a candidate")
 
     monkeypatch.setattr(trainer_mod, "retrain_hydragnn", unexpected_comparison)
-    monkeypatch.setattr(loop_mod, "evaluate_promotion_candidate", unexpected_comparison)
+    monkeypatch.setattr(al_promotion, "evaluate_promotion_candidate", unexpected_comparison)
     incumbent = cfg.mlip.logdir
     loop_mod.run_active_learning(cfg)
     state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
@@ -266,11 +270,11 @@ def _patch_runtime(
     promotion_decision: PromotionDecision | None = None,
 ) -> None:
     monkeypatch.setattr(
-        loop_mod,
+        al_surrogate,
         "make_mlip_calculator",
         lambda mlip_cfg, **kw: _ConstantForceCalc(forces=np.zeros((2, 3))),
     )
-    monkeypatch.setattr(loop_mod, "build_ensemble", lambda hcfg: [])
+    monkeypatch.setattr(al_surrogate, "build_ensemble", lambda hcfg: [])
     monkeypatch.setattr(
         loop_mod,
         "resolve_seed_structures",
@@ -281,7 +285,7 @@ def _patch_runtime(
         "sample_md_candidates",
         lambda md_cfg, calc, out_dir, seed_paths=None, **_: [_make_candidate(i) for i in range(3)],
     )
-    monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _FakeDFTBackend())
+    monkeypatch.setattr(al_labelling, "make_backend", lambda dft_cfg: _FakeDFTBackend())
     monkeypatch.setattr(
         trainer_mod,
         "retrain_hydragnn",
@@ -289,7 +293,7 @@ def _patch_runtime(
     )
     if promotion_decision is not None:
         monkeypatch.setattr(
-            loop_mod,
+            al_promotion,
             "evaluate_promotion_candidate",
             lambda *args, **kwargs: promotion_decision,
         )
@@ -448,7 +452,7 @@ def test_external_sampler_and_measured_error_gate(
         calculators.append(weakref.ref(calculator))
         return calculator
 
-    monkeypatch.setattr(loop_mod, "make_mlip_calculator", make_calculator)
+    monkeypatch.setattr(al_surrogate, "make_mlip_calculator", make_calculator)
     original_init = loop_mod._SurrogateModels.__init__
 
     def shared_device_models(self, placement, *, keep):
@@ -463,7 +467,7 @@ def test_external_sampler_and_measured_error_gate(
             result.final_atoms.info.clear()
             return result
 
-    monkeypatch.setattr(loop_mod, "make_backend", lambda *a: ParsedDFTBackend())
+    monkeypatch.setattr(al_labelling, "make_backend", lambda *a: ParsedDFTBackend())
 
     def no_md(*args, **kwargs):
         pytest.fail("An external sampler must bypass both MD seeds and MD integration")
@@ -951,7 +955,7 @@ def test_small_batches_accumulate_fixed_partitions_before_training(
 
 
 def test_cumulative_split_never_moves_existing_frames():
-    from matsim_agents.workflows.active_learning.loop import _split_training_validation_frames
+    from matsim_agents.workflows.active_learning.training import _split_training_validation_frames
 
     assert _split_training_validation_frames(
         [],
@@ -983,7 +987,7 @@ def test_cumulative_split_never_moves_existing_frames():
 def test_holdout_split_keeps_each_trajectory_in_one_partition():
     from types import SimpleNamespace
 
-    from matsim_agents.workflows.active_learning.loop import _split_training_validation_frames
+    from matsim_agents.workflows.active_learning.training import _split_training_validation_frames
 
     frames = [
         SimpleNamespace(atoms=SimpleNamespace(info={"trajectory_id": f"t{index // 3}"}))
@@ -1019,7 +1023,7 @@ def test_retried_iteration_keeps_trajectories_on_their_persisted_side(tmp_path):
     from ase import Atoms
     from ase.io import read, write
 
-    from matsim_agents.workflows.active_learning.loop import (
+    from matsim_agents.workflows.active_learning.training import (
         _split_training_validation_frames,
         _trajectory_ids,
     )
@@ -1064,9 +1068,9 @@ def test_resuming_a_framewise_split_requires_repartitioning(
     )
     _patch_runtime(loop_mod, monkeypatch)
     # The legacy framewise splitter put frames of one trajectory on both sides.
-    split = loop_mod._split_training_validation_frames
+    split = al_training._split_training_validation_frames
     monkeypatch.setattr(
-        loop_mod,
+        al_training,
         "_split_training_validation_frames",
         lambda frames, **_kwargs: (frames[:-1], frames[-1:]),
     )
@@ -1078,8 +1082,8 @@ def test_resuming_a_framewise_split_requires_repartitioning(
     training, validation = (
         read(cfg.loop.out_dir / name, index=":") for name in ("dataset.extxyz", "validation.extxyz")
     )
-    assert loop_mod._trajectory_ids(training) & loop_mod._trajectory_ids(validation)
-    monkeypatch.setattr(loop_mod, "_split_training_validation_frames", split)
+    assert al_training._trajectory_ids(training) & al_training._trajectory_ids(validation)
+    monkeypatch.setattr(al_training, "_split_training_validation_frames", split)
     cfg.loop.resume = True
     cfg.loop.n_iterations = 2
     monkeypatch.setattr(
@@ -1214,7 +1218,7 @@ def test_fraction_holdout_real_evaluation_and_resume(
 def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: Path) -> None:
     import json
 
-    from matsim_agents.workflows.active_learning.loop import _scan_resume
+    from matsim_agents.workflows.active_learning.resume import _scan_resume
 
     promoted = tmp_path / "promoted-model"
     promoted.mkdir()
@@ -1336,7 +1340,7 @@ def test_benchmark_sets_give_a_learning_curve_after_each_decision(
             {},
         )
 
-    monkeypatch.setattr(loop_mod, "evaluate_frames", fake_evaluate)
+    monkeypatch.setattr(al_promotion, "evaluate_frames", fake_evaluate)
     loop_mod.run_active_learning(cfg)
     assert scored == [str(benchmark)] * 2
     rows = learning_curve(cfg.loop.out_dir)
@@ -1429,7 +1433,7 @@ def test_resumed_iteration_reuses_saved_dft_labels(
             calls.append(spec.job_id)
             return super().run_one(spec)
 
-    monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _CountingBackend())
+    monkeypatch.setattr(al_labelling, "make_backend", lambda dft_cfg: _CountingBackend())
     append = loop_mod._append_labelled_frames
 
     def interrupted(*args, **kwargs):
@@ -1451,18 +1455,17 @@ def test_resumed_iteration_reuses_saved_dft_labels(
 
 
 def test_saved_dft_label_is_not_reused_for_a_different_geometry(tmp_path: Path) -> None:
-    import matsim_agents.workflows.active_learning.loop as loop_mod
 
     cfg = _make_cfg(tmp_path)
     ledger = tmp_path / "labels.jsonl"
     spec = DFTJobSpec(job_id="cand_000", atoms=_make_candidate(0).atoms, work_dir="x")
-    loop_mod._save_dft_label(
-        ledger, loop_mod._dft_label_key(cfg, spec), _FakeDFTBackend().run_one(spec)
+    al_labelling._save_dft_label(
+        ledger, al_labelling._dft_label_key(cfg, spec), _FakeDFTBackend().run_one(spec)
     )
     with ledger.open("a") as handle:
         handle.write('{"key": "truncated')
     moved = DFTJobSpec(job_id="cand_000", atoms=_make_candidate(1).atoms, work_dir="x")
 
-    labels = loop_mod._load_dft_labels(ledger)
-    assert list(labels) == [loop_mod._dft_label_key(cfg, spec)]
-    assert loop_mod._dft_label_key(cfg, moved) not in labels
+    labels = al_labelling._load_dft_labels(ledger)
+    assert list(labels) == [al_labelling._dft_label_key(cfg, spec)]
+    assert al_labelling._dft_label_key(cfg, moved) not in labels

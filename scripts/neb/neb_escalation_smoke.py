@@ -24,7 +24,8 @@ from matsim_agents.science.neb.endpoints import generate_vacancy_hop, vacancy_ne
 from matsim_agents.science.neb.images import generate_linear_images
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows.active_learning.config import NebEscalationConfig
-from matsim_agents.workflows.active_learning.loop import IterationState, _apply_neb_escalation
+from matsim_agents.workflows.active_learning.iteration_state import IterationState
+from matsim_agents.workflows.active_learning.neb_escalation import _apply_neb_escalation
 
 LATTICE_A = 3.44  # Angstrom, BCC Li; chosen for a small system, not for accuracy
 

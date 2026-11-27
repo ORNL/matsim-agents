@@ -68,7 +68,7 @@ def run_sampling(config: SamplingRunConfig, directory: str | Path) -> dict[str, 
     root = Path(directory).resolve()
     root.mkdir(parents=True, exist_ok=True)
     placement = config.resources.place(root)
-    from matsim_agents.workflows.active_learning.loop import _SurrogateModels
+    from matsim_agents.workflows.active_learning.surrogate import _SurrogateModels
 
     models = _SurrogateModels(placement, keep=True)
     try:

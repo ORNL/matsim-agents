@@ -174,17 +174,17 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
             "matsim_agents.workflows.active_learning.loop.resolve_seed_structures",
             return_value=[structure],
         ),
-        patch("matsim_agents.workflows.active_learning.loop.make_mlip_calculator", return_value=object()),
+        patch("matsim_agents.workflows.active_learning.surrogate.make_mlip_calculator", return_value=object()),
         patch("matsim_agents.workflows.active_learning.loop.sample_md_candidates", return_value=candidates),
         patch(
-            "matsim_agents.workflows.active_learning.loop.select_candidates",
+            "matsim_agents.workflows.active_learning.labelling.select_candidates",
             return_value=(candidates[:2], np.asarray([0.9, 0.8, 0.2, 0.1])),
         ),
         patch(
-            "matsim_agents.workflows.active_learning.loop.make_backend",
+            "matsim_agents.workflows.active_learning.labelling.make_backend",
             return_value=SimpleNamespace(name="qe"),
         ),
-        patch("matsim_agents.workflows.active_learning.loop.run_dft_batch", return_value=labelled),
+        patch("matsim_agents.workflows.active_learning.labelling.run_dft_batch", return_value=labelled),
         # The loop is mocked; resolve its CPU-only plan on a local allocation so a real
         # Slurm/PBS GPU allocation around the benchmark does not contradict it.
         patch(

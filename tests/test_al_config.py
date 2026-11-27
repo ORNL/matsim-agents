@@ -22,7 +22,7 @@ from pydantic import ValidationError
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig
 from matsim_agents.execution.allocation import Allocation
 from matsim_agents.workflows.active_learning import ALConfig
-from matsim_agents.workflows.active_learning.loop import _dft_method_signature
+from matsim_agents.workflows.active_learning.labelling import _dft_method_signature
 
 
 @pytest.fixture

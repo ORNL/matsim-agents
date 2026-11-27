@@ -23,8 +23,8 @@ from matsim_agents.workflows.active_learning.standalone_sampling import run_samp
 
 
 def _patch_sampling_runtime(monkeypatch):
-    import matsim_agents.workflows.active_learning.loop as loop
     import matsim_agents.workflows.active_learning.standalone_sampling as standalone
+    import matsim_agents.workflows.active_learning.surrogate as surrogate
 
     class FakeModels:
         def __init__(self, placement, *, keep):
@@ -39,7 +39,7 @@ def _patch_sampling_runtime(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(loop, "_SurrogateModels", FakeModels)
+    monkeypatch.setattr(surrogate, "_SurrogateModels", FakeModels)
     monkeypatch.setattr(ResourcePlan, "place", lambda self, run_dir=None: object())
     monkeypatch.setattr(standalone, "driver_on_mlip_device", lambda placement: nullcontext())
 
