@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -15,15 +13,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from matsim_agents.core.contracts import ProvenanceRecord
+from matsim_agents.core.fileio import atomic_write_text
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 _STANDARD_DIRS = ("structures", "calculations", "datasets", "models")
-# Read once at import: os.umask can only be queried by setting it. Files written
-# through a temporary file get the permissions of an ordinary new file, not the
-# owner-only mode of mkstemp, so collaborators sharing the project can read runs.
-_UMASK = os.umask(0o022)
-os.umask(_UMASK)
-_FILE_MODE = 0o666 & ~_UMASK
 
 
 def safe_component(value: str, *, fallback: str = "run") -> str:
@@ -101,19 +94,7 @@ class ScientificRunDirectory:
 
     def write_text(self, name: str, text: str) -> Path:
         """Atomically write a human-readable report inside the run directory."""
-        destination = self.path / safe_component(name)
-        fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=self.path)
-        try:
-            os.fchmod(fd, _FILE_MODE)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(text)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, destination)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
-        return destination
+        return atomic_write_text(self.path / safe_component(name), text)
 
     def append_event(self, event: str, payload: Mapping[str, Any]) -> Path:
         record = {

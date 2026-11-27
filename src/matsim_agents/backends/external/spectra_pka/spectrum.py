@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 import numpy as np
 
+from matsim_agents.core.hashing import sha256_file as _file_sha256
+
 ENERGY_TO_EV = {"eV": 1.0, "keV": 1.0e3, "MeV": 1.0e6}
 FLUX_UNIT_TO_CM2_S = {"n/cm2/s": 1.0, "n/m2/s": 1.0e-4}
 ValueKind = Literal["integrated", "per_energy", "per_lethargy"]
@@ -404,14 +406,6 @@ def load_transport_tally(
             "volume_cm3": volume_cm3,
         },
     )
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 __all__ = [

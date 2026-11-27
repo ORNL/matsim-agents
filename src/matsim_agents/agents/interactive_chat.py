@@ -16,7 +16,6 @@ import json
 import os
 import re
 import shlex
-import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -40,6 +39,7 @@ from matsim_agents.backends.mlip.config import MLIPConfig, parse_mlip_config
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.core.composition import Composition, extract_compositions
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.placement import Placement, ResourcePlan
 from matsim_agents.execution.run_directory import make_run_id
 from matsim_agents.workflows.composition_exploration import (
@@ -267,17 +267,9 @@ class DiscoveryChatSession:
             "mlip_evidence_ids": self.mlip_evidence_ids,
             "tool_evidence_ids": self.tool_evidence_ids,
         }
-        destination = directory / "session.json"
-        fd, temporary = tempfile.mkstemp(prefix=".session.json.", dir=directory)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(state, stream, indent=2, default=str)
-                stream.write("\n")
-            os.replace(temporary, destination)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
-        return destination
+        return atomic_write_text(
+            directory / "session.json", json.dumps(state, indent=2, default=str) + "\n"
+        )
 
     @classmethod
     def resume(cls, config: DiscoveryChatConfig, session: str | Path) -> DiscoveryChatSession:

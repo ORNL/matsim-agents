@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +37,7 @@ from ase import Atoms
 
 from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_relax import _ATOMIC_MASS, _fortran, _namelist
+from matsim_agents.core.fileio import atomic_write_text
 
 _CELL_TOLERANCE = 1e-8
 
@@ -194,15 +194,7 @@ def write_neb_input(
     target = Path(input_path)
     if target.exists() and not overwrite:
         raise FileExistsError(f"{target} exists; pass overwrite=True to replace it")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handle, staging = tempfile.mkstemp(prefix=".neb-in-", dir=target.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            stream.write(text)
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    atomic_write_text(target, text)
     return NebInput(
         path=str(target.resolve()),
         sha256=hashlib.sha256(text.encode()).hexdigest(),

@@ -461,6 +461,10 @@ run_vasp() {
     rc=$?
     kill -0 "${launcher_pid}" 2>/dev/null || break
   done
+  # A signal that interrupted wait just before the step exited leaves rc as 128+signal.
+  wait "${launcher_pid}" 2>/dev/null
+  wait_rc=$?
+  if [[ ${wait_rc} -ne 127 ]]; then rc=${wait_rc}; fi
   set -e
   stop_watchdog
   ACTIVE_RUN_DIR=""

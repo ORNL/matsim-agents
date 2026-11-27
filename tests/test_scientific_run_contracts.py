@@ -97,7 +97,7 @@ def test_failed_text_replace_preserves_previous_report(tmp_path, monkeypatch):
     def fail(*args):
         raise OSError("replace failed")
 
-    monkeypatch.setattr("matsim_agents.execution.run_directory.os.replace", fail)
+    monkeypatch.setattr("matsim_agents.core.fileio.os.replace", fail)
     with pytest.raises(OSError, match="replace failed"):
         run.write_text("report.md", "uncommitted report")
     assert (run.path / "report.md").read_text() == "committed report"

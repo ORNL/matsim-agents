@@ -21,7 +21,6 @@ import os
 import re
 import shlex
 import subprocess
-import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.locking import exclusive_lock
 
 MANIFEST_SCHEMA = "matsim-validation-jobs/1"
@@ -193,20 +193,11 @@ def load_manifest(path: str | os.PathLike) -> list[JobEntry]:
 
 
 def _write_manifest(path: Path, entries: Sequence[JobEntry]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema": MANIFEST_SCHEMA,
         "jobs": [e.model_dump(mode="json") for e in entries],
     }
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".jobs-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def _lock_path(path: Path) -> Path:

@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -28,6 +27,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.seeding import numpy_rng
 
 REPORT_SCHEMA = "matsim-mlip-validation/1"
@@ -184,18 +184,8 @@ def evaluate_validation(
 
 def write_validation_report(report: ValidationReport, path: str | os.PathLike) -> Path:
     """Atomically write the report; its hash can be cited as evidence."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handle, staging = tempfile.mkstemp(prefix=".mlip-val-", dir=target.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(report.model_dump(mode="json", by_alias=True), stream, indent=2)
-            stream.write("\n")
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
-    return target
+    text = json.dumps(report.model_dump(mode="json", by_alias=True), indent=2) + "\n"
+    return atomic_write_text(path, text)
 
 
 __all__ = [

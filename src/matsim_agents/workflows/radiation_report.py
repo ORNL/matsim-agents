@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.workflows.radiation_damage import RadiationDamageRun
 
 REPORT_FILE = "radiation-damage-report.json"
@@ -74,18 +74,8 @@ def build_report(run: RadiationDamageRun) -> dict[str, Any]:
 
 def write_report(run: RadiationDamageRun) -> Path:
     """Atomically write the report into the run directory and return its path."""
-    root = Path(run.directory)
-    target = root / REPORT_FILE
-    handle, staging = tempfile.mkstemp(prefix=".rd-report-", dir=root)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(build_report(run), stream, indent=2, allow_nan=False)
-            stream.write("\n")
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
-    return target
+    text = json.dumps(build_report(run), indent=2, allow_nan=False) + "\n"
+    return atomic_write_text(Path(run.directory) / REPORT_FILE, text)
 
 
 def read_report(directory: str | os.PathLike) -> dict[str, Any]:

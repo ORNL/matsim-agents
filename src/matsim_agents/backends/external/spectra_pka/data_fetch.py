@@ -30,6 +30,8 @@ from matsim_agents.backends.external.spectra_pka.isotopes import (
     natural_abundance,
     parse_nuclide,
 )
+from matsim_agents.core.fileio import atomic_write_text
+from matsim_agents.core.hashing import sha256_file as _sha256
 from matsim_agents.execution.locking import exclusive_lock
 
 OFFICIAL_URL = (
@@ -160,14 +162,6 @@ def _extract_one(tar: tarfile.TarFile, info: tarfile.TarInfo, target: Path) -> d
     }
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _is_cached(lib_dir: Path, base: str, target: Path) -> bool:
     manifest = lib_dir / MANIFEST
     if not (target.is_file() and manifest.is_file()):
@@ -184,9 +178,7 @@ def _record(lib_dir: Path, library: str, base: str, entry: dict[str, Any]) -> No
     doc = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
     doc.setdefault("library", library)
     doc.setdefault("files", {})[base] = entry
-    tmp = manifest_path.with_name(f".{MANIFEST}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(doc, indent=2, sort_keys=True))
-    os.replace(tmp, manifest_path)
+    atomic_write_text(manifest_path, json.dumps(doc, indent=2, sort_keys=True))
 
 
 def extract(

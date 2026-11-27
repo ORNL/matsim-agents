@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file
 
 MATRIX_SCHEMA = "matsim-radiation-qualification/1"
@@ -254,17 +254,8 @@ def demote(
 
 
 def save_matrix(matrix: QualificationMatrix, path: str | os.PathLike) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handle, staging = tempfile.mkstemp(prefix=".qual-", dir=target.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(matrix.model_dump(mode="json", by_alias=True), stream, indent=2)
-            stream.write("\n")
-        os.replace(staging, target)
-    except BaseException:
-        Path(staging).unlink(missing_ok=True)
-        raise
+    text = json.dumps(matrix.model_dump(mode="json", by_alias=True), indent=2) + "\n"
+    atomic_write_text(path, text)
 
 
 def load_matrix(

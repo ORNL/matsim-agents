@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -56,6 +55,7 @@ from matsim_agents.core.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
 )
+from matsim_agents.core.fileio import append_line
 from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.data.governance import (
     DatasetManifest,
@@ -437,7 +437,9 @@ def _label_with_dft(
         if result.converged:
             _save_dft_label(ledger, _dft_label_key(cfg, spec), result)
 
-    run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
+    returned = run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
+    for spec, result in zip(pending, returned, strict=True):
+        by_job.setdefault(spec.job_id, result)
     results = [by_job[spec.job_id] for spec in specs]
     n_ok = sum(1 for r in results if r.converged)
     state.n_dft_converged = n_ok
@@ -487,12 +489,8 @@ def _load_dft_labels(ledger: Path) -> dict[str, Any]:
 def _save_dft_label(ledger: Path, key: str, result: Any) -> None:
     from ase.io.jsonio import encode
 
-    ledger.parent.mkdir(parents=True, exist_ok=True)
     line = encode({"key": key, "result": asdict(result)})
-    with ledger.open("a", encoding="utf-8") as handle:
-        handle.write(line.replace("\n", " ") + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    append_line(ledger, line.replace("\n", " "))
 
 
 def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:
@@ -1194,12 +1192,8 @@ def _completed_dft_neb_count(root: Path) -> int:
 
 
 def _reserve_dft_neb(root: Path, iteration: int, transition_id: str) -> None:
-    root.mkdir(parents=True, exist_ok=True)
     entry = json.dumps({"iteration": iteration, "transition_id": transition_id}, sort_keys=True)
-    with (root / _DFT_NEB_RESERVATIONS).open("a", encoding="utf-8") as handle:
-        handle.write(entry + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    append_line(root / _DFT_NEB_RESERVATIONS, entry)
 
 
 def _apply_neb_escalation(
