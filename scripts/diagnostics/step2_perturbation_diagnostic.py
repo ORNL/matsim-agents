@@ -10,20 +10,18 @@ For each input structure we:
   (2) record the model's energy + |F|max at the unperturbed geometry;
   (3) apply an isotropic random displacement of fixed RMS amplitude;
   (4) run a tight relaxation (fmax=1e-4 eV/A, maxiter=500) and record
-      the per-step branch weights, energy, and force trajectory;
+      the per-step energy and force trajectory;
   (5) compare the recovered structure to the original (atomic RMSD).
 
 A bona-fide local minimum should:
   - have nontrivial |F|max immediately after the perturbation
     (~ k * displacement, with k the local stiffness);
   - decrease that |F|max monotonically during relaxation;
-  - recover the original geometry within ~10x machine precision in RMSD;
-  - hold its branch-weight assignment roughly constant.
+  - recover the original geometry within ~10x machine precision in RMSD.
 
 Numerical-noise plateaus instead show:
   - |F|max staying ~constant or growing during relaxation;
-  - high RMSD between recovered and original geometries;
-  - branch weights fluctuating between branches.
+  - high RMSD between recovered and original geometries.
 
 Outputs a JSON summary alongside per-case CSVs that the per-seed
 relaxation tool writes by default.
@@ -125,8 +123,6 @@ def run_case(
 
     energies = [float(row["energy_eV"]) for row in rows]
     fmax = [float(row["max_force_eV_per_A"]) for row in rows]
-    top_branches = [int(row["top_branch"]) for row in rows]
-    top_weights = [float(row["top_weight"]) for row in rows]
 
     # (d) RMSD between recovered structure and the original input
     recovered_candidates = sorted(case_dir.glob("*_optimized_structure.vasp"))
@@ -149,8 +145,6 @@ def run_case(
             "energy_per_atom_meV": (r.final_energy_eV / n_atoms) * 1000.0,
             "fmax_eV_per_A": r.final_max_force_eV_per_A,
             "num_steps": r.num_steps,
-            "top_branch": r.top_branch,
-            "top_branch_weight": r.top_branch_weight,
         },
         "trajectory": {
             "energy_initial_eV": energies[0] if energies else None,
@@ -159,13 +153,6 @@ def run_case(
             "fmax_initial_eV_per_A": fmax[0] if fmax else None,
             "fmax_final_eV_per_A": fmax[-1] if fmax else None,
             "fmax_max_eV_per_A": max(fmax) if fmax else None,
-            "top_branch_initial": top_branches[0] if top_branches else None,
-            "top_branch_final": top_branches[-1] if top_branches else None,
-            "top_branch_changes": int(
-                sum(1 for a, b in zip(top_branches[:-1], top_branches[1:], strict=True) if a != b)
-            ),
-            "top_weight_min": float(min(top_weights)) if top_weights else None,
-            "top_weight_mean": float(np.mean(top_weights)) if top_weights else None,
         },
         "rmsd_recovered_vs_original_A": rmsd_to_original,
         "csv_path": str(csv_path),
@@ -173,10 +160,6 @@ def run_case(
     }
     print(f"  RMSD(recovered, original) = {rmsd_to_original:.4f} A", flush=True)
     print(f"  fmax: {fmax[0]:.3e} -> {fmax[-1]:.3e} eV/A over {len(fmax)} step(s)", flush=True)
-    print(
-        f"  top branch changes during relaxation: {summary['trajectory']['top_branch_changes']}",
-        flush=True,
-    )
     return summary
 
 
@@ -200,9 +183,7 @@ def main():
     args = ap.parse_args()
     mlip = mlip_config_from_args(ap, args)
     if not isinstance(mlip, HydraGNNConfig):
-        ap.error(
-            "--mlip-config must select backend: hydragnn (the diagnostic tracks branch weights)"
-        )
+        ap.error("--mlip-config must select backend: hydragnn (the diagnostic targets HydraGNN)")
 
     out_root = Path(args.output_dir)
     out_root.mkdir(parents=True, exist_ok=True)

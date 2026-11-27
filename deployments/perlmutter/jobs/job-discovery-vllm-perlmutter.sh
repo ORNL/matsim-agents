@@ -94,8 +94,8 @@ fi
 # ── active-learning handoff mode ─────────────────────────────────────────────
 # MATSIM_AL_MODE = dry-run (default; plan/report only) | run (execute AL loop).
 # When MATSIM_AL_MODE=run, supply MATSIM_AL_CONFIG = path to a base AL YAML
-# (e.g. examples/paper_cases/al_hea_bcc.yaml). Discovery overrides its
-# seed_source to the detected formula on handoff.
+# (e.g. examples/paper_cases/al_hea_bcc.yaml). The chat /al command overrides
+# its seed_source to the requested formula.
 AL_MODE=${MATSIM_AL_MODE:-dry-run}
 AL_ARGS=()
 if [[ "$AL_MODE" == "run" ]]; then

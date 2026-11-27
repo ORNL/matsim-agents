@@ -129,7 +129,7 @@ fine-tuners are single-process, so configure one node/one rank for the
 ### Approved elemental DFT prerequisite
 
 HydraGNN checkpoints with routing or branch-weight MLP artifacts are rejected.
-Branch-7 relaxation reports no `top_branch_weight`.
+The calculator keeps only branch-7 and drops the other branches before use.
 
 `matsim_agents.workflows.active_learning.elemental_dft` calculates or reuses reference
 energies for an approved phase list. Every phase explicitly declares whether its

@@ -52,7 +52,6 @@ force inference.
 | `pending_tasks` | `list[TaskSpec]` | Queue consumed by the executor. |
 | `results` | `list[RelaxationResult]` | Accumulated tool outputs. |
 | `mcp_results` | `list[MCPCallRecord]` | Accumulated external MCP call records, separate from scientific results. |
-| `handoff_events` | `list[str]` | UQ-driven active-learning handoff events. |
 | `analysis` | `str \| None` | Final analyst summary. |
 | `iteration` / `max_iterations` | `int` | Executor loop guard. |
 | `llm_provider` / `llm_model` / `llm_base_url` | `str \| None` | LLM selection. |

@@ -19,12 +19,9 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, get_args
+from typing import Annotated, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
-
-if TYPE_CHECKING:
-    from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 
 UMATask = Literal["omat", "omol", "oc20", "odac", "omc"]
 MACEFamily = Literal[
@@ -254,17 +251,6 @@ class MLIPBackendConfig(BaseModel, ABC):
             )
         return self
 
-    def relaxation_calculator(self) -> RelaxCalculator:
-        """Calculator for structure relaxation and its branch-weight UQ support."""
-        from matsim_agents.backends.mlip.relaxation import RelaxCalculator
-
-        return RelaxCalculator(
-            self.build_calculator(),
-            0,
-            0,
-            f"branch-weight UQ unavailable for {self.backend} backend",
-        )
-
     @classmethod
     def resolve_paths(cls, raw: dict[str, Any], base: Path) -> dict[str, Any]:
         """Resolve this backend's file paths in a raw mapping against ``base``."""
@@ -435,11 +421,6 @@ class HydraGNNConfig(MLIPBackendConfig):
         if self.newhead_ft_config is not None:
             files.append(self.newhead_ft_config)
         return sorted(set(files))
-
-    def relaxation_calculator(self) -> RelaxCalculator:
-        from matsim_agents.backends.mlip.relaxation import hydragnn_relaxation_calculator
-
-        return hydragnn_relaxation_calculator(self)
 
 
 class UMAConfig(MLIPBackendConfig):

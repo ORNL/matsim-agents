@@ -68,10 +68,7 @@ def _relaxation_summary(state: MatSimState) -> str:
             f"{len(unreadable)} result(s) not ranked (structure unreadable): "
             + ", ".join(unreadable)
         )
-    summary = "\n".join(lines)
-    if state.handoff_events:
-        summary += "\nAL handoff events:\n- " + "\n- ".join(state.handoff_events)
-    return summary
+    return "\n".join(lines)
 
 
 def analyst_node(state: MatSimState) -> dict:
@@ -87,13 +84,8 @@ def analyst_node(state: MatSimState) -> dict:
             base_url=state.llm_base_url,
         )
         results_json = [r.model_dump() for r in state.results]
-        handoff_events = state.handoff_events
         system_prompt = _SYSTEM_PROMPT
-        content = (
-            f"Results: {results_json}\n"
-            f"AL handoff events: {handoff_events}\n"
-            f"Deterministic summary: {summary}"
-        )
+        content = f"Results: {results_json}\nDeterministic summary: {summary}"
         if state.mcp_results:
             system_prompt += _MCP_PROMPT
             mcp_json = [

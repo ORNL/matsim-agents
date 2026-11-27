@@ -19,7 +19,7 @@ import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.mlip.config import HydraGNNConfig, MLIPBackendConfig, MLIPConfig
+from matsim_agents.backends.mlip.config import MLIPBackendConfig, MLIPConfig
 from matsim_agents.core.relaxation import RelaxationResult
 from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.core.stress import NumericalStressCalculator
@@ -185,25 +185,6 @@ def _relaxation_paths(args: RelaxStructureInput) -> _RelaxPaths:
     )
 
 
-class RelaxCalculator(NamedTuple):
-    calculator: Any
-    num_branches: int
-    active_branches: int
-    uq_note: str | None
-
-
-def hydragnn_relaxation_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
-    """HydraGNN branch-7 (OMat24) calculator; branch-weight UQ does not apply."""
-    from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
-
-    return RelaxCalculator(
-        build_hydragnn_calculator(cfg),
-        1,
-        1,
-        "HydraGNN uses only branch-7 (OMat24); branch-weight UQ disabled",
-    )
-
-
 class CalculatorCache:
     """Loaded MLIP calculators reused across relaxations with identical model settings.
 
@@ -216,14 +197,14 @@ class CalculatorCache:
         if capacity < 1:
             raise ValueError("calculator cache capacity must be positive")
         self.capacity = capacity
-        self._entries: dict[tuple, RelaxCalculator] = {}
+        self._entries: dict[tuple, Any] = {}
         self.loads = 0
 
     @staticmethod
     def key(args: RelaxStructureInput) -> tuple:
         return args.conditioned_mlip().model_dump_json()
 
-    def get(self, args: RelaxStructureInput) -> RelaxCalculator:
+    def get(self, args: RelaxStructureInput) -> Any:
         key = self.key(args)
         entry = self._entries.pop(key, None)
         if entry is None:
@@ -236,22 +217,20 @@ class CalculatorCache:
                 release_device_memory()
             entry = _relaxation_calculator(args)
             self.loads += 1
-        elif hasattr(entry.calculator, "reset"):
-            entry.calculator.reset()
+        elif hasattr(entry, "reset"):
+            entry.reset()
         self._entries[key] = entry
         return entry
 
 
-def _relaxation_calculator(args: RelaxStructureInput) -> RelaxCalculator:
-    """Build the selected MLIP's relaxation calculator."""
-    return args.conditioned_mlip().relaxation_calculator()
+def _relaxation_calculator(args: RelaxStructureInput) -> Any:
+    """Build the selected MLIP's calculator."""
+    return args.conditioned_mlip().build_calculator()
 
 
 class _OptimizationOutcome(NamedTuple):
     energy: float
     max_force: float
-    top_branch: int
-    top_weight: float
     converged: bool
     steps_taken: int
     termination_reason: str
@@ -262,33 +241,26 @@ def _optimize_with_log(
     atoms,
     optimizable,
     optimizer,
-    calculator,
     traj_writer,
     *,
     log_csv_path: str,
-    num_branches: int,
-    active_branches: int,
     cell_relax_active: bool,
     step_guard: Callable[[Any], str | None] | None = None,
 ) -> _OptimizationOutcome:
-    """Step the optimizer, logging per-step energy, force, and branch weights to CSV.
+    """Step the optimizer, logging per-step energy and force to CSV.
 
     Stops at convergence, after ``maxiter`` steps, or when the maximum force grows
     by more than ``relative_increase_threshold`` in one step (positions are then
     rolled back unless the cell is relaxing). An optional wall-clock limit stops
     after a completed step without discarding the calculator or its model.
     """
-    csv_header = ["step", "energy_eV", "max_force_eV_per_A", "top_branch", "top_weight"] + [
-        f"w_branch_{i}" for i in range(int(num_branches))
-    ]
+    csv_header = ["step", "energy_eV", "max_force_eV_per_A"]
     if cell_relax_active:
         csv_header += ["max_atomic_force_eV_per_A", "max_active_stress_eV_per_A3", "cell_volume_A3"]
     prev_max_force: float | None = None
     prev_positions = None
     energy = float("nan")
     max_force = float("nan")
-    top_branch = -1
-    top_weight = float("nan")
     converged = False
     steps_taken = 0
     termination_reason = "max_steps"
@@ -371,28 +343,9 @@ def _optimize_with_log(
                         raise ValueError("Non-finite stress during relaxation.")
                     active = np.asarray(args.cell_mask or (True,) * 6, dtype=bool)
                     active_stress = float(np.max(np.abs(stress[active])))
-                weights = getattr(calculator, "last_branch_weights", None)
-                top_branch = int(np.argmax(weights)) if weights is not None else -1
-                top_weight = (
-                    float(weights[top_branch])
-                    if weights is not None and active_branches >= 2
-                    else float("nan")
-                )
-
                 traj_writer.write()
 
-                row = [
-                    str(steps_taken),
-                    f"{energy:.8e}",
-                    f"{max_force:.8e}",
-                    str(top_branch),
-                    f"{top_weight:.6f}",
-                ]
-                row += (
-                    [f"{float(w):.6f}" for w in weights]
-                    if weights is not None
-                    else ["nan"] * int(num_branches)
-                )
+                row = [str(steps_taken), f"{energy:.8e}", f"{max_force:.8e}"]
                 if cell_relax_active:
                     row += [
                         f"{atomic_max_force:.8e}",
@@ -441,8 +394,6 @@ def _optimize_with_log(
     return _OptimizationOutcome(
         energy,
         max_force,
-        top_branch,
-        top_weight,
         converged,
         steps_taken,
         termination_reason,
@@ -464,8 +415,7 @@ def relax_with_mlip(
     from ase.io.trajectory import Trajectory
 
     paths = _relaxation_paths(args)
-    built = calculators.get(args) if calculators is not None else _relaxation_calculator(args)
-    calculator, num_branches, active_branches, uq_note = built
+    calculator = calculators.get(args) if calculators is not None else _relaxation_calculator(args)
 
     atoms = read(paths.structure)
     atoms.calc = calculator
@@ -521,11 +471,8 @@ def relax_with_mlip(
         atoms,
         optimizable,
         optimizer,
-        calculator,
         traj_writer,
         log_csv_path=paths.log_csv,
-        num_branches=num_branches,
-        active_branches=active_branches,
         cell_relax_active=cell_relax_active,
         step_guard=step_guard,
     )
@@ -546,9 +493,6 @@ def relax_with_mlip(
         num_steps=outcome.steps_taken,
         converged=outcome.converged,
         termination_reason=outcome.termination_reason,
-        top_branch=outcome.top_branch if outcome.top_branch >= 0 else None,
-        top_branch_weight=outcome.top_weight if np.isfinite(outcome.top_weight) else None,
-        notes=uq_note,
     )
 
 

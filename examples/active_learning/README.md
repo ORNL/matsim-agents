@@ -132,13 +132,12 @@ The repository now exposes several connected workflows. This README documents
 the AL kernel itself (`matsim-agents al run`), while the other entry points
 can feed into it:
 
-- `matsim-agents objective`: core planner -> executor -> uq_gate -> analyst graph,
-  with optional run-path AL handoff on low-confidence relaxations.
-- `matsim-agents chat`: interactive discovery REPL; can optionally escalate to
-  AL when UQ is high (`--trigger-al-handoff`, `--al-config`).
+- `matsim-agents objective`: core planner -> executor -> analyst graph.
+- `matsim-agents chat`: interactive discovery REPL; the `/al [composition]`
+  command starts this loop for a composition (`--al-config`).
 
-In other words, AL is both a standalone workflow and the downstream execution
-engine for automated escalation from discovery.
+In other words, AL is both a standalone workflow and a downstream step that
+discovery can start on request.
 
 The `al run` loop uses cheap surrogate **molecular dynamics** (not relaxation)
 to generate candidate snapshots, scores them by ensemble / MC-dropout force
@@ -148,10 +147,8 @@ disagreement, and labels them with single-point (frozen-ion) DFT.
 
 ```mermaid
 flowchart LR
-  R[matsim-agents objective] --> RU[uq_gate]
-  C[matsim-agents chat] --> CU[chat UQ policy]
-  RU -->|triggered| AL[matsim-agents al run]
-  CU -->|triggered| AL
+  R[matsim-agents objective] --> A[analyst report]
+  C[matsim-agents chat] -->|/al| AL[matsim-agents al run]
 ```
 
 ## Files
@@ -239,19 +236,6 @@ in the parsed `ALConfig`.
        deployments/frontier/launchers/run-active-learning-frontier.sh
    ```
 
-### Trigger this same AL flow from `run`
-
-Run the agent graph and let it trigger this AL path when UQ policy thresholds
-are met:
-
-```bash
-matsim-agents objective "Find stable phases of Li2MnO3" \
-  --trigger-al-handoff \
-  --mlip-config examples/active_learning/al_config.example.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-run
-```
-
 ## Minimum viable commands
 
 ```bash
@@ -265,20 +249,14 @@ matsim-agents al run examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
-# 3) Agent graph with UQ-triggered handoff (dry run)
+# 3) Agent graph
 matsim-agents objective "Find stable phases of Li2MnO3" \
-  --trigger-al-handoff \
-  --mlip-config examples/active_learning/al_config.example.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
+  --mlip-config examples/active_learning/al_config.example.yaml
 
-# 4) Run path with UQ-triggered AL handoff planning
+# 4) Run path
 matsim-agents objective \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlip-config examples/active_learning/al_config.example.yaml \
-  --trigger-al-handoff \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
+  --mlip-config examples/active_learning/al_config.example.yaml
 ```
 
 ## Architecture

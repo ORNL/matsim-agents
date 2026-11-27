@@ -119,6 +119,113 @@ def test_repository_has_no_branch_mlp_usage():
     )
 
 
+# Branch-weight plumbing that only existed to carry BranchWeightMLP outputs.
+DEAD_BRANCH_WEIGHT_CODE = re.compile(
+    r"last_branch_weights|top_branch|w_branch_|mean_top_weight|uq_top_weight|uq-top-weight"
+    r"|trigger.al.handoff|trigger_active_learning_on_high_uq|handoff_events|uq_gate"
+    r"|RelaxCalculator|_build_selected_head_calculator"
+)
+PLUMBING_SCOPES = (
+    "src/",
+    "scripts/",
+    "benchmarks/",
+    "examples/",
+    "deployments/",
+    "docs/guide/",
+    "tests/",
+)
+
+
+def test_repository_has_no_branch_weight_plumbing():
+    files = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).split()
+    hits = []
+    for name in files:
+        if name == "tests/test_hydragnn_branch7_only.py":
+            continue
+        if not (name.startswith(PLUMBING_SCOPES) or name == "README.md"):
+            continue
+        path = ROOT / name
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        hits.extend(
+            f"{name}:{n}"
+            for n, line in enumerate(text.splitlines(), 1)
+            if DEAD_BRANCH_WEIGHT_CODE.search(line)
+        )
+    assert not hits, "Dead HydraGNN branch-weight plumbing:\n" + "\n".join(hits)
+
+
+def _sixteen_branch_model():
+    import torch.nn as nn
+
+    names = [f"branch-{i}" for i in range(16)]
+
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.graph_shared = nn.ModuleDict({n: nn.Linear(2, 2) for n in names})
+            self.convs_node_hidden = nn.ModuleDict({n: nn.Linear(2, 2) for n in names})
+            self.heads_NN = nn.ModuleList(
+                [nn.ModuleDict({n: nn.Linear(2, 1) for n in names}) for _ in range(2)]
+            )
+            self.num_branches = 16
+            self.config_heads = {"graph": [{"type": n, "dim": [1]} for n in names]}
+
+    return Model()
+
+
+def test_keep_only_branch_7_deletes_the_other_branches():
+    from matsim_agents.backends.mlip.hydragnn_newhead import keep_only_branch_7
+
+    model = _sixteen_branch_model()
+    shared7 = model.graph_shared["branch-7"]
+    hidden7 = model.convs_node_hidden["branch-7"]
+    heads7 = [head["branch-7"] for head in model.heads_NN]
+    model._hydragnn_checkpoint_state_keys = tuple(model.state_dict())
+
+    assert keep_only_branch_7(model) is model
+    assert model.num_branches == 1
+    assert list(model.graph_shared) == ["branch-0"]
+    assert model.graph_shared["branch-0"] is shared7
+    assert model.convs_node_hidden["branch-0"] is hidden7
+    assert [head["branch-0"] for head in model.heads_NN] == heads7
+    assert all(list(head) == ["branch-0"] for head in model.heads_NN)
+    assert model.config_heads == {"graph": [{"type": "branch-0", "dim": [1]}]}
+    assert not any("branch-1" in k or "branch-8" in k for k in model.state_dict())
+    assert model._hydragnn_checkpoint_state_keys == tuple(model.state_dict())
+
+
+def test_keep_only_branch_7_unwraps_and_prunes_wrapper():
+    import torch.nn as nn
+
+    from matsim_agents.backends.mlip.hydragnn_newhead import keep_only_branch_7
+
+    inner = _sixteen_branch_model()
+    wrapper = nn.Module()
+    wrapper.model = inner
+    wrapper.graph_shared = inner.graph_shared
+    wrapper.heads_NN = inner.heads_NN
+    wrapper.num_branches = 16
+
+    keep_only_branch_7(wrapper)
+    assert inner.num_branches == wrapper.num_branches == 1
+    assert not hasattr(wrapper, "graph_shared") or wrapper.graph_shared is inner.graph_shared
+    assert all("branch-0" in k for k in wrapper.state_dict() if "branch-" in k)
+
+
+def test_keep_only_branch_7_requires_branch_7():
+    import torch.nn as nn
+
+    from matsim_agents.backends.mlip.hydragnn_newhead import keep_only_branch_7
+
+    model = _sixteen_branch_model()
+    model.graph_shared = nn.ModuleDict({"branch-0": nn.Linear(2, 2)})
+    with pytest.raises(ValueError, match="branch-7"):
+        keep_only_branch_7(model)
+
+
 @pytest.mark.parametrize("name", AGENT_INSTRUCTIONS)
 def test_agent_instructions_state_the_branch_7_rule(name):
     text = (ROOT / name).read_text()

@@ -12,7 +12,6 @@ from ase.io import write
 from typer.testing import CliRunner
 
 from matsim_agents.backends.mlip.config import HydraGNNConfig
-from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.core.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.run_directory import ScientificRunDirectory
@@ -85,7 +84,7 @@ def emt_workflow(monkeypatch, available_dependencies):
 
     def calculator(args):
         calls["loads"] += 1
-        return RelaxCalculator(EMT(), 0, 0, None)
+        return EMT()
 
     monkeypatch.setattr("matsim_agents.workflows.exploration.rounds.generate_seed_action", generate)
     monkeypatch.setattr("matsim_agents.backends.mlip.relaxation._relaxation_calculator", calculator)

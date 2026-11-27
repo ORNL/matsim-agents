@@ -218,17 +218,15 @@ Chemical-stability proxy: PASS.
 you> Now suggest a Sb-substituted variant.
 ```
 
-### 3. Discovery with UQ-triggered active-learning handoff
+### 3. Discovery followed by active learning
 
 ```bash
-matsim-agents objective "Find stable phases of Li2MnO3" \
-  --trigger-al-handoff \
-  --mlip-config mlip.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
+matsim-agents objective "Find stable phases of Li2MnO3" --mlip-config mlip.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml
 ```
 
-To execute AL instead of dry-run, replace `--al-dry-run` with `--al-run`.
+In `matsim-agents chat`, the `/al [composition]` command starts the same loop
+for a composition (`--al-config`, plus `--al-dry-run` or `--al-run`).
 
 ### 4. Random-enriched exploration of exotic compositions
 
@@ -264,7 +262,7 @@ matsim-agents run      FILE [--runs-dir D] # execute any config; blocked runs ex
 matsim-agents resume   RUN_ID              # continue an interrupted run or retry a blocked one
 matsim-agents status   [RUN_ID]            # one run's state, or list recorded runs
 matsim-agents evidence RUN_ID              # a run's record, summary, blockers and native directory
-matsim-agents objective "TEXT" [options]   # planner -> executor -> uq_gate -> analyst (--plan-only)
+matsim-agents objective "TEXT" [options]   # planner -> executor -> analyst (--plan-only)
 matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MLIP phase search
 matsim-agents explore run CONFIG.yaml      # generate, select, relax, and rank MLIP-only batches

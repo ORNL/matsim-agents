@@ -40,7 +40,7 @@ def test_calculator_cache_reuses_and_evicts(monkeypatch):
 
     def build(args):
         built.append(args.mlip.model_name)
-        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
+        return _Calculator()
 
     monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
     cache = CalculatorCache(capacity=2)
@@ -77,7 +77,7 @@ def test_local_pool_relaxations_share_one_model(monkeypatch):
 
     def build(args):
         loads.append(args)
-        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
+        return _Calculator()
 
     def fake_relax(args, *, calculators=None):
         calculators.get(args)
@@ -333,7 +333,7 @@ def test_close_drops_local_models_and_restarts_lazily(monkeypatch):
 
     def build(args):
         built.append(args)
-        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
+        return _Calculator()
 
     def fake_relax(args, *, calculators=None):
         calculators.get(args)
@@ -393,7 +393,7 @@ def test_cache_eviction_frees_memory_before_loading(monkeypatch):
 
     def build(args):
         events.append(f"load {args.mlip.model_name}")
-        return relaxation.RelaxCalculator(_Calculator(), 0, 0, None)
+        return _Calculator()
 
     monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
     cache = CalculatorCache(capacity=1)
@@ -430,7 +430,7 @@ def test_cell_relaxation_runs_with_the_current_ase_filter(tmp_path, monkeypatch)
     monkeypatch.setattr(
         relaxation,
         "_relaxation_calculator",
-        lambda args: relaxation.RelaxCalculator(EMT(), 0, 0, None),
+        lambda args: EMT(),
     )
     result = relaxation.relax_with_mlip(
         _uma_args(

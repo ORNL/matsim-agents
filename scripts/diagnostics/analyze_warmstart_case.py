@@ -108,12 +108,7 @@ def _analyze_hydragnn_csv(case_dir: Path) -> None:
         step = row.get("step", "?")
         energy = row.get("energy_eV", "?")
         fmax = row.get("max_force_eV_per_A", "?")
-        top_branch = row.get("top_branch", "?")
-        top_weight = row.get("top_weight", "?")
-        print(
-            f"  step {step}: energy={energy}, max_force={fmax}, "
-            f"top_branch={top_branch}, top_weight={top_weight}"
-        )
+        print(f"  step {step}: energy={energy}, max_force={fmax}")
 
 
 def _analyze_comparison(case_dir: Path) -> None:
@@ -154,7 +149,9 @@ def _analyze_comparison(case_dir: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case-dir", required=True, help="Path to case directory containing comparison.json")
+    parser.add_argument(
+        "--case-dir", required=True, help="Path to case directory containing comparison.json"
+    )
     args = parser.parse_args()
 
     case_dir = Path(args.case_dir).resolve()

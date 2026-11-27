@@ -19,7 +19,6 @@ import shlex
 import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
-from datetime import UTC, datetime
 from pathlib import Path
 
 from langchain_core.messages import (
@@ -129,18 +128,12 @@ class DiscoveryChatConfig:
     critic_cross_critique: bool = False
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     auto_confirm: bool = False  # if True, skip the interactive y/N prompt
-    trigger_active_learning_on_high_uq: bool = True
     active_learning_config: str | None = None
     active_learning_dry_run: bool = True
-    uq_top_weight_threshold: float = 0.6
-    uq_min_unreliable_fraction: float = 0.25
-    uq_min_relaxations_for_handoff: int = 3
-    al_handoff_audit_path: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the MLIP selection at configuration time, not at the first relaxation."""
         if self.llm_only:
-            self.trigger_active_learning_on_high_uq = False
             return
         if self.mlip is None:
             raise ValueError("Atomistic chat requires an mlip configuration (or llm_only=True).")
@@ -557,110 +550,6 @@ def _run_single_structure_relaxation(
         f"steps={result.num_steps}, converged={result.converged}. "
         f"Optimized structure: {result.optimized_structure_path}."
     )
-
-
-def _uq_handoff_metrics(
-    exploration: CompositionExplorationResult, cfg: DiscoveryChatConfig
-) -> tuple[float, float, int]:
-    """Return (mean_top_weight, unreliable_fraction, n_with_weights)."""
-    weights = [
-        float(r.top_branch_weight)
-        for r in exploration.relaxations
-        if r.top_branch_weight is not None
-    ]
-    if not weights:
-        return float("nan"), 0.0, 0
-    n_unreliable = sum(1 for w in weights if w < cfg.uq_top_weight_threshold)
-    mean_top = sum(weights) / len(weights)
-    frac_unreliable = n_unreliable / len(weights)
-    return mean_top, frac_unreliable, len(weights)
-
-
-def _should_handoff_to_active_learning(
-    exploration: CompositionExplorationResult,
-    cfg: DiscoveryChatConfig,
-) -> tuple[bool, str]:
-    n_relax = len(exploration.relaxations)
-    if n_relax < cfg.uq_min_relaxations_for_handoff:
-        return (
-            False,
-            f"handoff skipped: only {n_relax} relaxation(s), "
-            f"need >= {cfg.uq_min_relaxations_for_handoff}",
-        )
-
-    mean_top, frac_unreliable, n_with_weights = _uq_handoff_metrics(exploration, cfg)
-    if n_with_weights == 0:
-        return False, "handoff skipped: no branch-weight UQ available from relaxations"
-
-    should = (
-        mean_top < cfg.uq_top_weight_threshold or frac_unreliable >= cfg.uq_min_unreliable_fraction
-    )
-    reason = (
-        f"mean_top_weight={mean_top:.3f}, unreliable_fraction={frac_unreliable:.3f}, "
-        f"thresholds: top<{cfg.uq_top_weight_threshold:.3f} or "
-        f"frac>={cfg.uq_min_unreliable_fraction:.3f}"
-    )
-    return should, reason
-
-
-def _default_handoff_audit_path(cfg: DiscoveryChatConfig) -> Path:
-    return Path(cfg.output_dir) / "discovery" / "al_handoff_events.jsonl"
-
-
-def _audit_handoff_event(
-    *,
-    cfg: DiscoveryChatConfig,
-    exploration: CompositionExplorationResult,
-    should_handoff: bool,
-    handoff_reason: str,
-    handoff_action: str,
-    handoff_message: str | None,
-) -> None:
-    """Append a structured AL-handoff audit record as one JSON line."""
-    mean_top, frac_unreliable, n_with_weights = _uq_handoff_metrics(exploration, cfg)
-    weights = [
-        float(r.top_branch_weight)
-        for r in exploration.relaxations
-        if r.top_branch_weight is not None
-    ]
-    record = {
-        "timestamp_utc": datetime.now(UTC).isoformat(),
-        "composition": exploration.composition.formula,
-        "n_relaxations": len(exploration.relaxations),
-        "n_relaxations_with_uq": n_with_weights,
-        "uq": {
-            "mean_top_weight": None if n_with_weights == 0 else mean_top,
-            "unreliable_fraction": None if n_with_weights == 0 else frac_unreliable,
-            "top_weight_threshold": cfg.uq_top_weight_threshold,
-            "min_unreliable_fraction_threshold": cfg.uq_min_unreliable_fraction,
-            "min_relaxations_for_handoff": cfg.uq_min_relaxations_for_handoff,
-            "top_weights": weights,
-        },
-        "decision": {
-            "should_handoff": should_handoff,
-            "reason": handoff_reason,
-            "action": handoff_action,
-            "message": handoff_message,
-            "active_learning_config": cfg.active_learning_config,
-            "active_learning_dry_run": cfg.active_learning_dry_run,
-        },
-    }
-
-    audit_path = (
-        Path(cfg.al_handoff_audit_path)
-        if cfg.al_handoff_audit_path
-        else _default_handoff_audit_path(cfg)
-    )
-    audit_path.parent.mkdir(parents=True, exist_ok=True)
-    with audit_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, sort_keys=True) + "\n")
-
-
-def _handoff_to_active_learning(
-    exploration: CompositionExplorationResult,
-    cfg: DiscoveryChatConfig,
-) -> str:
-    return _run_active_learning_for_formula(exploration.composition.formula, cfg)
 
 
 def _run_active_learning_for_formula(
@@ -1082,41 +971,6 @@ def _chat_turn(
                     mlip_id = f"chat-mlip-{len(session.mlip_evidence_ids) + 1:04d}"
                     session.mlip_evidence_ids.append(mlip_id)
                     session.scientific_evidence_ids.append(mlip_id)
-                if cfg.trigger_active_learning_on_high_uq:
-                    should_handoff, handoff_reason = _should_handoff_to_active_learning(
-                        exploration,
-                        cfg,
-                    )
-                    if should_handoff:
-                        session.release_mlip_models()
-                        handoff_msg = _handoff_to_active_learning(exploration, cfg)
-                        handoff_action = (
-                            "triggered_dry_run" if cfg.active_learning_dry_run else "triggered_run"
-                        )
-                        _audit_handoff_event(
-                            cfg=cfg,
-                            exploration=exploration,
-                            should_handoff=should_handoff,
-                            handoff_reason=handoff_reason,
-                            handoff_action=handoff_action,
-                            handoff_message=handoff_msg,
-                        )
-                        _print(f"\n[bold magenta]AL handoff[/bold magenta] {handoff_reason}")
-                        _print(f"[bold magenta]AL handoff[/bold magenta] {handoff_msg}")
-                        session.messages.append(
-                            HumanMessage(content="[active_learning] " + handoff_msg)
-                        )
-                        session.record("tool", "active_learning", handoff_msg)
-                    else:
-                        _audit_handoff_event(
-                            cfg=cfg,
-                            exploration=exploration,
-                            should_handoff=should_handoff,
-                            handoff_reason=handoff_reason,
-                            handoff_action="not_triggered",
-                            handoff_message=None,
-                        )
-                        _print(f"\n[dim]AL handoff not triggered:[/dim] {handoff_reason}")
                 # Feed the result back into the conversation so the LLM can
                 # incorporate it into subsequent reasoning. We use a
                 # HumanMessage (not SystemMessage) because some chat

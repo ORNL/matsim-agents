@@ -66,20 +66,6 @@ Discovery chat can also run optional control actions through slash commands:
   - Requires `--al-config`; respects the `--al-dry-run/--al-run` setting.
 - **Reset command**:
   - `/clear` (clear the conversation history and discovery state for the session)
-- **UQ-based AL handoff** (automatic policy knobs on CLI):
-  - `--trigger-al-handoff/--no-trigger-al-handoff`
-  - `--al-config <base_al_yaml>`
-  - `--al-dry-run/--al-run`
-  - `--uq-top-weight-threshold`
-  - `--uq-min-unreliable-fraction`
-  - `--uq-min-relaxations-for-handoff`
-  - `--al-handoff-audit-path`
-
-If `--al-handoff-audit-path` is not set, handoff events default to:
-
-```
-<output_dir>/discovery/al_handoff_events.jsonl
-```
 
 ## Session transcripts and resume
 
@@ -106,7 +92,7 @@ outputs/discovery/<formula>/
             <formula>_random_<sg>_<i>.vasp               # pyXtal seed in space group <sg>
   relaxed/  <formula>_<seed>_optimized_structure.vasp
             <formula>_<seed>_optimization.traj           # ASE trajectory
-            <formula>_<seed>_optimization.csv            # per-step E, |F|max, branch weights
+            <formula>_<seed>_optimization.csv            # per-step E, |F|max
 ```
 
 Seeds carry their provenance (`source`, `prototype_id`, `space_group`,

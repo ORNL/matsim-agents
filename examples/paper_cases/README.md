@@ -26,21 +26,18 @@ to, not instead of, the held-out compound split. See the
 
 These paper cases can be executed through three complementary entry points:
 
-- Core graph (`matsim-agents objective`): planner -> executor -> uq_gate -> analyst,
-  with optional run-path AL handoff when UQ thresholds are crossed.
+- Core graph (`matsim-agents objective`): planner -> executor -> analyst.
 - Active learning (`matsim-agents al run al_<case>.yaml`): iterative
   discovery -> UQ/acquisition -> DFT labeling -> retraining loop.
 
 The discovery chat path (`matsim-agents chat`) can also feed these cases by
 detecting formulas, optionally running `/relax <structure_path>`, and
-escalating to AL when configured UQ thresholds are crossed.
+starting AL with `/al [composition]`.
 
 ```mermaid
 flowchart LR
-  RG[matsim-agents objective] --> RU[uq_gate]
-  CH[matsim-agents chat] --> CQ[chat UQ policy]
-  RU -->|triggered| AL[matsim-agents al run al_case.yaml]
-  CQ -->|triggered| AL
+  RG[matsim-agents objective] --> AN[analyst report]
+  CH[matsim-agents chat] -->|/al| AL[matsim-agents al run al_case.yaml]
 ```
 
 ---
@@ -118,12 +115,9 @@ matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
 
-# 5) agent-graph discovery -> optional AL handoff:
+# 5) agent-graph discovery:
 matsim-agents objective "Find stable phases of LiFePO4" \
-  --trigger-al-handoff \
-  --mlip-config examples/paper_cases/al_lifepo4.yaml \
-  --al-config examples/paper_cases/al_lifepo4.yaml \
-  --al-dry-run
+  --mlip-config examples/paper_cases/al_lifepo4.yaml
 ```
 
 > **Note:** on Perlmutter, submit the full AL loop with
@@ -150,9 +144,6 @@ matsim-agents objective "Find stable phases of LiFePO4" \
 > offline. Run `sbatch deployments/perlmutter/download/download-uma-perlmutter.sh`
 > once. See `docs/model-download.md` ("UMA MLIP weights on Perlmutter").
 
-> **Integration note:** `--al-dry-run` in `run` only reports the
-> planned handoff. Use `--al-run` to actually execute the AL loop.
-
 ## Minimum viable commands
 
 ```bash
@@ -160,20 +151,14 @@ matsim-agents objective "Find stable phases of LiFePO4" \
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
-# 2) Agent graph with optional AL handoff planning
+# 2) Agent graph
 matsim-agents objective "Find stable phases of LiFePO4" \
-  --trigger-al-handoff \
-  --mlip-config examples/paper_cases/al_lifepo4.yaml \
-  --al-config examples/paper_cases/al_lifepo4.yaml \
-  --al-dry-run
+  --mlip-config examples/paper_cases/al_lifepo4.yaml
 
-# 3) Core run path with UQ-triggered AL handoff planning
+# 3) Core run path
 matsim-agents objective \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
-  --mlip-config examples/paper_cases/al_lifepo4.yaml \
-  --trigger-al-handoff \
-  --al-config examples/paper_cases/al_lifepo4.yaml \
-  --al-dry-run
+  --mlip-config examples/paper_cases/al_lifepo4.yaml
 ```
 
 For AL YAMLs in this folder, `--mlip-config` replaces the config's `mlip` block,
