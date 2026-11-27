@@ -846,6 +846,7 @@ def _export_for_lammps(cfg: ALConfig, state: IterationState) -> None:
             if Path(state.candidate_model_path).is_dir()
             else Path(state.candidate_model_path).parent,
             species=species,
+            seed=cfg.random_seed,
         )
     except Exception as exc:  # noqa: BLE001 - recorded, never blocks the promotion
         log.exception("LAMMPS export validation failed for %s", state.candidate_model_path)

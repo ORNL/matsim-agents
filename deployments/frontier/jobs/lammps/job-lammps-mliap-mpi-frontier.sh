@@ -11,7 +11,7 @@
 # rank count. Every rank evaluates the full system (all-gather), so this checks correctness only,
 # not scaling.
 #
-# Submit: MLIAP_OUT=<dir> sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
+# Submit: MLIAP_OUT=<dir> MATSIM_MLIAP_SEED=<root seed> sbatch -A <ACCOUNT> -t 00:20:00 -q debug \
 #   deployments/frontier/jobs/lammps/job-lammps-mliap-mpi-frontier.sh
 # ---------------------------------------------------------------------------
 
@@ -20,6 +20,7 @@ set -euo pipefail
 REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:?}")}"
 OUT="${MLIAP_OUT:?set MLIAP_OUT}"
 RANKS="${MATSIM_MLIAP_MPI_RANKS:-4}"
+SEED="${MATSIM_MLIAP_SEED:?set MATSIM_MLIAP_SEED (root seed of the run)}"
 
 # shellcheck disable=SC1091
 source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"
@@ -32,7 +33,7 @@ run() { # name python args...
     local name="$1" py="$2"
     shift 2
     srun -N 1 -n "$RANKS" -c 1 --gpus-per-node=0 "$py" "$REPO/scripts/lammps/mliap_parity.py" \
-        "$@" --out "$OUT/$name.json" || status=1
+        "$@" --seed "$SEED" --out "$OUT/$name.json" || status=1
 }
 run emt-mpi "$REPO/.venv/bin/python" --calc emt --md-steps 200 --md-timestep-fs 0.2 --pka-eV 200
 run mace-mpi "$REPO/.venv-mace/bin/python" --calc mace --model small --md-steps 20

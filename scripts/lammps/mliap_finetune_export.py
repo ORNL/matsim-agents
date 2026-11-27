@@ -12,11 +12,12 @@ import json
 import os
 from pathlib import Path
 
-import numpy as np
 from ase.build import bulk
 from ase.calculators.emt import EMT
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
+
+from matsim_agents.core.seeding import numpy_rng
 
 PROJ = Path(__file__).resolve().parents[3]
 MACE_SMALL = "20231210mace128L0_energy_epoch249model"
@@ -47,7 +48,7 @@ def make_inputs(root: Path, frames: int, seed: int) -> tuple[Path, Path]:
             }
         )
     )
-    rng = np.random.default_rng(seed)
+    rng = numpy_rng(seed, "finetune-inputs")
     out = []
     for _ in range(frames):
         atoms = bulk("Cu", "fcc", a=float(rng.uniform(3.5, 3.7)), cubic=True).repeat((2, 2, 2))
@@ -155,7 +156,7 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=12)
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--lora", action="store_true", help="MACE and UMA only")
-    ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--seed", type=int, required=True, help="root seed of the run")
     ap.add_argument("--md-steps", type=int, default=20)
     args = ap.parse_args()
 
@@ -164,7 +165,12 @@ def main() -> int:
     dataset, manifest = make_inputs(args.out / "inputs", args.frames, args.seed)
     cfg, checkpoint = CASES[args.backend](dataset, manifest, args.out / "ft", args)
     record = export_checkpoint_for_lammps(
-        cfg, checkpoint, args.out / "export", species=["Cu"], md_steps=args.md_steps
+        cfg,
+        checkpoint,
+        args.out / "export",
+        species=["Cu"],
+        seed=args.seed,
+        md_steps=args.md_steps,
     )
     record["backend"] = args.backend
     record["finetune_checkpoint"] = str(checkpoint)

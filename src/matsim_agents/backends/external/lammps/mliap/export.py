@@ -19,6 +19,7 @@ from matsim_agents.backends.external.lammps.mliap.parity import (
     parity_check,
     write_export_record,
 )
+from matsim_agents.core.seeding import numpy_rng, stream_seed
 
 
 def checkpoint_file(mlip_cfg: Any) -> Path:
@@ -49,6 +50,7 @@ def export_checkpoint_for_lammps(
     out_dir: str | Path,
     *,
     species: list[str],
+    seed: int,
     md_steps: int = 20,
     md_temperature_K: float = 300.0,
     md_timestep_fs: float = 1.0,
@@ -62,20 +64,21 @@ def export_checkpoint_for_lammps(
     with ``approved`` true only when both pass. ``calculator`` is for callers that
     already hold one.
     """
-    import numpy as np
     from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 
     candidate = mlip_cfg.with_checkpoint(checkpoint)
     calc = calculator if calculator is not None else candidate.build_calculator()
     element = species[0]
     atoms = bulk(element, "fcc", a=_lattice_guess(element), cubic=True).repeat((3, 3, 3))
-    atoms.rattle(0.05, seed=7)
+    atoms.rattle(0.05, seed=stream_seed(seed, "lammps-export", "rattle"))
     parity = parity_check(atoms, calc, species)
     md = None
     if md_steps > 0:
         md_atoms = atoms.copy()
         MaxwellBoltzmannDistribution(
-            md_atoms, temperature_K=md_temperature_K, rng=np.random.default_rng(11)
+            md_atoms,
+            temperature_K=md_temperature_K,
+            rng=numpy_rng(seed, "lammps-export", "velocities"),
         )
         Stationary(md_atoms)
         md = md_stability_check(md_atoms, calc, species, steps=md_steps, timestep_fs=md_timestep_fs)

@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 from ase.build import bulk
 
+from matsim_agents.core.seeding import numpy_rng, stream_seed
+
 MACE_SMALL = "20231210mace128L0_energy_epoch249model"
 
 
@@ -66,6 +68,7 @@ def main() -> int:
     ap.add_argument("--a", type=float, default=3.6)
     ap.add_argument("--rattle", type=float, default=0.05)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--seed", type=int, required=True, help="root seed of the run")
     ap.add_argument("--md-steps", type=int, default=0, help="NVE steps for the stability check")
     ap.add_argument("--md-temperature", type=float, default=300.0, help="K, initial velocities")
     ap.add_argument("--md-timestep-fs", type=float, default=1.0)
@@ -96,7 +99,7 @@ def main() -> int:
         short_range = {"policy": record.policy, "r_in": record.r_in, "r_out": record.r_out}
 
     atoms = bulk(args.element, "fcc", a=args.a, cubic=True).repeat((3, 3, 3))
-    atoms.rattle(args.rattle, seed=7)
+    atoms.rattle(args.rattle, seed=stream_seed(args.seed, "rattle"))
     result = parity_check(atoms, calc, [args.element])
     payload = {"label": label, "zbl": args.zbl, "result": result.__dict__}
     md_passed = True
@@ -105,7 +108,7 @@ def main() -> int:
 
         md_atoms = atoms.copy()
         MaxwellBoltzmannDistribution(
-            md_atoms, temperature_K=args.md_temperature, rng=np.random.default_rng(11)
+            md_atoms, temperature_K=args.md_temperature, rng=numpy_rng(args.seed, "velocities")
         )
         Stationary(md_atoms)
         if args.pka_eV > 0:

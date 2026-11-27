@@ -196,9 +196,12 @@ builds the calculator from the promoted checkpoint, runs the parity and NVE stab
 writes `lammps_export.json` (checkpoint sha256, parity, MD, `approved`) next to the model. The result is
 recorded in the iteration state and does not block the promotion.
 
+The rattle and initial velocities come from streams of one required root seed (`--seed`; the jobs
+take `MATSIM_MLIAP_SEED`; the AL loop passes its `random_seed`), see `docs/reproducibility.md`.
+
 ```bash
 source external/lammps/activate-mliap.sh
-PYTHONPATH=$PWD/src .venv-mace/bin/python scripts/lammps/mliap_parity.py \
+PYTHONPATH=$PWD/src .venv-mace/bin/python scripts/lammps/mliap_parity.py --seed 7 \
     --calc mace --model small --a 2.3 --rattle 0.02 --zbl --out outputs/mliap-parity/mace.json
 ```
 

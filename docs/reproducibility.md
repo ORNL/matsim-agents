@@ -37,6 +37,8 @@ are valid and never alias positive ones.
 | Held-out evaluation (`evaluate`, fine-tune evaluation) | the AL config's `random_seed` / the evaluation `seed` | parity-plot atoms from `parity-plot` (whole atoms, so x/y/z stay balanced) |
 | Dataset splits | `split.seed` | root stream |
 | Relaxation with `random_displacement` | `displacement_seed` (required) | root stream |
+| LAMMPS ML-IAP export check (AL loop) | the AL config's `random_seed`, passed as `seed` | `("lammps-export", "rattle")`, `("lammps-export", "velocities")` |
+| LAMMPS ML-IAP scripts and Frontier jobs | `--seed` / `MATSIM_MLIAP_SEED` (required) | `rattle`, `velocities`, `finetune-inputs`; the seed is also passed to the fine-tune |
 
 A campaign retry of an inconclusive formula is a new attempt with a new seed
 and its own directory (`formulas/<formula>/attempt-NNNN`), so it explores new

@@ -10,7 +10,7 @@
 # <backend>/finetune-export.json. Checks the pipeline, not model accuracy. MATSIM_MLIAP_FT_LORA=1
 # makes the MACE and UMA fine-tunes low-rank.
 #
-# Submit: MLIAP_OUT=<dir> sbatch -A <ACCOUNT> -t 00:30:00 -q normal \
+# Submit: MLIAP_OUT=<dir> MATSIM_MLIAP_SEED=<root seed> sbatch -A <ACCOUNT> -t 00:30:00 -q normal \
 #   deployments/frontier/jobs/lammps/job-lammps-mliap-finetune-frontier.sh
 # ---------------------------------------------------------------------------
 
@@ -18,6 +18,7 @@ set -euo pipefail
 
 REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:?}")}"
 OUT="${MLIAP_OUT:?set MLIAP_OUT}"
+SEED="${MATSIM_MLIAP_SEED:?set MATSIM_MLIAP_SEED (root seed of the run)}"
 PROJ="$(dirname "$REPO")"
 export HYDRAGNN_DIR="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
 export HYDRAGNN_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
@@ -32,7 +33,7 @@ status=0
 ft() { # backend, python interpreter
     local backend="$1" py="$2"
     "$py" "$REPO/scripts/lammps/mliap_finetune_export.py" --backend "$backend" \
-        --out "$OUT/$backend" --epochs "${MATSIM_MLIAP_FT_EPOCHS:-1}" \
+        --out "$OUT/$backend" --seed "$SEED" --epochs "${MATSIM_MLIAP_FT_EPOCHS:-1}" \
         ${MATSIM_MLIAP_FT_LORA:+--lora} || status=1
 }
 

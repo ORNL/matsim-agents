@@ -242,6 +242,7 @@ def test_export_records_checkpoint_hash_and_requires_both_checks(
         ckpt,
         tmp_path / "out",
         species=["Cu"],
+        seed=5,
         calculator=EMT(),
     )
     assert record["approved"] is approved
@@ -257,7 +258,12 @@ def test_export_requires_an_existing_checkpoint_file(tmp_path, monkeypatch):
     export = _stub_checks(monkeypatch)
     with pytest.raises(FileNotFoundError, match="no checkpoint file"):
         export.export_checkpoint_for_lammps(
-            MACEConfig(), tmp_path / "missing.model", tmp_path, species=["Cu"], calculator=EMT()
+            MACEConfig(),
+            tmp_path / "missing.model",
+            tmp_path,
+            species=["Cu"],
+            seed=5,
+            calculator=EMT(),
         )
 
 
@@ -271,14 +277,17 @@ def test_loop_export_is_opt_in_and_never_blocks_promotion(tmp_path, monkeypatch)
         "export_checkpoint_for_lammps",
         lambda *a, **k: calls.append(k) or {"approved": True},
     )
-    cfg = SimpleNamespace(mlip=object(), trainer=SimpleNamespace(lammps_export_species=[]))
+    cfg = SimpleNamespace(
+        mlip=object(), random_seed=9, trainer=SimpleNamespace(lammps_export_species=[])
+    )
     state = SimpleNamespace(candidate_model_path=str(tmp_path / "m.model"), lammps_export=None)
     loop._export_for_lammps(cfg, state)
     assert calls == [] and state.lammps_export is None
 
     cfg.trainer.lammps_export_species = ["Cu"]
     loop._export_for_lammps(cfg, state)
-    assert calls[0]["species"] == ["Cu"] and state.lammps_export == {"approved": True}
+    assert calls[0]["species"] == ["Cu"] and calls[0]["seed"] == 9
+    assert state.lammps_export == {"approved": True}
 
     def boom(*a, **k):
         raise RuntimeError("no lammps")

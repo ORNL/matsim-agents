@@ -13,7 +13,7 @@
 # BEST6 weights tree (HYDRAGNN_WEIGHTS); UMA needs the bundle from
 # deployments/frontier/download/download-uma-frontier.sh and is skipped without it.
 #
-# Submit: MLIAP_OUT=<dir> sbatch -A <ACCOUNT> -t 00:30:00 -q debug \
+# Submit: MLIAP_OUT=<dir> MATSIM_MLIAP_SEED=<root seed> sbatch -A <ACCOUNT> -t 00:30:00 -q debug \
 #   deployments/frontier/jobs/lammps/job-lammps-mliap-parity-frontier.sh
 # ---------------------------------------------------------------------------
 
@@ -21,6 +21,7 @@ set -euo pipefail
 
 REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"; [[ -f "$d/pyproject.toml" ]] && echo "$d" || echo "${SLURM_SUBMIT_DIR:?}")}"
 OUT="${MLIAP_OUT:?set MLIAP_OUT}"
+SEED="${MATSIM_MLIAP_SEED:?set MATSIM_MLIAP_SEED (root seed of the run)}"
 
 # shellcheck disable=SC1091
 source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"
@@ -34,7 +35,7 @@ status=0
 run() { # name python args...
     local name="$1" py="$2"
     shift 2
-    "$py" "$REPO/scripts/lammps/mliap_parity.py" "$@" --out "$OUT/$name.json" || status=1
+    "$py" "$REPO/scripts/lammps/mliap_parity.py" "$@" --seed "$SEED" --out "$OUT/$name.json" || status=1
 }
 
 MD_STEPS="${MATSIM_MLIAP_MD_STEPS:-20}"  # NVE stability stage on the unstrained-lattice runs
