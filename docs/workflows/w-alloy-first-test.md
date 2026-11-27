@@ -133,8 +133,9 @@ Relax the defect endpoints first. The prepared `neb_*` entries require relaxed e
 `matsim-agents neb prepare` cannot use them. It builds its own vacancy hop from the `parent` and
 `defect` keys of its config and rejects the interstitial and recombination mechanisms
 ([`cli/neb.py`](../../src/matsim_agents/cli/neb.py)), so it ignores the prior relaxation and covers
-only `neb_vacancy`. For all three paths, build a `MigrationPair` in Python from the relaxed
-structures with their endpoint provenance and call `matsim_agents.workflows.neb.run_neb_workflow`.
+only `neb_vacancy`. For all three paths, build a `matsim_agents.science.neb.endpoints.MigrationPair`
+in Python from the relaxed structures with their endpoint provenance and call
+`matsim_agents.workflows.neb.workflow.run_neb_workflow`.
 Then use `matsim-agents neb validate|inspect|resume` on the resulting workflow directory
 (see [Run a workflow](run-campaigns.md)).
 
@@ -163,11 +164,16 @@ A barrier from this chain is at most `unqualified`.
 Hierarchical transfer and the radiation-damage chain are dry runs by default. Active learning is not.
 
 - Hierarchical transfer: `matsim_agents.workflows.hierarchy.engine`. Dispatch needs `approved_by` and a node-hour budget.
-- Radiation-damage chain: `matsim_agents.workflows.radiation_damage.run_radiation_damage`. Dispatch needs `dispatch=True`.
+- Radiation-damage chain: `matsim_agents.workflows.radiation.damage.run_radiation_damage`. Dispatch needs `dispatch=True`.
   Kinetics are blocked without NEB evidence and are never labelled qualified.
-- Active learning: `matsim-agents active-learning --help`. `active-learning run` calls
+- Active learning: `matsim-agents active-learning --help` (alias `al`). `active-learning run` calls
   `run_active_learning` with no dry-run gate. `deployments/frontier/launchers/run-active-learning-frontier.sh`
   requests 64 nodes for 12 h and runs DFT and training. It is live execution and needs approval.
+  - Generate your own `al.yaml` with `active-learning init-campaign`. `run` refuses a config under
+    `examples/` unless `--allow-template` or `MATSIM_ALLOW_TEMPLATE_CONFIG=1` is set, and it stops if the
+    training references miss an element in the seeds (see [Active learning](../guide/active-learning.md)).
+  - `loop.resume` defaults to true. A restart continues from the last iteration and reuses finished DFT
+    labels instead of recomputing them.
 
 ## 9. Check results
 
