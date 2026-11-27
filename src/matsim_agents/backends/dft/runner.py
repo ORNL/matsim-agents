@@ -9,6 +9,7 @@ capture.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -27,7 +28,11 @@ def run_dft_batch(
     pool: PoolPlacement,
     on_complete: Callable[[DFTJobSpec, DFTResult], None] | None = None,
 ) -> list[DFTResult]:
-    """Run DFT jobs concurrently on the disjoint job groups of the ``dft`` pool."""
+    """Run DFT jobs concurrently on the disjoint job groups of the ``dft`` pool.
+
+    ``on_complete(spec, result)`` runs as soon as each job finishes, serialized
+    across partitions, so callers can checkpoint finished work.
+    """
     specs_list = list(specs)
     if not specs_list:
         return []
@@ -41,6 +46,7 @@ def run_dft_batch(
         Path(s.work_dir).mkdir(parents=True, exist_ok=True)
 
     queues = [specs_list[index::nworkers] for index in range(nworkers)]
+    callback_lock = threading.Lock()
 
     def run_partition(
         launch: ProcessLaunch, queue: list[DFTJobSpec]
@@ -67,6 +73,9 @@ def run_dft_batch(
                     notes=f"Python-level exception: {exc!r}",
                 )
             completed.append((spec, result))
+            if on_complete is not None:
+                with callback_lock:
+                    on_complete(spec, result)
         return completed
 
     results: list[DFTResult] = []
@@ -75,9 +84,6 @@ def run_dft_batch(
             pool.submit(run_partition, groups[index], queue) for index, queue in enumerate(queues)
         ]
         for future in as_completed(futures):
-            for spec, result in future.result():
-                results.append(result)
-                if on_complete is not None:
-                    on_complete(spec, result)
+            results.extend(result for _, result in future.result())
 
     return results

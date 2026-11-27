@@ -1412,3 +1412,57 @@ def test_fresh_run_rejects_an_existing_run_directory(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="already holds a run"):
         loop_mod.run_active_learning(cfg)
     assert json.loads((cfg.loop.out_dir / "random-seed.json").read_text()) == {"random_seed": 5}
+
+
+def test_resumed_iteration_reuses_saved_dft_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    _patch_runtime(loop_mod, monkeypatch)
+    calls: list[str] = []
+
+    class _CountingBackend(_FakeDFTBackend):
+        def run_one(self, spec: DFTJobSpec) -> DFTResult:
+            calls.append(spec.job_id)
+            return super().run_one(spec)
+
+    monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _CountingBackend())
+    append = loop_mod._append_labelled_frames
+
+    def interrupted(*args, **kwargs):
+        raise RuntimeError("node failure after DFT")
+
+    monkeypatch.setattr(loop_mod, "_append_labelled_frames", interrupted)
+    with pytest.raises(RuntimeError, match="node failure"):
+        loop_mod.run_active_learning(cfg)
+    assert len(calls) == 2
+
+    monkeypatch.setattr(loop_mod, "_append_labelled_frames", append)
+    loop_mod.run_active_learning(cfg)
+
+    state = json.loads((cfg.loop.out_dir / "iteration_0000" / "state.json").read_text())
+    assert state["status"] == "complete"
+    assert state["n_dft_reused"] == 2 and state["n_dft_converged"] == 2
+    assert len(calls) == 2, "saved DFT labels were recomputed"
+    assert len(ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")) == 2
+
+
+def test_saved_dft_label_is_not_reused_for_a_different_geometry(tmp_path: Path) -> None:
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    ledger = tmp_path / "labels.jsonl"
+    spec = DFTJobSpec(job_id="cand_000", atoms=_make_candidate(0).atoms, work_dir="x")
+    loop_mod._save_dft_label(
+        ledger, loop_mod._dft_label_key(cfg, spec), _FakeDFTBackend().run_one(spec)
+    )
+    with ledger.open("a") as handle:
+        handle.write('{"key": "truncated')
+    moved = DFTJobSpec(job_id="cand_000", atoms=_make_candidate(1).atoms, work_dir="x")
+
+    labels = loop_mod._load_dft_labels(ledger)
+    assert list(labels) == [loop_mod._dft_label_key(cfg, spec)]
+    assert loop_mod._dft_label_key(cfg, moved) not in labels

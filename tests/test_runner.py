@@ -460,3 +460,71 @@ def test_dft_mode_rejects_an_mlip_relaxation_config(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match="needs relaxation mode in"):
         runner.validate(config)
+
+
+def _rerun_resumable_alloy(tmp_path, monkeypatch, outcomes):
+    spec = tmp_path / "alloy.yaml"
+    spec.write_text(
+        yaml.safe_dump(
+            {
+                "crystal_structure": "bcc",
+                "repeats": [1, 1, 1],
+                "lattice_parameter": 3.16,
+                "ordering": "random",
+                "seed": 1,
+                "counts": {"W": 2},
+            }
+        )
+    )
+    seen = []
+
+    def execute(path, run, options):
+        seen.append(options.mlip_config)
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    handler = runner.Handler(runner._alloy_preflight, execute, rerun_resumes=True)
+    monkeypatch.setitem(runner.HANDLERS, "alloy-spec", handler)
+    return spec, seen
+
+
+def test_rerun_resumable_kind_resumes_with_its_original_options(tmp_path, monkeypatch) -> None:
+    spec, seen = _rerun_resumable_alloy(
+        tmp_path,
+        monkeypatch,
+        [RuntimeError("walltime"), runner.Outcome("complete", str(tmp_path / "native"))],
+    )
+    mlip = tmp_path / "mlip.yaml"
+    options = runner.RunOptions(mlip_config=mlip)
+    directory, record = runner.run(spec, runs_dir=tmp_path / "runs", options=options)
+    assert record.state == "failed" and record.resumable
+
+    directory, record = runner.resume(record.run_id, runs_dir=tmp_path / "runs")
+    assert record.state == "complete" and not record.resumable
+    assert record.native_run_directory == str(tmp_path / "native")
+    assert seen == [mlip.resolve(), mlip.resolve()]
+    assert load_record(directory).state == "complete"
+
+
+def test_resume_refuses_a_config_edited_since_the_run_started(tmp_path, monkeypatch) -> None:
+    spec, seen = _rerun_resumable_alloy(tmp_path, monkeypatch, [RuntimeError("walltime")])
+    _, record = runner.run(spec, runs_dir=tmp_path / "runs")
+    spec.write_text(spec.read_text() + "# edited\n")
+    with pytest.raises(ValueError, match="changed since the run started"):
+        runner.resume(record.run_id, runs_dir=tmp_path / "runs")
+    assert len(seen) == 1
+
+
+def test_kinds_without_resume_support_still_refuse(tmp_path, monkeypatch) -> None:
+    spec, _ = _rerun_resumable_alloy(tmp_path, monkeypatch, [])
+    monkeypatch.setitem(
+        runner.HANDLERS,
+        "alloy-spec",
+        runner.Handler(runner._alloy_preflight, lambda *args: runner.Outcome("failed")),
+    )
+    _, record = runner.run(spec, runs_dir=tmp_path / "runs")
+    assert record.state == "failed" and not record.resumable
+    with pytest.raises(ValueError, match="cannot be resumed"):
+        runner.resume(record.run_id, runs_dir=tmp_path / "runs")

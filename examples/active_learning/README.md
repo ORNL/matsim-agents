@@ -317,10 +317,24 @@ then `srun` against the allocation.
 
 ## Resume
 
+Set `loop.resume: true` and rerun the same config, or run
+`matsim-agents resume RUN_ID` for a run started with `matsim-agents run`.
+The runner refuses to resume if the config file has changed since the run
+started, and it reuses the MLIP selected when the run began.
+
 Each iteration writes `out_dir/iteration_NNNN/state.json` with `status:
 "complete"` only on success. On restart the loop scans for the highest
 completed iteration, deletes any partial directory, and resumes from there
 without double-counting DFT results.
+
+Every converged DFT label is appended to
+`out_dir/dft_label_cache/iteration_NNNN.jsonl` as soon as its job finishes.
+This happens while the rest of the batch is still running. A restarted
+iteration reuses a saved label only if the candidate ID, the geometry, the
+DFT method and the backend all match; every other candidate is recomputed.
+`state.json` reports reused labels as `n_dft_reused`. The loop skips truncated
+ledger lines and logs a warning. Failed or unconverged calculations are not
+saved, so they run again.
 
 ## Seed sources
 

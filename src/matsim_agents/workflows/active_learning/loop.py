@@ -14,7 +14,10 @@ Each iteration writes a JSON ``state.json`` under
 Resume logic: on restart, the driver scans ``loop.out_dir`` for the highest
 existing ``iteration_*/state.json`` with ``status == "complete"`` and starts
 the next iteration from there. Partial iterations are wiped (so we never
-double-count VASP results in the dataset).
+double-count VASP results in the dataset), but each converged DFT label is
+also saved to ``dft_label_cache/iteration_{i:04d}.jsonl`` as it finishes; the
+rerun of that iteration reuses a saved label instead of repeating the
+calculation when the candidate ID, geometry and DFT method all match.
 
 Usage (Python)
 --------------
@@ -122,6 +125,7 @@ class IterationState:
     n_selected: int = 0
     n_dft_converged: int = 0
     n_dft_failed: int = 0
+    n_dft_reused: int = 0
     n_dft_neb_runs: int = 0
     neb_pathways: list[dict[str, Any]] = field(default_factory=list)
     dft_backend: str | None = None
@@ -224,7 +228,7 @@ _ROOT_SEED_FILE = "random-seed.json"
 
 def _prior_run_artifacts(root: Path) -> list[str]:
     """Evidence a previous run left in *root*: iterations, datasets, and seed structures."""
-    names = ["dataset.extxyz", "dataset.db", "validation.extxyz", "seeds"]
+    names = ["dataset.extxyz", "dataset.db", "validation.extxyz", "seeds", "dft_label_cache"]
     found = [name for name in names if (root / name).exists()]
     return found + sorted(path.name for path in root.glob("iteration_*"))
 
@@ -411,7 +415,30 @@ def _label_with_dft(
         )
         for cand in selected
     ]
-    results = run_dft_batch(specs, backend, placement.pool("dft"))
+    ledger = it_dir.parent / _DFT_LABEL_CACHE / f"{it_dir.name}.jsonl"
+    cached = _load_dft_labels(ledger)
+    reused: dict[str, Any] = {}
+    pending = []
+    for spec in specs:
+        result = cached.get(_dft_label_key(cfg, spec))
+        if result is None or result.backend != backend.name:
+            pending.append(spec)
+            continue
+        result.work_dir = spec.work_dir
+        reused[spec.job_id] = result
+    if reused:
+        log.info("Iter %d: reusing %d saved DFT labels from %s", i, len(reused), ledger)
+    state.n_dft_reused = len(reused)
+
+    by_job = dict(reused)
+
+    def save(spec: DFTJobSpec, result: Any) -> None:
+        by_job[spec.job_id] = result
+        if result.converged:
+            _save_dft_label(ledger, _dft_label_key(cfg, spec), result)
+
+    run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
+    results = [by_job[spec.job_id] for spec in specs]
     n_ok = sum(1 for r in results if r.converged)
     state.n_dft_converged = n_ok
     state.n_dft_failed = len(results) - n_ok
@@ -427,6 +454,45 @@ def _label_with_dft(
     if cfg.loop.fail_fast and state.n_dft_failed:
         raise RuntimeError(f"{state.n_dft_failed} {backend.name} jobs failed and fail_fast=True")
     return results, backend
+
+
+_DFT_LABEL_CACHE = "dft_label_cache"
+
+
+def _dft_label_key(cfg: ALConfig, spec: DFTJobSpec) -> str:
+    elements = set(spec.atoms.get_chemical_symbols())
+    return "|".join(
+        (spec.job_id, structure_identity(spec.atoms), _dft_method_signature(cfg, elements))
+    )
+
+
+def _load_dft_labels(ledger: Path) -> dict[str, Any]:
+    from ase.io.jsonio import decode
+
+    from matsim_agents.backends.dft.base import DFTResult
+
+    labels: dict[str, Any] = {}
+    if not ledger.is_file():
+        return labels
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = decode(line)
+            labels[entry["key"]] = DFTResult(**entry["result"])
+        except Exception as exc:  # noqa: BLE001
+            # A write cut short by the interruption; that job simply reruns.
+            log.warning("Ignoring unreadable DFT label in %s: %s", ledger, exc)
+    return labels
+
+
+def _save_dft_label(ledger: Path, key: str, result: Any) -> None:
+    from ase.io.jsonio import encode
+
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    line = encode({"key": key, "result": asdict(result)})
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(line.replace("\n", " ") + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:
