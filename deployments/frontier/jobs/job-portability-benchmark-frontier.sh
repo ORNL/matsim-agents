@@ -44,8 +44,8 @@ mkdir -p "${MIOPEN_USER_DB_PATH}"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.), which the
 # HydraGNN ASE calculator in backends/mlip/relaxation.py imports at build time.
-HYDRAGNN_EXAMPLE="${HYDRAGNN_DIR:-$PROJ/HydraGNN}/examples/multidataset_hpo_sc26"
-export PYTHONPATH="$HYDRAGNN_EXAMPLE:${HYDRAGNN_DIR:-$PROJ/HydraGNN}:${PYTHONPATH:-}"
+source "$REPO/deployments/common/hydragnn-env.sh"
+hydragnn_export_pythonpath
 export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_ARCH=gfx90a
 export LD_LIBRARY_PATH="${VENV}/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"

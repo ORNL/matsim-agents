@@ -21,11 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 WORKTREE_SOURCE = (REPO / "src").resolve()
 ORIGINAL_CHECKOUT_SOURCE = (REPO.parent / "matsim-agents" / "src").resolve()
 # The shared HPC venv is editable-installed from a sibling checkout; prefer this checkout.
-sys.path = [
-    entry
-    for entry in sys.path
-    if Path(entry or ".").resolve() != ORIGINAL_CHECKOUT_SOURCE
-]
+sys.path = [entry for entry in sys.path if Path(entry or ".").resolve() != ORIGINAL_CHECKOUT_SOURCE]
 sys.path.insert(0, str(WORKTREE_SOURCE))
 
 _mlip_predict = importlib.import_module("benchmarks.e3.mlip_predict")
@@ -101,7 +97,6 @@ def build_calculator(
         "config_sha256": sha256(config_path),
         "inference_head": HYDRAGNN_HEAD,
         "inference_head_index": HYDRAGNN_HEAD_INDEX,
-        "branch_weight_mlp_used": False,
         "checkpoint_load_report": getattr(
             model_calculator, "hydragnn_checkpoint_load_report", None
         ),
@@ -138,11 +133,13 @@ def benchmark(
 
     calc, model_config = build_calculator(model_name, device, hydragnn_logdir, hydragnn_root)
     element_root = reference_root / "dft_reference/vasp/elemental_refs/calculations"
-    elements = sorted({
-        symbol
-        for sid in ids
-        for symbol in read(data / "relaxed" / f"{sid}.xyz").get_chemical_symbols()
-    })
+    elements = sorted(
+        {
+            symbol
+            for sid in ids
+            for symbol in read(data / "relaxed" / f"{sid}.xyz").get_chemical_symbols()
+        }
+    )
     model_refs: dict[str, float] = {}
     reference_failures: dict[str, str] = {}
     started = time.perf_counter()
@@ -177,19 +174,21 @@ def benchmark(
             formation_energy = (
                 energy - sum(model_refs[symbol] for symbol in atoms.get_chemical_symbols())
             ) / len(atoms)
-            predictions.append({
-                "structure_id": sid,
-                "material_class": metadata[sid]["material_class"],
-                "formula": metadata[sid]["formula"],
-                "n_atoms": len(atoms),
-                "formation_energy_prediction_eV_atom": formation_energy,
-                "formation_energy_reference_eV_atom": float(
-                    labels[sid]["formation_energy_eV_per_atom"]
-                ),
-                "formation_energy_error_eV_atom": formation_energy
-                - float(labels[sid]["formation_energy_eV_per_atom"]),
-                "force_error_eV_A": (forces - reference_forces).tolist(),
-            })
+            predictions.append(
+                {
+                    "structure_id": sid,
+                    "material_class": metadata[sid]["material_class"],
+                    "formula": metadata[sid]["formula"],
+                    "n_atoms": len(atoms),
+                    "formation_energy_prediction_eV_atom": formation_energy,
+                    "formation_energy_reference_eV_atom": float(
+                        labels[sid]["formation_energy_eV_per_atom"]
+                    ),
+                    "formation_energy_error_eV_atom": formation_energy
+                    - float(labels[sid]["formation_energy_eV_per_atom"]),
+                    "force_error_eV_A": (forces - reference_forces).tolist(),
+                }
+            )
         except Exception as exc:
             failures.append({"structure_id": sid, "error": f"{type(exc).__name__}: {exc}"})
 
@@ -202,9 +201,9 @@ def benchmark(
         "model": model_name,
         "model_config": model_config,
         "device": device,
-        "public_label_digest": hashlib.sha256(json.dumps(
-            [labels[sid] for sid in ids], sort_keys=True, separators=(",", ":")
-        ).encode()).hexdigest(),
+        "public_label_digest": hashlib.sha256(
+            json.dumps([labels[sid] for sid in ids], sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
         "dataset": {
             "public_ids_only": True,
             "public_label_count": len(ids),
@@ -242,7 +241,8 @@ def main() -> int:
     repo = REPO
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--codabench-root", type=Path,
+        "--codabench-root",
+        type=Path,
         default=repo.parent / "matsim-agents" / "benchmarks" / "codabench",
     )
     parser.add_argument(
@@ -262,9 +262,7 @@ def main() -> int:
             / "hydragnn-sc26"
             / "multidataset_hpo-BEST6-fp64"
         )
-        args.hydragnn_root = args.hydragnn_root or (
-            repo.parent / "HydraGNN-e4b-frozen-81d5b883"
-        )
+        args.hydragnn_root = args.hydragnn_root or (repo.parent / "HydraGNN-e4b-frozen-81d5b883")
     result = benchmark(
         args.codabench_root,
         args.reference_root,
@@ -274,16 +272,21 @@ def main() -> int:
         args.hydragnn_logdir,
         args.hydragnn_root,
     )
-    print(json.dumps({
-        "model": result["model"],
-        "successful_predictions": result["successful_predictions"],
-        "failed_predictions": len(result["failed_predictions"]),
-        "overall": result["overall"],
-        "by_material_class": result["by_material_class"],
-        "elapsed_seconds_including_model_elemental_references": result[
-            "elapsed_seconds_including_model_elemental_references"
-        ],
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "model": result["model"],
+                "successful_predictions": result["successful_predictions"],
+                "failed_predictions": len(result["failed_predictions"]),
+                "overall": result["overall"],
+                "by_material_class": result["by_material_class"],
+                "elapsed_seconds_including_model_elemental_references": result[
+                    "elapsed_seconds_including_model_elemental_references"
+                ],
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

@@ -27,7 +27,8 @@ VENV=${VENV_PATH:-$M/matsim-agents/.venv}
 OUT=${E4_OUTPUT_ROOT:-$M/runs/e4-framework}
 ACCOUNT=${E4_ACCOUNT:-HydraGNN}
 CONFIGS=$REPO/benchmarks/e4/framework/configs
-HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$M/HydraGNN-e4b-frozen-81d5b883/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 
 case $CODE in
   vasp)

@@ -19,9 +19,6 @@ What happens:
       ASE calculator of the selected MLIP, and reports chemical / dynamical
       stability proxies. Results are streamed back into the
       conversation so the LLM can refine its hypothesis.
-    * If the relaxed phases show high uncertainty (low branch-weight
-      confidence), discovery can hand off directly to the active-learning
-      loop using a base AL YAML config (--al-config).
     * You can also trigger optional control actions from inside chat with
       slash commands: /relax <path_to_structure> (single-structure
       relaxation), /al [composition] (active-learning handoff for the
@@ -55,45 +52,14 @@ def main() -> None:
         "--al-config",
         default=None,
         help=(
-            "Path to a base active-learning YAML. When high-UQ is detected in discovery, "
-            "the composition is handed off to AL by overriding seed_source to compositions."
+            "Path to a base active-learning YAML used by the /al command, which "
+            "overrides seed_source to compositions=[formula]."
         ),
-    )
-    parser.add_argument(
-        "--no-al-handoff",
-        action="store_true",
-        help="Disable discovery->active-learning handoff even when UQ is high.",
     )
     parser.add_argument(
         "--al-dry-run",
         action="store_true",
-        help="Plan and report AL handoff parameters without running the AL loop.",
-    )
-    parser.add_argument(
-        "--uq-top-weight-threshold",
-        type=float,
-        default=0.6,
-        help="High-UQ gate: trigger handoff when mean top branch weight drops below this.",
-    )
-    parser.add_argument(
-        "--uq-min-unreliable-fraction",
-        type=float,
-        default=0.25,
-        help="High-UQ gate: trigger handoff when this fraction of relaxations is low-confidence.",
-    )
-    parser.add_argument(
-        "--uq-min-relaxations-for-handoff",
-        type=int,
-        default=3,
-        help="Require at least this many relaxations before evaluating AL handoff UQ criteria.",
-    )
-    parser.add_argument(
-        "--al-handoff-audit-path",
-        default=None,
-        help=(
-            "Optional JSONL artifact path for discovery->AL handoff audit records "
-            "(UQ metrics, trigger rationale, action)."
-        ),
+        help="Plan and report /al parameters without running the AL loop.",
     )
     args = parser.parse_args()
     mlip = mlip_config_from_args(parser, args)
@@ -109,13 +75,8 @@ def main() -> None:
         llm_model=args.llm_model,
         llm_base_url=args.llm_base_url,
         auto_confirm=args.auto_confirm,
-        trigger_active_learning_on_high_uq=not args.no_al_handoff,
         active_learning_config=args.al_config,
         active_learning_dry_run=args.al_dry_run,
-        uq_top_weight_threshold=args.uq_top_weight_threshold,
-        uq_min_unreliable_fraction=args.uq_min_unreliable_fraction,
-        uq_min_relaxations_for_handoff=args.uq_min_relaxations_for_handoff,
-        al_handoff_audit_path=args.al_handoff_audit_path,
     )
 
     session = run_chat(cfg)

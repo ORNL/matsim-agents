@@ -23,7 +23,8 @@ printf 'RUNNING started=%s host=%s job=%s\n' "$(date -Is)" "$(hostname)" "${PBS_
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_xpu_modules
 export PYTHONPATH="${REPO}/src:${REPO}:${PYTHONPATH:-}"
-export HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(dirname "${REPO}")/HydraGNN}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT ZE_AFFINITY_MASK=0

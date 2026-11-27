@@ -231,7 +231,7 @@ def test_relaxation_uses_the_configured_charge_and_spin(tmp_path, monkeypatch):
 
     built = []
     monkeypatch.setattr(
-        HydraGNNConfig, "relaxation_calculator", lambda self: built.append(self.conditioning())
+        HydraGNNConfig, "build_calculator", lambda self: built.append(self.conditioning())
     )
     request = relaxation.RelaxStructureInput(
         structure_path="s.vasp", mlip=_conditioned_hydragnn(tmp_path)

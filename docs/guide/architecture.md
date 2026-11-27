@@ -18,8 +18,7 @@ Reusable standalone workflow graphics:
                 ┌───────────────────────▼──────────────────────┐
                 │         LangGraph orchestration layer         │
                 │                                               │
-                │  run: planner -> executor -> uq_gate          │
-                │      -> [optional AL handoff] -> analyst      │
+                │  run: planner -> executor -> analyst          │
                 └───────────────────────┬──────────────────────┘
                                         │  tool calls
                 ┌───────────────────────▼──────────────────────┐
@@ -30,7 +29,7 @@ Reusable standalone workflow graphics:
                                         │
                 ┌───────────────────────▼──────────────────────┐
                 │             Atomistic backends               │
-                │   HydraGNN (fused or selected decoder head)  │
+                │   HydraGNN (branch-7 / OMat24 head only)     │
                 │   UMA + open MACE foundation-model families │
                 │   ASE (FIRE / BFGS / BFGSLineSearch)         │
                 │   pymatgen (AFLOW prototype encyclopedia)    │
@@ -56,13 +55,10 @@ flowchart TD
 
     subgraph SCIENCE[Shared scientific capabilities]
       X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
-      Q[Evaluate uncertainty]
-      AL[Active learning loop]
+      AL[Active learning loop<br/>/al or al run]
       E[Results and auditable evidence]
 
-      X --> Q
-      Q -->|low confidence + policy enabled| AL
-      Q -->|sufficient confidence| E
+      X --> E
       AL --> E
     end
 
@@ -85,7 +81,7 @@ flowchart TD
     class U entry
     class G,R decision
     class O,OP,I,IP mode
-    class X,Q,AL,E science
+    class X,AL,E science
     class OA,IR output
 ```
 
@@ -103,8 +99,6 @@ flowchart TD
   `--critic-llm-*`, `--peer-review-rounds`).
 - **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
 - **Slash commands inside discovery chat**: `/relax <structure_path>` (single-structure relaxation), `/al [composition]` (trigger an active-learning handoff for the given or most recently discussed composition), and `/clear` (reset the conversation and discovery state).
-- **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
-- **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
   - **HydraGNN** branch-7 (OMat24) head only (default).
   - **UMA** (Universal Models for Atoms) via fairchem (`backend: uma`).
@@ -113,9 +107,8 @@ flowchart TD
   - Every command selects the backend with `--mlip-config FILE`, a YAML whose
     `mlip:` block holds `backend` and that backend's settings (see
     `examples/mlip/`).
-  - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
-    HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
-    MACE relaxations do not emit branch-weight metrics.
+  - HydraGNN loads the checkpoint, keeps only branch-7 and drops the other
+    branches before inference; it supports MC-dropout UQ.
 - **Unified crystal-phase seed generation** (`matsim_agents.science.structures.seed_structures`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the
@@ -169,8 +162,8 @@ flowchart TD
   shell-style substitution with optional in-file `vars:` block, so the
   same config can be re-targeted across users / scratch dirs / runs
   without editing it.
-- **Graph entry point**: `matsim-agents run` for planner-executor-analyst
-  task execution, with optional UQ-triggered AL handoff (`--trigger-al-handoff`).
+- **Graph entry point**: `matsim-agents objective` for planner-executor-analyst
+  task execution.
 - **Surrogate backend switch for AL flows**: an AL config's `mlip`
   block selects its model; `--mlip-config` replaces it at run time, so one
   config runs with any backend:
@@ -182,15 +175,14 @@ flowchart TD
 The repository exposes one LangGraph workflow over the shared numerical
 kernels (discovery wrapper, relaxations, AL loop):
 
-- **Core agent graph** (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
-  with optional run-path AL handoff when UQ policy is triggered.
+- **Core agent graph** (`matsim-agents objective`): planner -> executor -> analyst.
 
 This keeps decision logic agentic while preserving deterministic,
 restart-friendly HPC kernels for heavy computation.
 
 ### Core agent graph
 
-Four nodes share a typed `MatSimState`:
+Three nodes share a typed `MatSimState`:
 
 - **planner** — turns the objective into a list of `TaskSpec` items
   (kinds: `relax`, `analyze`, `report`, `mcp_tool`, `mcp_resource`). Uses the LLM with structured
@@ -201,14 +193,8 @@ Four nodes share a typed `MatSimState`:
   currently require an MLIP selection and are then skipped without incrementing
   `iteration`. It loops until the queue drains or `max_iterations`
   is reached. See the [MCP guide](../mcp.md).
-- **uq_gate** — aggregates branch-weight confidence over relaxation
-  results and applies policy thresholds. If low-confidence criteria are
-  met and handoff is enabled, this node can launch active learning
-  (`--al-config`, `--al-dry-run/--al-run`) and append structured handoff
-  events to the state.
 - **analyst** — summarizes the accumulated results into a human-readable
-  report (LLM-assisted when available, deterministic baseline otherwise),
-  including handoff decisions/events when present.
+  report (LLM-assisted when available, deterministic baseline otherwise).
 
 State is checkpointed via LangGraph's `MemorySaver`, so every node
 transition is replayable and inspectable.

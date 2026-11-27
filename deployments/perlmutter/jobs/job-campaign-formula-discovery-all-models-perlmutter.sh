@@ -114,6 +114,10 @@ PY
 fi
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
+# campaign-nb-ta-o-hydragnn-qe.yaml takes the BEST6 logdir from this script's variables. A
+# missing or wrong checkout only fails the HydraGNN stages, which cannot expand their config.
+source "$REPO/deployments/common/hydragnn-env.sh" ||
+  echo "WARNING: pinned HydraGNN checkout unavailable; HydraGNN stages will fail." >&2
 MODELS_ROOT="${MODEL_ROOT:-$PROJ/models}"
 source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"
 MLIP=""

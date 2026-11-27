@@ -87,7 +87,10 @@ may restart. Completed runs are no-ops.
 `resume` verifies the saved run record and the native config/manifest file.
 These are **not** a replacement for native transitive scientific-input checks.
 Changing scientific inputs requires a fresh run, not editing saved evidence.
-Do not point a run at an unrelated native run/session. AL, characterization,
+Do not point a run at an unrelated native run/session. AL and characterization
+runs also accept `matsim-agents resume RUN_ID`, which reruns the unchanged
+config against their native checkpoints. See
+[active-learning resume](../../examples/active_learning/README.md#resume).
 E1, chat, and E3 production each retain their own native restart policies.
 
 ## What to do next

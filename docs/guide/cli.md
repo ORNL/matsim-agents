@@ -66,19 +66,12 @@ Relaxation options of `chat`:
 | `--n-random` | `50` | Target number of supplementary pyXtal structures per composition, added to every applicable AFLOW prototype. `0` disables them; fewer may be generated. |
 | `--random-seed` | `0` | Seed for the pyXtal generator. |
 
-Active-learning handoff options shared by both commands:
+Active-learning options for the chat `/al` command:
 
 | Option | Description |
 |---|---|
-| `--trigger-al-handoff / --no-trigger-al-handoff` | Evaluate branch-weight uncertainty after relaxations and optionally hand off to active learning. Enabled by default for `chat`, disabled for `run`. |
-| `--al-config PATH` | Base active-learning YAML used when the handoff fires. |
-| `--al-dry-run / --al-run` | Only plan and record the handoff (default), or execute the loop. |
-| `--uq-top-weight-threshold` | Trigger when the mean top branch weight is below this value (default `0.6`). |
-| `--uq-min-unreliable-fraction` | Trigger when the low-confidence fraction is at least this value (default `0.25`; one of four results is enough). |
-| `--uq-min-relaxations-for-handoff` | Relaxations required before evaluation (default `1` for `run`, `3` otherwise). |
-| `--al-handoff-audit-path PATH` | JSONL file for decisions (default `<output-dir>/discovery/al_handoff_events.jsonl`). |
-
-Branch-weight uncertainty is produced only by fused HydraGNN inference.
+| `--al-config PATH` | Base active-learning YAML used by `/al`. |
+| `--al-dry-run / --al-run` | Only plan and report the run (default), or execute the loop. |
 
 ## `run`: planner, executor, and analyst
 

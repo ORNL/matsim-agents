@@ -32,8 +32,9 @@ export PYTHONNOUSERSITE=1
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH="/tmp/miopen-${SLURM_JOB_ID:-$$}"
 mkdir -p "${MIOPEN_USER_DB_PATH}"
-HYDRAGNN_ROOT="${HYDRAGNN_DIR:-${PROJ}/HydraGNN}"
-export PYTHONPATH="${REPO}:${REPO}/src:${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26:${HYDRAGNN_ROOT}:${PYTHONPATH:-}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
+export PYTHONPATH="${REPO}:${REPO}/src:${PYTHONPATH:-}"
+hydragnn_export_pythonpath
 # ROCm PyTorch exposes AMD GPUs through the cuda device API.
 export E4_MLP_DEVICE="${E4_MLP_DEVICE:-cuda}"
 cd "${REPO}"

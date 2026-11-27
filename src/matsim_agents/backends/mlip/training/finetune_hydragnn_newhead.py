@@ -40,13 +40,19 @@ import numpy as np
 
 from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
+    HYDRAGNN_INFERENCE_HEAD_INDEX,
     resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 from matsim_agents.backends.mlip.hydragnn_newhead import (
     apply_newhead_surgery,
+    keep_only_branch_7,
     load_update_model,
+)
+from matsim_agents.backends.mlip.hydragnn_source import (
+    verify_hydragnn_source,
+    write_hydragnn_source_record,
 )
 from matsim_agents.backends.mlip.training.cost import CostReport, count_parameters, track_cost
 from matsim_agents.backends.mlip.training.hydragnn_data import (
@@ -110,61 +116,19 @@ def build_newhead_ft_config(
     }
 
 
-def _keep_pretrained_branch(decoder_target, branch_index: int) -> None:
-    """Prune the pretrained decoder to the *selected* branch, keyed as ``branch-0``.
-
-    Generalises ORNL ``_keep_pretrained_branch_zero`` (which only ever keeps
-    ``branch-0``) to any of the 16 pretrained branches. The chosen branch's
-    trained ``graph_shared`` and per-head ``heads_NN`` sub-modules are kept **by
-    reference** -- so their pretrained weights are preserved -- and re-keyed as
-    ``branch-0`` so HydraGNN's single-branch decoder path uses them directly.
-    """
-    import torch.nn as nn
-
-    src = f"branch-{branch_index}"
-    if src not in decoder_target.graph_shared:
-        raise ValueError(
-            f"pretrained graph_shared has no {src!r} "
-            f"(available: {list(decoder_target.graph_shared.keys())})"
-        )
-
-    graph_shared = nn.ModuleDict({"branch-0": decoder_target.graph_shared[src]})
-    heads_nn = nn.ModuleList()
-    for head_module in decoder_target.heads_NN:
-        if src not in head_module:
-            raise ValueError(f"pretrained heads_NN entry has no {src!r}")
-        heads_nn.append(nn.ModuleDict({"branch-0": head_module[src]}))
-
-    decoder_target.graph_shared = graph_shared
-    decoder_target.heads_NN = heads_nn
-    decoder_target.num_branches = 1
-
-    config_heads = getattr(decoder_target, "config_heads", None)
-    if isinstance(config_heads, dict) and "graph" in config_heads:
-        specs = config_heads["graph"]
-        chosen = dict(specs[branch_index] if branch_index < len(specs) else specs[0])
-        chosen["type"] = "branch-0"
-        config_heads["graph"] = [chosen]
-
-
 def apply_pretrained_head_surgery(
     model, branch_index: int, *, ft_repo=None, freeze_mode: str = "none"
 ):
-    """Keep the *selected* pretrained branch as the single ``branch-0`` head.
+    """Delete every pretrained branch except branch-7 (OMat24), kept as the single head.
 
-    Unlike :func:`apply_newhead_surgery` (which discards all 16 pretrained
-    readouts and grows a randomly-initialised head), this preserves the chosen
-    head's pretrained weights -- the MACE/UMA-style approach of adapting an
-    existing dataset-specific readout instead of bootstrapping one from scratch.
     Requires the pretrained decoder to already be loaded into ``model``. Returns
     the updated model.
     """
-    um = load_update_model(ft_repo)
-    decoder_target = um._resolve_decoder_target(model)
-    _keep_pretrained_branch(decoder_target, int(branch_index))
-    um._drop_wrapper_decoder_modules(model, decoder_target)
+    if branch_index != HYDRAGNN_INFERENCE_HEAD_INDEX:
+        raise ValueError(f"HydraGNN head {branch_index} is forbidden; only branch-7 (OMat24)")
+    model = keep_only_branch_7(model)
     if freeze_mode and freeze_mode != "none":
-        model = um.apply_freeze_mode(
+        model = load_update_model(ft_repo).apply_freeze_mode(
             model, {"NeuralNetwork": {"Training": {"freeze_mode": freeze_mode}}}
         )
     return model
@@ -423,7 +387,13 @@ def _warmup_cosine_scheduler(optimizer, steps_per_epoch: int, epochs: int, warmu
 
 
 def _save_single_head_logdir(
-    model, output_dir: Path, *, config_path: Path, checkpoint_name: str, metadata: dict
+    model,
+    output_dir: Path,
+    *,
+    config_path: Path,
+    checkpoint_name: str,
+    metadata: dict,
+    source_record: dict,
 ) -> Path:
     """Write the checkpoint, the ORIGINAL GFM config, and ``newhead.json``."""
     import torch
@@ -433,6 +403,7 @@ def _save_single_head_logdir(
     # The original GFM config lets eval rebuild the backbone and re-apply surgery.
     shutil.copyfile(config_path, output_dir / "config.json")
     (output_dir / "newhead.json").write_text(json.dumps(metadata, indent=2))
+    write_hydragnn_source_record(output_dir, source_record)
     return ckpt_out
 
 
@@ -503,6 +474,7 @@ def finetune_hydragnn_newhead(
     root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
+    source_record = verify_hydragnn_source(gfm_logdir)
     resume_metadata = None
     if (gfm_logdir / "newhead.json").exists():
         resume_metadata, gfm_checkpoint, head_index = _load_resume_metadata(
@@ -661,6 +633,7 @@ def finetune_hydragnn_newhead(
         output_dir,
         config_path=config_path,
         checkpoint_name=checkpoint_name,
+        source_record=source_record,
         metadata={
             "strategy": strategy,
             "head": GFM_HEAD_DATASETS[head_index],

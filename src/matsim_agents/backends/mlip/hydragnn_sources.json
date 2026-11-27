@@ -1,0 +1,9 @@
+{
+  "8532b03296a8ab4cfc3b37beb6d57b2091a50807b155fac93cb1882253d32867": {
+    "checkpoint": "multidataset_hpo-BEST6-fp64_epoch_97.pk",
+    "repository": "https://github.com/allaffa/HydraGNN.git",
+    "commit": "81d5b88304f20bb45c840571e2e26c490d1b19da",
+    "checkout": "HydraGNN-e4b-frozen-81d5b883",
+    "evidence": "Strict load succeeds at this commit (PAINN Linear with bias); the HydraGNN 2431099 checkout has bias=False and fails the strict load."
+  }
+}

@@ -6,6 +6,7 @@ that calls the native workflow. The CLI and agents are thin callers of this modu
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.execution.capabilities import check, get_capability
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.execution.variables import unset_variables
@@ -25,6 +27,8 @@ from matsim_agents.workflows.run_records import (
     start_run,
     write_record,
 )
+
+log = logging.getLogger(__name__)
 
 
 class UnrunnableInput(ValueError):
@@ -60,6 +64,12 @@ class Handler:
     preflight: Callable[[Path, RunOptions], Preflight]
     execute: Callable[[Path, ScientificRunDirectory, RunOptions], Outcome]
     resume: Callable[[RunRecord], Outcome] | None = None
+    # The native workflow skips its completed work, so running the same source again resumes it.
+    rerun_resumes: bool = False
+
+    @property
+    def resumable(self) -> bool:
+        return self.resume is not None or self.rerun_resumes
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -352,8 +362,14 @@ def _al_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) ->
     from matsim_agents.workflows.active_learning import ALConfig
     from matsim_agents.workflows.active_learning.loop import run_active_learning
 
-    run_active_learning(ALConfig.from_yaml(path, mlip=_mlip_override(options)))
-    return Outcome("complete", None, {"note": "see the active-learning run directory"})
+    cfg = ALConfig.from_yaml(path, mlip=_mlip_override(options))
+    if not cfg.loop.resume:
+        # Without it the loop refuses an out_dir that already holds iterations.
+        log.warning("loop.resume is false; this AL run cannot be resumed")
+    run_active_learning(cfg)
+    return Outcome(
+        "complete", str(cfg.loop.out_dir), {"note": "see the active-learning run directory"}
+    )
 
 
 def _sampling_config(path: Path, options: RunOptions):
@@ -614,14 +630,14 @@ def _investigation_execute(path: Path, run: ScientificRunDirectory, options: Run
 
 HANDLERS: dict[str, Handler] = {
     "application": Handler(_application_preflight, _application_execute),
-    "al": Handler(_al_preflight, _al_execute),
+    "al": Handler(_al_preflight, _al_execute, rerun_resumes=True),
     "sampling": Handler(_sampling_preflight, _sampling_execute),
     "neb": Handler(_neb_preflight, _neb_execute),
     "external": Handler(_external_preflight, _external_execute),
     "relax": Handler(_relax_preflight, _relax_execute),
     "debate": Handler(_debate_preflight, _debate_execute),
     "llm-check": Handler(_llm_check_preflight, _llm_check_execute),
-    "characterize": Handler(_characterize_preflight, _characterize_execute),
+    "characterize": Handler(_characterize_preflight, _characterize_execute, rerun_resumes=True),
     "explore": Handler(_explore_preflight, _explore_execute, _explore_resume),
     "alloy-spec": Handler(_alloy_preflight, _alloy_execute),
     "investigation": Handler(_investigation_preflight, _investigation_execute),
@@ -745,6 +761,8 @@ def run(
         return run_dir.path, record
     run_dir, record = start_run(runs_dir, kind=kind, source=source, resolved_config=pre.summary)
     record.summary = pre.summary
+    if options.mlip_config is not None:
+        record.mlip_config = str(Path(options.mlip_config).resolve())
     if pre.blockers:
         record.state, record.blockers = "blocked", pre.blockers
         write_record(run_dir, record)
@@ -752,11 +770,12 @@ def run(
     try:
         outcome = handler.execute(target, run_dir, options)
     except KeyboardInterrupt:
-        record.state, record.resumable = "interrupted", handler.resume is not None
+        record.state, record.resumable = "interrupted", handler.resumable
         write_record(run_dir, record)
         raise
     except Exception as error:  # noqa: BLE001 - recorded with its type, then reported
         record.state, record.failure_reason = "failed", f"{type(error).__name__}: {error}"
+        record.resumable = handler.rerun_resumes
         write_record(run_dir, record)
         return run_dir.path, record
     _apply(record, outcome, handler)
@@ -769,7 +788,7 @@ def _apply(record: RunRecord, outcome: Outcome, handler: Handler) -> None:
     record.native_run_directory = outcome.native_run_directory
     record.summary = {**record.summary, **outcome.summary}
     record.failure_reason = outcome.failure_reason
-    record.resumable = handler.resume is not None and outcome.state in {"partial", "failed"}
+    record.resumable = handler.resumable and outcome.state in {"partial", "failed"}
 
 
 def resume(reference: str | Path, *, runs_dir: str | Path | None = None) -> tuple[Path, RunRecord]:
@@ -779,20 +798,42 @@ def resume(reference: str | Path, *, runs_dir: str | Path | None = None) -> tupl
     record = load_record(directory)
     if record.state == "complete":
         return directory, record
+    options = RunOptions(mlip_config=Path(record.mlip_config) if record.mlip_config else None)
     if record.state == "blocked" and record.source:
-        return run(record.source, runs_dir=directory.parent)
+        return run(record.source, runs_dir=directory.parent, options=options)
     handler = HANDLERS.get(record.kind)
-    if handler is None or handler.resume is None:
+    if handler is None or not handler.resumable:
         raise ValueError(f"{record.kind} runs cannot be resumed; start a new run instead")
+    if handler.rerun_resumes:
+        _check_source_unchanged(record)
     run_dir = ScientificRunDirectory.open(directory)
     try:
-        outcome = handler.resume(record)
+        if handler.rerun_resumes:
+            outcome = handler.execute(_resolve(Path(record.source))[1], run_dir, options)
+        else:
+            outcome = handler.resume(record)
+    except KeyboardInterrupt:
+        record.state, record.resumable = "interrupted", True
+        write_record(run_dir, record)
+        raise
     except Exception as error:  # noqa: BLE001
         record.state, record.failure_reason = "failed", f"{type(error).__name__}: {error}"
+        record.resumable = handler.rerun_resumes
     else:
         _apply(record, outcome, handler)
     write_record(run_dir, record)
     return directory, record
+
+
+def _check_source_unchanged(record: RunRecord) -> None:
+    """Resuming from an edited config would mix two campaigns in one native directory."""
+    if not record.source or not Path(record.source).is_file():
+        raise ValueError(f"cannot resume: the run's config {record.source} no longer exists")
+    if record.source_sha256 and sha256_file(Path(record.source)) != record.source_sha256:
+        raise ValueError(
+            f"cannot resume: {record.source} changed since the run started; "
+            "start a new run with a new output directory instead"
+        )
 
 
 def exit_code(record: RunRecord) -> int:

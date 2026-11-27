@@ -650,7 +650,8 @@ def test_aurora_xpu_qualification_builds_each_backend_from_mlip_config(
     import matsim_agents.backends.mlip.calculator  # noqa: F401  (cached before torch is faked)
     from matsim_agents.backends.mlip.config import MLIP_BACKEND_CONFIGS
 
-    monkeypatch.setenv("HYDRAGNN_ROOT", str(tmp_path / "HydraGNN"))
+    best6 = tmp_path / "HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64"
+    monkeypatch.setenv("HYDRAGNN_BEST6_LOGDIR", str(best6))  # from hydragnn-env.sh
     module = _load_xpu_qualifier()
     output = tmp_path / f"{backend}.json"
     args, cfg = module.parse_args(
@@ -658,8 +659,7 @@ def test_aurora_xpu_qualification_builds_each_backend_from_mlip_config(
     )
     assert (cfg.backend, cfg.device) == (backend, "xpu")
     if backend == "hydragnn":
-        example = tmp_path / "HydraGNN/examples/multidataset_hpo_sc26"
-        assert cfg.logdir == example / "multidataset_hpo-BEST6-fp64"
+        assert cfg.logdir == best6
         assert cfg.inference_head == "OMat24"
 
     built, residency = [], []

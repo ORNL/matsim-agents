@@ -90,10 +90,12 @@ export PYTHONPATH="${MATSIM_AGENTS_DIR}/src:${PYTHONPATH:-}"
 
 # Add the HydraGNN sc26 example dir to PYTHONPATH so `inference_fused`
 # (used by src/matsim_agents/backends/mlip/relaxation.py) can be imported.
-HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(dirname "${MATSIM_AGENTS_DIR}")/HydraGNN}"
-HYDRAGNN_SC26_DIR="${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26"
-if [[ -f "${HYDRAGNN_SC26_DIR}/inference_fused.py" ]]; then
-    export PYTHONPATH="${HYDRAGNN_SC26_DIR}:${PYTHONPATH}"
+# Not every job uses HydraGNN, so a missing or wrong checkout only warns here; matsim-agents
+# refuses to load a HydraGNN checkpoint from any other commit.
+if source "${MATSIM_AGENTS_DIR}/deployments/common/hydragnn-env.sh"; then
+    hydragnn_export_pythonpath
+else
+    echo "WARNING: pinned HydraGNN checkout unavailable; HydraGNN backends will not load." >&2
 fi
 
 echo ""

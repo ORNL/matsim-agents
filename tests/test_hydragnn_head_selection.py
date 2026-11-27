@@ -9,7 +9,7 @@ import pytest
 from typer.main import get_command
 
 from matsim_agents.agents.interactive_chat import DiscoveryChatConfig
-from matsim_agents.backends.mlip import hydragnn_checkpoint
+from matsim_agents.backends.mlip import hydragnn_checkpoint, hydragnn_newhead
 from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
 from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
@@ -109,44 +109,9 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     assert len(result["results"]) == 1
 
 
-def test_branch_7_relaxation_disables_branch_weight_uq(tmp_path, monkeypatch):
-    import numpy as np
-    from ase import Atoms
-    from ase.calculators.calculator import Calculator, all_changes
-    from ase.io import write
-
-    import matsim_agents.backends.mlip.calculator as factory
-    import matsim_agents.backends.mlip.relaxation as relaxation
-
-    class Branch7Calculator(Calculator):
-        implemented_properties = ["energy", "forces"]
-        model = SimpleNamespace(num_branches=16)
-        last_branch_weights = np.array([1.0] + [0.0] * 15)
-
-        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
-            super().calculate(atoms, properties, system_changes)
-            self.results = {"energy": -1.0, "forces": np.zeros((len(atoms), 3))}
-
-    logdir = tmp_path / "model"
-    logdir.mkdir()
-    (logdir / "energy-convention.json").write_text("{}")
-    structure = tmp_path / "structure.extxyz"
-    write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
-    monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: Branch7Calculator())
-    result = relaxation.relax_with_mlip(
-        RelaxStructureInput(
-            structure_path=str(structure),
-            mlip={"backend": "hydragnn", "logdir": str(logdir)},
-            maxiter=1,
-        )
-    )
-    assert result.top_branch_weight is None
-    assert "branch-weight UQ disabled" in result.notes
-
-
 @pytest.mark.parametrize("metadata_name", ["routing.json", "newhead.json", None])
 def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
-    tmp_path, monkeypatch, metadata_name
+    tmp_path, monkeypatch, metadata_name, unverified_hydragnn_source
 ):
     import matsim_agents.backends.mlip.relaxation as relaxation
 
@@ -186,7 +151,7 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
 
 @pytest.mark.parametrize("inference_head", ["OMat24", "branch-7"])
-def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head):
+def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head, unverified_hydragnn_source):
     import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"
@@ -211,36 +176,45 @@ def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head):
         model._hydragnn_checkpoint_load_report = {"missing_tensor_count": 0}
 
     monkeypatch.setattr(hydragnn_checkpoint, "restore_hydragnn_checkpoint", restore)
+    pruned = []
+
+    def prune(model):
+        pruned.append(model.num_branches)
+        model.num_branches = 1
+        return model
+
+    monkeypatch.setattr(hydragnn_newhead, "keep_only_branch_7", prune)
     captured = {}
 
-    def selected_builder(model, **kwargs):
+    def single_builder(model, **kwargs):
+        assert model.num_branches == 1
         captured.update(kwargs)
         return SimpleNamespace(**kwargs)
 
-    monkeypatch.setattr(calculator, "_build_selected_head_calculator", selected_builder)
+    monkeypatch.setattr(calculator, "_build_single_head_calculator", single_builder)
+    monkeypatch.setattr(
+        "matsim_agents.backends.mlip.hydragnn_energy.restore_hydragnn_total_energy",
+        lambda c, *a: c,
+    )
 
     result = build_hydragnn_calculator(HydraGNNConfig(logdir=logdir, inference_head=inference_head))
 
-    assert result.head_index == 7
+    assert result.inference_head_index == 7
+    assert pruned == [16]
     assert restored and restored[0][1] == "cuda"
     assert captured["radius"] == 6.0
     assert captured["max_neighbours"] == 24
     assert captured["autocast_ctx"] is autocast_ctx
 
 
-def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
+def test_single_head_calculator_exposes_model_for_mc_dropout():
     import matsim_agents.backends.mlip.calculator as calculator
 
-    torch = ModuleType("torch")
-    torch.float32 = "float32"
-    torch.tensor = lambda value, dtype: (value, dtype)
-    monkeypatch.setitem(sys.modules, "torch", torch)
-    model = SimpleNamespace()
+    model = SimpleNamespace(num_branches=1)
 
-    result = calculator._build_selected_head_calculator(
+    result = calculator._build_single_head_calculator(
         model,
         autocast_ctx=nullcontext(),
-        head_index=7,
         radius=6.0,
         max_neighbours=24,
         param_dtype="float64",
@@ -252,8 +226,23 @@ def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
     assert result.model is model
 
 
+def test_single_head_calculator_rejects_unpruned_model():
+    import matsim_agents.backends.mlip.calculator as calculator
+
+    with pytest.raises(ValueError, match="prune it to branch-7"):
+        calculator._build_single_head_calculator(
+            SimpleNamespace(num_branches=16),
+            radius=6.0,
+            max_neighbours=24,
+            param_dtype="float64",
+            device="cpu",
+            charge=0,
+            spin=0,
+        )
+
+
 @pytest.mark.parametrize("precision", ["fp32", "fp64", "bf16"])
-def test_selected_head_calculator_preserves_precision_context(monkeypatch, precision):
+def test_single_head_calculator_preserves_precision_context(monkeypatch, precision):
     import torch
     from ase import Atoms
 
@@ -279,7 +268,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
 
     def model(data):
         assert torch.is_autocast_enabled("cpu") == (precision == "bf16")
-        assert data.dataset_name.item() == 7
+        assert not hasattr(data, "dataset_name")
         output = data.pos @ torch.eye(3, dtype=dtype)
         calls.append(output.dtype)
         return [output.sum().reshape(1, 1)]
@@ -292,10 +281,9 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
 
     monkeypatch.setattr(relaxation, "atoms_to_graph", graph)
     monkeypatch.setattr(torch.autograd, "grad", grad)
-    calc = calculator._build_selected_head_calculator(
+    calc = calculator._build_single_head_calculator(
         model,
         autocast_ctx=autocast_ctx,
-        head_index=7,
         radius=6.0,
         max_neighbours=24,
         param_dtype=dtype,

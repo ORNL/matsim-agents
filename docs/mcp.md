@@ -107,8 +107,7 @@ and tasks it emits for anything else are denied and recorded.
 
 MCP tasks only call external tools. They do not run relaxations, DFT, or
 active learning, so the existing scientific approvals, the MLIP selection
-(still required by every `relax` task), the UQ gate, and the active-learning
-handoff are unchanged. MCP tasks count towards `--max-iterations`.
+(still required by every `relax` task), and active learning are unchanged. MCP tasks count towards `--max-iterations`.
 
 ## Run an MCP-enabled workflow
 

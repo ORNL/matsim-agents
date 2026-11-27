@@ -8,7 +8,6 @@ from ase.calculators.emt import EMT
 from ase.io import write
 from typer.testing import CliRunner
 
-from matsim_agents.backends.mlip.relaxation import RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
@@ -65,7 +64,7 @@ def setup(tmp_path, monkeypatch):
 
     def calculator(args):
         calls["loads"] += 1
-        return RelaxCalculator(EMT(), 0, 0, None)
+        return EMT()
 
     original = workflow.relax_with_mlip
 

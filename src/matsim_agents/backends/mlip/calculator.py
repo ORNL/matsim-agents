@@ -60,9 +60,12 @@ def _build_single_head_calculator(
     charge,
     spin,
     autocast_dtype=None,
+    autocast_ctx=None,
 ):
-    """ASE calculator for a fine-tuned single-branch model whose only head derives from branch-7.
+    """ASE calculator for a single-branch HydraGNN whose only branch is (or derives from) branch-7.
 
+    The model must already hold exactly one branch (see
+    :func:`~matsim_agents.backends.mlip.hydragnn_newhead.keep_only_branch_7`).
     Energy = ``model(data)[0]`` and forces = ``-dE/dx`` via autograd.
     """
     import torch
@@ -70,6 +73,12 @@ def _build_single_head_calculator(
 
     from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
     from matsim_agents.backends.mlip.relaxation import atoms_to_graph
+
+    num_branches = getattr(model, "num_branches", 1)
+    if num_branches != 1:
+        raise ValueError(
+            f"HydraGNN model has {num_branches} branches; prune it to branch-7 (OMat24) first"
+        )
 
     class SingleHeadHydraGNNCalculator(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -89,72 +98,25 @@ def _build_single_head_calculator(
                 data.cell = data.cell.to(param_dtype)
             data.x = data.x.to(param_dtype)
             data.pos.requires_grad_(True)
-            with torch.enable_grad(), hydragnn_autocast(device, autocast_dtype):
+            ctx = (
+                autocast_ctx
+                if autocast_ctx is not None
+                else hydragnn_autocast(device, autocast_dtype)
+            )
+            with torch.enable_grad(), ctx:
                 pred = model(data)
-                energy = pred[0] if isinstance(pred, (list, tuple)) else pred
+                if isinstance(pred, (list, tuple)):
+                    energy = pred[0]
+                elif isinstance(pred, dict) and "graph" in pred:
+                    energy = pred["graph"][0]
+                else:
+                    energy = pred
                 energy = energy.squeeze(-1).sum()
                 forces = -torch.autograd.grad(energy, data.pos)[0]
             self.results["energy"] = float(energy.detach())
             self.results["forces"] = forces.detach().cpu().numpy()
 
     return SingleHeadHydraGNNCalculator()
-
-
-def _build_selected_head_calculator(
-    model,
-    *,
-    autocast_ctx,
-    head_index,
-    radius,
-    max_neighbours,
-    param_dtype,
-    device,
-    charge,
-    spin,
-):
-    """ASE calculator pinned to branch-7 (OMat24) of the multi-branch HydraGNN."""
-    import torch
-
-    if head_index != HYDRAGNN_INFERENCE_HEAD_INDEX:
-        raise ValueError(f"HydraGNN head {head_index} is forbidden; only branch-7 (OMat24)")
-    from ase.calculators.calculator import Calculator, all_changes
-
-    from matsim_agents.backends.mlip.relaxation import atoms_to_graph
-
-    class SelectedHeadHydraGNNCalculator(Calculator):
-        implemented_properties = ["energy", "forces"]
-
-        def __init__(self):
-            super().__init__()
-            self.model = model
-            self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-            self.inference_head_index = head_index
-            self.inference_head_name = HYDRAGNN_DATASET_HEADS[head_index]
-            self.last_branch_weights = None
-
-        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
-            super().calculate(atoms, properties, system_changes)
-            data = atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
-            data.pos = data.pos.to(param_dtype)
-            if hasattr(data, "cell") and data.cell is not None:
-                data.cell = data.cell.to(param_dtype)
-            data.x = data.x.to(param_dtype)
-            data.dataset_name = torch.full((1, 1), head_index, dtype=torch.long, device=device)
-            data.pos.requires_grad_(True)
-            with torch.enable_grad(), autocast_ctx:
-                prediction = model(data)
-                if isinstance(prediction, (list, tuple)):
-                    energy = prediction[0]
-                elif isinstance(prediction, dict) and "graph" in prediction:
-                    energy = prediction["graph"][0]
-                else:
-                    energy = prediction
-                energy = energy.squeeze(-1).sum()
-                forces = -torch.autograd.grad(energy, data.pos)[0]
-            self.results["energy"] = float(energy.detach())
-            self.results["forces"] = forces.detach().cpu().numpy()
-
-    return SelectedHeadHydraGNNCalculator()
 
 
 def _apply_energy_convention(
@@ -188,48 +150,41 @@ def _apply_energy_convention(
 def _add_hydragnn_example_dirs(logdir: Path) -> None:
     """Put the HydraGNN example dir (with ``inference_fused``) on ``sys.path``.
 
-    ``inference_fused`` lives in the HydraGNN example dir alongside the GFM
-    logdir (``.../multidataset_hpo_sc26/<gfm_logdir>``). Adding it here makes the
-    eval path self-sufficient instead of relying on the caller (or the fine-tune
-    module) having imported it first. ``HYDRAGNN_ROOT`` is honoured as well,
-    matching the fine-tune's resolution.
+    The scripts come from the checkout whose ``hydragnn`` is imported, never from the
+    directory beside the logdir: the weights may sit in a different HydraGNN tree
+    than the commit recorded for them (``verify_hydragnn_source`` checks that commit).
     """
     import sys
 
-    example_dirs = [logdir.parent]
-    root_env = os.environ.get("HYDRAGNN_ROOT")
-    if root_env:
-        example_dirs.append(Path(root_env) / "examples" / "multidataset_hpo_sc26")
+    from matsim_agents.backends.mlip.hydragnn_source import imported_hydragnn_root
+
+    example_dirs = [imported_hydragnn_root() / "examples" / "multidataset_hpo_sc26"]
     for directory in example_dirs:
         if (directory / "inference_fused.py").is_file() and str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
 
 
-def _selected_head_hydragnn_calculator(
-    cfg: HydraGNNConfig, logdir: Path, selected_head: int = HYDRAGNN_INFERENCE_HEAD_INDEX
-):
-    """Calculator that evaluates pretrained branch-7 (OMat24) of the multi-branch model."""
+def _branch_7_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path):
+    """Calculator for the pretrained GFM with every branch except branch-7 (OMat24) deleted."""
     from inference_random_structures import find_checkpoint, load_config_and_model
 
     from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
     from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
+    from matsim_agents.backends.mlip.hydragnn_newhead import keep_only_branch_7
 
     model, config, device, autocast_ctx, param_dtype = load_config_and_model(
         str(logdir), cfg.checkpoint, cfg.precision
     )
     checkpoint_path = find_checkpoint(str(logdir), cfg.checkpoint)
+    # Restore the full 16-branch checkpoint strictly (so nothing is silently
+    # missing), then delete the other 15 branches before the model is ever run.
     restore_hydragnn_checkpoint(model, checkpoint_path, device=device)
-    num_branches = int(getattr(model, "num_branches", 1))
-    if selected_head >= num_branches:
-        raise ValueError(
-            f"HydraGNN head {selected_head} ({HYDRAGNN_DATASET_HEADS[selected_head]}) "
-            f"is unavailable in a model with {num_branches} branches"
-        )
+    load_report = model._hydragnn_checkpoint_load_report
+    model = keep_only_branch_7(model)
     arch = config["NeuralNetwork"]["Architecture"]
-    calculator = _build_selected_head_calculator(
+    calculator = _build_single_head_calculator(
         model,
         autocast_ctx=autocast_ctx,
-        head_index=selected_head,
         radius=float(cfg.radius if cfg.radius is not None else arch.get("radius", 5.0)),
         max_neighbours=int(
             cfg.max_neighbours if cfg.max_neighbours is not None else arch.get("max_neighbours", 20)
@@ -239,7 +194,9 @@ def _selected_head_hydragnn_calculator(
         charge=cfg.charge,
         spin=cfg.spin,
     )
-    calculator.hydragnn_checkpoint_load_report = model._hydragnn_checkpoint_load_report
+    calculator.inference_head_index = HYDRAGNN_INFERENCE_HEAD_INDEX
+    calculator.inference_head_name = HYDRAGNN_DATASET_HEADS[HYDRAGNN_INFERENCE_HEAD_INDEX]
+    calculator.hydragnn_checkpoint_load_report = load_report
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
@@ -338,9 +295,12 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig):
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
     cfg, _ = _apply_energy_convention(cfg, logdir)
     _add_hydragnn_example_dirs(logdir)
+    from matsim_agents.backends.mlip.hydragnn_source import verify_hydragnn_source
+
+    verify_hydragnn_source(logdir)
     if cfg.newhead_ft_config is not None:
         return _newhead_hydragnn_calculator(cfg, logdir)
-    return _selected_head_hydragnn_calculator(cfg, logdir, HYDRAGNN_INFERENCE_HEAD_INDEX)
+    return _branch_7_hydragnn_calculator(cfg, logdir)
 
 
 def build_ensemble(cfg: Any, *, enable_mc_dropout: bool = False) -> list[Any]:

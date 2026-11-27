@@ -216,7 +216,6 @@ class TestLLMOnly:
         cfg = DiscoveryChatConfig(llm_only=True)
 
         assert cfg.llm_only is True
-        assert cfg.trigger_active_learning_on_high_uq is False
 
     def test_formulas_do_not_trigger_atomistic_tools(self, monkeypatch, tmp_path):
         cfg = DiscoveryChatConfig(llm_only=True, auto_confirm=True, output_dir=str(tmp_path))

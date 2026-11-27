@@ -20,14 +20,13 @@ REPO="${PROJECT_ROOT:-$(d="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/
 OUT="${MLIAP_OUT:?set MLIAP_OUT}"
 SEED="${MATSIM_MLIAP_SEED:?set MATSIM_MLIAP_SEED (root seed of the run)}"
 PROJ="$(dirname "$REPO")"
-export HYDRAGNN_DIR="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
-export HYDRAGNN_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
+source "$REPO/deployments/common/hydragnn-env.sh"
 export HYDRAGNN_FT_REPO="${HYDRAGNN_FT_REPO:-$PROJ/HydraGNN_GFM_FineTuning4Materials}"
 
 # shellcheck disable=SC1091
 source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"
 unset PYTHONHOME
-export PYTHONPATH="$HYDRAGNN_DIR:$REPO/src:$REPO:${PYTHONPATH:-}" XALT_EXECUTABLE_TRACKING=no PYTHONNOUSERSITE=1
+export PYTHONPATH="$HYDRAGNN_EXAMPLE:$HYDRAGNN_ROOT:$REPO/src:$REPO:${PYTHONPATH:-}" XALT_EXECUTABLE_TRACKING=no PYTHONNOUSERSITE=1
 mkdir -p "$OUT"
 
 status=0

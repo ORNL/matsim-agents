@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import namedtuple
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -229,15 +228,14 @@ def test_worker_times_cached_calculator_and_synchronizes(tmp_path, monkeypatch):
         max_memory_allocated=lambda: 123,
         device_count=lambda: 1,
     )
-    Entry = namedtuple("Entry", ["calculator", "num_branches", "active_branches", "uq_note"])
     cache = SimpleNamespace(loads=0)
-    entry = Entry(ToyCalculator(), 0, 0, None)
+    toy = ToyCalculator()
 
     def get(args):
         if cache.loads == 0:
             cache.loads += 1
-        entry.calculator.reset()
-        return entry
+        toy.reset()
+        return toy
 
     cache.get = get
     monkeypatch.setattr("benchmarks.e4_mlip.run._device", lambda: device)
@@ -512,7 +510,7 @@ def test_pilot_resource_cap_retains_partial_relaxation(tmp_path, monkeypatch):
     monkeypatch.setattr(
         pilot,
         "_worker_calculators",
-        lambda: SimpleNamespace(get=lambda args: SimpleNamespace(calculator=Harmonic())),
+        lambda: SimpleNamespace(get=lambda args: Harmonic()),
     )
     monkeypatch.setenv("ZE_AFFINITY_MASK", "0")
     path = tmp_path / "input.extxyz"

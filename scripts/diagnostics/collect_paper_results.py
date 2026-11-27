@@ -2,7 +2,6 @@
 """Collect paper benchmark outputs into one machine-readable dataset.
 
 Scans one or more run roots for:
-- active-learning-uq-*/outputs/uq_summary.csv
 - qe-warmstart-*/**/comparison.json
 - vasp-warmstart-*/**/comparison.json (if present)
 
@@ -54,36 +53,6 @@ def _read_csv_rows(path: str) -> List[Dict[str, str]]:
     return rows
 
 
-def _collect_uq(root: str) -> List[Dict[str, object]]:
-    records = []
-    pattern = os.path.join(root, "active-learning-uq-*", "outputs", "uq_summary.csv")
-    for uq_csv in sorted(glob.glob(pattern)):
-        run_dir = os.path.dirname(os.path.dirname(uq_csv))
-        run_name = os.path.basename(run_dir)
-        job_id = run_name.rsplit("-", 1)[-1]
-        for row in _read_csv_rows(uq_csv):
-            records.append(
-                {
-                    "workflow": "uq",
-                    "run_root": root,
-                    "run_dir": run_dir,
-                    "job_id": job_id,
-                    "source_file": uq_csv,
-                    "structure": row.get("structure"),
-                    "optimized_structure": row.get("optimized_structure"),
-                    "final_energy_eV": _safe_float(row.get("final_energy_eV")),
-                    "final_max_force_eV_per_A": _safe_float(row.get("final_max_force_eV_per_A")),
-                    "num_steps": int(row["num_steps"]) if row.get("num_steps") else None,
-                    "converged": row.get("converged"),
-                    "mean_top_weight": _safe_float(row.get("mean_top_weight")),
-                    "mean_entropy": _safe_float(row.get("mean_entropy")),
-                    "is_unreliable": row.get("is_unreliable"),
-                    "reason": row.get("reason"),
-                }
-            )
-    return records
-
-
 def _collect_warmstart(root: str) -> List[Dict[str, object]]:
     records = []
     run_patterns = [
@@ -94,7 +63,9 @@ def _collect_warmstart(root: str) -> List[Dict[str, object]]:
         for run_dir in sorted(glob.glob(run_pattern)):
             run_name = os.path.basename(run_dir)
             job_id = run_name.rsplit("-", 1)[-1]
-            comparison_files = glob.glob(os.path.join(run_dir, "**", "comparison.json"), recursive=True)
+            comparison_files = glob.glob(
+                os.path.join(run_dir, "**", "comparison.json"), recursive=True
+            )
             for comp_json in sorted(comparison_files):
                 with open(comp_json, "r") as fh:
                     data = json.load(fh)
@@ -104,7 +75,11 @@ def _collect_warmstart(root: str) -> List[Dict[str, object]]:
                 structure_path = data.get("structure_path")
                 fixture = os.path.splitext(os.path.basename(structure_path or ""))[0]
 
-                is_vasp = "n_ionic_steps" in cold or "scf_iterations_per_step" in cold and "bfgs_steps" not in cold
+                is_vasp = (
+                    "n_ionic_steps" in cold
+                    or "scf_iterations_per_step" in cold
+                    and "bfgs_steps" not in cold
+                )
                 workflow = "warmstart_vasp" if is_vasp else "warmstart_qe"
 
                 records.append(
@@ -119,7 +94,9 @@ def _collect_warmstart(root: str) -> List[Dict[str, object]]:
                         "cold_converged": cold.get("converged"),
                         "warm_converged": warm.get("converged") if warm else None,
                         "cold_steps": cold.get("bfgs_steps", cold.get("n_ionic_steps")),
-                        "warm_steps": warm.get("bfgs_steps", warm.get("n_ionic_steps")) if warm else None,
+                        "warm_steps": warm.get("bfgs_steps", warm.get("n_ionic_steps"))
+                        if warm
+                        else None,
                         "cold_scf_total": cold.get("scf_iterations_total"),
                         "warm_scf_total": warm.get("scf_iterations_total") if warm else None,
                         "cold_wall_time_sec": cold.get("wall_time_sec"),
@@ -130,8 +107,14 @@ def _collect_warmstart(root: str) -> List[Dict[str, object]]:
                         "speedup": data.get("speedup_bfgs", data.get("speedup_ionic")),
                         "warm_helped": data.get("warm_helped"),
                         "hydragnn_num_steps": hydragnn.get("num_steps") if hydragnn else None,
-                        "hydragnn_final_energy_eV": hydragnn.get("final_energy_eV") if hydragnn else None,
-                        "hydragnn_final_max_force_eV_per_A": hydragnn.get("final_max_force_eV_per_A") if hydragnn else None,
+                        "hydragnn_final_energy_eV": hydragnn.get("final_energy_eV")
+                        if hydragnn
+                        else None,
+                        "hydragnn_final_max_force_eV_per_A": hydragnn.get(
+                            "final_max_force_eV_per_A"
+                        )
+                        if hydragnn
+                        else None,
                     }
                 )
     return records
@@ -201,22 +184,12 @@ def main() -> int:
         return 2
 
     all_rows: List[Dict[str, object]] = []
-    counts = {"uq": 0, "warmstart": 0}
-
     for root in roots:
-        uq_rows = _collect_uq(root)
-        ws_rows = _collect_warmstart(root)
-
-        counts["uq"] += len(uq_rows)
-        counts["warmstart"] += len(ws_rows)
-
-        all_rows.extend(uq_rows)
-        all_rows.extend(ws_rows)
+        all_rows.extend(_collect_warmstart(root))
 
     all_rows = _dedupe_rows(all_rows)
 
     counts = {
-        "uq": sum(1 for r in all_rows if r.get("workflow") == "uq"),
         "warmstart": sum(1 for r in all_rows if str(r.get("workflow", "")).startswith("warmstart")),
     }
 
@@ -236,7 +209,6 @@ def main() -> int:
     for root in roots:
         print("  - {}".format(root))
     print("Records:")
-    print("  - uq: {}".format(counts["uq"]))
     print("  - warmstart: {}".format(counts["warmstart"]))
     print("  - total: {}".format(len(all_rows)))
     print("CSV:  {}".format(os.path.abspath(args.output_csv)))

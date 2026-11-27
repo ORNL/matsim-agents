@@ -1828,8 +1828,7 @@ def _execute_task(
             max_cell_total_strain=optimizer_settings["max_cell_total_strain"],
             require_native_stress=OPTIMIZER_SETTINGS["require_native_stress"],
         )
-        calculator_record = calculators.get(relax_args)
-        calculator = calculator_record.calculator
+        calculator = calculators.get(relax_args)
         initial.calc = calculator
         initial_energy = float(initial.get_potential_energy())
         initial_forces = initial.get_forces()

@@ -32,8 +32,8 @@ PROJ="$(dirname "${REPO}")"
 source "${REPO}/deployments/common/runtime-env.sh"
 VENV=$REPO/.venv
 VLLM_VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 RUN_DIR=$PROJ/runs/discovery-chat-vllm-$SLURM_JOB_ID
@@ -54,7 +54,7 @@ VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONF
 activate_python_env "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 
 # Suppress ROCm / MIOpen noise
 export MIOPEN_DISABLE_CACHE=1

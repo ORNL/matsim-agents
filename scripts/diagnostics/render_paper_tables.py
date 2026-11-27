@@ -5,7 +5,6 @@ Inputs:
 - research/paper/manuscript/results/paper_results_master.csv
 
 Outputs (default under research/paper/manuscript/results/tex):
-- uq_table_rows.tex
 - warmstart_qe_table_rows.tex
 
 These files contain only table row lines, ready for \input{} in LaTeX.
@@ -18,13 +17,6 @@ import csv
 import json
 import os
 from typing import Dict, List
-
-
-UQ_LABEL_MAP = {
-    "si": ("Si (diamond)", 8),
-    "mgo": ("MgO (rocksalt)", 8),
-    "monbtaw_hea": ("MoNbTaW (BCC \\acs{HEA})", 16),
-}
 
 
 def _read_csv(path: str) -> List[Dict[str, str]]:
@@ -44,17 +36,6 @@ def _as_int(v: str | None):
         return int(v) if v not in (None, "") else None
     except Exception:
         return None
-
-
-def _sci_tex(x: float | None, digits: int = 1) -> str:
-    if x is None:
-        return "--"
-    if x == 0:
-        return "0"
-    s = f"{x:.{digits}e}"
-    mant, exp = s.split("e")
-    exp_i = int(exp)
-    return f"${mant} \\times 10^{{{exp_i}}}$"
 
 
 def _dedupe_rows(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -90,31 +71,6 @@ def _select_best_unique(rows: List[Dict[str, str]], key_fields: List[str]) -> Li
         if jid_new >= jid_old:
             best[key] = r
     return list(best.values())
-
-
-def render_uq(rows: List[Dict[str, str]]) -> List[str]:
-    uq_rows = [r for r in rows if r.get("workflow") == "uq"]
-    uq_rows = _select_best_unique(uq_rows, ["structure"])
-
-    lines = []
-    for r in sorted(uq_rows, key=lambda x: x.get("structure", "")):
-        structure_path = (r.get("structure") or "").lower()
-        base = os.path.basename(structure_path)
-        key = os.path.splitext(base)[0]
-        label, atoms = UQ_LABEL_MAP.get(key, (base or "Unknown", "--"))
-
-        steps = _as_int(r.get("num_steps"))
-        fmax = _as_float(r.get("final_max_force_eV_per_A"))
-        wt = _as_float(r.get("mean_top_weight"))
-        ent = _as_float(r.get("mean_entropy"))
-
-        steps_s = str(steps) if steps is not None else "--"
-        fmax_s = _sci_tex(fmax, digits=1)
-        wt_s = f"{wt:.4f}" if wt is not None else "--"
-        ent_s = f"{ent:.3f}" if ent is not None else "--"
-
-        lines.append(f"{label} & {atoms} & {steps_s} & {fmax_s} & {wt_s} & {ent_s} \\\\")
-    return lines
 
 
 def _extract_qe_scf_seq(comparison_json: str, mode: str) -> str:
@@ -153,9 +109,17 @@ def render_warmstart_qe(rows: List[Dict[str, str]]) -> List[str]:
         cold_seq = _extract_qe_scf_seq(source, "cold")
         warm_seq = _extract_qe_scf_seq(source, "warm")
 
-        delta_steps = (cold_steps - warm_steps) if (cold_steps is not None and warm_steps is not None) else None
-        delta_scf = (cold_scf - warm_scf) if (cold_scf is not None and warm_scf is not None) else None
-        delta_wall = (warm_wall - cold_wall) if (warm_wall is not None and cold_wall is not None) else None
+        delta_steps = (
+            (cold_steps - warm_steps)
+            if (cold_steps is not None and warm_steps is not None)
+            else None
+        )
+        delta_scf = (
+            (cold_scf - warm_scf) if (cold_scf is not None and warm_scf is not None) else None
+        )
+        delta_wall = (
+            (warm_wall - cold_wall) if (warm_wall is not None and cold_wall is not None) else None
+        )
         cold_wall_s = f"{cold_wall:.2f}" if cold_wall is not None else "--"
         warm_wall_s = f"{warm_wall:.2f}" if warm_wall is not None else "--"
         delta_wall_s = f"${delta_wall:+.2f}$" if delta_wall is not None else "--"
@@ -211,17 +175,13 @@ def main() -> int:
 
     rows = _dedupe_rows(_read_csv(args.input_csv))
 
-    uq_lines = render_uq(rows)
     ws_lines = render_warmstart_qe(rows)
 
-    uq_path = os.path.join(args.output_dir, "uq_table_rows.tex")
     ws_path = os.path.join(args.output_dir, "warmstart_qe_table_rows.tex")
 
-    _write_lines(uq_path, uq_lines)
     _write_lines(ws_path, ws_lines)
 
     print("Rendered LaTeX table fragments:")
-    print("  - {} ({} rows)".format(os.path.abspath(uq_path), len(uq_lines)))
     print("  - {} ({} rows)".format(os.path.abspath(ws_path), len(ws_lines)))
     return 0
 

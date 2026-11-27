@@ -83,7 +83,6 @@ class FormationCalculator(Calculator):
     def __init__(self):
         super().__init__()
         self.model = SimpleNamespace(offset=0)
-        self.last_branch_weights = [1]
         self.calls = 0
 
     def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
@@ -192,7 +191,6 @@ def test_checkpoint_reconstructs_totals_and_preserves_forces_and_stress(
     np.testing.assert_array_equal(atoms.get_forces(), np.full((len(atoms), 3), 0.2))
     np.testing.assert_array_equal(atoms.get_stress(), np.arange(6) * 0.01)
     assert calculator.model is underlying.model
-    assert calculator.last_branch_weights == [1]
     calculator.model.offset = 2
     calculator.reset()
     assert atoms.get_potential_energy() == pytest.approx(expected + 2)
@@ -326,10 +324,13 @@ def test_unmarked_foundation_retains_existing_behavior(tmp_path):
     assert restore_hydragnn_total_energy(calculator, tmp_path) is calculator
 
 
-def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, monkeypatch):
+def test_branch_7_factory_restores_total_energy(
+    tmp_path, training_inputs, monkeypatch, unverified_hydragnn_source
+):
     import torch
 
     import matsim_agents.backends.mlip.calculator as factory
+    import matsim_agents.backends.mlip.hydragnn_newhead as newhead_surgery
 
     model = _checkpoint(tmp_path, training_inputs)
     loaded_model = torch.nn.Linear(1, 1)
@@ -351,15 +352,26 @@ def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, 
     inference.load_config_and_model = load
     inference.find_checkpoint = lambda logdir, checkpoint: str(Path(logdir) / checkpoint)
     monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
+    pruned = []
+
+    def prune(m):
+        pruned.append(m.num_branches)
+        m.num_branches = 1
+        return m
+
+    monkeypatch.setattr(newhead_surgery, "keep_only_branch_7", prune)
     monkeypatch.setattr(
-        factory, "_build_selected_head_calculator", lambda *a, **kw: FormationCalculator()
+        factory, "_build_single_head_calculator", lambda *a, **kw: FormationCalculator()
     )
     calculator = factory.build_hydragnn_calculator(HydraGNNConfig(logdir=model, inference_head=7))
     assert selected == ["ft_model.pk"]
+    assert pruned == [16]
     assert Atoms("NbO2", calculator=calculator).get_potential_energy() == pytest.approx(-23)
 
 
-def test_auto_newhead_reload_restores_totals(tmp_path, training_inputs, monkeypatch):
+def test_auto_newhead_reload_restores_totals(
+    tmp_path, training_inputs, monkeypatch, unverified_hydragnn_source
+):
     import torch
 
     import matsim_agents.backends.mlip.calculator as factory

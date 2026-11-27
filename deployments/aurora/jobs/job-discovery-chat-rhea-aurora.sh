@@ -41,8 +41,8 @@ PROJ="$(dirname "${REPO}")"
 source "${REPO}/deployments/common/runtime-env.sh"
 
 VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
-HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
-LOGDIR="${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
+source "${REPO}/deployments/common/hydragnn-env.sh"
+LOGDIR="${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_BEST6_LOGDIR}}"
 
 CHAT_MODEL_PATH="${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
 CHAT_MODEL_NAME="${CHAT_MODEL_NAME:-$(basename "${CHAT_MODEL_PATH}")}"
@@ -69,7 +69,7 @@ if [[ -f "${VENV_PATH}/bin/activate" ]]; then
     activate_matsim_aurora_python "${REPO}" "${VENV_PATH}"
 fi
 
-export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${PROJ}/HydraGNN:${PYTHONPATH:-}"
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export TMPDIR=/tmp

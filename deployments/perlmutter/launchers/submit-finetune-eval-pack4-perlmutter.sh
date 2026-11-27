@@ -31,6 +31,8 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 export PROJECT_ROOT="${REPO}"
 PROJ="$(dirname "${REPO}")"
+# The matrix YAML takes HYDRAGNN_ROOT and HYDRAGNN_BEST6_LOGDIR from this script.
+source "${REPO}/deployments/common/hydragnn-env.sh"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 JOB="${SCRIPT_DIR}/job-finetune-eval-pack4-perlmutter.sh"
 [[ ! -f "${JOB}" ]] && { echo "ERROR: missing pack4 job script ${JOB}" >&2; exit 2; }

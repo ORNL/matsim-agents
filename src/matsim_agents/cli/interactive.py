@@ -11,12 +11,7 @@ from matsim_agents.cli.options import (
     load_mlip_option,
     opt_active_learning_config,
     opt_active_learning_dry_run,
-    opt_al_handoff_audit_path,
     opt_mlip_config,
-    opt_trigger_al_handoff,
-    opt_uq_min_relaxations_for_handoff,
-    opt_uq_min_unreliable_fraction,
-    opt_uq_top_weight_threshold,
     path_or_none,
 )
 
@@ -124,26 +119,12 @@ def chat(
         "--auto-confirm/--ask",
         help="If set, skip the y/N prompt and explore every detected composition.",
     ),
-    trigger_active_learning_on_high_uq: bool = opt_trigger_al_handoff(
-        True,
-        "Automatically hand off discovery to active learning when UQ is high.",
-    ),
     active_learning_config: Path | None = opt_active_learning_config(
-        "Path to a base AL YAML config. On handoff, discovery overrides "
-        "seed_source to compositions=[detected_formula]."
+        "Path to a base AL YAML config used by the /al command, which overrides "
+        "seed_source to compositions=[formula]."
     ),
     active_learning_dry_run: bool = opt_active_learning_dry_run(
-        "Plan/report AL handoff only (dry-run) or execute AL loop."
-    ),
-    uq_top_weight_threshold: float = opt_uq_top_weight_threshold(),
-    uq_min_unreliable_fraction: float = opt_uq_min_unreliable_fraction(),
-    uq_min_relaxations_for_handoff: int = opt_uq_min_relaxations_for_handoff(
-        3,
-        "Minimum number of relaxations required before handoff UQ evaluation.",
-    ),
-    al_handoff_audit_path: Path | None = opt_al_handoff_audit_path(
-        "Optional JSONL artifact path for discovery->AL handoff audit records "
-        "(UQ metrics, trigger rationale, action)."
+        "Plan/report the /al active-learning run only (dry-run) or execute the AL loop."
     ),
     resume: str | None = typer.Option(
         None,
@@ -193,13 +174,8 @@ def chat(
         critic_panel_base_urls=panel_base_urls,
         critic_cross_critique=critic_cross_critique,
         auto_confirm=auto_confirm,
-        trigger_active_learning_on_high_uq=trigger_active_learning_on_high_uq,
         active_learning_config=path_or_none(active_learning_config),
         active_learning_dry_run=active_learning_dry_run,
-        uq_top_weight_threshold=uq_top_weight_threshold,
-        uq_min_unreliable_fraction=uq_min_unreliable_fraction,
-        uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
-        al_handoff_audit_path=path_or_none(al_handoff_audit_path),
     )
     session = run_chat(cfg, resume=resume)
     console.print(

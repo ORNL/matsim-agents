@@ -35,48 +35,12 @@ def load_mlip_option(path: Path | None) -> MLIPConfig | None:
         raise typer.BadParameter(str(error), param_hint="--mlip-config") from error
 
 
-def opt_trigger_al_handoff(default: bool, help_text: str):
-    return typer.Option(
-        default,
-        "--trigger-al-handoff/--no-trigger-al-handoff",
-        help=help_text,
-    )
-
-
 def opt_active_learning_config(help_text: str):
     return typer.Option(None, "--al-config", help=help_text)
 
 
 def opt_active_learning_dry_run(help_text: str):
     return typer.Option(True, "--al-dry-run/--al-run", help=help_text)
-
-
-def opt_uq_top_weight_threshold():
-    return typer.Option(
-        0.6,
-        "--uq-top-weight-threshold",
-        help="Trigger handoff when mean top branch weight is below this value.",
-    )
-
-
-def opt_uq_min_unreliable_fraction():
-    return typer.Option(
-        0.25,
-        "--uq-min-unreliable-fraction",
-        help="Trigger handoff when this fraction of relaxations is low-confidence.",
-    )
-
-
-def opt_uq_min_relaxations_for_handoff(default: int, help_text: str):
-    return typer.Option(
-        default,
-        "--uq-min-relaxations-for-handoff",
-        help=help_text,
-    )
-
-
-def opt_al_handoff_audit_path(help_text: str):
-    return typer.Option(None, "--al-handoff-audit-path", help=help_text)
 
 
 def path_or_none(value: Path | None) -> str | None:

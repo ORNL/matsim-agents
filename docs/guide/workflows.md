@@ -13,19 +13,14 @@ enforce. Command options are listed in the [command-line guide](cli.md).
 | Answer a characterization question (relaxed structure, energy ranking, hull stability) | `matsim-agents run <contract.yaml>` | characterization contract | report stating whether the evidence suffices; see [characterization](../characterization.md) |
 | Qualify an LLM deployment before scientific use | `matsim-agents run <config.yaml>` | LLM check YAML | readiness report; see [LLM readiness](../llm-readiness.md) |
 | Debate one hypothesis among several LLMs | `matsim-agents run <config.yaml>` | debate YAML with participants and rounds | transcript, verdicts, and model provenance; see [scientific debate](../scientific-debate.md) |
-| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents objective` | natural-language objective; `--mlip-config` for relaxations; optional MCP and AL handoff configuration | planner/executor/UQ/analyst result; optional MCP records and audit, or AL handoff + JSONL audit |
+| One-shot objective execution with planning and summary | `matsim-agents objective` | natural-language objective; `--mlip-config` for relaxations; optional MCP configuration | planner/executor/analyst result; optional MCP records and audit |
 | Call approved external tools or read resources | `matsim-agents objective` with `--mcp-config` | MCP extra, server configuration and an objective; no MLIP for MCP-only tasks | external MCP call records and JSONL audit; see [MCP guide](../mcp.md) |
 | Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--mlip-config` (omit with `--llm-only`), LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
-| Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
+| Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `--mlip-config` replacing its `mlip` block | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
-
-Notes:
-
-- `run` and `chat` can escalate to AL using `--al-config` plus UQ policy flags.
-- Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
 
 ## Minimum viable commands
 
@@ -39,7 +34,7 @@ mlip:
 ```
 
 ```bash
-# 1) Core graph: planner -> executor -> uq_gate -> analyst
+# 1) Core graph: planner -> executor -> analyst
 matsim-agents objective \
   "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
   --mlip-config hydragnn.yaml
@@ -48,14 +43,6 @@ matsim-agents objective \
 matsim-agents objective \
   "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
   --mlip-config examples/mlip/uma-s-1p1-omat.yaml
-
-# 1b) Core graph with UQ-triggered AL handoff planning
-matsim-agents objective \
-  "Relax examples/characterization/structures/MgO-rocksalt.vasp and summarize results." \
-  --mlip-config hydragnn.yaml \
-  --trigger-al-handoff \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
 
 # 2) Interactive discovery chat
 matsim-agents chat \
@@ -82,19 +69,9 @@ matsim-agents chat \
   --peer-review-rounds 2 \
   --critic-cross-critique
 
-# 3) Agent graph with UQ-triggered AL handoff with AL handoff planning
+# 3) Agent graph discovery objective
 matsim-agents objective "Find stable phases of Li2MnO3" \
-  --trigger-al-handoff \
-  --mlip-config hydragnn.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
-
-# 3a) The same with UMA relaxations
-matsim-agents objective "Find stable phases of Li2MnO3" \
-  --trigger-al-handoff \
-  --mlip-config examples/mlip/uma-s-1p1-omat.yaml \
-  --al-config examples/active_learning/al_config.example.yaml \
-  --al-dry-run
+  --mlip-config hydragnn.yaml
 
 # 4) Standalone active learning run
 matsim-agents al validate-config examples/active_learning/al_config.example.yaml

@@ -27,10 +27,10 @@ load_aurora_frameworks_modules
 set -u
 export PYTHONPATH="${REPO}:${REPO}/src:${PYTHONPATH:-}"
 export E4_MLP_DEVICE="${E4_MLP_DEVICE:-xpu}"
-# The logdir sits in the frozen HydraGNN example dir (inference_fused); its checkout is two levels up.
+# The HydraGNN code is the pinned checkout, whichever logdir is evaluated.
 if [[ -n "${E4_HYDRAGNN_LOGDIR:-}" ]]; then
-  HYDRAGNN_EXAMPLE=$(dirname "${E4_HYDRAGNN_LOGDIR}")
-  export PYTHONPATH="${HYDRAGNN_EXAMPLE}:$(dirname "$(dirname "${HYDRAGNN_EXAMPLE}")"):${PYTHONPATH}"
+  source "${REPO}/deployments/common/hydragnn-env.sh"
+  hydragnn_export_pythonpath
 fi
 # Config paths are relative to the checkout.
 cd "${REPO}"

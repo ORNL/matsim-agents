@@ -36,8 +36,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV=$REPO/.venv
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 
 VASP_LAUNCHER=${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}
 VASP_POTCAR_DIR=${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}
@@ -53,7 +53,7 @@ load_perlmutter_modules_gpu
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "$VENV"
 
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID

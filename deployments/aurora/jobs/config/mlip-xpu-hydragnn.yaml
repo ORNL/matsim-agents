@@ -1,10 +1,9 @@
 # Aurora XPU qualification: HydraGNN BEST6 logdir, branch-7 (OMat24) head only.
-# HYDRAGNN_ROOT is exported by job-qualify-mlip-xpu-aurora.sh.
-vars:
-  HYDRA_EXAMPLE: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26
+# HYDRAGNN_BEST6_LOGDIR is exported by deployments/common/hydragnn-env.sh, which
+# job-qualify-mlip-xpu-aurora.sh sources.
 mlip:
   backend: hydragnn
-  logdir: ${HYDRA_EXAMPLE}/multidataset_hpo-BEST6-fp64
+  logdir: ${HYDRAGNN_BEST6_LOGDIR}
   inference_head: OMat24
   precision: fp32
   device: xpu

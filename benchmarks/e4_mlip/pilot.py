@@ -65,11 +65,11 @@ def bounded_relaxation(row: dict, args: dict, directory: Path, deadline: float) 
     )
     device.synchronize()
     started = time.perf_counter()
-    entry = cache.get(parsed)
+    calculator = cache.get(parsed)
     device.synchronize()
     load_seconds = time.perf_counter() - started
-    matched_tensors = validate_checkpoint(entry.calculator.model)
-    timed = TimedCalculator(entry.calculator, device)
+    matched_tensors = validate_checkpoint(calculator.model)
+    timed = TimedCalculator(calculator, device)
     atoms.calc = timed
     optimizer = FIRE(atoms, maxstep=0.01, logfile=str(directory / "fire.log"))
     device.reset_peak_memory_stats()
@@ -187,7 +187,7 @@ def pilot_worker(payload: dict) -> dict:
             {**payload["relax_args"], "structure_path": payload["structures"][0]["path"]}
         )
     )
-    matched_tensors = validate_checkpoint(built.calculator.model)
+    matched_tensors = validate_checkpoint(built.model)
     return {
         "mask": mask,
         "pid": os.getpid(),

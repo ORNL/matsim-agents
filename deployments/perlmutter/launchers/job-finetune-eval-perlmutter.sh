@@ -54,7 +54,6 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-${PROJ}/HydraGNN}"
 
 # ── required inputs ─────────────────────────────────────────────────────────
 readable() {  # $1=variable name; resolve it to an absolute path (the job cds later)
@@ -115,7 +114,10 @@ source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mlip_model_artifacts "${REPO}" python "${MLIP_CONFIG}"
 case "${BACKEND}" in
   # HydraGNN package + example dir (inference_fused) on the path.
-  hydragnn) export PYTHONPATH="${HYDRAGNN_ROOT}:${PYTHONPATH}" ;;
+  hydragnn)
+    source "${REPO}/deployments/common/hydragnn-env.sh"
+    hydragnn_export_pythonpath
+    ;;
   uma)
     if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
       HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"; export HF_TOKEN

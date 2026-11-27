@@ -28,8 +28,8 @@ OUT=${E4_OUTPUT_ROOT:-${SCRATCH:-$PROJ}/runs/e4-framework}
 ACCOUNT=${E4_ACCOUNT:?set E4_ACCOUNT to your NERSC project}
 QOS=${E4_QOS:-regular}
 CONFIGS=$REPO/benchmarks/e4/framework/configs
-HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-$PROJ/HydraGNN}
-HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+HYDRAGNN=${E4_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 
 case $CODE in
   vasp)

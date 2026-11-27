@@ -156,16 +156,13 @@ flowchart TD
 - Failed or unconverged calculations are excluded as positive scientific
   evidence. Evidence-ledger recording is available in campaign and
   characterization workflows, not imposed on every standalone workflow.
-- UQ handoff policy is exposed through mode-specific adapters today; the
-  diagram groups those adapters by their common responsibility. Fused
-  HydraGNN branch weights can drive that policy directly, while pinned-head
-  HydraGNN can use MC-dropout when configured. UMA and MACE do not emit
-  HydraGNN branch weights, so this specific handoff signal needs an alternative.
+- HydraGNN uses only branch-7 (OMat24) and can use MC-dropout UQ when
+  configured. There is no automatic UQ-triggered handoff; `/al` and
+  `matsim-agents al run` start active learning explicitly.
 - Active-learning acquisition strategies include ensemble disagreement,
   MC-dropout, random selection, and ensemble-then-dropout, depending on backend
   configuration.
 - Interactive conversation-only turns return directly to chat, while `/al`
   invokes active learning directly; those shortcuts are omitted above to keep
   the primary scientific workflow legible.
-- UQ policy thresholds are configurable from CLI flags (`--uq-top-weight-threshold`, `--uq-min-unreliable-fraction`, and related handoff options).
 - Handoff decisions are auditable via JSONL artifacts when `--al-handoff-audit-path` is set (or through default audit paths).

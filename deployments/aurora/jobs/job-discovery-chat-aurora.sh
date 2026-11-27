@@ -39,8 +39,8 @@ REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_BEST6_LOGDIR}
 
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Mistral-Small-24B-Instruct-2501}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
@@ -59,7 +59,7 @@ MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR")"
 VENV="$(mlip_backend_venv "${REPO}" "$(mlip_backend "${VENV}/bin/python" "$MLIP_CONFIG")" "${VENV}")"
 activate_matsim_aurora_python "${REPO}" "${VENV}"
 
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 

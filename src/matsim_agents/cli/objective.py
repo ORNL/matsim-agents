@@ -13,14 +13,7 @@ from rich.panel import Panel
 from matsim_agents.cli._app import app, console
 from matsim_agents.cli.options import (
     load_mlip_option,
-    opt_active_learning_config,
-    opt_active_learning_dry_run,
-    opt_al_handoff_audit_path,
     opt_mlip_config,
-    opt_trigger_al_handoff,
-    opt_uq_min_relaxations_for_handoff,
-    opt_uq_min_unreliable_fraction,
-    opt_uq_top_weight_threshold,
     path_or_none,
 )
 
@@ -64,13 +57,6 @@ def _build_run_config(
     thread_id: str,
     mlip: MLIPConfig | None,
     output_dir: Path | None,
-    trigger_al_handoff: bool,
-    active_learning_config: Path | None,
-    active_learning_dry_run: bool,
-    uq_top_weight_threshold: float,
-    uq_min_unreliable_fraction: float,
-    uq_min_relaxations_for_handoff: int,
-    al_handoff_audit_path: Path | None,
     mcp_client: MCPSessionManager | None = None,
 ) -> dict:
     config = {
@@ -78,13 +64,6 @@ def _build_run_config(
             "thread_id": thread_id,
             "mlip": mlip.model_dump(mode="json") if mlip is not None else None,
             "output_dir": path_or_none(output_dir),
-            "trigger_al_handoff": trigger_al_handoff,
-            "active_learning_config": path_or_none(active_learning_config),
-            "active_learning_dry_run": active_learning_dry_run,
-            "uq_top_weight_threshold": uq_top_weight_threshold,
-            "uq_min_unreliable_fraction": uq_min_unreliable_fraction,
-            "uq_min_relaxations_for_handoff": uq_min_relaxations_for_handoff,
-            "al_handoff_audit_path": path_or_none(al_handoff_audit_path),
         }
     }
     if mcp_client is not None:
@@ -116,25 +95,6 @@ def objective_command(
         None,
         "--llm-base-url",
         help="Override server URL (Ollama or vLLM /v1 endpoint).",
-    ),
-    trigger_active_learning_on_high_uq: bool = opt_trigger_al_handoff(
-        False,
-        "After run relaxations, evaluate UQ and optionally hand off to active learning.",
-    ),
-    active_learning_config: Path | None = opt_active_learning_config(
-        "Path to a base AL YAML config used when UQ-triggered handoff fires."
-    ),
-    active_learning_dry_run: bool = opt_active_learning_dry_run(
-        "Plan/report run->AL handoff only, or execute AL loop."
-    ),
-    uq_top_weight_threshold: float = opt_uq_top_weight_threshold(),
-    uq_min_unreliable_fraction: float = opt_uq_min_unreliable_fraction(),
-    uq_min_relaxations_for_handoff: int = opt_uq_min_relaxations_for_handoff(
-        1,
-        "Minimum relaxations required before evaluating run-path handoff.",
-    ),
-    al_handoff_audit_path: Path | None = opt_al_handoff_audit_path(
-        "Optional JSONL path for UQ decision and run->AL handoff audit records."
     ),
     mcp_config: Path | None = typer.Option(
         None,
@@ -174,13 +134,6 @@ def objective_command(
             thread_id=str(uuid.uuid4()),
             mlip=mlip,
             output_dir=output_dir,
-            trigger_al_handoff=trigger_active_learning_on_high_uq,
-            active_learning_config=active_learning_config,
-            active_learning_dry_run=active_learning_dry_run,
-            uq_top_weight_threshold=uq_top_weight_threshold,
-            uq_min_unreliable_fraction=uq_min_unreliable_fraction,
-            uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
-            al_handoff_audit_path=al_handoff_audit_path,
             mcp_client=mcp_client,
         )
 

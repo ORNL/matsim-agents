@@ -24,6 +24,9 @@ def _load(name: str, path: Path):
 @pytest.fixture
 def matrix_module(monkeypatch):
     monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
+    # Normally exported by deployments/common/hydragnn-env.sh.
+    monkeypatch.setenv("HYDRAGNN_ROOT", "/pinned/HydraGNN")
+    monkeypatch.setenv("HYDRAGNN_BEST6_LOGDIR", "/weights/BEST6")
     return _load("finetune_eval_matrix", LAUNCHERS / "finetune_eval_matrix.py")
 
 

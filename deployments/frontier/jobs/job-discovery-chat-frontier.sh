@@ -36,8 +36,8 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
-HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
+source "$REPO/deployments/common/hydragnn-env.sh"
+LOGDIR=$HYDRAGNN_BEST6_LOGDIR
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 init_run_dirs "$PROJ" "discovery-chat" "${SLURM_JOB_ID}"
@@ -53,7 +53,7 @@ VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONF
 activate_python_env "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
-export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
+hydragnn_export_pythonpath
 
 # ── environment ──────────────────────────────────────────────────────────────
 export MIOPEN_DISABLE_CACHE=1

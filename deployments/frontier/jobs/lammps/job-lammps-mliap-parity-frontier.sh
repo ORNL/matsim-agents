@@ -45,17 +45,14 @@ run emt-zbl "$REPO/.venv/bin/python" --calc emt --a 2.3 --rattle 0.02 --zbl
 run mace "$REPO/.venv-mace/bin/python" --calc mace --model small --md-steps "$MD_STEPS"
 run mace-zbl "$REPO/.venv-mace/bin/python" --calc mace --model small --a 2.3 --rattle 0.02 --zbl
 PROJ="$(dirname "$REPO")"
-HG_SRC="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
-HG_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
-if [[ -d "$HG_SRC/hydragnn" && -d "$HG_WEIGHTS/examples/multidataset_hpo_sc26" ]]; then
-    export HYDRAGNN_DIR="$HG_SRC" HYDRAGNN_WEIGHTS="$HG_WEIGHTS"
-    HG_PP="$HG_SRC:$PYTHONPATH"
+if source "$REPO/deployments/common/hydragnn-env.sh" && [[ -d "$HYDRAGNN_BEST6_LOGDIR" ]]; then
+    HG_PP="$HYDRAGNN_EXAMPLE:$HYDRAGNN_ROOT:$PYTHONPATH"
     PYTHONPATH="$HG_PP" run hydragnn "$REPO/.venv/bin/python" --calc hydragnn \
         --md-steps "$MD_STEPS"
     PYTHONPATH="$HG_PP" run hydragnn-zbl "$REPO/.venv/bin/python" --calc hydragnn \
         --a 2.3 --rattle 0.02 --zbl
 else
-    echo "hydragnn: skipped (frozen source or weights missing)" | tee "$OUT/hydragnn.skipped"
+    echo "hydragnn: skipped (pinned source unavailable or BEST6 weights missing)" | tee "$OUT/hydragnn.skipped"
 fi
 
 export MATSIM_UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-$PROJ/models/artifacts/uma}"

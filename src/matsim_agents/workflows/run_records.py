@@ -28,6 +28,7 @@ class RunRecord(BaseModel):
     kind: str
     source: str | None = None
     source_sha256: str | None = None
+    mlip_config: str | None = None
     objective: str | None = None
     state: RunState = "running"
     native_run_directory: str | None = None

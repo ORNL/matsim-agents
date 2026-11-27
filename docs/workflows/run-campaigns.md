@@ -78,15 +78,18 @@ evolving hypothesis trajectory.
 | `application` | Application runner (structure build, relaxation, campaign) | Blocked runs retry |
 | `explore` | Bounded MLIP exploration | Checkpointed (`resume RUN_ID`) |
 | `relax` | Provenance-tracked relaxation | Unsupported |
-| `characterize` | Characterization contract | Native step journal |
+| `characterize` | Characterization contract | `resume RUN_ID` reruns against the native step journal |
 | `debate` | Scientific debate | Unsupported |
 | `llm-check` | LLM deployment qualification | Unsupported |
-| `al` | Active-learning loop | Native loop with `loop.resume: true` |
+| `al` | Active-learning loop | `resume RUN_ID` with `loop.resume: true`; finished DFT labels are reused |
 | `neb` | QE NEB preparation and dispatch | Unsupported |
 | `alloy-spec` | Structure generation | Unsupported |
 | `external` | Optional external-software interfaces | Unsupported |
 
 `resume` rejects kinds without a safe restart contract instead of replaying.
+For `al` and `characterize`, `resume` reruns the original config with the MLIP
+recorded at the start, and the workflow skips work it has already finished. It
+refuses to resume if the config file has changed or has been removed.
 A natural-language goal uses `matsim-agents objective "TEXT"` and records a run of
 kind `objective` the same way.
 

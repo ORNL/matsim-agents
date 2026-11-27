@@ -187,11 +187,11 @@ class TimedCalculator:
 
 
 class PreparedCache:
-    def __init__(self, entry):
-        self.entry = entry
+    def __init__(self, calculator):
+        self.calculator = calculator
 
     def get(self, args):
-        return self.entry
+        return self.calculator
 
 
 def worker_task(
@@ -208,24 +208,20 @@ def worker_task(
     before = cache.loads
     device.synchronize()
     load_start = time.perf_counter()
-    built = cache.get(args)
+    calculator = cache.get(args)
     device.synchronize()
     load_seconds = time.perf_counter() - load_start
     matched_tensors = (
-        validate_checkpoint(built.calculator.model) if validate_checkpoint is not None else None
+        validate_checkpoint(calculator.model) if validate_checkpoint is not None else None
     )
-    if "energy" not in built.calculator.implemented_properties or (
-        "forces" not in built.calculator.implemented_properties
+    if "energy" not in calculator.implemented_properties or (
+        "forces" not in calculator.implemented_properties
     ):
         raise ValueError("Calculator must implement energy and forces")
-    model = getattr(built.calculator, "model", None)
+    model = getattr(calculator, "model", None)
     if model is None or any(parameter.device.type != "xpu" for parameter in model.parameters()):
         raise RuntimeError("Calculator model residency on XPU could not be verified")
-    mlp = getattr(built.calculator, "mlp", None)
-    if mlp is not None and any(parameter.device.type != "xpu" for parameter in mlp.parameters()):
-        raise RuntimeError("Branch weighting model is not on XPU")
-    timed = TimedCalculator(built.calculator, device)
-    measured_entry = built._replace(calculator=timed)
+    timed = TimedCalculator(calculator, device)
     device.reset_peak_memory_stats()
     compute_start = time.perf_counter()
     if payload["mode"] == "inference":
@@ -240,7 +236,7 @@ def worker_task(
         converged = None
         geometry = atoms.positions.tolist()
     else:
-        result = relax_with_mlip(args, calculators=PreparedCache(measured_entry))
+        result = relax_with_mlip(args, calculators=PreparedCache(timed))
         atoms = read(result.optimized_structure_path)
         atoms.calc = timed
         energy, forces = numerical_values(

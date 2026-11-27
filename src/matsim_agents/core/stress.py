@@ -14,8 +14,7 @@ class NumericalStressCalculator:
     optimizer step, which is negligible for a fast ML potential.
 
     The wrapper transparently forwards all other attribute access to the inner
-    calculator, so ``last_branch_weights`` and other custom attributes remain
-    accessible to the benchmark logging code.
+    calculator, so its custom attributes (for example ``model``) remain accessible.
 
     Args:
         inner:  An ASE calculator that implements energy and forces.
@@ -43,7 +42,7 @@ class NumericalStressCalculator:
             inner.implemented_properties = orig
 
     def __getattr__(self, name: str):
-        # Forward attribute reads (e.g. last_branch_weights) to the inner calc.
+        # Forward attribute reads (e.g. model) to the inner calc.
         if name.startswith("_") or name in ("results", "implemented_properties"):
             raise AttributeError(name)
         # Block methods that would raise PropertyNotImplementedError on the inner
@@ -74,10 +73,6 @@ class NumericalStressCalculator:
         native = self._inner.results.get("stress") if self._native_stress else None
         if self._require_native and native is None:
             raise ValueError("Calculator did not provide the required native stress.")
-        # Copy last_branch_weights *before* perturbations overwrite them.
-        if hasattr(self._inner, "last_branch_weights"):
-            self.last_branch_weights = self._inner.last_branch_weights
-
         # Always provide stress so ASE's property cache stays consistent.
         self.results["stress"] = native if native is not None else self._numerical_stress(atoms)
         self._state = self._snapshot(atoms)
