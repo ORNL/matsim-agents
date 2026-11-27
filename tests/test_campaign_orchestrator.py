@@ -30,7 +30,8 @@ from matsim_agents.science.thermodynamics.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
-from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.exploration.composition import CompositionExplorationResult
+from matsim_agents.workflows.exploration.phase import PhaseExplorationWorkflowResult
 from matsim_agents.workflows.multi_formula.formula_execution import latest_promoted_model
 from matsim_agents.workflows.multi_formula.orchestrator import (
     CampaignReviewDecision,
@@ -38,7 +39,6 @@ from matsim_agents.workflows.multi_formula.orchestrator import (
     run_campaign,
 )
 from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
-from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
 def _hypothesis_revisions(campaign):
@@ -984,10 +984,10 @@ def test_campaign_resume_rejects_a_different_root_seed(tmp_path):
 def test_campaign_policies_reject_removed_seed_fields(tmp_path):
     from pydantic import ValidationError
 
+    from matsim_agents.workflows.exploration.phase import PhaseExplorationPolicy
     from matsim_agents.workflows.multi_formula.formula_execution import (
         CampaignFormulaExecutionConfig,
     )
-    from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy
 
     with pytest.raises(ValidationError, match="random_seed"):
         CampaignAcquisitionPolicy(random_seed=3)

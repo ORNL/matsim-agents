@@ -6,7 +6,7 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 1. The user and the assistant exchange messages about a target property.
 2. After each turn, [`extract_compositions`](../../src/matsim_agents/core/composition.py) scans both messages for chemical formulas (validates element symbols, reduces stoichiometry, ignores English words like "Carbon" or "Hello").
 3. For every newly-seen formula the user is asked (or `--auto-confirm` is honored) whether to launch a substantial atomistic exploration.
-4. The wrapper [`explore_composition`](../../src/matsim_agents/workflows/composition_exploration.py) then:
+4. The wrapper [`explore_composition`](../../src/matsim_agents/workflows/exploration/composition.py) then:
    - **generates seeds** through the unified
      [`matsim_agents.science.structures.seed_structures.generate_seeds`](../../src/matsim_agents/science/structures/seed_structures.py)
      entry point, which combines:

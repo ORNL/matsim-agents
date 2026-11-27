@@ -104,9 +104,9 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="neb-preparation",
         summary="QE NEB endpoints, images, input and result ingestion; dry run by default.",
         entry_points=(
-            "matsim_agents.workflows.neb:prepare_neb_workflow",
-            "matsim_agents.workflows.neb:run_neb_workflow",
-            "matsim_agents.workflows.neb:ingest_neb_results",
+            "matsim_agents.workflows.neb.workflow:prepare_neb_workflow",
+            "matsim_agents.workflows.neb.workflow:run_neb_workflow",
+            "matsim_agents.workflows.neb.workflow:ingest_neb_results",
         ),
         backends=("qe",),
         tests=("tests/test_neb_workflow.py", "tests/test_qe_neb.py"),
@@ -115,7 +115,7 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="recovery-workflow",
         summary="Checkpointed alloy, vacancy hop, NEB and exploratory kinetics; dry run default.",
-        entry_points=("matsim_agents.workflows.radiation_damage:run_radiation_damage",),
+        entry_points=("matsim_agents.workflows.radiation.damage:run_radiation_damage",),
         backends=("qe",),
         tests=("tests/test_radiation_damage_workflow.py",),
         caveats="Kinetics stay exploratory; a missing barrier blocks the stage.",
@@ -123,7 +123,7 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="hypothesis-revision",
         summary="Rule-based ledger hypothesis revisions with budgets and optional LLM text.",
-        entry_points=("matsim_agents.workflows.radiation_hypothesis:revise_hypothesis",),
+        entry_points=("matsim_agents.workflows.radiation.hypothesis:revise_hypothesis",),
         tests=("tests/test_radiation_hypothesis.py",),
         caveats="Supported or contradicted is unreachable without a qualified barrier.",
     ),
@@ -168,8 +168,8 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
         name="neb-qualification-checks",
         summary="Cutoff and k-point convergence, endpoint, climbing-image and saddle checks.",
         entry_points=(
-            "matsim_agents.workflows.neb_convergence:check_barrier_series",
-            "matsim_agents.workflows.neb_convergence:check_neb_run",
+            "matsim_agents.workflows.neb.convergence:check_barrier_series",
+            "matsim_agents.workflows.neb.convergence:check_neb_run",
         ),
         tests=("tests/test_neb_convergence.py",),
         caveats="Checks numbers only; no DFT has been run and nothing is promoted.",
@@ -195,14 +195,14 @@ RADIATION_CAPABILITIES: tuple[RadiationCapability, ...] = (
     RadiationCapability(
         name="material-readiness",
         summary="Per-material composition, wt% to at% conversion, scope limits, missing evidence.",
-        entry_points=("matsim_agents.workflows.radiation_materials:assess_all",),
+        entry_points=("matsim_agents.workflows.radiation.materials:assess_all",),
         tests=("tests/test_radiation_materials.py",),
         caveats="Reads status from the matrix; W-rich, RAFM and ODS compositions need a source.",
     ),
     RadiationCapability(
         name="final-report",
         summary="Evidence-grounded report: matrix, jobs, ledger, materials, unverified items.",
-        entry_points=("matsim_agents.workflows.radiation_final_report:build_final_report",),
+        entry_points=("matsim_agents.workflows.radiation.final_report:build_final_report",),
         tests=("tests/test_radiation_final_report.py",),
         caveats="A completed job is not evidence; software completeness is not qualification.",
     ),

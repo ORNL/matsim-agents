@@ -20,7 +20,7 @@ from matsim_agents.core.contracts import (
 )
 from matsim_agents.core.hashing import sha256_file as file_sha256
 from matsim_agents.execution.run_directory import ScientificRunDirectory
-from matsim_agents.workflows.composition_exploration import (
+from matsim_agents.workflows.exploration.composition import (
     CompositionExplorationResult,
     explore_composition,
 )
@@ -232,7 +232,7 @@ def run_phase_exploration(
             raise PermissionError("model promotion requires explicit approval")
 
         if not policy.relax_structures:
-            from matsim_agents.workflows.composition_exploration import (
+            from matsim_agents.workflows.exploration.composition import (
                 generate_composition_candidates,
             )
 

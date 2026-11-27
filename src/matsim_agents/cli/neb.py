@@ -77,7 +77,7 @@ def neb_prepare(
     """Generate endpoints and images, write QE input and plan; run only with --dispatch."""
 
     from matsim_agents.execution.ledger import EvidenceLedger
-    from matsim_agents.workflows.neb import NebWorkflowError, run_neb_workflow
+    from matsim_agents.workflows.neb.workflow import NebWorkflowError, run_neb_workflow
 
     data, pair, qe = _load(config)
     images = data.get("images", {})
@@ -132,7 +132,7 @@ def neb_inspect(
     """Parse the latest run stage and write neb-result.json."""
 
     from matsim_agents.execution.ledger import EvidenceLedger
-    from matsim_agents.workflows.neb import NebWorkflowError, ingest_neb_results
+    from matsim_agents.workflows.neb.workflow import NebWorkflowError, ingest_neb_results
 
     try:
         outcome = ingest_neb_results(directory, ledger=EvidenceLedger(ledger) if ledger else None)

@@ -192,7 +192,7 @@ class _StubPool:
 
 
 def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path, monkeypatch):
-    from matsim_agents.workflows import composition_exploration as wrapper
+    from matsim_agents.workflows.exploration import composition as wrapper
 
     candidates = [
         PhaseCandidate(
@@ -239,7 +239,7 @@ def test_pooled_exploration_keeps_candidate_order_and_isolates_failures(tmp_path
 
 
 def test_exploration_rejects_both_relax_fn_and_pool(tmp_path):
-    from matsim_agents.workflows.composition_exploration import explore_composition
+    from matsim_agents.workflows.exploration.composition import explore_composition
 
     with pytest.raises(ValueError, match="either relax_fn or mlip_pool"):
         explore_composition(

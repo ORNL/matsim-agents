@@ -10,7 +10,7 @@ from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.science.defects.point_defects import generate_vacancy
 from matsim_agents.science.neb.endpoints import generate_vacancy_hop, vacancy_neighbors
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
-from matsim_agents.workflows.neb import (
+from matsim_agents.workflows.neb.workflow import (
     NOT_ASSESSED,
     NebWorkflowError,
     ingest_neb_results,

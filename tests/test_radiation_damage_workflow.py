@@ -6,7 +6,7 @@ import math
 import pytest
 
 from matsim_agents.execution.ledger import EvidenceLedger
-from matsim_agents.workflows.radiation_damage import (
+from matsim_agents.workflows.radiation.damage import (
     STATE_FILE,
     RadiationDamageConfig,
     RadiationDamageError,

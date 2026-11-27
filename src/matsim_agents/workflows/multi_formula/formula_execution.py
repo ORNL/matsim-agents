@@ -52,12 +52,12 @@ from matsim_agents.workflows.candidate_registry import (
     select_dft_refinement_candidates,
     structure_content_hash,
 )
-from matsim_agents.workflows.multi_formula.state import CampaignState
-from matsim_agents.workflows.phase_exploration import (
+from matsim_agents.workflows.exploration.phase import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
     run_phase_exploration,
 )
+from matsim_agents.workflows.multi_formula.state import CampaignState
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,
     GeometryControls,

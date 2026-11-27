@@ -4,8 +4,8 @@ import pytest
 
 from matsim_agents.core.revision import RevisionBudget, RevisionBudgetError
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.workflows.radiation_damage import run_radiation_damage
-from matsim_agents.workflows.radiation_hypothesis import RevisionGateError, revise_hypothesis
+from matsim_agents.workflows.radiation.damage import run_radiation_damage
+from matsim_agents.workflows.radiation.hypothesis import RevisionGateError, revise_hypothesis
 from tests.test_neb_workflow import _fake
 from tests.test_radiation_damage_workflow import _config, _forbidden
 

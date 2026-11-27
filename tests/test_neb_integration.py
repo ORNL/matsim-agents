@@ -27,7 +27,7 @@ from matsim_agents.science.neb.endpoints import (
 )
 from matsim_agents.science.neb.serialization import read_pathway
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
-from matsim_agents.workflows.neb import ingest_neb_results, run_neb_workflow
+from matsim_agents.workflows.neb.workflow import ingest_neb_results, run_neb_workflow
 from tests.test_neb_workflow import ENERGIES, _cfg, _fake
 
 A = 3.16

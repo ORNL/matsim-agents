@@ -10,7 +10,7 @@ from matsim_agents.workflows.qualification_matrix import (
     promote,
     record_evidence,
 )
-from matsim_agents.workflows.radiation_materials import (
+from matsim_agents.workflows.radiation.materials import (
     ATOMIC_WEIGHT,
     MaterialError,
     MaterialSpec,

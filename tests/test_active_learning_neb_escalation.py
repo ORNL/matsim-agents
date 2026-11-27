@@ -96,7 +96,7 @@ def test_eligible_converged_mlip_barrier_is_accepted_without_dft(tmp_path):
 
 
 def test_missing_uncertainty_escalates_to_existing_qe_neb_workflow(tmp_path, monkeypatch):
-    import matsim_agents.workflows.neb as neb_workflow
+    import matsim_agents.workflows.neb.workflow as neb_workflow
 
     policy = NebEscalationConfig(
         policy="uncertainty_gated",
@@ -256,7 +256,7 @@ def _escalation_policy():
 def test_constrained_pathway_is_rejected_before_a_dft_run_is_reserved(tmp_path, monkeypatch):
     from ase.constraints import FixAtoms
 
-    import matsim_agents.workflows.neb as neb_workflow
+    import matsim_agents.workflows.neb.workflow as neb_workflow
 
     monkeypatch.setattr(neb_workflow, "run_neb_workflow", lambda *a, **k: pytest.fail("ran"))
     outcome = _pathway(None)
@@ -278,7 +278,7 @@ def test_constrained_pathway_is_rejected_before_a_dft_run_is_reserved(tmp_path, 
 def test_dft_neb_reservation_survives_deletion_of_the_iteration_directory(tmp_path, monkeypatch):
     import shutil
 
-    import matsim_agents.workflows.neb as neb_workflow
+    import matsim_agents.workflows.neb.workflow as neb_workflow
 
     def interrupted(*args, **kwargs):
         raise RuntimeError("allocation ended")
@@ -322,7 +322,7 @@ def test_interrupted_reservation_is_added_to_legacy_runs_without_double_counting
 
 
 def test_escalation_passes_optimized_images_endpoints_and_dft_environment(tmp_path, monkeypatch):
-    import matsim_agents.workflows.neb as neb_workflow
+    import matsim_agents.workflows.neb.workflow as neb_workflow
 
     calls = []
 

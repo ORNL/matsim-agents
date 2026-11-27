@@ -8,8 +8,9 @@ import pytest
 import yaml
 
 from matsim_agents.core.composition import parse_composition
-from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
 from matsim_agents.workflows.debate import DebateParticipant
+from matsim_agents.workflows.exploration.composition import CompositionExplorationResult
+from matsim_agents.workflows.exploration.phase import PhaseExplorationWorkflowResult
 from matsim_agents.workflows.investigation import (
     HypothesisDiscussionConfig,
     InvestigationConfig,
@@ -18,7 +19,6 @@ from matsim_agents.workflows.investigation import (
     build_hypothesis_from_discussion,
     run_investigation,
 )
-from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
 class _ProposalModel:

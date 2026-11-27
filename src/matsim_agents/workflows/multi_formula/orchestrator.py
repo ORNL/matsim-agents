@@ -38,6 +38,7 @@ from matsim_agents.workflows.candidate_registry import (
     ingest_exploration_result,
 )
 from matsim_agents.workflows.debate import ScientificDebateResult
+from matsim_agents.workflows.exploration.phase import PhaseExplorationWorkflowResult
 from matsim_agents.workflows.multi_formula.evidence import (
     open_campaign_ledger,
     record_formula_evidence,
@@ -47,7 +48,6 @@ from matsim_agents.workflows.multi_formula.state import (
     CampaignState,
     FormulaRunRecord,
 )
-from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
 class CampaignRunPolicy(BaseModel):

@@ -32,7 +32,11 @@ from matsim_agents.science.thermodynamics.unary_references import (
     unary_cache_directory,
 )
 from matsim_agents.workflows.active_learning.config import ALConfig
-from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.exploration.composition import CompositionExplorationResult
+from matsim_agents.workflows.exploration.phase import (
+    PhaseExplorationPolicy,
+    PhaseExplorationWorkflowResult,
+)
 from matsim_agents.workflows.multi_formula.formula_execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
@@ -51,10 +55,6 @@ from matsim_agents.workflows.multi_formula.formula_execution import (
     run_formula_with_active_learning,
 )
 from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
-from matsim_agents.workflows.phase_exploration import (
-    PhaseExplorationPolicy,
-    PhaseExplorationWorkflowResult,
-)
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
