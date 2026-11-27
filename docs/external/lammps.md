@@ -259,6 +259,10 @@ velocity-Verlet run from the same state. On the 108-atom cell, 20 to 200 steps a
 | UMA uma-s-1p1 (job 6005055) | 20 | 9.4e-8 | 4.9e-9 |
 | EMT, 50 eV recoil on atom 0 along <110> (login node) | 200 at 0.2 fs | 4.7e-5 | 2.1e-8 |
 | EMT, 200 eV recoil (login node) | 200 at 0.2 fs | 5.3e-4 | 1.2e-7 |
+| EMT, 200 eV recoil, 4 MPI ranks (job 6005236) | 200 at 0.2 fs | 5.3e-4 | 1.2e-7 |
+| MACE-MP-0 small, 4 MPI ranks (job 6005236) | 20 | 7.7e-7 | 1.4e-9 |
+| HydraGNN BEST6, 4 MPI ranks (job 6005236) | 20 | 1.8e-5 | 3.0e-10 |
+| UMA uma-s-1p1, 4 MPI ranks (job 6005236) | 20 | 9.8e-8 | 6.4e-9 |
 
 The recoil runs (`--pka-eV`) show that the bridge reproduces ASE integration of a high-energy
 recoil with the same calculator. They are software checks of the bridge, not cascade physics: no
@@ -282,6 +286,17 @@ Login-node smoke test (6 frames, 1 epoch, 5 NVE steps, no LoRA):
 |---|---|---|---|
 | MACE-MP-0 small | yes | 5.7e-14 | 8.1e-8 |
 | UMA uma-s-1p1 | yes | 4.7e-7 | 9.1e-8 |
+
+Compute-node job 6005326 (12 frames, 1 epoch, 20 NVE steps, no LoRA, one CPU node):
+
+| Backend | Approved | Parity energy diff (eV) | Parity force diff (eV/A) | NVE drift (eV/atom) |
+|---|---|---|---|---|
+| HydraGNN BEST6 | yes | 2.8e-14 | 7.9e-15 | 4.5e-6 |
+| MACE-MP-0 small | yes | 1.1e-13 | 3.2e-14 | 9.6e-7 |
+| UMA uma-s-1p1 | yes | 1.2e-6 | 2.7e-7 | 9.9e-7 |
+
+The 4-rank rows use the same 108-atom cells as the single-rank rows and agree with them. The
+fine-tuned models are not checked against any reference, so only the plumbing is shown.
 
 ## Limits
 
