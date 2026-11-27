@@ -96,6 +96,7 @@ class Resources(BaseModel):
     qos: str = "debug"
     partition: str = "batch"
     gpus: int = 0
+    max_outstanding: int = Field(default=2, ge=1)
 
 
 class ConvergenceConfig(BaseModel):
@@ -197,7 +198,6 @@ def _settings_for(
             if minimum_ok and scan.parameter == "cutoff"
             else None
         ),
-        extra_control={"tprnfor": ".true.", "tstress": ".true."},
     )
     return settings, kpts
 
@@ -308,7 +308,7 @@ def slurm_submitter(config: ConvergenceConfig, manifest: str | Path) -> Submitte
             partition=res.partition,
             cwd=str(run.directory),
         )
-        entry, _ = submit_job(spec, manifest)
+        entry, _ = submit_job(spec, manifest, max_outstanding_gpu_jobs=res.max_outstanding)
         return entry.job_id
 
     return submit

@@ -224,3 +224,10 @@ def test_below_recommendation_scan_points_are_diagnostic_only(config_path, tmp_p
 def test_cost_proxy_is_finite(config_path):
     runs = nc.plan(nc.load_config(config_path))
     assert math.isfinite(nc.estimate_resources(runs)["relative_cost_proxy"])
+
+
+def test_planned_decks_have_unquoted_logicals_and_forces_and_stress(config_path):
+    runs = nc.plan(nc.load_config(config_path))
+    text = runs[0].input_path.read_text()
+    assert "tprnfor" in text and "tstress" in text
+    assert "'.true.'" not in text and "'.false.'" not in text

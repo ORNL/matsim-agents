@@ -52,3 +52,4 @@ resources:
   qos: normal
   partition: batch
   gpus: 1
+  max_outstanding: 64

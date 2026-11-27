@@ -243,9 +243,11 @@ def submit_job(
     manifest: str | os.PathLike = DEFAULT_MANIFEST,
     *,
     runner: Runner = subprocess_runner,
+    max_outstanding_gpu_jobs: int = MAX_OUTSTANDING_GPU_JOBS,
 ) -> tuple[JobEntry, bool]:
     """Submit ``spec`` once. Returns ``(entry, submitted)``; ``submitted`` is False when the
-    same spec is already in the manifest, in which case nothing is sent to the scheduler."""
+    same spec is already in the manifest, in which case nothing is sent to the scheduler.
+    A caller that queues a batch of independent jobs passes its own explicit cap."""
     path = Path(manifest)
     with exclusive_lock(_lock_path(path), timeout=30):
         entries = load_manifest(path)
@@ -254,10 +256,10 @@ def submit_job(
                 return existing, False
         if spec.gpus:
             outstanding = [e.job_id for e in entries if e.outstanding_gpu]
-            if len(outstanding) >= MAX_OUTSTANDING_GPU_JOBS:
+            if len(outstanding) >= max_outstanding_gpu_jobs:
                 raise SlurmJobError(
                     f"{len(outstanding)} GPU jobs are outstanding "
-                    f"(limit {MAX_OUTSTANDING_GPU_JOBS}): {', '.join(outstanding)}; "
+                    f"(limit {max_outstanding_gpu_jobs}): {', '.join(outstanding)}; "
                     "refresh the manifest first if some have finished"
                 )
         entry = _submit_locked(spec, path, runner, entries, retry_of=None, diagnosis=None)
