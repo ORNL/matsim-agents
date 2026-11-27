@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.core.application import SupercellTarget
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.science.acquisition.acquisition import CandidateAcquisitionPolicy
 from matsim_agents.workflows.hierarchy.qe_plan import (
     MethodSignature,
@@ -178,9 +179,4 @@ class CampaignConfig(_Section):
 
 
 def load_campaign_config(path: str | Path) -> CampaignConfig:
-    import yaml
-
-    data = yaml.safe_load(Path(path).read_text())
-    if not isinstance(data, dict):
-        raise ValueError("the campaign config must be a mapping")
-    return CampaignConfig(**data)
+    return CampaignConfig(**load_yaml_mapping(path))

@@ -59,12 +59,11 @@ def _structure_digest(atoms: Atoms) -> str:
 
 
 def _relax_template(app: ApplicationConfig) -> dict[str, Any]:
-    from matsim_agents.backends.mlip.config import resolve_mlip_paths
+    from matsim_agents.backends.mlip.config import resolve_mlip_block
 
     path = app.resolve(app.relaxation)
     raw = runner.load_yaml(path)
-    if isinstance(raw.get("mlip"), dict):
-        resolve_mlip_paths(raw["mlip"], path.resolve().parent)
+    resolve_mlip_block(raw, path.resolve().parent)
     if raw.get("mode") not in _RELAX_MODES[app.mode]:
         raise ValueError(
             f"application mode {app.mode!r} needs relaxation mode in "

@@ -7,12 +7,12 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
+from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_block
 from matsim_agents.backends.mlip.relaxation import RelaxationSettings, RelaxStructureInput
 from matsim_agents.core.hashing import sha256_file as file_sha256
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.science.structures.seed_structures import SeedGenerationAction
 
 
@@ -112,11 +112,8 @@ class ExplorationCheck(BaseModel):
 def load_exploration_config(path: str | Path) -> ExplorationConfig:
     """Resolve data paths relative to the YAML file, not the caller's directory."""
     path = Path(path).resolve()
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("Exploration configuration must be a YAML or JSON mapping")
-    if isinstance(raw.get("mlip"), dict):
-        resolve_mlip_paths(raw["mlip"], path.parent)
+    raw = load_yaml_mapping(path)
+    resolve_mlip_block(raw, path.parent)
     cfg = ExplorationConfig.model_validate(raw)
     output_dir = cfg.output_dir.expanduser()
     if not output_dir.is_absolute():

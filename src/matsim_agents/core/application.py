@@ -16,8 +16,9 @@ from math import prod
 from pathlib import Path
 from typing import Any, Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+
+from matsim_agents.core.yamlio import load_yaml_mapping
 
 ATOMS_PER_CONVENTIONAL_CELL = {"sc": 1, "bcc": 2, "fcc": 4, "hcp": 2, "diamond": 8}
 
@@ -110,9 +111,7 @@ class ApplicationConfig(BaseModel):
 def load_application(path: str | os.PathLike[str]) -> ApplicationConfig:
     """Read and validate an application YAML file; referenced files must exist."""
     source = Path(path).resolve()
-    data = yaml.safe_load(source.read_text())
-    if not isinstance(data, dict):
-        raise ValueError(f"{source} does not contain a mapping")
+    data = load_yaml_mapping(source)
     app = ApplicationConfig.model_validate({**data, "source": source})
     for field in ("policy", "workflow_config", "relaxation"):
         resolved = app.resolve(getattr(app, field))
