@@ -17,7 +17,7 @@ Rules kept here:
   run the interior image errors must also respect the requested threshold.
 * The barrier is ``max(E_i) - E_end`` over the *sampled* images. It is an estimate until a
   saddle is refined; it is withheld when the maximum sits at an endpoint.
-* The mapping onto ``NebResult`` (``workflows.neb_mapping.to_neb_result``) never yields
+* The mapping onto ``NebResult`` (``workflows.neb.mapping.to_neb_result``) never yields
   ``qualified``: qualification needs evidence this parser does not have.
 """
 

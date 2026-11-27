@@ -43,7 +43,7 @@ from matsim_agents.science.neb.endpoints import (
     vacancy_neighbors,
 )
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
-from matsim_agents.workflows.neb import (
+from matsim_agents.workflows.neb.workflow import (
     RESULT_FILE,
     NebWorkflowError,
     dispatch_neb_workflow,

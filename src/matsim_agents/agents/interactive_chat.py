@@ -4,7 +4,7 @@ A user chats with an LLM (default Qwen 2.5 via Ollama). After every
 assistant response we inspect the conversation for newly proposed
 chemical compositions; when one is detected the user is asked whether to
 launch a substantial atomistic exploration via
-:func:`matsim_agents.workflows.composition_exploration.explore_composition`.
+:func:`matsim_agents.workflows.exploration.composition.explore_composition`.
 
 The REPL is intentionally synchronous and self-contained so it can be
 invoked from notebooks, scripts, or the ``matsim-agents chat`` CLI.
@@ -42,7 +42,7 @@ from matsim_agents.core.composition import Composition, extract_compositions
 from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.execution.placement import Placement, ResourcePlan
 from matsim_agents.execution.run_directory import make_run_id
-from matsim_agents.workflows.composition_exploration import (
+from matsim_agents.workflows.exploration.composition import (
     CompositionExplorationResult,
     explore_composition,
 )

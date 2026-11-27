@@ -464,7 +464,7 @@ def _neb_preflight(path: Path, options: RunOptions) -> Preflight:
 
 
 def _neb_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
-    from matsim_agents.workflows.neb import run_neb_workflow
+    from matsim_agents.workflows.neb.workflow import run_neb_workflow
 
     data, pair, qe = _neb_inputs(path)
     images = {
@@ -599,8 +599,8 @@ def _investigation_preflight(path: Path, options: RunOptions) -> Preflight:
 
 
 def _investigation_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.exploration.phase import run_phase_exploration
     from matsim_agents.workflows.investigation import run_investigation
-    from matsim_agents.workflows.phase_exploration import run_phase_exploration
 
     cfg = _investigation_config(path)
     mlip = _mlip_override(options)

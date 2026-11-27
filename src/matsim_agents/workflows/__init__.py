@@ -36,7 +36,7 @@ _EXPORTS = {
         "run_investigation",
     ),
     "llm_check": ("LLMCheckConfig", "LLMCheckResult", "run_llm_check"),
-    "phase_exploration": (
+    "exploration.phase": (
         "HullFollowUpAssessment",
         "PhaseExplorationContext",
         "PhaseExplorationEvidenceRecord",
@@ -125,6 +125,14 @@ if TYPE_CHECKING:
         run_exploration,
         summarize_exploration,
     )
+    from matsim_agents.workflows.exploration.phase import (
+        HullFollowUpAssessment,
+        PhaseExplorationContext,
+        PhaseExplorationEvidenceRecord,
+        PhaseExplorationPolicy,
+        PhaseExplorationWorkflowResult,
+        run_phase_exploration,
+    )
     from matsim_agents.workflows.investigation import (
         HypothesisDiscussionConfig,
         InvestigationConfig,
@@ -136,14 +144,6 @@ if TYPE_CHECKING:
         run_investigation,
     )
     from matsim_agents.workflows.llm_check import LLMCheckConfig, LLMCheckResult, run_llm_check
-    from matsim_agents.workflows.phase_exploration import (
-        HullFollowUpAssessment,
-        PhaseExplorationContext,
-        PhaseExplorationEvidenceRecord,
-        PhaseExplorationPolicy,
-        PhaseExplorationWorkflowResult,
-        run_phase_exploration,
-    )
     from matsim_agents.workflows.relaxation import (
         RelaxationMode,
         ScientificRelaxationConfig,

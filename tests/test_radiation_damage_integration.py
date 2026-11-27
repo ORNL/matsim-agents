@@ -6,9 +6,9 @@ import json
 from typer.testing import CliRunner
 
 from matsim_agents.execution.ledger import EvidenceLedger, HypothesisStatus
-from matsim_agents.workflows.radiation_damage import run_radiation_damage
-from matsim_agents.workflows.radiation_hypothesis import revise_hypothesis
-from matsim_agents.workflows.radiation_report import build_report, write_report
+from matsim_agents.workflows.radiation.damage import run_radiation_damage
+from matsim_agents.workflows.radiation.hypothesis import revise_hypothesis
+from matsim_agents.workflows.radiation.report import build_report, write_report
 from tests.test_neb_workflow import _fake
 from tests.test_radiation_damage_workflow import _config, _forbidden
 

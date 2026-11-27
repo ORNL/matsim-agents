@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from matsim_agents.core.seeding import python_rng
 from matsim_agents.science.acquisition.acquisition import FormulaAcquisitionMetrics
 from matsim_agents.science.structures.seed_structures import PhaseCandidate
-from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.exploration.composition import CompositionExplorationResult
 
 NOT_YET_ESTABLISHED = "NOT_YET_ESTABLISHED"
 Origin = Literal["existing", "new"]

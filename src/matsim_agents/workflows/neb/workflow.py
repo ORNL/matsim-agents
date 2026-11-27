@@ -56,7 +56,7 @@ from matsim_agents.science.neb.images import (
     generate_linear_images,
 )
 from matsim_agents.science.neb.serialization import METADATA_FILE, read_pathway, write_pathway
-from matsim_agents.workflows.neb_mapping import to_neb_result
+from matsim_agents.workflows.neb.mapping import to_neb_result
 
 PLAN_FILE = "neb-workflow.json"
 RESULT_FILE = "neb-result.json"

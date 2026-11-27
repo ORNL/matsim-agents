@@ -119,7 +119,7 @@ def _apply_neb_escalation(
     _write_state(iteration_dir, state)
 
     from matsim_agents.science.neb.endpoints import MigrationPair
-    from matsim_agents.workflows.neb import run_neb_workflow
+    from matsim_agents.workflows.neb.workflow import run_neb_workflow
 
     # The optimized MLIP path and the endpoints it was actually built from (relaxed or
     # reordered), not the transition's generated endpoints or a fresh linear guess.

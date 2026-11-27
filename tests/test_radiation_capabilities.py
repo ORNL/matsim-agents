@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from matsim_agents.workflows import radiation_capabilities as rc
+from matsim_agents.workflows.radiation import capabilities as rc
 
 ROOT = Path(__file__).resolve().parents[1]
 

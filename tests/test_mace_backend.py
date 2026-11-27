@@ -9,7 +9,7 @@ from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_ca
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.science.structures.seed_structures import PhaseCandidate, SeedGenerationAction
-from matsim_agents.workflows.composition_exploration import explore_composition
+from matsim_agents.workflows.exploration.composition import explore_composition
 from matsim_agents.workflows.multi_formula.formula_execution import _exploration_kwargs
 
 
@@ -215,7 +215,7 @@ def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
         prototype_id="A_cI2_229_a",
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.generate_seeds",
+        "matsim_agents.workflows.exploration.composition.generate_seeds",
         lambda *args, **kwargs: [candidate],
     )
     captured = {}
@@ -257,7 +257,7 @@ def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypat
     )
     generation_call = {}
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.generate_seed_action",
+        "matsim_agents.workflows.exploration.composition.generate_seed_action",
         lambda requested_action, output_dir: (
             generation_call.update(action=requested_action, output_dir=output_dir) or [candidate]
         ),
@@ -296,11 +296,11 @@ def test_exploration_reports_ranking_failure_after_convergence(
         prototype_id="A_cI2_229_a",
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.generate_seeds",
+        "matsim_agents.workflows.exploration.composition.generate_seeds",
         lambda *args, **kwargs: [candidate],
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.score_stability",
+        "matsim_agents.workflows.exploration.composition.score_stability",
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("ranking failed")),
     )
 
@@ -328,11 +328,11 @@ def test_exploration_reports_non_convergence_when_residual_force_is_ineligible(
         prototype_id="A_cI2_229_a",
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.generate_seeds",
+        "matsim_agents.workflows.exploration.composition.generate_seeds",
         lambda *args, **kwargs: [candidate],
     )
     monkeypatch.setattr(
-        "matsim_agents.workflows.composition_exploration.score_stability",
+        "matsim_agents.workflows.exploration.composition.score_stability",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             ValueError("no converged candidates satisfy the force tolerance for ranking")
         ),

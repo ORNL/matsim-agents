@@ -85,7 +85,7 @@ def _candidates(app: ApplicationConfig, directory: Path) -> list[tuple[str, Atom
     """Structures to process: one for a supercell target, deduplicated seeds per composition."""
     if app.target is not None:
         return [(app.target.formula, build_target_structure(app))]
-    from matsim_agents.workflows.composition_exploration import generate_composition_candidates
+    from matsim_agents.workflows.exploration.composition import generate_composition_candidates
 
     found: list[tuple[str, Atoms | Path]] = []
     seen: set[str] = set()

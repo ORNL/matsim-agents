@@ -32,7 +32,7 @@ print(result.final_energy_eV, result.optimized_structure_path)
 ### Composition exploration
 
 ```python
-from matsim_agents.workflows.composition_exploration import explore_composition
+from matsim_agents.workflows.exploration.composition import explore_composition
 
 # Default: every applicable AFLOW prototype + 50 pyXtal random structures.
 # The seed is always explicit (docs/reproducibility.md).

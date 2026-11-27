@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from matsim_agents.core.fileio import atomic_write_text
-from matsim_agents.workflows.radiation_damage import RadiationDamageRun
+from matsim_agents.workflows.radiation.damage import RadiationDamageRun
 
 REPORT_FILE = "radiation-damage-report.json"
 REPORT_SCHEMA = "matsim-radiation-damage-report/1"

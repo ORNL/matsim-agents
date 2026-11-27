@@ -52,7 +52,7 @@ the enforced architecture itself is campaign-shaped.
 | `campaign/stages.py`, `strategies.py`, `synthetic.py` | Hierarchy-specific stage names and synthetic fixtures | examples / test fixtures |
 | `workflows/radiation_*` (6), `workflows/full_supercell_campaign.py` | W interstitial, QE settings, `account="LRN110"` | `examples/radiation_damage/` |
 | `workflows/e1.py` | Paper experiment E1 | `research/` |
-| `workflows/scalability.py`, `workflows/warmstart_qe.py`, `workflows/warmstart_vasp.py` | Benchmarks | `benchmarks/` (warm-start merged into one; `scalability.py` stayed in `workflows/`: it is a library capability listed in `workflows/radiation_capabilities.py`, not a benchmark script) |
+| `workflows/scalability.py`, `workflows/warmstart_qe.py`, `workflows/warmstart_vasp.py` | Benchmarks | `benchmarks/` (warm-start merged into one; `scalability.py` stayed in `workflows/`: it is a library capability listed in `workflows/radiation/capabilities.py`, not a benchmark script) |
 | `discovery/exploration/demo.py` | Demo | `examples/` |
 | `campaign/agent_eval.py`, `campaign/known_answers.py`, `campaign/_replay_pw.py` | Evaluation harness | `benchmarks/` |
 

@@ -17,7 +17,7 @@ from matsim_agents.workflows.candidate_registry import (
     soap_novelty,
     structure_content_hash,
 )
-from matsim_agents.workflows.composition_exploration import CompositionExplorationResult
+from matsim_agents.workflows.exploration.composition import CompositionExplorationResult
 
 
 def _write_structure(path, *, displacement: float = 0.0):

@@ -26,7 +26,7 @@ from matsim_agents.execution.ledger import (
     HypothesisRecord,
     HypothesisStatus,
 )
-from matsim_agents.workflows.radiation_damage import RadiationDamageConfig, RadiationDamageRun
+from matsim_agents.workflows.radiation.damage import RadiationDamageConfig, RadiationDamageRun
 
 RationaleWriter = Callable[[str], str]
 

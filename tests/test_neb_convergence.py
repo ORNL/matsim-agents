@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from matsim_agents.workflows.neb_convergence import (
+from matsim_agents.workflows.neb.convergence import (
     NebInputs,
     check_barrier_series,
     check_neb_run,

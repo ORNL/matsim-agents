@@ -29,7 +29,7 @@ from matsim_agents.workflows.debate import (
     ScientificDebateConfig,
     run_scientific_debate,
 )
-from matsim_agents.workflows.phase_exploration import (
+from matsim_agents.workflows.exploration.phase import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
 )

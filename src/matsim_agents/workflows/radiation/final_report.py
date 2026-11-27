@@ -28,7 +28,7 @@ from matsim_agents.workflows.qualification_matrix import (
     QualificationMatrix,
     QualificationStatus,
 )
-from matsim_agents.workflows.radiation_materials import MaterialReadiness
+from matsim_agents.workflows.radiation.materials import MaterialReadiness
 
 FINAL_REPORT_SCHEMA = "matsim-radiation-final-report/1"
 STANDING_STATEMENTS = (
