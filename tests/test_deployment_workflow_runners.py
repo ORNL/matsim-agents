@@ -305,6 +305,25 @@ def _fake_venv(tmp_path: Path, capture: Path, name: str = "venv") -> Path:
     return venv
 
 
+@pytest.fixture
+def pinned_hydragnn_checkout(tmp_path, monkeypatch):
+    """Make hydragnn-env.sh see the pinned commit when no HydraGNN checkout exists (CI)."""
+    pin = json.loads((ROOT / "benchmarks/e4_mlip/frozen-source.json").read_text())["commit"]
+    shim = tmp_path / "git-shim"
+    shim.mkdir()
+    git = shim / "git"
+    git.write_text(
+        "#!/bin/bash\n"
+        'case "$*" in\n'
+        f"  *'rev-parse HEAD'*) echo {pin}; exit 0;;\n"
+        "  *'status --porcelain'*) exit 0;;\n"
+        "esac\n"
+        f'exec {shutil.which("git")} "$@"\n'
+    )
+    git.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shim}:{os.environ['PATH']}")
+
+
 def _fake_aurora_venv(tmp_path: Path, capture: Path, name: str = "venv") -> Path:
     venv = _fake_venv(tmp_path, capture, name)
     (venv / "bash-env").write_text("module() { return 0; }\nml() { return 0; }\n")
@@ -318,7 +337,9 @@ def _fake_aurora_venv(tmp_path: Path, capture: Path, name: str = "venv") -> Path
         ("phosphorene_qe", "al_phosphorene_qe_aurora.yaml", "qe"),
     ],
 )
-def test_aurora_paper_case_job_runs_aurora_config(tmp_path, case, config, dft):
+def test_aurora_paper_case_job_runs_aurora_config(
+    tmp_path, case, config, dft, pinned_hydragnn_checkout
+):
     capture = tmp_path / "calls.txt"
     venv = _fake_aurora_venv(tmp_path, capture)
     result = subprocess.run(
@@ -342,7 +363,7 @@ def test_aurora_paper_case_job_runs_aurora_config(tmp_path, case, config, dft):
     assert calls[1].split("|")[1:3] == ["venv", dft]
 
 
-def test_aurora_paper_case_job_forwards_the_mlip_config(tmp_path):
+def test_aurora_paper_case_job_forwards_the_mlip_config(tmp_path, pinned_hydragnn_checkout):
     capture = tmp_path / "calls.txt"
     venv = _fake_aurora_venv(tmp_path, capture)
     mace_venv = _fake_venv(tmp_path, capture, "venv-mace")
@@ -371,7 +392,7 @@ def test_aurora_paper_case_job_forwards_the_mlip_config(tmp_path):
     assert calls[1].startswith(f"al run {config} --mlip-config {mlip} --log-level INFO|venv-mace|")
 
 
-def test_aurora_paper_case_job_rejects_unknown_case(tmp_path):
+def test_aurora_paper_case_job_rejects_unknown_case(tmp_path, pinned_hydragnn_checkout):
     result = subprocess.run(
         ["bash", str(ROOT / "deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh")],
         env={**os.environ, "PROJECT_ROOT": str(ROOT), "CASE": "nope"},
@@ -382,7 +403,7 @@ def test_aurora_paper_case_job_rejects_unknown_case(tmp_path):
     assert "unknown CASE='nope'" in result.stderr
 
 
-def test_aurora_scaling_job_tags_run_by_unique_pbs_nodes(tmp_path):
+def test_aurora_scaling_job_tags_run_by_unique_pbs_nodes(tmp_path, pinned_hydragnn_checkout):
     capture = tmp_path / "calls.txt"
     venv = _fake_aurora_venv(tmp_path, capture)
     nodefile = tmp_path / "nodefile"
