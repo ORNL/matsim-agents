@@ -404,10 +404,10 @@ class ResourcePlan(_StrictModel):
     def from_yaml(cls, path: str | Path) -> ResourcePlan:
         """Load the ``resources:`` block of a workflow config or standalone plan file."""
 
-        import yaml
+        from matsim_agents.core.yamlio import load_yaml_mapping
 
         path = Path(path)
-        return cls.from_mapping(yaml.safe_load(path.read_text(encoding="utf-8")), source=path)
+        return cls.from_mapping(load_yaml_mapping(path), source=path)
 
     def resolve(self, allocation: Allocation) -> Placement:
         return _Resolver(self, allocation).run()

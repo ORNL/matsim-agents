@@ -275,6 +275,7 @@ def load_mcp_config(path: str | Path) -> MCPConfig:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
+        # The parser's message quotes the file, which may hold secrets; report only the position.
         mark = getattr(error, "problem_mark", None)
         location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
         raise ValueError(f"{path}: invalid YAML{location}") from None

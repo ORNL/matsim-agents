@@ -744,6 +744,7 @@ def _load_yaml_mapping(path: str | Path, *, mlip: MLIPBackendConfig | None) -> d
     """Expand a workflow YAML and optionally replace its selected MLIP backend."""
     import yaml
 
+    from matsim_agents.core.yamlio import parse_yaml_mapping
     from matsim_agents.execution.variables import expand_variables, variable_defaults
 
     path = Path(path)
@@ -758,9 +759,7 @@ def _load_yaml_mapping(path: str | Path, *, mlip: MLIPBackendConfig | None) -> d
         preview.pop("mlip", None)
         raw_text = yaml.safe_dump(preview, sort_keys=False)
     substituted = expand_variables(raw_text, defaults, source=path)
-    data = yaml.safe_load(substituted)
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected a YAML mapping")
+    data = parse_yaml_mapping(substituted, path)
     data.pop("vars", None)
     if mlip is not None:
         data["mlip"] = mlip
