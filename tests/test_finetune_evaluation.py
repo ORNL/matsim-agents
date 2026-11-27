@@ -312,25 +312,14 @@ def test_recipe_must_match_the_selected_backend():
         )
 
 
-@pytest.mark.parametrize(
-    ("fine_tuner", "field"),
-    [("finetune_hydragnn", "strategy"), ("finetune_hydragnn_newhead", "weight_threshold")],
-)
-def test_hydragnn_recipe_rejects_settings_of_the_other_fine_tuner(fine_tuner, field, tmp_path):
-    recipe = finetune_eval.HydraGNNFineTune.model_validate(
-        {field: "frozen" if field == "strategy" else 0.2}
-    )
-    mlip = HydraGNNConfig(logdir=tmp_path, checkpoint="c.pk", fine_tuner=fine_tuner)
-    with pytest.raises(ValueError, match=f"do not apply to {fine_tuner}"):
-        recipe.endpoints(
-            mlip,
-            tmp_path / "train.extxyz",
-            None,
-            tmp_path / "ft",
-            eval_only=False,
-            reference_manifest=tmp_path / "r.json",
-            seed=0,
-        )
+def test_hydragnn_recipe_rejects_routed_fine_tune_settings():
+    with pytest.raises(ValueError, match="only branch-7"):
+        finetune_eval.HydraGNNFineTune.model_validate({"weight_threshold": 0.2})
+
+
+def test_hydragnn_rejects_the_routed_fine_tuner(tmp_path):
+    with pytest.raises(ValueError, match="only uses finetune_hydragnn_newhead"):
+        HydraGNNConfig(logdir=tmp_path, checkpoint="c.pk", fine_tuner="finetune_hydragnn")
 
 
 def test_training_on_an_unsupported_device_is_rejected_before_any_work(tmp_path):
