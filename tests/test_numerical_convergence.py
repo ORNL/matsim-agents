@@ -242,3 +242,45 @@ def test_partial_output_of_a_running_job_stays_pending(config_path):
     assert nc.collect(runs, log)["pending"] == len(runs)
     assert runs[0].key not in log.load()
     assert nc.collect(runs, log, ended={runs[0].key})["pending"] == len(runs) - 1
+
+
+def test_timed_out_runs_are_retried_once_on_the_retry_launcher(config_path, tmp_path):
+    from matsim_agents.execution.slurm_jobs import CommandResult, refresh_manifest
+
+    config = nc.load_config(config_path)
+    config.resources.retry_launcher = ["run8", "{input}", "{output}"]
+    config.resources.retry_gpus = 8
+    config.resources.gpus = 1
+    runs = nc.plan(config)[:2]
+    ids = iter(range(100, 200))
+    calls: list[list[str]] = []
+
+    def sched(argv):
+        calls.append(list(argv))
+        if argv[0] == "sbatch":
+            return CommandResult(0, f"{next(ids)};frontier\n")
+        rows = [f"{j}|TIMEOUT|0:0|02:00:01" for j in argv[argv.index("-j") + 1].split(",")]
+        return CommandResult(0, "\n".join(rows) + "\n")
+
+    manifest = tmp_path / "jobs.json"
+    from matsim_agents.execution import slurm_jobs as sj
+
+    def submitter(run):
+        spec = sj.JobSpec(
+            name=f"qe-{run.key[:10]}",
+            command=("one", str(run.input_path)),
+            gpus=1,
+            account="A",
+            cwd=str(run.directory),
+        )
+        return sj.submit_job(spec, manifest, runner=sched)[0].job_id
+
+    out = Path(config.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    sent = nc.submit(runs, KeyedResultLog(out / "results.jsonl"), submitter)
+    (out / "submitted.json").write_text(json.dumps(sent))
+    refresh_manifest(manifest, runner=sched)
+    again = nc.retry_timed_out(config, runs, manifest, runner=sched)
+    assert set(again) == {r.key for r in runs}
+    assert any("--gpus-per-node=8" in " ".join(c) for c in calls)
+    assert json.loads((out / "submitted.json").read_text()) == again

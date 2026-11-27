@@ -97,6 +97,8 @@ class Resources(BaseModel):
     partition: str = "batch"
     gpus: int = 0
     max_outstanding: int = Field(default=2, ge=1)
+    retry_launcher: list[str] | None = None  # used once for runs that hit the time limit
+    retry_gpus: int = 0
 
 
 class ConvergenceConfig(BaseModel):
@@ -314,6 +316,53 @@ def slurm_submitter(config: ConvergenceConfig, manifest: str | Path) -> Submitte
     return submit
 
 
+def retry_timed_out(
+    config: ConvergenceConfig,
+    runs: Sequence[PlannedRun],
+    manifest: str | Path,
+    runner: Any = None,
+) -> dict[str, str]:
+    """Resubmit each run whose job hit the time limit once, with the retry launcher and GPUs."""
+    from matsim_agents.execution.slurm_jobs import (
+        JobSpec,
+        load_manifest,
+        retry_job,
+        subprocess_runner,
+    )
+
+    runner = runner or subprocess_runner
+    res = config.resources
+    if res.retry_launcher is None:
+        raise ValueError("resources.retry_launcher is not configured")
+    path = Path(config.out_dir) / "submitted.json"
+    sent: dict[str, str] = json.loads(path.read_text())
+    by_job = {e.job_id: e for e in load_manifest(manifest)}
+    by_key = {r.key: r for r in runs}
+    retried: dict[str, str] = {}
+    for key, job_id in sorted(sent.items()):
+        entry = by_job.get(job_id)
+        run = by_key.get(key)
+        if entry is None or run is None or entry.state != "TIMEOUT" or entry.retried:
+            continue
+        command = tuple(
+            part.format(input=str(run.input_path), output=str(run.output_path))
+            for part in res.retry_launcher
+        )
+        spec = entry.spec.model_copy(update={"command": command, "gpus": res.retry_gpus})
+        new = retry_job(
+            entry.spec_hash,
+            manifest,
+            diagnosis="the single-GPU run reached its time limit; rerun on more GPUs",
+            spec=JobSpec.model_validate(spec.model_dump()),
+            max_outstanding_gpu_jobs=res.max_outstanding,
+            runner=runner,
+        )
+        retried[key] = new.job_id
+    sent.update(retried)
+    atomic_write_text(path, json.dumps(sent, indent=2))
+    return retried
+
+
 def submit(
     runs: Sequence[PlannedRun],
     log: KeyedResultLog,
@@ -464,7 +513,7 @@ def run_stage(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("config")
-    parser.add_argument("stage", choices=["plan", "submit", "collect", "analyse"])
+    parser.add_argument("stage", choices=["plan", "submit", "retry", "collect", "analyse"])
     parser.add_argument("--job-manifest", default=None)
     args = parser.parse_args(argv)
     config = load_config(args.config)
@@ -473,6 +522,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.job_manifest:
             parser.error("submit needs --job-manifest")
         submitter = slurm_submitter(config, args.job_manifest)
+    if args.stage == "retry":
+        if not args.job_manifest:
+            parser.error("retry needs --job-manifest")
+        ended_run_keys(config, args.job_manifest)  # refresh states first
+        done = retry_timed_out(config, plan(config), args.job_manifest)
+        print(json.dumps({"retried": len(done)}, indent=2))
+        return 0
     ended = ended_run_keys(config, args.job_manifest) if args.job_manifest else ()
     result = run_stage(config, args.stage, submitter, ended)
     print(json.dumps(result, indent=2, default=str))

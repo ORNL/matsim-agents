@@ -53,3 +53,8 @@ resources:
   partition: batch
   gpus: 1
   max_outstanding: 64
+  retry_launcher:
+    - bash
+    - -c
+    - "NRANKS=8 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} -nk 4 > {output} 2> {output}.err"
+  retry_gpus: 8

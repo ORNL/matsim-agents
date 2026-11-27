@@ -166,7 +166,7 @@ def test_scheduler_failure_leaves_no_manifest(tmp_path):
     "kwargs",
     [
         {"nodes": 2},
-        {"gpus": 2},
+        {"gpus": 9},
         {"time_limit": "UNLIMITED"},
         {"time_limit": "00:00:00"},
         {"time_limit": "03:00:00"},
