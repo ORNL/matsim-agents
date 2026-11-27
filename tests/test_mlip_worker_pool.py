@@ -46,8 +46,8 @@ def test_calculator_cache_reuses_and_evicts(monkeypatch):
     cache = CalculatorCache(capacity=2)
     first = cache.get(_uma_args())
     again = cache.get(_uma_args(structure_path="Other.vasp", maxiter=5))
-    assert again.calculator is first.calculator
-    assert first.calculator.resets == 1
+    assert again is first
+    assert first.resets == 1
     cache.get(_uma_args(model_name="b"))
     cache.get(_uma_args(model_name="c"))
     cache.get(_uma_args())
