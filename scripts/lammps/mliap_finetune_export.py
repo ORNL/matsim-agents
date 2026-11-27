@@ -73,18 +73,20 @@ def make_inputs(root: Path, frames: int, seed: int) -> tuple[Path, Path]:
 
 def finetune_hydragnn_case(dataset: Path, manifest: Path, out: Path, args):
     from matsim_agents.backends.mlip.config import HydraGNNConfig
-    from matsim_agents.backends.mlip.training.finetune_hydragnn import finetune_hydragnn
+    from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import (
+        finetune_hydragnn_newhead,
+    )
 
     src = Path(os.environ.get("HYDRAGNN_DIR", str(PROJ / "HydraGNN-e4b-frozen-81d5b883")))
     example = Path(os.environ.get("HYDRAGNN_WEIGHTS", str(PROJ / "HydraGNN")))
     example = example / "examples/multidataset_hpo_sc26"
     gfm = example / "multidataset_hpo-BEST6-fp64"
     ckpt = "multidataset_hpo-BEST6-fp64_epoch_97.pk"
-    logdir = finetune_hydragnn(
+    logdir = finetune_hydragnn_newhead(
         dataset,
         out,
         gfm_logdir=gfm,
-        branch_mlp_path=example / "mlp_branch_weights.pt",
+        head="OMat24",
         gfm_checkpoint=ckpt,
         epochs=args.epochs,
         seed=args.seed,
@@ -95,7 +97,7 @@ def finetune_hydragnn_case(dataset: Path, manifest: Path, out: Path, args):
     cfg = HydraGNNConfig(
         logdir=gfm,
         checkpoint=ckpt,
-        mlp_checkpoint=example / "mlp_branch_weights.pt",
+        inference_head="OMat24",
         hydragnn_root=src,
         precision="fp64",
         device="cpu",

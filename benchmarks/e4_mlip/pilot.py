@@ -182,38 +182,21 @@ def pilot_worker(payload: dict) -> dict:
         map_location="cpu",
         weights_only=False,
     )
-    branch = torch.load(
-        payload["relax_args"]["mlip"]["mlp_checkpoint"],
-        map_location="cpu",
-        weights_only=False,
-    )
     built = _worker_calculators().get(
         RelaxStructureInput.model_validate(
             {**payload["relax_args"], "structure_path": payload["structures"][0]["path"]}
         )
     )
     matched_tensors = validate_checkpoint(built.calculator.model)
-    association = {
-        key: str(value)
-        for key, value in branch.items()
-        if key != "mlp_state_dict" and isinstance(value, (str, int, float, bool))
-    }
     return {
         "mask": mask,
         "pid": os.getpid(),
         "device_total_memory_bytes": device.get_device_properties(0).total_memory,
         "records": records,
         "checkpoint_keys": sorted(checkpoint),
-        "branch_checkpoint_keys": sorted(branch),
-        "branch_metadata": association,
         "model_state_keys_match": True,
         "model_tensors_matched": matched_tensors,
-        "branch_output_dimension": next(
-            layer.out_features
-            for layer in reversed(list(built.calculator.mlp.modules()))
-            if isinstance(layer, torch.nn.Linear)
-        ),
-        "model_branches": built.num_branches,
+        "inference_head": "OMat24",
     }
 
 
@@ -302,10 +285,9 @@ def execute(rows: list[Structure], metadata: dict, output: Path) -> int:
             "backend": "hydragnn",
             "logdir": str(Path(metadata["config"]["path"]).parent),
             "checkpoint": metadata["checkpoint"]["path"],
-            "mlp_checkpoint": metadata["branch_checkpoint"]["path"],
+            "inference_head": "OMat24",
             "device": "xpu",
             "precision": "fp64",
-            "mlp_precision": "fp64",
         },
         "optimizer": "FIRE",
         "fmax": 0.02,
@@ -319,7 +301,6 @@ def execute(rows: list[Structure], metadata: dict, output: Path) -> int:
         "source_revision": revision,
         "hydragnn_import": spec.origin,
         "checkpoint": metadata["checkpoint"],
-        "branch_checkpoint": metadata["branch_checkpoint"],
         "config": metadata["config"],
         "pbs_job_id": os.environ["PBS_JOBID"],
         "scientific_accuracy_validated": False,
@@ -383,8 +364,6 @@ def execute(rows: list[Structure], metadata: dict, output: Path) -> int:
         failures.append("Two-worker isolation failed")
     for key, workers in stages.items():
         for worker in workers:
-            if worker["branch_output_dimension"] != worker["model_branches"]:
-                failures.append(f"{key}: branch MLP output dimension mismatch")
             for row in worker["records"]:
                 if row["status"] != "ok":
                     if key.startswith("inference"):

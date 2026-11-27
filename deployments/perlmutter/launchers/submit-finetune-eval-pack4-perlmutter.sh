@@ -4,8 +4,8 @@
 #
 # Run up to four fine-tune + evaluation matrix variants per case as one packed
 # full-node job (one variant per A100) via job-finetune-eval-pack4-perlmutter.sh.
-# The default packs the four HydraGNN transfer-learning strategies -- routed,
-# unfrozen, frozen, scratch -- so the 20 single-GPU `-q shared` runs become five
+# The default packs the HydraGNN branch-7 (OMat24) variants -- zero-shot,
+# unfrozen, frozen -- so the single-GPU `-q shared` runs become five
 # full-node `-q premium` jobs (all 4 GPUs used; 2x charge but top scheduling
 # priority). premium/regular QOS require a full node, so they are only valid on
 # these packed jobs.
@@ -40,7 +40,7 @@ EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>,
 PYTHON="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}/bin/python3"
 FTEVAL_ROOT="${FTEVAL_ROOT:-${RUNS_ROOT}/finetune-eval}"
 QOS="${QOS:-premium}"
-VARIANTS="${VARIANTS:-hydragnn,hydragnn-unfrozen,hydragnn-frozen,hydragnn-scratch}"
+VARIANTS="${VARIANTS:-hydragnn,hydragnn-unfrozen,hydragnn-frozen}"
 IFS=',' read -ra VARIANT_LIST <<<"${VARIANTS}"
 (( ${#VARIANT_LIST[@]} <= 4 )) || { echo "ERROR: at most 4 variants per node (got ${VARIANTS})" >&2; exit 2; }
 

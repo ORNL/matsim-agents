@@ -41,7 +41,6 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Mistral-Small-24B-Instruct-2501}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
@@ -56,7 +55,7 @@ load_aurora_frameworks_modules
 source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
 # The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
 # or the HydraGNN foundation model above. The client runs in that backend's environment.
-MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR")"
 VENV="$(mlip_backend_venv "${REPO}" "$(mlip_backend "${VENV}/bin/python" "$MLIP_CONFIG")" "${VENV}")"
 activate_matsim_aurora_python "${REPO}" "${VENV}"
 
@@ -67,7 +66,6 @@ export PYTHONUNBUFFERED=1
 # executor_node reads these env vars as fallback when config injection is
 # unavailable (e.g. across LangGraph checkpoint boundaries).
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 # Compute nodes have no outbound internet → force fully offline HF stack.
 export HF_HUB_OFFLINE=1
@@ -93,7 +91,6 @@ echo "Repo:          $REPO"
 echo "Venv:          $VENV"
 echo "LLM model:     $MODEL_NAME ($MODEL_DIR)"
 echo "HydraGNN log:  $LOGDIR"
-echo "MLP ckpt:      $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "=========================================="
 
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"

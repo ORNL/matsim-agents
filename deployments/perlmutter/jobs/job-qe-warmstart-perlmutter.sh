@@ -38,7 +38,6 @@ RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -63,16 +62,9 @@ export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export MATSIM_QE_LAUNCHER="$QE_LAUNCHER"
 export MATSIM_QE_PSEUDO_DIR="$QE_PSEUDO_DIR"
 export MATSIM_HYDRAGNN_LOGDIR="$LOGDIR"
-export HYDRAGNN_BRANCH_MLP_CHECKPOINT="$HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 export MATSIM_QE_MLP_DEVICE="${MATSIM_QE_MLP_DEVICE:-cuda}"
 export MATSIM_QE_TIMEOUT_SEC="${MATSIM_QE_TIMEOUT_SEC:-3600}"
 export MATSIM_WARMSTART_FIXTURES="${MATSIM_WARMSTART_FIXTURES:-Si_diamond}"
-
-# Optionally pin HydraGNN routing to a fixed expert branch (e.g. 7 = OMat24).
-# When unset, the BranchWeightMLP softmax routing is used as-is.
-if [[ -n "${HYDRAGNN_FORCE_BRANCH:-}" ]]; then
-  export HYDRAGNN_FORCE_BRANCH
-fi
 
 # ── diagnostics ─────────────────────────────────────────────────────────────
 echo "=========================================="
@@ -83,11 +75,9 @@ echo "Host:         $(hostname)"
 echo "Repo:         $REPO"
 echo "Venv:         $VENV"
 echo "HydraGNN log: $LOGDIR"
-echo "MLP ckpt:     $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "QE launcher:  $QE_LAUNCHER"
 echo "QE pseudos:   $QE_PSEUDO_DIR"
 echo "Fixtures:     $MATSIM_WARMSTART_FIXTURES"
-echo "Force branch: ${HYDRAGNN_FORCE_BRANCH:-<unset> (softmax routing)}"
 echo "=========================================="
 
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"

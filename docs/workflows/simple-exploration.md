@@ -210,7 +210,7 @@ successful calculations.
   GPU/CPU model memory from a terminated process.
 - Only one writer may run/resume a directory at a time (an OS file lock).
 - Missing/modified input or output artifacts, a changed model selection or any
-  changed model file (checkpoint, branch-weight MLP, training metadata), changed
+  changed model file (checkpoint, energy convention, training metadata), changed
   workflow/optimizer/generator source, or changed scientific dependency versions
   block resume. Do not edit the journal to bypass checks. Start a fresh run for
   changed scientific settings; the stored configuration is authoritative.

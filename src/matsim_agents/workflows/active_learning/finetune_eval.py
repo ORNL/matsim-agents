@@ -220,30 +220,30 @@ class _FineTuneRecipe(BaseModel, ABC):
 
 
 class HydraGNNFineTune(_FineTuneRecipe):
-    """HydraGNN fine-tune; ``mlip.fine_tuner`` chooses routed heads or one new head."""
+    """HydraGNN fine-tune of the single branch-7 (OMat24) head."""
 
     backend: Literal["hydragnn"] = "hydragnn"
     epochs: int = Field(20, ge=1)
-    lr: float | None = Field(
-        None, gt=0, description="Default: 1e-4 for routed heads, 1e-3 for a new head."
-    )
-    # finetune_hydragnn (routed heads)
-    weight_threshold: float = 0.1
-    unfreeze_backbone: bool = False
-    # finetune_hydragnn_newhead (drop all heads, train one)
-    strategy: Literal["unfrozen", "frozen", "scratch"] = "unfrozen"
-    head: str | int | None = Field(
-        None, description="Start from this pretrained head (index or dataset name)."
-    )
+    lr: float = Field(1e-3, gt=0)
+    strategy: Literal["unfrozen", "frozen"] = "unfrozen"
+    head: Literal["OMat24"] = "OMat24"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _only_branch_7(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            from matsim_agents.backends.mlip.config import resolve_hydragnn_inference_head
+
+            if forbidden := sorted({"weight_threshold", "unfreeze_backbone"} & set(data)):
+                raise ValueError(
+                    f"fine_tune {forbidden} belong to the forbidden routed HydraGNN fine-tune; "
+                    "matsim-agents uses only branch-7 (OMat24)"
+                )
+            resolve_hydragnn_inference_head(data.get("head"))
+            data = {**data, "head": "OMat24"}
+        return data
 
     def _check_recipe(self, mlip: HydraGNNConfig) -> None:
-        other = (
-            {"strategy", "head"}
-            if mlip.fine_tuner == "finetune_hydragnn"
-            else {"weight_threshold", "unfreeze_backbone"}
-        )
-        if misplaced := sorted(other & self.model_fields_set):
-            raise ValueError(f"fine_tune {misplaced} do not apply to {mlip.fine_tuner}")
         if mlip.checkpoint is None:
             raise ValueError("HydraGNN fine-tuning needs mlip.checkpoint (the foundation weights)")
 
@@ -265,22 +265,6 @@ class HydraGNNFineTune(_FineTuneRecipe):
         if eval_only:
             _require_checkpoint(ft_dir / "ft_model.pk", "HydraGNN")
             ft_logdir = ft_dir
-        elif mlip.fine_tuner == "finetune_hydragnn":
-            if mlip.mlp_checkpoint is None:
-                raise ValueError("finetune_hydragnn requires mlip.mlp_checkpoint (BranchWeightMLP)")
-            from matsim_agents.backends.mlip.training.finetune_hydragnn import finetune_hydragnn
-
-            # 1e-4 (not 1e-3): a full-backbone step at 1e-3 collapses the net
-            # into a constant predictor; force_weight stays ~94 (config).
-            ft_logdir = finetune_hydragnn(
-                train,
-                ft_dir,
-                branch_mlp_path=mlip.mlp_checkpoint,
-                weight_threshold=self.weight_threshold,
-                unfreeze_backbone=self.unfreeze_backbone,
-                lr=self.lr if self.lr is not None else 1e-4,
-                **common,
-            )
         else:
             from matsim_agents.backends.mlip.training.finetune_hydragnn_newhead import (
                 finetune_hydragnn_newhead,
@@ -295,16 +279,14 @@ class HydraGNNFineTune(_FineTuneRecipe):
                 strategy=self.strategy,
                 head=self.head,
                 ft_repo=mlip.ft_repo,
-                lr=self.lr if self.lr is not None else 1e-3,
+                lr=self.lr,
                 **common,
             )
-        update: dict[str, Any] = {"logdir": Path(ft_logdir), "checkpoint": "ft_model.pk"}
-        if mlip.fine_tuner == "finetune_hydragnn_newhead":
-            update |= {
-                "newhead_ft_config": Path(ft_logdir) / "newhead.json",
-                "mlp_checkpoint": None,
-                "inference_head": None,
-            }
+        update: dict[str, Any] = {
+            "logdir": Path(ft_logdir),
+            "checkpoint": "ft_model.pk",
+            "newhead_ft_config": Path(ft_logdir) / "newhead.json",
+        }
         return _Models(mlip, str(mlip.logdir), mlip.model_copy(update=update), str(ft_logdir))
 
 

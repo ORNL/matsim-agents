@@ -101,11 +101,18 @@ def test_backend_discriminates_the_flat_selection(raw, expected):
         {"backend": "mace", "mace": {"model": "medium"}},
         {"backend": "uma", "model_name": "uma-s-1p1", "family": "mace_mp"},
         {"backend": "hydragnn", "logdir": "/tmp/logdir", "mlp_device": "cpu"},
-        {"backend": "hydragnn", "logdir": "/tmp/logdir", "hydragnn_branch_mlp_checkpoint": "x"},
+        {"backend": "hydragnn", "logdir": "/tmp/logdir", "inference_head": "MPTrj"},
         {"backend": "mace", "model": "medium", "ensemble_paths": []},
         {"backend": "orb"},
     ],
-    ids=["nested", "foreign-field", "mlp_device", "long-mlp-name", "ensemble_paths", "unknown"],
+    ids=[
+        "nested",
+        "foreign-field",
+        "mlp_device",
+        "non-branch-7-head",
+        "ensemble_paths",
+        "unknown",
+    ],
 )
 def test_only_the_current_flat_fields_are_accepted(raw):
     with pytest.raises(ValidationError):
@@ -195,21 +202,13 @@ def test_uma_fine_tune_directory_resolves_to_its_inference_checkpoint(tmp_path):
 def test_hydragnn_model_files_follow_the_declared_energy_convention(tmp_path):
     logdir = tmp_path / "logdir"
     logdir.mkdir()
-    for name in ("config.json", "epoch_7.pk", "routing.json", "mlp.pt"):
+    for name in ("config.json", "epoch_7.pk", "newhead.json"):
         (logdir / name).write_text(name)
-    (logdir / "energy-convention.json").write_text(
-        json.dumps({"checkpoint": "epoch_7.pk", "branch_mlp_checkpoint": "mlp.pt"})
-    )
+    (logdir / "energy-convention.json").write_text(json.dumps({"checkpoint": "epoch_7.pk"}))
     files = HydraGNNConfig(logdir=logdir).model_files()
     assert files == sorted(
         logdir / name
-        for name in (
-            "config.json",
-            "energy-convention.json",
-            "epoch_7.pk",
-            "mlp.pt",
-            "routing.json",
-        )
+        for name in ("config.json", "energy-convention.json", "epoch_7.pk", "newhead.json")
     )
 
 
@@ -223,7 +222,7 @@ def test_reusable_selections_are_complete_for_inference(path, hydragnn_env):
 
 def _conditioned_hydragnn(tmp_path):
     return HydraGNNConfig(
-        logdir=tmp_path, checkpoint="c.pk", inference_head=0, charge=2.0, spin=1.0
+        logdir=tmp_path, checkpoint="c.pk", inference_head="OMat24", charge=2.0, spin=1.0
     )
 
 

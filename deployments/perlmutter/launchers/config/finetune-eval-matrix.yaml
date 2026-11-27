@@ -11,7 +11,6 @@ vars:
   HYDRAGNN_ROOT: ${PROJECT_ROOT}/../HydraGNN
   GFM_LOGDIR: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
   GFM_CHECKPOINT: multidataset_hpo-BEST6-fp64_epoch_97.pk
-  BRANCH_MLP: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
   FT_REPO: ${PROJECT_ROOT}/../HydraGNN_GFM_FineTuning4Materials
 
 cases:
@@ -24,27 +23,22 @@ cases:
   hea-bcc-al-001: {}
 
 variants:
-  # HydraGNN multi-head GFM: routed branch-MLP heads, or drop all heads and train one.
+  # HydraGNN GFM: branch-7 (OMat24) head only, unfrozen or frozen backbone.
   hydragnn:
     mlip: &hydragnn
       backend: hydragnn
       logdir: ${GFM_LOGDIR}
       checkpoint: ${GFM_CHECKPOINT}
-      mlp_checkpoint: ${BRANCH_MLP}
+      inference_head: OMat24
       hydragnn_root: ${HYDRAGNN_ROOT}
+      ft_repo: ${FT_REPO}
       device: cuda
   hydragnn-unfrozen:
-    mlip: &hydragnn_newhead
-      <<: *hydragnn
-      fine_tuner: finetune_hydragnn_newhead
-      ft_repo: ${FT_REPO}
+    mlip: *hydragnn
     fine_tune: {backend: hydragnn, strategy: unfrozen}
   hydragnn-frozen:
-    mlip: *hydragnn_newhead
+    mlip: *hydragnn
     fine_tune: {backend: hydragnn, strategy: frozen}
-  hydragnn-scratch:
-    mlip: *hydragnn_newhead
-    fine_tune: {backend: hydragnn, strategy: scratch}
 
   # UMA small: whole model, frozen backbone, or backbone LoRA adapters.
   uma:

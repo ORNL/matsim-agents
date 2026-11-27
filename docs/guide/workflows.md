@@ -36,7 +36,6 @@ Use these as starter templates; replace paths with your environment.
 mlip:
   backend: hydragnn
   logdir: /path/to/hydragnn_logdir
-  mlp_checkpoint: /path/to/mlp_branch_weights.pt
 ```
 
 ```bash

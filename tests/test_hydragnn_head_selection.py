@@ -42,10 +42,13 @@ EXPECTED_HEADS = (
 
 def test_hydragnn_dataset_head_mapping_matches_training_order():
     assert HYDRAGNN_DATASET_HEADS == EXPECTED_HEADS
-    assert [resolve_hydragnn_inference_head(name) for name in EXPECTED_HEADS] == list(range(16))
+    assert EXPECTED_HEADS[7] == "OMat24"
     assert resolve_hydragnn_inference_head("omat24") == 7
     assert resolve_hydragnn_inference_head("branch-7") == 7
-    assert resolve_hydragnn_inference_head("15") == 15
+    for name in EXPECTED_HEADS:
+        if name != "OMat24":
+            with pytest.raises(ValueError, match="only branch-7"):
+                resolve_hydragnn_inference_head(name)
 
 
 @pytest.mark.parametrize("value", [-1, 16, "branch-16", "unknown-dataset"])
@@ -54,7 +57,7 @@ def test_hydragnn_dataset_head_rejects_invalid_selection(value):
         resolve_hydragnn_inference_head(value)
 
 
-def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
+def test_branch_7_does_not_use_a_branch_weight_mlp(tmp_path):
     logdir = tmp_path / "model"
     logdir.mkdir()
     (logdir / "config.json").write_text("{}", encoding="utf-8")
@@ -67,8 +70,8 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
     chat = DiscoveryChatConfig(mlip=config)
 
     assert resolve_hydragnn_inference_head(config.inference_head) == 7
-    assert request.mlip.mlp_checkpoint is None
-    assert chat.mlip.mlp_checkpoint is None
+    assert request.mlip.inference_head == "OMat24"
+    assert chat.mlip.inference_head == "OMat24"
 
 
 @pytest.mark.parametrize("declared", [False, True])
@@ -97,26 +100,16 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
 
     monkeypatch.setattr(executor, "relax_with_mlip", run)
     state = MatSimState(pending_tasks=[TaskSpec(structure_path="structure.extxyz")])
-    if declared:
-        chat = DiscoveryChatConfig(mlip=mlip)
-        request = RelaxStructureInput(structure_path="structure.extxyz", mlip=mlip)
-        result = executor.executor_node(state, {"configurable": {"mlip": mlip}})
-        assert chat.mlip.mlp_checkpoint is None
-        assert request.mlip.mlp_checkpoint is None
-        assert captured[0].mlip.mlp_checkpoint is None
-        assert len(result["results"]) == 1
-    else:
-        with pytest.raises(ValueError, match="BranchWeightMLP"):
-            DiscoveryChatConfig(mlip=mlip)
-        with pytest.raises(ValueError, match="mlp_checkpoint"):
-            RelaxStructureInput(structure_path="structure.extxyz", mlip=mlip)
-        with pytest.raises(ValueError, match="BranchWeightMLP"):
-            executor.executor_node(state, {"configurable": {"mlip": mlip}})
-        assert not captured
+    chat = DiscoveryChatConfig(mlip=mlip)
+    request = RelaxStructureInput(structure_path="structure.extxyz", mlip=mlip)
+    result = executor.executor_node(state, {"configurable": {"mlip": mlip}})
+    assert chat.mlip.inference_head == "OMat24"
+    assert request.mlip.inference_head == "OMat24"
+    assert captured[0].mlip.inference_head == "OMat24"
+    assert len(result["results"]) == 1
 
 
-@pytest.mark.parametrize("active_branches", [1, 2])
-def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active_branches):
+def test_branch_7_relaxation_disables_branch_weight_uq(tmp_path, monkeypatch):
     import numpy as np
     from ase import Atoms
     from ase.calculators.calculator import Calculator, all_changes
@@ -125,10 +118,9 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     import matsim_agents.backends.mlip.calculator as factory
     import matsim_agents.backends.mlip.relaxation as relaxation
 
-    class RoutedCalculator(Calculator):
+    class Branch7Calculator(Calculator):
         implemented_properties = ["energy", "forces"]
         model = SimpleNamespace(num_branches=16)
-        active_branch_count = active_branches
         last_branch_weights = np.array([1.0] + [0.0] * 15)
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
@@ -140,7 +132,7 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     (logdir / "energy-convention.json").write_text("{}")
     structure = tmp_path / "structure.extxyz"
     write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
-    monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: RoutedCalculator())
+    monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: Branch7Calculator())
     result = relaxation.relax_with_mlip(
         RelaxStructureInput(
             structure_path=str(structure),
@@ -148,13 +140,8 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
             maxiter=1,
         )
     )
-    assert result.top_branch == 0
-    if active_branches == 1:
-        assert result.top_branch_weight is None
-        assert "branch-weight UQ disabled" in result.notes
-    else:
-        assert result.top_branch_weight == pytest.approx(1)
-        assert result.notes is None
+    assert result.top_branch_weight is None
+    assert "branch-weight UQ disabled" in result.notes
 
 
 @pytest.mark.parametrize("metadata_name", ["routing.json", "newhead.json", None])
@@ -165,31 +152,33 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
     logdir = tmp_path / "model"
     logdir.mkdir()
+    (logdir / "config.json").write_text("{}")
     if metadata_name is not None:
         (logdir / metadata_name).write_text(json.dumps({"reference_energies": {"Si": -1}}))
-    inference = ModuleType("inference_fused")
+    inference = ModuleType("inference_random_structures")
     loaded = []
 
     def load(*args):
         loaded.append(args)
         raise RuntimeError("foundation loader reached")
 
-    inference.load_fused_stack = load
-    monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    inference.load_config_and_model = load
+    inference.find_checkpoint = lambda logdir, checkpoint: checkpoint
+    monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
     request = RelaxStructureInput(
         structure_path=str(tmp_path / "structure.extxyz"),
         output_dir=str(tmp_path / "output"),
-        mlip={
-            "backend": "hydragnn",
-            "logdir": str(logdir),
-            "mlp_checkpoint": str(tmp_path / "mlp.pt"),
-        },
+        mlip={"backend": "hydragnn", "logdir": str(logdir)},
     )
 
     if metadata_name is None:
         with pytest.raises(RuntimeError, match="foundation loader reached"):
             relaxation.relax_with_mlip(request)
         assert len(loaded) == 1
+    elif metadata_name == "routing.json":
+        with pytest.raises(ValueError, match="BranchWeightMLP HydraGNN checkpoints are forbidden"):
+            relaxation.relax_with_mlip(request)
+        assert not loaded
     else:
         with pytest.raises(ValueError, match="lacks verified energy convention"):
             relaxation.relax_with_mlip(request)
@@ -197,7 +186,7 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
 
 @pytest.mark.parametrize("inference_head", ["OMat24", "branch-7"])
-def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch, inference_head):
+def test_builder_loads_branch_7(tmp_path, monkeypatch, inference_head):
     import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"
@@ -343,102 +332,3 @@ def test_hydragnn_head_selector_is_exposed_by_public_commands(tmp_path):
     assert isinstance(selected, HydraGNNConfig)
     assert selected.logdir == logdir.resolve()
     assert resolve_hydragnn_inference_head(selected.inference_head) == 7
-
-
-@pytest.mark.parametrize("mlp_precision", ["fp32", "bf16"])
-def test_fused_xpu_builder_moves_and_exposes_mlp(tmp_path, monkeypatch, mlp_precision):
-    import torch
-
-    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
-
-    (tmp_path / "config.json").write_text("{}")
-    device = torch.device("xpu:0")
-    model = SimpleNamespace()
-    moves = []
-    mlp = SimpleNamespace(to=lambda **kwargs: moves.append(kwargs) or mlp)
-    config = {"NeuralNetwork": {"Architecture": {}}}
-    inference = ModuleType("inference_fused")
-    inference.load_fused_stack = lambda *args: (
-        model,
-        mlp,
-        config,
-        device,
-        nullcontext(),
-        torch.float32,
-        16,
-        torch.device("cpu"),
-        nullcontext(),
-        False,
-        "fp32",
-        mlp_precision,
-    )
-    inference.run_fused_inference = lambda *args, **kwargs: None
-    monkeypatch.setitem(sys.modules, "inference_fused", inference)
-    upstream = ModuleType("inference_random_structures")
-    upstream.find_checkpoint = lambda *args: "model.pk"
-    monkeypatch.setitem(sys.modules, "inference_random_structures", upstream)
-    monkeypatch.setattr(
-        "matsim_agents.backends.mlip.hydragnn_checkpoint.restore_hydragnn_checkpoint",
-        lambda *args, **kwargs: ("model.weight",),
-    )
-    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
-    contexts = []
-    monkeypatch.setattr(
-        torch, "autocast", lambda *args, **kwargs: contexts.append((args, kwargs)) or nullcontext()
-    )
-    stack = _load_fused_stack(tmp_path, None, "mlp.pt", "fp32", mlp_precision, "xpu")
-    assert stack[7] == device
-    assert stack[9] is (mlp_precision == "fp32")
-    assert bool(contexts) is (mlp_precision == "bf16")
-    if contexts:
-        assert contexts == [(("xpu",), {"dtype": torch.bfloat16})]
-    result = build_hydragnn_calculator(
-        HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", device="xpu")
-    )
-    assert result.model is model and result.mlp is mlp
-    assert moves == [{"device": device}, {"device": device}]
-
-
-def test_fused_xpu_loader_rejects_unavailable_xpu_and_cpu_gnn(monkeypatch):
-    import torch
-
-    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
-
-    inference = ModuleType("inference_fused")
-    calls = []
-    inference.load_fused_stack = lambda *args: (
-        calls.append(args)
-        or (
-            SimpleNamespace(),
-            None,
-            {},
-            torch.device("cpu"),
-            None,
-            None,
-            16,
-            torch.device("cpu"),
-            None,
-            False,
-            "fp32",
-            "fp32",
-        )
-    )
-    monkeypatch.setitem(sys.modules, "inference_fused", inference)
-    upstream = ModuleType("inference_random_structures")
-    upstream.find_checkpoint = lambda *args: "model.pk"
-    monkeypatch.setitem(sys.modules, "inference_random_structures", upstream)
-    monkeypatch.setattr(
-        "matsim_agents.backends.mlip.hydragnn_checkpoint.restore_hydragnn_checkpoint",
-        lambda *args, **kwargs: (),
-    )
-    monkeypatch.setattr(torch.xpu, "is_available", lambda: False)
-    with pytest.raises(RuntimeError, match="CPU fallback is forbidden"):
-        _load_fused_stack("model", None, "mlp.pt", None, None, "xpu")
-    assert not calls
-    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
-    with pytest.raises(RuntimeError, match="but XPU was requested"):
-        _load_fused_stack("model", None, "mlp.pt", None, None, "xpu")
-    for device in ("cpu", "cuda"):
-        stack = _load_fused_stack("model", None, "mlp.pt", None, None, device)
-        assert stack[3].type == "cpu"
-        assert calls[-1][-1] == device

@@ -151,7 +151,6 @@ def discovery_config(tmp_path: Path, si_vasp: str):
         mlip={
             "backend": "hydragnn",
             "logdir": str(logdir),
-            "mlp_checkpoint": str(tmp_path / "mlp.pt"),
         },
         output_dir=str(tmp_path / "outputs"),
         auto_confirm=True,

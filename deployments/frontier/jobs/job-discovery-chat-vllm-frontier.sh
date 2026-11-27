@@ -34,7 +34,6 @@ VENV=$REPO/.venv
 VLLM_VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 RUN_DIR=$PROJ/runs/discovery-chat-vllm-$SLURM_JOB_ID
@@ -50,7 +49,7 @@ load_frontier_rocm72_modules
 
 # The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
 # or the HydraGNN foundation model above. The client runs in that backend's environment.
-MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR" "$HYDRAGNN_BRANCH_MLP_CHECKPOINT")"
+MLIP_CONFIG="$(default_mlip_config "$RUN_DIR" "$LOGDIR")"
 VENV="$(mlip_backend_venv "$REPO" "$(mlip_backend "$VENV/bin/python" "$MLIP_CONFIG")" "$VENV")"
 activate_python_env "$VENV"
 

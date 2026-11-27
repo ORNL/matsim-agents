@@ -792,7 +792,6 @@ _MLIP_SELECTIONS = {
     "hydragnn": {
         "backend": "hydragnn",
         "logdir": "/models/hydragnn-logdir",
-        "mlp_checkpoint": "/models/branch.pt",
         "device": "cpu",
     },
 }

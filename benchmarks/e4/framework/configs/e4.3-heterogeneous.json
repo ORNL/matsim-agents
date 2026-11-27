@@ -67,8 +67,7 @@
           "logdir": "${E4_HYDRAGNN_LOGDIR}",
           "inference_head": "OMat24",
           "device": "${E4_MLP_DEVICE}",
-          "precision": "fp64",
-          "mlp_precision": "fp64"
+          "precision": "fp64"
         },
         "fmax": 0.02,
         "maxiter": 200

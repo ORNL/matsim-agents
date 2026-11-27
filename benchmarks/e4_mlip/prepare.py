@@ -94,7 +94,6 @@ def audit(example: Path, output: Path) -> dict:
     logdir = example / "multidataset_hpo-BEST6-fp64"
     paths = {
         "checkpoint": logdir / "multidataset_hpo-BEST6-fp64_epoch_97.pk",
-        "branch_checkpoint": example / "mlp_branch_weights.pt",
         "config": logdir / "config.json",
     }
     revision = subprocess.check_output(

@@ -14,7 +14,6 @@ without a Quantum ESPRESSO install or a HydraGNN checkpoint::
     MATSIM_QE_LAUNCHER         # absolute path or wrapper that invokes pw.x
     MATSIM_QE_PSEUDO_DIR       # directory with .UPF pseudopotentials
     MATSIM_HYDRAGNN_LOGDIR     # HydraGNN logdir (config.json + checkpoint)
-    HYDRAGNN_BRANCH_MLP_CHECKPOINT   # BranchWeightMLP .pt checkpoint
 
 Optional::
 
@@ -64,8 +63,6 @@ def _missing_requirements() -> list[str]:
         missing.append("MATSIM_QE_PSEUDO_DIR (not a directory)")
     if _env("MATSIM_HYDRAGNN_LOGDIR") is None:
         missing.append("MATSIM_HYDRAGNN_LOGDIR")
-    if _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT") is None:
-        missing.append("HYDRAGNN_BRANCH_MLP_CHECKPOINT")
     return missing
 
 
@@ -147,7 +144,6 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
             key: value
             for key, value in {
                 "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
-                "mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
                 "device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
             }.items()
             if value is not None

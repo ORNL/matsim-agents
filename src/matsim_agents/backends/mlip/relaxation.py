@@ -3,7 +3,7 @@
 This module wraps the workflow implemented in
 ``HydraGNN/examples/multidataset_hpo_sc26/structure_optimization_ASE.py``
 as a LangGraph-compatible tool. The HydraGNN-specific code (model loading,
-fused inference, ASE calculator) is imported lazily so that the rest of the
+branch-7 inference, ASE calculator) is imported lazily so that the rest of the
 agent framework can be developed and tested without a HydraGNN install.
 """
 
@@ -13,7 +13,6 @@ import os
 import time
 from collections.abc import Callable
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
 import numpy as np
@@ -147,136 +146,6 @@ def atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
     return add_edges_pbc(data)
 
 
-def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precision, mlp_device):
-    """Load upstream models while enforcing explicit XPU co-location."""
-    from inference_fused import load_fused_stack
-
-    if mlp_device == "xpu":
-        import torch
-
-        if not torch.xpu.is_available():
-            raise RuntimeError("XPU unavailable; HydraGNN CPU fallback is forbidden")
-    stack = load_fused_stack(
-        logdir, checkpoint, mlp_checkpoint, precision, mlp_precision, mlp_device
-    )
-    if mlp_device == "xpu" and stack[3].type != "xpu":
-        raise RuntimeError(f"HydraGNN GNN is on {stack[3]}, but XPU was requested")
-    from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
-
-    if checkpoint is None:
-        from inference_random_structures import find_checkpoint
-
-        checkpoint = find_checkpoint(logdir, checkpoint)
-    elif not os.path.isabs(checkpoint):
-        checkpoint = os.path.join(logdir, checkpoint)
-    model = stack[0]
-    model._hydragnn_checkpoint_state_keys = restore_hydragnn_checkpoint(
-        model, checkpoint, device=stack[3]
-    )
-    if mlp_device != "xpu":
-        return stack
-    from contextlib import nullcontext
-
-    (
-        model,
-        mlp,
-        config,
-        device,
-        autocast_ctx,
-        param_dtype,
-        num_branches,
-        _mlp_device,
-        _mlp_autocast_ctx,
-        _unified,
-        gnn_prec,
-        mlp_prec,
-    ) = stack
-    mlp = mlp.to(device=device)
-    unified = mlp_prec == gnn_prec
-    mlp_autocast_ctx = (
-        torch.autocast("xpu", dtype=torch.bfloat16)
-        if not unified and mlp_prec == "bf16"
-        else nullcontext()
-    )
-    return (
-        model,
-        mlp,
-        config,
-        device,
-        autocast_ctx,
-        param_dtype,
-        num_branches,
-        device,
-        mlp_autocast_ctx,
-        unified,
-        gnn_prec,
-        mlp_prec,
-    )
-
-
-def _build_calculator(
-    model,
-    mlp,
-    radius,
-    max_neighbours,
-    param_dtype,
-    autocast_ctx,
-    device,
-    num_branches,
-    mlp_device,
-    mlp_autocast_ctx,
-    unified_mlp_gnn_stack,
-    charge,
-    spin,
-):
-    """Construct the FusedHydraGNNCalculator class lazily."""
-    import torch
-    from ase.calculators.calculator import Calculator, all_changes
-    from inference_fused import run_fused_inference  # provided alongside the HydraGNN example
-
-    class FusedHydraGNNCalculator(Calculator):
-        implemented_properties = ["energy", "forces"]
-
-        def __init__(self):
-            super().__init__()
-            self.model = model  # expose for score_mc_dropout (uncertainty.py)
-            self.mlp = mlp
-            self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-            self.last_branch_weights = None
-
-        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
-            super().calculate(atoms, properties, system_changes)
-            structure = atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours)
-            (
-                all_energies,
-                all_forces,
-                _all_natoms,
-                all_weights,
-                _batch_latencies_ms,
-                _total_timed_structures,
-                _stage_stats,
-            ) = run_fused_inference(
-                model,
-                mlp,
-                [structure],
-                batch_size=1,
-                param_dtype=param_dtype,
-                autocast_ctx=autocast_ctx,
-                device=device,
-                num_branches=num_branches,
-                num_warmup=0,
-                mlp_device=mlp_device,
-                mlp_autocast_ctx=mlp_autocast_ctx,
-                unified_mlp_gnn_stack=unified_mlp_gnn_stack,
-                profile_stages=False,
-            )
-            self.last_branch_weights = all_weights[0].numpy()
-            self.results["energy"] = float(all_energies[0])
-            self.results["forces"] = all_forces[0].numpy()
-
-    return FusedHydraGNNCalculator()
-
-
 def _build_optimizer(name: str, atoms, maxstep: float):
     from ase.optimize import BFGS, FIRE
     from ase.optimize.bfgslinesearch import BFGSLineSearch
@@ -324,76 +193,15 @@ class RelaxCalculator(NamedTuple):
 
 
 def hydragnn_relaxation_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
-    """HydraGNN calculator with its branch-weight UQ description."""
-    declared_checkpoint = Path(cfg.logdir) / "energy-convention.json"
-    if cfg.inference_head is not None or declared_checkpoint.exists():
-        return _declared_hydragnn_calculator(cfg)
-    return _fused_hydragnn_calculator(cfg)
-
-
-def _declared_hydragnn_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
-    """HydraGNN with a declared energy convention or an explicitly selected head."""
+    """HydraGNN branch-7 (OMat24) calculator; branch-weight UQ does not apply."""
     from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
 
-    calculator = build_hydragnn_calculator(cfg)
-    num_branches = (
-        1 if cfg.inference_head is not None else int(getattr(calculator.model, "num_branches", 1))
+    return RelaxCalculator(
+        build_hydragnn_calculator(cfg),
+        1,
+        1,
+        "HydraGNN uses only branch-7 (OMat24); branch-weight UQ disabled",
     )
-    active_branches = int(getattr(calculator, "active_branch_count", num_branches))
-    uq_note = (
-        "HydraGNN has fewer than two active branches; branch-weight UQ disabled"
-        if active_branches < 2
-        else None
-    )
-    return RelaxCalculator(calculator, num_branches, active_branches, uq_note)
-
-
-def _fused_hydragnn_calculator(cfg: HydraGNNConfig) -> RelaxCalculator:
-    """Pretrained multi-branch HydraGNN weighted by its BranchWeightMLP."""
-    from ase.calculators.calculator import Calculator
-
-    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-
-    restore_hydragnn_total_energy(Calculator(), Path(cfg.logdir), cfg.checkpoint)
-
-    (
-        model,
-        mlp,
-        config,
-        device,
-        autocast_ctx,
-        param_dtype,
-        num_branches,
-        mlp_device,
-        mlp_autocast_ctx,
-        unified_mlp_gnn_stack,
-        _gnn_prec,
-        _mlp_prec,
-    ) = _load_fused_stack(
-        str(cfg.logdir),
-        cfg.checkpoint,
-        str(cfg.mlp_checkpoint),
-        cfg.precision,
-        cfg.mlp_precision,
-        cfg.device,
-    )
-    arch = config["NeuralNetwork"]["Architecture"]
-    calculator = _build_calculator(
-        model,
-        mlp,
-        float(arch.get("radius", 5.0)),
-        int(arch.get("max_neighbours", 20)),
-        param_dtype,
-        autocast_ctx,
-        device,
-        num_branches,
-        mlp_device,
-        mlp_autocast_ctx,
-        unified_mlp_gnn_stack,
-        cfg.charge,
-        cfg.spin,
-    )
-    return RelaxCalculator(calculator, num_branches, num_branches, None)
 
 
 class CalculatorCache:

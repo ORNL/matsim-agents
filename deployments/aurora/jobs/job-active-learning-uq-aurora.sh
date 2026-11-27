@@ -32,7 +32,6 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
 # Default candidate set: neutral fixtures that ship with the repo. Override
 # with MATSIM_STRUCTURES="path1 path2 ..." for a real sweep.
@@ -85,7 +84,6 @@ echo "Job ID:      ${JOBID}"
 echo "Repo:        ${REPO}"
 echo "Venv:        ${VENV}"
 echo "Logdir:      ${LOGDIR}"
-echo "MLP ckpt:    ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "Structures:  ${#STRUCTURES[@]}"
 for s in "${STRUCTURES[@]}"; do echo "             - ${s}"; done
 echo "DFT backend: ${MATSIM_DFT_BACKEND}"

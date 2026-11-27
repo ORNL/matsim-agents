@@ -29,7 +29,6 @@ PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 STRUCTURE=${MATSIM_STRUCTURE:-$REPO/tests/integration/data/Si.vasp}
 
 RUN_DIR=$PROJ/runs/single-relaxation-$SLURM_JOB_ID
@@ -63,7 +62,6 @@ echo "Repo:        $REPO"
 echo "Venv:        $VENV"
 echo "Structure:   $STRUCTURE"
 echo "Logdir:      $LOGDIR"
-echo "MLP ckpt:    $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "Run dir:     $RUN_DIR"
 echo "=========================================="
 

@@ -43,7 +43,6 @@ source "${REPO}/deployments/common/runtime-env.sh"
 VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-HYDRAGNN_BRANCH_MLP_CHECKPOINT="${CHAT_HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
 CHAT_MODEL_PATH="${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
 CHAT_MODEL_NAME="${CHAT_MODEL_NAME:-$(basename "${CHAT_MODEL_PATH}")}"
@@ -63,7 +62,7 @@ load_aurora_frameworks_modules
 # shellcheck disable=SC1091
 # The MLIP: MLIP_CONFIG (any YAML with an `mlip:` block, e.g. examples/mlip/*.yaml)
 # or the HydraGNN foundation model above. The client runs in that backend's environment.
-MLIP_CONFIG="$(default_mlip_config "${RUN_DIR}" "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}")"
+MLIP_CONFIG="$(default_mlip_config "${RUN_DIR}" "${LOGDIR}")"
 VENV_PATH="$(mlip_backend_venv "${REPO}" "$(mlip_backend "${VENV_PATH}/bin/python" "$MLIP_CONFIG")" "${VENV_PATH}")"
 if [[ -f "${VENV_PATH}/bin/activate" ]]; then
     source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
@@ -76,7 +75,6 @@ export PYTHONUNBUFFERED=1
 export TMPDIR=/tmp
 
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1

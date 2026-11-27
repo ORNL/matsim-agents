@@ -191,7 +191,7 @@ offline. Each model is an `mlip:` block passed to `qualify_mlip_xpu.py
 --mlip-config FILE`; the block must select `device: xpu`, and anything else is
 rejected. Without `MLIP_CONFIG`, the job qualifies the three selections in
 `deployments/aurora/jobs/config/`: `mlip-xpu-hydragnn.yaml` (the BEST6
-logdir and BranchWeightMLP under `${HYDRAGNN_ROOT}`), `mlip-xpu-uma.yaml`
+logdir under `${HYDRAGNN_ROOT}`, branch-7 (OMat24) only), `mlip-xpu-uma.yaml`
 (UMA `uma-s-1p1`), and `mlip-xpu-mace.yaml` (MACE-MP `small`). Set
 `MLIP_CONFIG` to an absolute or repository-relative YAML file to qualify one
 other model instead, and `QUALIFICATION_RUN_DIR` to choose the output

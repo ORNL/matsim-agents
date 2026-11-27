@@ -127,12 +127,8 @@ def test_inference_rejects_checkpoint_with_no_matching_model_keys(tmp_path):
 
 
 @pytest.mark.parametrize("ddp", [False, True])
-def test_fused_loader_strictly_restores_model_prefix_and_lazy_weights(tmp_path, monkeypatch, ddp):
-    import sys
-    from types import ModuleType
-
+def test_restore_strictly_records_model_prefix_and_lazy_weights(tmp_path, ddp):
     from benchmarks.e4_mlip.pilot import validate_checkpoint
-    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
 
     trained = torch.nn.ModuleDict({"model": LazyConditioning().double()})
     trained["model"]._ensure_graph_concat_projector(2, 2, "cpu", torch.float64)
@@ -144,11 +140,7 @@ def test_fused_loader_strictly_restores_model_prefix_and_lazy_weights(tmp_path, 
     )
     before = path.read_bytes()
     rebuilt = torch.nn.ModuleDict({"model": LazyConditioning().double()})
-    upstream = ModuleType("inference_fused")
-    upstream.load_fused_stack = lambda *args: (rebuilt, None, {}, torch.device("cpu"))
-    monkeypatch.setitem(sys.modules, "inference_fused", upstream)
-    stack = _load_fused_stack(tmp_path, path, "unused", "fp64", "fp64", "cpu")
-    assert stack[0] is rebuilt
+    restore_hydragnn_checkpoint(rebuilt, path, device="cpu")
     assert validate_checkpoint(rebuilt) == len(state)
     assert all(k.startswith("model.") for k in rebuilt._hydragnn_checkpoint_state_keys)
     for key, expected in state.items():
@@ -157,12 +149,7 @@ def test_fused_loader_strictly_restores_model_prefix_and_lazy_weights(tmp_path, 
 
 
 @pytest.mark.parametrize("problem", ["missing", "unexpected", "shape", "double-ddp"])
-def test_fused_loader_rejects_invalid_state_before_inference(tmp_path, monkeypatch, problem):
-    import sys
-    from types import ModuleType
-
-    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
-
+def test_restore_rejects_invalid_state_before_inference(tmp_path, problem):
     model = torch.nn.ModuleDict({"model": torch.nn.Linear(2, 2)})
     state = {f"module.{k}": v.clone() for k, v in model.state_dict().items()}
     if problem == "missing":
@@ -175,9 +162,6 @@ def test_fused_loader_rejects_invalid_state_before_inference(tmp_path, monkeypat
         state = {f"module.{k}": v for k, v in state.items()}
     path = tmp_path / "model.pk"
     torch.save({"model_state_dict": state}, path)
-    upstream = ModuleType("inference_fused")
-    upstream.load_fused_stack = lambda *args: (model, None, {}, torch.device("cpu"))
-    monkeypatch.setitem(sys.modules, "inference_fused", upstream)
     with pytest.raises(RuntimeError):
-        _load_fused_stack(tmp_path, path, "unused", "fp32", "fp32", "cpu")
+        restore_hydragnn_checkpoint(model, path, device="cpu")
     assert not hasattr(model, "_hydragnn_checkpoint_state_keys")

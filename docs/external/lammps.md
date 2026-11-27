@@ -291,8 +291,8 @@ The Slurm jobs are marked FAILED because of the drift check.
 `export_checkpoint_for_lammps` on the result. `--lora` makes the MACE and UMA fine-tunes low-rank.
 The labels are EMT, not DFT, so the run checks the pipeline (fine-tune, checkpoint, reload, parity
 and NVE under LAMMPS) and says nothing about accuracy. MACE starts from the cached `small`
-checkpoint, UMA from the local `uma-s-1p1` bundle, HydraGNN from BEST6 through the routed
-`finetune_hydragnn` (the `HydraGNN_GFM_FineTuning4Materials` newhead fine-tuner is not installed).
+checkpoint, UMA from the local `uma-s-1p1` bundle, HydraGNN from BEST6 branch-7 (OMat24) through
+`finetune_hydragnn_newhead`.
 Compute-node job: `deployments/frontier/jobs/lammps/job-lammps-mliap-finetune-frontier.sh` runs
 all three and writes `<backend>/finetune-export.json`.
 

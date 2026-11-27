@@ -1,10 +1,10 @@
-# Aurora XPU qualification: HydraGNN BEST6 logdir fused with its BranchWeightMLP.
+# Aurora XPU qualification: HydraGNN BEST6 logdir, branch-7 (OMat24) head only.
 # HYDRAGNN_ROOT is exported by job-qualify-mlip-xpu-aurora.sh.
 vars:
   HYDRA_EXAMPLE: ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26
 mlip:
   backend: hydragnn
   logdir: ${HYDRA_EXAMPLE}/multidataset_hpo-BEST6-fp64
-  mlp_checkpoint: ${HYDRA_EXAMPLE}/mlp_branch_weights.pt
+  inference_head: OMat24
   precision: fp32
   device: xpu

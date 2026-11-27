@@ -110,7 +110,7 @@ def test_ensemble_strategy_requires_members(tmp_path) -> None:
     [
         (
             {"backend": "hydragnn", "logdir": "logdir"},
-            "matsim_agents.backends.mlip.training.finetune_hydragnn",
+            "matsim_agents.backends.mlip.training.finetune_hydragnn_newhead",
         ),
         (
             {

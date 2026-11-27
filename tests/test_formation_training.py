@@ -124,7 +124,7 @@ def test_rejects_formation_marked_frames_under_a_native_sidecar(
 def test_constrained_frames_preserve_raw_force_labels(
     tmp_path, elemental_manifest, dataset_method_sidecar
 ):
-    from matsim_agents.backends.mlip.training.finetune_hydragnn import _reference_forces
+    from matsim_agents.backends.mlip.training.hydragnn_data import _reference_forces
 
     dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
     atoms = read(dataset)

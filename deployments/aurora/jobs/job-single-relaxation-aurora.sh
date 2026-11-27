@@ -30,7 +30,6 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 STRUCTURE="${MATSIM_STRUCTURE:-${REPO}/tests/integration/data/Si.vasp}"
 
 JOBID="${PBS_JOBID:-$$}"
@@ -53,7 +52,6 @@ export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 # executor_node reads these env vars as fallback when config injection is
 # unavailable (e.g. across LangGraph checkpoint boundaries).
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 # ── diagnostics ─────────────────────────────────────────────────────────────
 echo "=========================================="
@@ -65,7 +63,6 @@ echo "Repo:        ${REPO}"
 echo "Venv:        ${VENV}"
 echo "Structure:   ${STRUCTURE}"
 echo "Logdir:      ${LOGDIR}"
-echo "MLP ckpt:    ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "Run dir:     ${RUN_DIR}"
 echo "=========================================="
 

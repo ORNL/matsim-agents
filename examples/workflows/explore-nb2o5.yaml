@@ -16,7 +16,7 @@ mlip:
   #   backend: hydragnn
   #   logdir: /path/to/hydragnn/logdir
   #   checkpoint: best_model.pk   # required: names the weights the run records
-  #   mlp_checkpoint: /path/to/branch_weight_mlp.pt
+  #   inference_head: OMat24      # only branch-7 is allowed
   # A trusted local MACE file is pinned by hash with
   #   backend: mace
   #   family: checkpoint

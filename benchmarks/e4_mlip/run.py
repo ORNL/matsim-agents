@@ -103,7 +103,7 @@ def resource_plan(devices: int) -> ResourcePlan:
 
 def verify_model(metadata: dict[str, Any], rows: list[Structure]) -> list[str]:
     blockers = []
-    for key in ("checkpoint", "branch_checkpoint", "config"):
+    for key in ("checkpoint", "config"):
         if key not in metadata:
             raise ValueError(
                 f"Frozen metadata is incomplete: missing {key}; upload and re-audit weights"
@@ -316,10 +316,9 @@ def execute(args, rows, metadata, output: Path) -> int:
             "backend": args.backend,
             "logdir": str(Path(metadata["config"]["path"]).parent),
             "checkpoint": metadata["checkpoint"]["path"],
-            "mlp_checkpoint": metadata["branch_checkpoint"]["path"],
+            "inference_head": "OMat24",
             "device": "xpu",
             "precision": args.precision,
-            "mlp_precision": args.precision,
         },
         "optimizer": "FIRE",
         "fmax": args.fmax,

@@ -6,11 +6,9 @@ set -euo pipefail
 : "${RUN_DIR:?set RUN_DIR}"
 : "${STRUCTURE:?set STRUCTURE}"
 : "${LOGDIR:?set LOGDIR}"
-: "${HYDRAGNN_BRANCH_MLP_CHECKPOINT:?set HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 RELAX_CONFIG="${RUN_DIR}/relaxation-config.json"
 REPO="${REPO}" RUN_DIR="${RUN_DIR}" STRUCTURE="${STRUCTURE}" LOGDIR="${LOGDIR}" \
-HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
 RELAX_CONFIG="${RELAX_CONFIG}" python3 -c '
 import json, os
 from pathlib import Path
@@ -22,7 +20,7 @@ cfg = {
     "mlip": {
         "backend": "hydragnn",
         "logdir": os.environ["LOGDIR"],
-        "mlp_checkpoint": os.environ["HYDRAGNN_BRANCH_MLP_CHECKPOINT"],
+        "inference_head": "OMat24",
         "device": os.environ.get("MATSIM_MLP_DEVICE", "cuda"),
     },
     "max_steps": int(os.environ.get("MATSIM_RELAX_MAX_STEPS", "200")),

@@ -33,7 +33,6 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
 # Inputs from step-1 outputs (required).
 BTO_STRUCT="${MATSIM_BTO_STRUCT:-}"
@@ -64,7 +63,6 @@ export PYTHONUNBUFFERED=1
 export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-0}"
 export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 echo "=========================================="
 echo "[Aurora] step 2 perturbation diagnostic"
@@ -79,8 +77,8 @@ echo "=========================================="
 
 # HydraGNN on Aurora uses device cuda; the wrapper routes it to XPU when available.
 MLIP_CONFIG="${RUN_DIR}/mlip.yaml"
-printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  mlp_checkpoint: "%s"\n  device: cuda\n' \
-  "${LOGDIR}" "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" >"${MLIP_CONFIG}"
+printf 'mlip:\n  backend: hydragnn\n  logdir: "%s"\n  inference_head: OMat24\n  device: cuda\n' \
+  "${LOGDIR}" >"${MLIP_CONFIG}"
 
 python "${REPO}/scripts/diagnostics/step2_perturbation_diagnostic.py" \
     --mlip-config     "${MLIP_CONFIG}" \

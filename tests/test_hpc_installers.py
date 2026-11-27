@@ -580,7 +580,7 @@ def test_aurora_xpu_qualification_rejects_invalid_predictions(tmp_path):
     assert "export HF_HUB_OFFLINE=1" in job.read_text()
 
 
-def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
+def test_aurora_hydragnn_residency_requires_xpu_branch7_model(monkeypatch):
     from types import SimpleNamespace
 
     import pytest
@@ -600,14 +600,14 @@ def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
     def model(device):
         return SimpleNamespace(parameters=lambda: [SimpleNamespace(device=device)])
 
-    fused = SimpleNamespace(model=model("xpu:0"), mlp=model("cpu"))
+    calc = SimpleNamespace(model=model("cpu"))
     with pytest.raises(RuntimeError, match="not exclusively resident"):
-        module.verify_model_residency(fused, "hydragnn")
-    fused.mlp = None
-    with pytest.raises(RuntimeError, match="requires both GNN and MLP"):
-        module.verify_model_residency(fused, "hydragnn")
-    fused.mlp = model("xpu:0")
-    assert module.verify_model_residency(fused, "hydragnn") == ["xpu:0"]
+        module.verify_model_residency(calc, "hydragnn")
+    calc.model = None
+    with pytest.raises(RuntimeError, match="branch-7"):
+        module.verify_model_residency(calc, "hydragnn")
+    calc.model = model("xpu:0")
+    assert module.verify_model_residency(calc, "hydragnn") == ["xpu:0"]
 
 
 def _load_xpu_qualifier():
@@ -660,7 +660,7 @@ def test_aurora_xpu_qualification_builds_each_backend_from_mlip_config(
     if backend == "hydragnn":
         example = tmp_path / "HydraGNN/examples/multidataset_hpo_sc26"
         assert cfg.logdir == example / "multidataset_hpo-BEST6-fp64"
-        assert cfg.mlp_checkpoint == example / "mlp_branch_weights.pt"
+        assert cfg.inference_head == "OMat24"
 
     built, residency = [], []
 

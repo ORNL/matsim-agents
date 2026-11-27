@@ -45,7 +45,8 @@ def restore_hydragnn_checkpoint(model, checkpoint_path, *, device):
         "unused_checkpoint_tensor_count": 0,
         "wrapper_prefixes_removed": prefix_depth,
     }
-    return tuple(state_dict)
+    model._hydragnn_checkpoint_state_keys = tuple(state_dict)
+    return model._hydragnn_checkpoint_state_keys
 
 
 def load_hydragnn_state_dict(model, state_dict: Mapping, *, strict=True):

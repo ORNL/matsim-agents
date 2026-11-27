@@ -22,7 +22,7 @@ def main() -> None:
                 "mlip": {
                     "backend": "hydragnn",
                     "logdir": "multidataset_hpo-BEST6-fp64",
-                    "mlp_checkpoint": "mlp_branch_weights.pt",
+                    "inference_head": "OMat24",
                     "device": "cuda",
                 },
             }

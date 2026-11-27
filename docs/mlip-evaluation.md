@@ -126,14 +126,12 @@ python -m matsim_agents.data.splits --dataset dataset.extxyz \
 The foundation model is an `mlip:` block (`--mlip-config FILE`, e.g. a file in
 [examples/mlip](../examples/mlip)), so any supported backend is evaluated the same
 way. The block fixes everything about the model: backend, checkpoint, device,
-UMA task, MACE family/size/precision, and for HydraGNN the fine-tuner
-(`fine_tuner: finetune_hydragnn` adapts the routed heads and needs
-`mlp_checkpoint`; `finetune_hydragnn_newhead` drops all heads and trains one). A
-HydraGNN block must name its `checkpoint`.
+UMA task, MACE family/size/precision. HydraGNN always uses only branch-7
+(OMat24) and fine-tunes it with `finetune_hydragnn_newhead`. A HydraGNN block
+must name its `checkpoint`.
 
 The evaluation YAML's optional `fine_tune:` block holds that backend's
-hyperparameters; omit it for the defaults. Settings of another backend, or of the
-other HydraGNN fine-tuner, are rejected.
+hyperparameters; omit it for the defaults. Settings of another backend are rejected.
 
 ```yaml
 evaluation:
@@ -143,8 +141,7 @@ evaluation:
     backend: uma            # must match the mlip block
     lora: true              # uma: epochs, lr, force_weight, weight_decay, freeze_backbone, lora, lora_r, lora_alpha
     epochs: 20              # mace: epochs, lr, weight_decay, freeze_backbone, lora, lora_rank, lora_alpha
-                            # hydragnn: epochs, lr, weight_threshold, unfreeze_backbone (routed) or
-                            #           strategy (unfrozen|frozen|scratch), head (new head)
+                            # hydragnn: epochs, lr, strategy (unfrozen|frozen)
 ```
 
 ```bash

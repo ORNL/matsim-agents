@@ -34,10 +34,8 @@ CASES = [
 # deployments/perlmutter/launchers/config/finetune-eval-matrix.yaml.
 ROWS = [
     ("HydraGNN zero-shot", "hydragnn", "before"),
-    ("\\quad routed", "hydragnn", "after"),
     ("\\quad unfrozen", "hydragnn-unfrozen", "after"),
     ("\\quad frozen", "hydragnn-frozen", "after"),
-    ("\\quad scratch", "hydragnn-scratch", "after"),
     ("UMA zero-shot", "uma", "before"),
     ("\\quad full FT", "uma", "after"),
     ("\\quad frozen", "uma-frozen", "after"),

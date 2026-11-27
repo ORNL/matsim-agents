@@ -106,8 +106,7 @@ flowchart TD
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
-  - **HydraGNN** fused MLFF + branch-weight MLP stack (default), or one
-    explicitly selected decoder head for dataset-specific inference.
+  - **HydraGNN** branch-7 (OMat24) head only (default).
   - **UMA** (Universal Models for Atoms) via fairchem (`backend: uma`).
   - **MACE** open foundation-model families and user checkpoints
     (`backend: mace`), isolated from UMA in multi-model validation.
