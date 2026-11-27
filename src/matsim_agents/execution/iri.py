@@ -20,6 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.execution.resources import ResourceRequest
 
 TERMINAL_STATES = frozenset({"completed", "failed", "canceled"})
@@ -77,14 +78,10 @@ def load_iri_profiles(path: str | os.PathLike[str]) -> dict[str, IRIFacility]:
     ``facilities:`` key. Deployments own these files (see ``deployments/common``); the package
     carries no facility defaults.
     """
-    import yaml
-
     source = Path(path)
     if not source.is_file():
         raise FileNotFoundError(f"IRI profile file {source} does not exist")
-    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{source} does not contain a mapping of facility profiles")
+    raw = load_yaml_mapping(source)
     raw = raw.get("facilities", raw)
     if not isinstance(raw, dict) or not raw:
         raise ValueError(f"{source} defines no facility profiles")

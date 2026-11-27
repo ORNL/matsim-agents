@@ -26,11 +26,11 @@ import re
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from matsim_agents.backends.external.spectra_pka.data_fetch import matrix_name
 from matsim_agents.backends.external.spectra_pka.isotopes import IsotopeError, resolve_isotopes
+from matsim_agents.core.yamlio import load_yaml_mapping
 
 FRACTION_TOLERANCE = 1e-6
 _SAFE_STUB = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
@@ -236,11 +236,11 @@ def load_config_file(path: str | Path) -> ConfigFile:
     """Parse a YAML file. Relative paths resolve against the file's directory."""
     source = Path(path)
     try:
-        data = yaml.safe_load(source.read_text())
-    except (OSError, yaml.YAMLError) as exc:
+        data = load_yaml_mapping(source)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
+    except OSError as exc:
         raise ConfigError(f"{source}: {exc}") from None
-    if not isinstance(data, dict):
-        raise ConfigError(f"{source}: the config must be a YAML mapping")
     try:
         parsed = ConfigFile(**data)
     except (ValidationError, TypeError) as exc:
