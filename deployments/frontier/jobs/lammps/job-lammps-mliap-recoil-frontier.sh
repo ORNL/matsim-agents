@@ -9,6 +9,7 @@
 # HydraGNN and UMA, each with additive ZBL, on MATSIM_MLIAP_MPI_RANKS ranks (default 4) of one
 # node, CPU. Each stage runs parity first, then NVE (MATSIM_MLIAP_RECOIL_STEPS, default 200 steps
 # of MATSIM_MLIAP_TIMESTEP_FS, default 0.2 fs) from the recoiled cell, and records energy drift and the position difference to ASE.
+# MATSIM_MLIAP_FD_ATOMS > 0 also compares forces with -dE/dx (ASE) at the step of largest energy jump.
 # A software check of the bridge under a recoil, not a cascade result and not a model validation.
 #
 # Submit: MLIAP_OUT=<dir> MATSIM_MLIAP_SEED=<root seed> sbatch -A <ACCOUNT> -t 01:30:00 -q normal \
@@ -24,6 +25,7 @@ RANKS="${MATSIM_MLIAP_MPI_RANKS:-4}"
 PKA_EV="${MATSIM_MLIAP_PKA_EV:-200}"
 STEPS="${MATSIM_MLIAP_RECOIL_STEPS:-200}"
 DT_FS="${MATSIM_MLIAP_TIMESTEP_FS:-0.2}"
+FD_ATOMS="${MATSIM_MLIAP_FD_ATOMS:-0}"
 
 # shellcheck disable=SC1091
 source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"
@@ -37,7 +39,7 @@ run() { # name python args...
     shift 2
     srun -N 1 -n "$RANKS" -c 1 --gpus-per-node=0 "$py" "$REPO/scripts/lammps/mliap_parity.py" \
         "$@" --zbl --pka-eV "$PKA_EV" --md-steps "$STEPS" --md-timestep-fs "$DT_FS" \
-        --seed "$SEED" --out "$OUT/$name.json" || status=1
+        --fd-check-atoms "$FD_ATOMS" --seed "$SEED" --out "$OUT/$name.json" || status=1
 }
 run mace-recoil "$REPO/.venv-mace/bin/python" --calc mace --model small
 

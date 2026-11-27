@@ -54,7 +54,8 @@ def test_every_run_is_written_with_its_model_and_recipe(matrix_module, tmp_path)
     lifepo4 = yaml.safe_load((tmp_path / "uma/lifepo4-al-001/mlip.yaml").read_text())
     assert lifepo4["mlip"]["task_name"] == "omat"
     frozen = yaml.safe_load((tmp_path / "hydragnn-frozen/lifepo4-al-001/mlip.yaml").read_text())
-    assert frozen["mlip"]["fine_tuner"] == "finetune_hydragnn_newhead"
+    assert frozen["mlip"]["inference_head"] == "OMat24"
+    assert "fine_tuner" not in frozen["mlip"]
 
 
 def test_selection_filters_and_rejects_unknown_names(matrix_module, tmp_path):
