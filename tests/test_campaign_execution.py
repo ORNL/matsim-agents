@@ -37,22 +37,28 @@ from matsim_agents.workflows.exploration.phase import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
 )
-from matsim_agents.workflows.multi_formula.formula_execution import (
+from matsim_agents.workflows.multi_formula.formula_al import (
+    _exploration_kwargs,
+    _iteration_states,
+    _model_identifier,
+)
+from matsim_agents.workflows.multi_formula.formula_config import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
     ReferenceStructureSpec,
-    _cross_model_scores,
-    _exploration_kwargs,
-    _generate_reference_energies,
-    _iteration_states,
-    _model_identifier,
-    _perturbation_robustness,
-    _relaxation_energy_per_atom,
-    _score_relaxed_candidate_uncertainty,
+)
+from matsim_agents.workflows.multi_formula.formula_execution import (
     latest_promoted_model,
     make_formula_runner,
     run_formula_with_active_learning,
+)
+from matsim_agents.workflows.multi_formula.formula_ranking import _relaxation_energy_per_atom
+from matsim_agents.workflows.multi_formula.formula_references import _generate_reference_energies
+from matsim_agents.workflows.multi_formula.formula_validation import (
+    _cross_model_scores,
+    _perturbation_robustness,
+    _score_relaxed_candidate_uncertainty,
 )
 from matsim_agents.workflows.multi_formula.state import CampaignState, FormulaRunRecord
 from matsim_agents.workflows.relaxation import (
@@ -495,7 +501,7 @@ def test_surrogate_hull_scales_compound_reference_from_loaded_structure(tmp_path
 
 
 def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
-    import matsim_agents.workflows.multi_formula.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_validation as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -605,7 +611,7 @@ def test_cross_model_scores_records_ranking_disagreement(tmp_path):
 def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path, monkeypatch):
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.workflows.multi_formula.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_validation as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -668,7 +674,7 @@ def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path,
 
 
 def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
-    import matsim_agents.workflows.multi_formula.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_validation as execution
     from matsim_agents.workflows.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -1805,7 +1811,7 @@ def test_formula_execution_applies_retraining_and_promotion(
 
 
 def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_path):
-    import matsim_agents.workflows.multi_formula.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_al as execution
 
     promoted = tmp_path / "promoted-model"
     cfg = SimpleNamespace(
@@ -1822,7 +1828,7 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
     cfg = SimpleNamespace(mlip=MACEConfig(family="mace_mp", model="medium", dispersion=True))
 
-    import matsim_agents.workflows.multi_formula.formula_execution as execution
+    import matsim_agents.workflows.multi_formula.formula_al as execution
 
     execution._apply_model_override(cfg, str(tmp_path / "promoted.model"))
 
