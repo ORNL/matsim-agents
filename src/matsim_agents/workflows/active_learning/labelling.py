@@ -13,7 +13,7 @@ import numpy as np
 
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
-from matsim_agents.core.fileio import append_line
+from matsim_agents.core.restart import KeyedResultLog
 from matsim_agents.core.seeding import stream_seed
 from matsim_agents.data.governance import (
     structure_identity,
@@ -180,29 +180,20 @@ def _dft_label_key(cfg: ALConfig, spec: DFTJobSpec) -> str:
     )
 
 
-def _load_dft_labels(ledger: Path) -> dict[str, Any]:
-    from ase.io.jsonio import decode
+def _dft_label_log(ledger: Path) -> KeyedResultLog:
+    from ase.io.jsonio import decode, encode
 
+    return KeyedResultLog(ledger, encode=encode, decode=decode)
+
+
+def _load_dft_labels(ledger: Path) -> dict[str, Any]:
     from matsim_agents.backends.dft.base import DFTResult
 
-    labels: dict[str, Any] = {}
-    if not ledger.is_file():
-        return labels
-    for line in ledger.read_text(encoding="utf-8").splitlines():
-        try:
-            entry = decode(line)
-            labels[entry["key"]] = DFTResult(**entry["result"])
-        except Exception as exc:  # noqa: BLE001
-            # A write cut short by the interruption; that job simply reruns.
-            log.warning("Ignoring unreadable DFT label in %s: %s", ledger, exc)
-    return labels
+    return _dft_label_log(ledger).load(lambda result: DFTResult(**result))
 
 
 def _save_dft_label(ledger: Path, key: str, result: Any) -> None:
-    from ase.io.jsonio import encode
-
-    line = encode({"key": key, "result": asdict(result)})
-    append_line(ledger, line.replace("\n", " "))
+    _dft_label_log(ledger).save(key, asdict(result))
 
 
 def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:
