@@ -20,6 +20,7 @@ from ase.build import bulk
 from ase.calculators.calculator import Calculator
 from ase.optimize import LBFGS
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.science.cascade.boundaries import assess_cascade_boundaries
 from matsim_agents.science.cascade.events import CascadeEvent, structure_hash
@@ -166,9 +167,7 @@ def run_task(task: dict, calculators: dict[str, Calculator], out_dir: Path) -> d
         "caveats": list(analysis.caveats),
         "wall_s": time.time() - t0,
     }
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(record))
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(record))
     return record
 
 

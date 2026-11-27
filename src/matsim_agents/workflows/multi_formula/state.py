@@ -26,6 +26,7 @@ from matsim_agents.core.contracts import (
     EvidenceLevel,
     WorkflowStatus,
 )
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.science.acquisition.acquisition import CampaignAcquisitionState
 from matsim_agents.science.structures.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.science.thermodynamics.stability import (
@@ -180,14 +181,7 @@ class CampaignState(BaseModel):
         return cls.model_validate(data)
 
     def save(self, path: str | Path) -> None:
-        destination = Path(path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(destination.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(self.model_dump(mode="json"), indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary.replace(destination)
+        atomic_write_text(path, json.dumps(self.model_dump(mode="json"), indent=2) + "\n")
 
     def upsert_formulas(self, candidates: Iterable[FormulaCandidate]) -> None:
         for candidate in candidates:

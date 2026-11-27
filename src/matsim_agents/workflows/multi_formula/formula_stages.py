@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.workflows.multi_formula.formula_config import CampaignFormulaExecutionConfig
 
 
@@ -45,15 +46,12 @@ class _StageTracker:
         return self.stages[name]["status"]
 
     def write(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema_version": 1,
             "formula": self.formula,
             "stages": list(self.stages.values()),
         }
-        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
-        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        temporary.replace(self.path)
+        atomic_write_text(self.path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
     def set(self, name: str, status: str, **evidence: Any) -> None:
         record = self.stages.setdefault(name, {"name": name})
