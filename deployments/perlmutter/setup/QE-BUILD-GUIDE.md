@@ -150,8 +150,8 @@ NCORES=128 bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 
 | Step | Frontier | Perlmutter |
 |------|----------|-----------|
-| **Compiler** | PrgEnv-cray (cce/18.0.1) | PrgEnv-nvidia (nvfortran) |
-| **Module load** | PrgEnv-cray, rocm/6.2.4 | PrgEnv-gnu/8.5.0, cudatoolkit/12.9, NVHPC 25.5 |
+| **Compiler** | PrgEnv-cray (cce/21.0.4) | PrgEnv-nvidia (nvfortran) |
+| **Module load** | PrgEnv-cray, rocm/7.2.0 | PrgEnv-gnu/8.5.0, cudatoolkit/12.9, NVHPC 25.5 |
 | **GPU arch flag** | `-DQE_GPU_ARCHS=gfx90a` | `-DQE_GPU_ARCHS=sm_80` |
 | **Compiler issues** | ICE retry loop needed | None — stable toolchain |
 | **Build complexity** | High (300+ lines for workarounds) | Low (straightforward) |

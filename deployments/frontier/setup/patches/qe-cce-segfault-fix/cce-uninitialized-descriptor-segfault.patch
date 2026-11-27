@@ -1,8 +1,8 @@
 diff --git a/Modules/qes_init_module.f90 b/Modules/qes_init_module.f90
-index 5e22d7d78..86dbbc02b 100644
+index 5be9c3965..dedd0a051 100644
 --- a/Modules/qes_init_module.f90
 +++ b/Modules/qes_init_module.f90
-@@ -1101,19 +1101,450 @@ MODULE qes_init_module
+@@ -1102,19 +1102,450 @@ MODULE qes_init_module
      END IF
      IF ( PRESENT(dftU)) THEN
        obj%dftU_ispresent = .TRUE. 
@@ -453,13 +453,13 @@ index 5e22d7d78..86dbbc02b 100644
 +  END SUBROUTINE copy_Hubbard_ns_array
 +  !
    !
-   SUBROUTINE qes_init_hybrid(obj, tagname, qpoint_grid, ecutfock, exx_fraction, screening_parameter,&
-                             exxdiv_treatment, x_gamma_extrapolation, ecutvcut, localization_threshold,&
+   SUBROUTINE qes_init_hybrid(obj, tagname, qpoint_grid, ecutfock, exx_fraction, exx_lr_fraction,&
+                             screening_parameter, exxdiv_treatment, x_gamma_extrapolation, ecutvcut,&
 diff --git a/PW/src/pw_init_qexsd_input.f90 b/PW/src/pw_init_qexsd_input.f90
-index ed1a20825..fb06635d8 100644
+index b6dec4b98..e5836c26f 100644
 --- a/PW/src/pw_init_qexsd_input.f90
 +++ b/PW/src/pw_init_qexsd_input.f90
-@@ -120,9 +120,12 @@
+@@ -122,9 +122,12 @@
    LOGICAL,POINTER                          ::  gate_ptr, block_ptr, relaxz_ptr
    REAL(DP),TARGET                          ::  block_1_tgt, block_2_tgt, block_height_tgt, zgate_tgt
    REAL(DP),POINTER                         ::  block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr
@@ -473,9 +473,9 @@ index ed1a20825..fb06635d8 100644
 +  TYPE(dftU_type), SAVE                    ::  dftU_
 +  TYPE(vdW_type), SAVE                     ::  vdW_
    REAL(DP),TARGET                          ::  xdm_a1_, xdm_a2_, lond_s6_, lond_rcut_, ts_vdw_econv_thr_,&
-                                                scr_par_, exx_frc_, ecutvcut_, ecut_fock_, loc_thr_, cell_factor_tg      
+                                                scr_par_, exx_frc_, exx_lr_frc_, ecutvcut_, ecut_fock_, loc_thr_, cell_factor_tg
    REAL(DP),POINTER                         ::  xdm_a1_pt, xdm_a2_pt, lond_s6_pt, lond_rcut_pt, ts_vdw_econv_thr_pt, & 
-@@ -151,6 +154,87 @@
+@@ -153,6 +156,87 @@
    NULLIFY (loc_thr_p, cell_factor_pt) 
    NULLIFY (ts_vdw_isolated_pt, dftd3_threebody_pt ) 
    NULLIFY (dftd3_version_pt, nbnd_pt, nq1_pt, nq2_pt, nq3_pt) 
@@ -541,33 +541,33 @@ index ed1a20825..fb06635d8 100644
 +  ! The compiler's automatic end-of-scope finalization of these local
 +  ! variables' ALLOCATABLE array components crashes (dealloc_cpnts/_DEALLOC)
 +  ! when their allocation-status descriptor is left in the undefined state
-+  ! from declaration. Give each a real, valid, zero-size allocation instead
-+  ! (deliberately not guarded by ALLOCATED()/DEALLOCATE(), which would read
-+  ! the same undefined descriptor and are the operations known to crash).
-+  ALLOCATE(dftU_%Hubbard_Occ(0))
-+  ALLOCATE(dftU_%Hubbard_U(0))
-+  ALLOCATE(dftU_%Hubbard_Um(0))
-+  ALLOCATE(dftU_%Hubbard_J0(0))
-+  ALLOCATE(dftU_%Hubbard_alpha(0))
-+  ALLOCATE(dftU_%Hubbard_beta(0))
-+  ALLOCATE(dftU_%Hubbard_J(0))
-+  ALLOCATE(dftU_%starting_ns(0))
-+  ALLOCATE(dftU_%Hubbard_V(0))
-+  ALLOCATE(dftU_%Hubbard_ns(0))
-+  ALLOCATE(dftU_%Hub_m_order(0))
-+  ALLOCATE(dftU_%Hubbard_back(0))
-+  ALLOCATE(dftU_%Hubbard_alpha_back(0))
-+  ALLOCATE(dftU_%Hubbard_ns_nc(0))
-+  ALLOCATE(vdW_%london_c6(0))
++  ! from declaration. Give each a real, valid, zero-size allocation instead.
++  ! The variables are SAVEd (zero-initialized static storage), so ALLOCATED()
++  ! is reliable, and the guard is needed because neb.x calls iosys once per image.
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_Occ)) ALLOCATE(dftU_%Hubbard_Occ(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_U)) ALLOCATE(dftU_%Hubbard_U(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_Um)) ALLOCATE(dftU_%Hubbard_Um(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_J0)) ALLOCATE(dftU_%Hubbard_J0(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_alpha)) ALLOCATE(dftU_%Hubbard_alpha(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_beta)) ALLOCATE(dftU_%Hubbard_beta(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_J)) ALLOCATE(dftU_%Hubbard_J(0))
++  IF (.NOT. ALLOCATED(dftU_%starting_ns)) ALLOCATE(dftU_%starting_ns(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_V)) ALLOCATE(dftU_%Hubbard_V(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_ns)) ALLOCATE(dftU_%Hubbard_ns(0))
++  IF (.NOT. ALLOCATED(dftU_%Hub_m_order)) ALLOCATE(dftU_%Hub_m_order(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_back)) ALLOCATE(dftU_%Hubbard_back(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_alpha_back)) ALLOCATE(dftU_%Hubbard_alpha_back(0))
++  IF (.NOT. ALLOCATED(dftU_%Hubbard_ns_nc)) ALLOCATE(dftU_%Hubbard_ns_nc(0))
++  IF (.NOT. ALLOCATED(vdW_%london_c6)) ALLOCATE(vdW_%london_c6(0))
 +  !
  
    obj%tagname=TRIM(obj_tagname)
    IF ( ABS(ip_ibrav)  .GT. 0 ) THEN  
 diff --git a/PW/src/pw_restart_new.f90 b/PW/src/pw_restart_new.f90
-index bc091e844..b66c3f3e2 100644
+index f7bd6870a..4a44f30ad 100644
 --- a/PW/src/pw_restart_new.f90
 +++ b/PW/src/pw_restart_new.f90
-@@ -256,6 +256,66 @@ MODULE pw_restart_new
+@@ -257,6 +257,66 @@ MODULE pw_restart_new
        NULLIFY (vdw_corr_pt, non_local_term_pt)
        NULLIFY (ts_thr_pt, ts_isol_pt)
        !

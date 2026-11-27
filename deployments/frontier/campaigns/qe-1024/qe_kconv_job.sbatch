@@ -18,11 +18,8 @@ KCONV_DIR="$(cd "${KCONV_DIR}" && pwd)" || { echo "KCONV_DIR not found: ${KCONV_
 [[ -x "${PW_BIN}" ]] || { echo "pw.x not found: ${PW_BIN}" >&2; exit 2; }
 
 module reset
-# pw.x was built under cpe/24.11 (cray-mpich 8.1.31, rocm 6.2.4); the default cpe pulls rocm 7 libs.
-module load cpe/24.11
-module load Core/25.03 PrgEnv-cray cce/18.0.1 craype-accel-amd-gfx90a rocm/6.2.4 cray-fftw
-MPICH=/opt/cray/pe/mpich/8.1.31
-export LD_LIBRARY_PATH="${MPICH}/gtl/lib:${MPICH}/ofi/cray/17.0/lib:${LD_LIBRARY_PATH:-}"
+# pw.x is built against the site-default cpe (cray-mpich 9.1, rocm 7.2.0).
+module load PrgEnv-cray craype-accel-amd-gfx90a rocm/7.2.0 cray-fftw
 
 export OMP_NUM_THREADS=7
 export OMP_TARGET_OFFLOAD=MANDATORY

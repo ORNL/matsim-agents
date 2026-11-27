@@ -251,6 +251,11 @@ class QENebConfig(BaseModel):
             raise ValueError("launcher and extra_args entries must be nonempty")
         if self.nimage < 1 or self.npool < 1:
             raise ValueError("nimage and npool must be at least 1")
+        if self.nimage > self.n_images - 2:
+            raise ValueError(
+                f"nimage {self.nimage} exceeds the {self.n_images - 2} interior images of a "
+                f"{self.n_images}-image path; neb.x only distributes the interior images"
+            )
         if not _PREFIX.match(self.prefix):
             raise ValueError("prefix may only contain letters, digits, '_', '.' and '-'")
         for name in ("-inp", "-i", "-in", "-input", "-nimage", "-ni", "-npool", "-nk"):

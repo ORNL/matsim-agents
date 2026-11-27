@@ -125,6 +125,36 @@ def _relax_endpoints(
     return relaxed[0], relaxed[1]
 
 
+_RESTART_ARTIFACTS = (
+    "neb-images.extxyz",
+    "neb-optimization-state.json",
+    "neb-optimizer.json",
+    "neb-refinement-images.extxyz",
+    "neb-refinement-state.json",
+    "neb-refinement-optimizer.json",
+)
+
+
+def _write_restart_state(state_path: Path, steps: int, model_id: str | None) -> None:
+    payload = {"optimization_steps": steps, "model_id": model_id or "unspecified"}
+    state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _check_restart_model(state_path: Path, checkpoint_path: Path, model_id: str | None) -> None:
+    """Refuse to resume a pathway that was optimized with a different (or unrecorded) MLIP."""
+    if not checkpoint_path.is_file():
+        return
+    recorded = None
+    if state_path.is_file():
+        recorded = json.loads(state_path.read_text(encoding="utf-8")).get("model_id")
+    if recorded != (model_id or "unspecified"):
+        raise ValueError(
+            f"cannot resume NEB from {checkpoint_path}: it was optimized with MLIP "
+            f"{recorded!r}, not {model_id or 'unspecified'!r}; "
+            "remove the directory or disable resume"
+        )
+
+
 def _load_restart(path: Path, expected_count: int, reference_images):
     if not path.is_file():
         return None
@@ -380,6 +410,13 @@ def sample_neb_candidates(
         check_intermediate_overlaps=config.interpolation != "idpp",
     )
     checkpoint_path = out_dir / "neb-images.extxyz"
+    state_path = out_dir / "neb-optimization-state.json"
+    if config.resume:
+        _check_restart_model(state_path, checkpoint_path, model_id)
+    else:
+        # A fresh run must not leave another model's checkpoints to be relabelled by new provenance.
+        for stale in _RESTART_ARTIFACTS:
+            (out_dir / stale).unlink(missing_ok=True)
     images = (
         _load_restart(checkpoint_path, config.n_images, generated.images) if config.resume else None
     )
@@ -399,7 +436,6 @@ def sample_neb_candidates(
         validate_images(images, config.min_distance_A)
 
     trajectory_path = out_dir / "neb-optimization.traj"
-    state_path = out_dir / "neb-optimization-state.json"
     prior_steps = 0
     if config.resume and state_path.is_file():
         state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -424,6 +460,8 @@ def sample_neb_candidates(
         for image in images:
             trajectory.write(image)
 
+    # Written before optimizing so an interrupted run still records which MLIP made the checkpoint.
+    _write_restart_state(state_path, prior_steps, model_id)
     optimizer.attach(save_checkpoint, interval=1)
     optimizer.attach(record_trajectory, interval=config.record_every)
     uncertainty_evaluations = 0
@@ -467,10 +505,7 @@ def sample_neb_candidates(
         trajectory.close()
     save_checkpoint()
     optimization_steps = prior_steps + max(0, optimizer.get_number_of_steps() - starting_steps)
-    state_path.write_text(
-        json.dumps({"optimization_steps": optimization_steps}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _write_restart_state(state_path, optimization_steps, model_id)
     refinement_stage_used = False
     refinement_steps = 0
     if config.refinement_stage is not None and converged:
@@ -478,6 +513,8 @@ def sample_neb_candidates(
         refinement_checkpoint = out_dir / "neb-refinement-images.extxyz"
         refinement_state = out_dir / "neb-refinement-state.json"
         prior_refinement_steps = 0
+        if config.resume:
+            _check_restart_model(refinement_state, refinement_checkpoint, model_id)
         if config.resume and refinement_state.is_file():
             saved_state = json.loads(refinement_state.read_text(encoding="utf-8"))
             prior_refinement_steps = saved_state.get("optimization_steps")
@@ -501,6 +538,7 @@ def sample_neb_candidates(
             logfile=str(out_dir / "neb-refinement.log"),
         )
         starting_refinement_steps = refinement_optimizer.get_number_of_steps()
+        _write_restart_state(refinement_state, prior_refinement_steps, model_id)
         refinement_trajectory = Trajectory(
             out_dir / "neb-refinement.traj",
             mode="a" if config.resume and (out_dir / "neb-refinement.traj").exists() else "w",
@@ -535,10 +573,7 @@ def sample_neb_candidates(
             0, refinement_optimizer.get_number_of_steps() - starting_refinement_steps
         )
         optimization_steps += refinement_steps
-        refinement_state.write_text(
-            json.dumps({"optimization_steps": refinement_steps}, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        _write_restart_state(refinement_state, refinement_steps, model_id)
         optimizer = refinement_optimizer
         refinement_stage_used = True
 

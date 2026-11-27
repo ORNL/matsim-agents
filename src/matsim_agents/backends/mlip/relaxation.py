@@ -167,6 +167,8 @@ def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precisi
         from inference_random_structures import find_checkpoint
 
         checkpoint = find_checkpoint(logdir, checkpoint)
+    elif not os.path.isabs(checkpoint):
+        checkpoint = os.path.join(logdir, checkpoint)
     model = stack[0]
     model._hydragnn_checkpoint_state_keys = restore_hydragnn_checkpoint(
         model, checkpoint, device=stack[3]

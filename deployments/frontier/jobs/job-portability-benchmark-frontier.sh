@@ -34,7 +34,7 @@ source activate "${VENV}"
 
 # Real MLIP (--qualification compute) runs torch on-GPU; the QE step launcher
 # (deployments/frontier/launchers/run-pw-gpu-frontier.sh) does its own module
-# reset to the PrgEnv-cray/rocm-6.2.4 QE toolchain. Note LD_LIBRARY_PATH below
+# reset to the PrgEnv-cray QE toolchain. Note LD_LIBRARY_PATH below
 # still leaks into that subprocess (module reset doesn't clear exported env
 # vars), so the launcher itself unsets it before loading QE's module stack.
 export PYTHONNOUSERSITE=1

@@ -33,8 +33,8 @@ def _network():
 
 def _hop():
     initial, config = generate_vacancy(PARENT, "p", 0)
-    mover = vacancy_neighbors(initial, config, A)[0]
-    return generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    return generate_vacancy_hop(initial, config, PARENT, mover)
 
 
 def test_vacancy_hop_gives_candidate_forward_and_reverse_edges():
@@ -59,7 +59,7 @@ def test_interstitial_migration_is_a_reversible_candidate():
 
 def test_frenkel_recombination_ends_in_an_absorbing_state_without_reverse():
     initial, config = generate_frenkel_pair(PARENT, "p", 0, 9, A)
-    pair = generate_frenkel_recombination(initial, config, PARENT, A)
+    pair = generate_frenkel_recombination(initial, config, PARENT)
     net = _network()
     (event,) = add_candidate_transition(net, pair.transition)
     target = net.state(event.target_id)
@@ -156,8 +156,8 @@ def test_consecutive_vacancy_hops_share_the_intermediate_state():
     initial, config = generate_vacancy(PARENT, "p", 0)
     second_initial = first.final
     second_config = first.final_config
-    mover = vacancy_neighbors(second_initial, second_config, A)[0]
-    second = generate_vacancy_hop(second_initial, second_config, PARENT, mover, A)
+    mover = vacancy_neighbors(second_initial, second_config)[0]
+    second = generate_vacancy_hop(second_initial, second_config, PARENT, mover)
     net = _network()
     (f1, _) = add_candidate_transition(net, first.transition)
     (f2, _) = add_candidate_transition(net, second.transition)

@@ -3,7 +3,6 @@ parent:
   counts: {Mo: 4, Ta: 4, W: 8}
   repeats: [2, 2, 2]
   seed: 1
-lattice_parameter: 3.16
 defect:
   mechanism: vacancy_hop
   site: 0

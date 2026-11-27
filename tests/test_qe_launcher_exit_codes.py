@@ -76,8 +76,8 @@ def test_converged_pw_with_job_done_succeeds(tmp_path):
 
 @pytest.mark.parametrize("script", PINNED, ids=lambda p: p.name)
 def test_launcher_pins_the_build_toolchain(script):
-    loads = [
-        ln.strip() for ln in script.read_text().splitlines() if ln.strip().startswith("module load")
-    ]
-    assert "cpe/24.11" in loads[0]
-    assert any("PrgEnv-cray" in ln for ln in loads[1:])
+    text = script.read_text()
+    loads = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("module load")]
+    assert "rocm/7.2.0" in text
+    assert "cpe/24.11" not in text and "Core/25.03" not in text and "rocm/6.2.4" not in text
+    assert any("PrgEnv-cray" in ln for ln in loads)

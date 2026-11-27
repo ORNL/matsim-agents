@@ -52,6 +52,9 @@ PROJ="$(dirname "${REPO}")"
 # ---- Configuration ----------------------------------------------------------
 QE_VERSION="${QE_VERSION:-develop}"      # git tag (e.g. "7.4") or "develop"
 QE_REPO="${QE_REPO:-https://gitlab.com/QEF/q-e.git}"
+# Upstream commit the patches in patches/ are generated against; used when QE_VERSION=develop.
+# Set QE_COMMIT=develop to build the branch tip instead (patches may then fail to apply).
+QE_COMMIT="${QE_COMMIT:-2e651f7253920e1ce8737c5cee2cce63919746a6}"
 
 # Where QE source/build/install live. Default: under matsim-agents/external/
 # (gitignored). The repo "owns" the location while the large build artifacts
@@ -91,9 +94,11 @@ echo "=========================================="
 
 # ---- Load modules -----------------------------------------------------------
 module reset
-# Frontier's default cpe moved to 26.03 (cce 21, mpich 9.1); the runtime stack is pinned to 24.11.
-module load cpe/24.11
-module load Core/25.03
+# Default: the site-default cpe (26.03: cce 21, cray-mpich 9.1, ROCm 7 GTL).
+# Set CPE_MODULE=cpe/24.11 CORE_MODULE=Core/25.03 CCE_MODULE=cce/18.0.1 ROCM_MODULE=rocm/6.2.4
+# to reproduce the previous ROCm 6 build.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
 # NOTE: We deliberately stay on the Frontier-default cce/18.0.1 stack.
@@ -103,20 +108,15 @@ module load Core/25.03
 # A per-file workaround later in this script handles cce/18.0.1's ICE on
 # PW/src/gen_at_d{j,y}.f90.
 module load PrgEnv-cray
-module load cce/18.0.1
+if [[ -n "${CCE_MODULE:-}" ]]; then module load "${CCE_MODULE}"; fi
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
-# ROCm version is selectable via env. Default rocm/6.2.4 is the only option
-# that is ABI-compatible with Frontier's cray-mpich/8.1.31 GTL: the GTL library
-# /opt/cray/pe/mpich/8.1.31/gtl/lib/libmpi_gtl_hsa.so is hard-linked against
-# libamdhip64.so.6 (rocm 6.x SONAME). rocm/7.x ships libamdhip64.so.7 and
-# breaks the MPI Fortran link probe at CMake configure. Frontier does not yet
-# ship a cray-mpich built against rocm 7. Override with ROCM_MODULE=rocm/6.4.x
-# only if needed.
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
+# The ROCm module must match the cray-mpich GTL (libmpi_gtl_hsa.so): mpich 9.1.0
+# (cpe/26.03) links libamdhip64.so.7, mpich 8.1.31 (cpe/24.11) links .so.6.
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 module load "${ROCM_MODULE}"             # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
-module load cmake/3.30.5
-module load git/2.47.0
+module load "${CMAKE_MODULE:-cmake/3.31.11}"
+module load "${GIT_MODULE:-git/2.53.0}"
 
 # QE GPU build needs unbuffered HIP and host-callable rocFFT/rocBLAS.
 # Cray's compiler wrapper picks these up when craype-accel-amd-gfx90a is loaded;
@@ -143,6 +143,7 @@ if [[ ! -d "${SRC_DIR}/.git" ]]; then
     mkdir -p "$(dirname "${SRC_DIR}")"
     if [[ "${QE_VERSION}" == "develop" ]]; then
         git clone --branch develop "${QE_REPO}" "${SRC_DIR}"
+        (cd "${SRC_DIR}" && git checkout --quiet "${QE_COMMIT}")
     else
         git clone --branch "qe-${QE_VERSION}" "${QE_REPO}" "${SRC_DIR}"
     fi
@@ -154,6 +155,22 @@ else
         (cd "${SRC_DIR}" && git fetch --unshallow 2>/dev/null || true)
     fi
     echo "  HEAD = $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
+    if [[ "${QE_VERSION}" == "develop" ]] \
+       && [[ "$(cd "${SRC_DIR}" && git rev-parse HEAD)" != "$(cd "${SRC_DIR}" && git rev-parse "${QE_COMMIT}^{commit}" 2>/dev/null)" ]]; then
+        if [[ "${QE_COMMIT}" == "develop" ]]; then
+            echo "  WARNING: HEAD is not the tip of develop; patches may not apply."
+        else
+            echo "ERROR: ${SRC_DIR} is not at the pinned QE_COMMIT ${QE_COMMIT}." >&2
+            echo "  Use a clean SRC_DIR so the clone is checked out at the pin, or check it out yourself." >&2
+            exit 1
+        fi
+    fi
+    # A tree patched by an earlier revision keeps its unconditional allocations (aborts neb.x).
+    if grep -q 'Frontier/cce-18.0.1 workaround' "${SRC_DIR}/Modules/qes_init_module.f90" 2>/dev/null \
+       && ! grep -q 'the default component initializers' "${SRC_DIR}/PW/src/pw_init_qexsd_input.f90" 2>/dev/null; then
+        echo "ERROR: ${SRC_DIR} carries a superseded descriptor patch; use a clean SRC_DIR." >&2
+        exit 1
+    fi
 fi
 
 # ---- Configure with CMake ---------------------------------------------------

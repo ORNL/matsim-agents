@@ -14,7 +14,7 @@
 # allocation: each call issues its own `srun` step.
 #
 # Module pin matches deployments/frontier/setup/build-qe-gpu-frontier.sh
-# (rocm/6.2.4 — the older ROCm is required by QE's GPU-offload patches).
+# (site-default cpe + rocm/7.2.0; QE is built against the same stack).
 # =============================================================================
 
 set -euo pipefail
@@ -40,8 +40,8 @@ GPUS_PER_NODE="${MATSIM_DEVICES_PER_NODE:-$RANKS_PER_NODE}"
 
 # ── Module reset to the QE build's toolchain ───────────────────────────────
 # IMPORTANT: do NOT inherit modules from the parent shell — QE needs
-# PrgEnv-cray + cce + craype-accel-amd-gfx90a + rocm/6.2.4 + cray-fftw,
-# while the parent driver runs under PrgEnv-gnu + rocm/7.2.0.
+# PrgEnv-cray + cce + craype-accel-amd-gfx90a + rocm + cray-fftw,
+# while the parent driver runs under PrgEnv-gnu.
 # `module reset` is mandatory; otherwise Lmod will refuse to swap PrgEnv.
 if command -v module >/dev/null 2>&1; then
   :
@@ -50,12 +50,14 @@ elif [[ -f /usr/share/lmod/lmod/init/bash ]]; then
   source /usr/share/lmod/lmod/init/bash
 fi
 
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 
 module reset
-module load "${CPE_MODULE:-cpe/24.11}"   # pw.x was built under cpe/24.11 (rocm 6.2.4, mpich 8.1.31)
+# Same CPE_MODULE/CORE_MODULE/CCE_MODULE overrides as the build script.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 module load PrgEnv-cray
-module load cce
+module load "${CCE_MODULE:-cce}"
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw

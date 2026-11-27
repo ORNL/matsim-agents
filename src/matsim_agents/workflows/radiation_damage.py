@@ -167,14 +167,12 @@ def build_pair(config: RadiationDamageConfig) -> MigrationPair:
     parent_id = f"alloy-seed{config.seed}"
     try:
         initial, defect = generate_vacancy(parent, parent_id, config.vacancy_site)
-        movers = vacancy_neighbors(initial, defect, config.lattice_parameter)
+        movers = vacancy_neighbors(initial, defect)
         if config.mover_index >= len(movers):
             raise RadiationDamageError(
                 f"mover_index {config.mover_index} but the vacancy has {len(movers)} neighbours"
             )
-        return generate_vacancy_hop(
-            initial, defect, parent, movers[config.mover_index], config.lattice_parameter
-        )
+        return generate_vacancy_hop(initial, defect, parent, movers[config.mover_index])
     except (ValueError, IndexError) as exc:
         raise RadiationDamageError(f"cannot build the hop: {exc}") from exc
 

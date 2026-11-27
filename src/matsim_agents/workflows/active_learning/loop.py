@@ -144,6 +144,7 @@ class IterationState:
     model_comparison: dict[str, Any] | None = None
     model_promoted: bool = False
     promotion_validation: dict[str, Any] | None = None
+    lammps_export: dict[str, Any] | None = None
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
@@ -494,6 +495,9 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
                     if value is not None:
                         info[key] = value
                 info.update(candidate.metadata)
+                # Set last so no candidate field can relabel a fixed-geometry image as a DFT MEP.
+                info["label_kind"] = "dft_single_point"
+                info["label_is_dft_mep"] = False
             for key in ("e3_action_id", "e3_geometry_stage", "incumbent_checkpoint_sha256"):
                 if key in candidate.atoms.info:
                     info[key] = candidate.atoms.info[key]
@@ -822,6 +826,31 @@ def _compare_and_promote(
         state.new_logdir = state.candidate_model_path
         state.model_promoted = True
         _apply_model_override(cfg, state.candidate_model_path)
+        _export_for_lammps(cfg, state)
+
+
+def _export_for_lammps(cfg: ALConfig, state: IterationState) -> None:
+    """Opt-in: validate the promoted model under the LAMMPS ML-IAP bridge and record the result."""
+    species = list(cfg.trainer.lammps_export_species)
+    if not species or state.candidate_model_path is None:
+        return
+    try:
+        from matsim_agents.backends.external.lammps.mliap.export import (
+            export_checkpoint_for_lammps,
+        )
+
+        state.lammps_export = export_checkpoint_for_lammps(
+            cfg.mlip,
+            state.candidate_model_path,
+            Path(state.candidate_model_path)
+            if Path(state.candidate_model_path).is_dir()
+            else Path(state.candidate_model_path).parent,
+            species=species,
+            seed=cfg.random_seed,
+        )
+    except Exception as exc:  # noqa: BLE001 - recorded, never blocks the promotion
+        log.exception("LAMMPS export validation failed for %s", state.candidate_model_path)
+        state.lammps_export = {"approved": False, "error": str(exc)}
 
 
 class _SurrogateModels:
@@ -1115,6 +1144,7 @@ def _apply_neb_escalation(
     state: IterationState,
     completed_dft_neb: int,
     env: Mapping[str, str] | None = None,
+    timeout_sec: float | None = None,
 ) -> tuple[dict[str, Any], bool]:
     result = outcome.result
     uncertainty = result.pathway_uncertainty_eV
@@ -1134,6 +1164,19 @@ def _apply_neb_escalation(
     run_dft = policy.policy == "always_dft_neb" or (
         policy.policy == "uncertainty_gated" and not acceptable
     )
+    if acceptable:
+        reason = None
+    elif result.state != "converged_unqualified":
+        reason = f"mlip_state_{result.state}"
+    elif uncertainty is None:
+        reason = "uncertainty_unavailable"  # unavailable is never read as low
+    else:
+        reason = "uncertainty_above_limit"
+    record["escalation"] = {
+        "policy": policy.policy,
+        "mlip_model_id": result.provenance.get("model_id"),
+        "reason": "always_dft_neb" if policy.policy == "always_dft_neb" else reason,
+    }
     if not run_dft:
         record["decision"] = "accepted_mlip" if acceptable else "not_accepted"
         return record, False
@@ -1181,6 +1224,7 @@ def _apply_neb_escalation(
         pathway_directory / f"{transition.transition_id}-dft-neb",
         dispatch=True,
         allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
+        timeout_sec=timeout_sec,
         env=env,
         images=start_images,
     )

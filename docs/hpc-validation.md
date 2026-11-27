@@ -11,7 +11,7 @@ not replace this common gate.
 
 | Site | Scheduler | Accelerator | Python/ML stack | DFT stack | Status |
 |---|---|---|---|---|---|
-| OLCF Frontier | Slurm | MI250X (`gfx90a`, 8 GCD/node) | ROCm 7.2 recipe | QE ROCm 6.2.4 / VASP ROCm 6.2 | recipe present; on-system revalidation required |
+| OLCF Frontier | Slurm | MI250X (`gfx90a`, 8 GCD/node) | ROCm 7.2 recipe | QE ROCm 7.2.0 / VASP ROCm 6.2 | recipe present; on-system revalidation required |
 | ALCF Aurora | PBS Pro | 6 PVC GPUs / 12 tiles | `frameworks` + Intel PyTorch recipe | oneAPI QE/VASP recipe | recipe present; on-system revalidation required |
 | NERSC Perlmutter | Slurm | 4 A100 (`sm_80`) | CUDA 12.9 recipe | NVHPC 25.5 QE/VASP recipe | recipe present; on-system revalidation required |
 

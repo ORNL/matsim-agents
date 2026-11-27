@@ -12,13 +12,13 @@
 #
 # Architecture:
 #   * The HydraGNN ASE relax phase needs rocm/7.2.0 + the rocm72 venv.
-#   * The pw.x phase needs rocm/6.2.4 + cray-mpich (see build-qe-gpu-frontier.sh
-#     for why ROCm is *forced* to 6.2.4 for QE).
+#   * The pw.x phase needs PrgEnv-cray + cray-mpich with the same rocm/7.2.0 the
+#     QE build used (see build-qe-gpu-frontier.sh).
 #   * These two ROCm pins cannot coexist in one shell.
 #
 # We therefore launch pytest with rocm/7.2.0 loaded in the *parent* shell, and
 # point MATSIM_QE_LAUNCHER at the GPU pw.x launcher script. That launcher
-# does its own `module reset && module load rocm/6.2.4 ...` inside its child
+# does its own `module reset && module load PrgEnv-cray ...` inside its child
 # bash, so the QE subprocess sees a clean environment regardless of what the
 # parent loaded.
 #

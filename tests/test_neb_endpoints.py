@@ -28,14 +28,14 @@ def _vacancy(site=0):
 
 def test_vacancy_neighbors_are_the_eight_bcc_neighbors():
     initial, config = _vacancy()
-    assert len(vacancy_neighbors(initial, config, A)) == 8
+    assert len(vacancy_neighbors(initial, config)) == 8
 
 
 def test_vacancy_hop_moves_the_neighbor_into_the_vacancy_and_keeps_identities():
     initial, config = _vacancy()
     before = initial.positions.copy()
-    mover = vacancy_neighbors(initial, config, A)[0]
-    pair = generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    pair = generate_vacancy_hop(initial, config, PARENT, mover)
     assert np.array_equal(initial.positions, before)  # initial is not modified
     assert np.array_equal(pair.final.get_array("atom_id"), initial.get_array("atom_id"))
     assert pair.final.get_chemical_symbols() == initial.get_chemical_symbols()
@@ -62,8 +62,8 @@ def test_occupant_exchange_flag_follows_species():
     initial, config = _vacancy()
     vacancy_species = PARENT[0].symbol
     flags = {}
-    for mover in vacancy_neighbors(initial, config, A):
-        pair = generate_vacancy_hop(initial, config, PARENT, mover, A)
+    for mover in vacancy_neighbors(initial, config):
+        pair = generate_vacancy_hop(initial, config, PARENT, mover)
         species = pair.transition.mechanism.parameters["mover_species"]
         flags[mover] = (species, pair.transition.mechanism.parameters["occupant_exchange"])
     assert all(flag == (species != vacancy_species) for species, flag in flags.values())
@@ -72,35 +72,35 @@ def test_occupant_exchange_flag_follows_species():
 
 def test_vacancy_hops_chain_and_are_deterministic():
     initial, config = _vacancy()
-    mover = vacancy_neighbors(initial, config, A)[0]
-    first = generate_vacancy_hop(initial, config, PARENT, mover, A)
-    again = generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    first = generate_vacancy_hop(initial, config, PARENT, mover)
+    again = generate_vacancy_hop(initial, config, PARENT, mover)
     assert first.transition == again.transition
-    nxt = vacancy_neighbors(first.final, first.final_config, A)
+    nxt = vacancy_neighbors(first.final, first.final_config)
     assert len(nxt) == 8
-    second = generate_vacancy_hop(first.final, first.final_config, PARENT, nxt[-1], A)
+    second = generate_vacancy_hop(first.final, first.final_config, PARENT, nxt[-1])
     assert second.transition.initial.structure_id == first.final_config.config_id
 
 
 def test_vacancy_hop_rejects_bad_requests():
     initial, config = _vacancy()
-    neighbors = set(vacancy_neighbors(initial, config, A))
+    neighbors = set(vacancy_neighbors(initial, config))
     far = next(i for i in initial.get_array("atom_id") if int(i) not in neighbors)
     with pytest.raises(ValueError, match="not a nearest neighbour"):
-        generate_vacancy_hop(initial, config, PARENT, int(far), A)
+        generate_vacancy_hop(initial, config, PARENT, int(far))
     with pytest.raises(ValueError, match="exactly once"):
-        generate_vacancy_hop(initial, config, PARENT, 0, A)  # atom 0 was removed
-    with pytest.raises(ValueError, match="lattice_parameter"):
+        generate_vacancy_hop(initial, config, PARENT, 0)  # atom 0 was removed
+    with pytest.raises(ValueError, match="hop_distance"):
         generate_vacancy_hop(initial, config, PARENT, next(iter(neighbors)), float("nan"))
     no_ids = initial.copy()
     del no_ids.arrays["atom_id"]
     with pytest.raises(ValueError, match="atom_id"):
-        generate_vacancy_hop(no_ids, config, PARENT, next(iter(neighbors)), A)
+        generate_vacancy_hop(no_ids, config, PARENT, next(iter(neighbors)))
     interstitial, i_config = generate_dumbbell_interstitial(PARENT, "p", 0, "W", "110", A)
     with pytest.raises(ValueError, match="needs a vacancy"):
-        generate_vacancy_hop(interstitial, i_config, PARENT, 1, A)
+        generate_vacancy_hop(interstitial, i_config, PARENT, 1)
     with pytest.raises(ValueError, match="parent has"):
-        generate_vacancy_hop(initial, config, PARENT[:-2], next(iter(neighbors)), A)
+        generate_vacancy_hop(initial, config, PARENT[:-2], next(iter(neighbors)))
 
 
 def test_interstitial_migration_moves_only_the_named_atom():
@@ -145,7 +145,7 @@ def _frenkel():
 
 def test_direct_frenkel_recombination_restores_the_lattice_ordering():
     initial, config = _frenkel()
-    pair = generate_frenkel_recombination(initial, config, PARENT, A)
+    pair = generate_frenkel_recombination(initial, config, PARENT)
     assert pair.final_config is None
     params = pair.transition.mechanism.parameters
     assert params["recombination"] == "direct" and params["ordering"] == "restored"
@@ -159,10 +159,8 @@ def test_exchange_recombination_records_the_ordering_it_computes():
     initial, config = _frenkel()
     mover_species = PARENT[0].symbol
     outcomes = set()
-    for partner in vacancy_neighbors(
-        generate_vacancy(PARENT, "p", 0)[0], generate_vacancy(PARENT, "p", 0)[1], A
-    ):
-        pair = generate_frenkel_recombination(initial, config, PARENT, A, exchange_with=partner)
+    for partner in vacancy_neighbors(*generate_vacancy(PARENT, "p", 0)):
+        pair = generate_frenkel_recombination(initial, config, PARENT, exchange_with=partner)
         params = pair.transition.mechanism.parameters
         different = PARENT[partner].symbol != mover_species
         assert params["recombination"] == "exchange"
@@ -176,14 +174,57 @@ def test_exchange_recombination_records_the_ordering_it_computes():
 def test_frenkel_recombination_rejects_bad_requests():
     initial, config = _frenkel()
     vac, vac_config = _vacancy()
-    near = set(vacancy_neighbors(vac, vac_config, A)) | {0}
+    near = set(vacancy_neighbors(vac, vac_config)) | {0}
     far = next(i for i in range(len(PARENT)) if i not in near)
     with pytest.raises(ValueError, match="not a nearest neighbour"):
-        generate_frenkel_recombination(initial, config, PARENT, A, exchange_with=far)
+        generate_frenkel_recombination(initial, config, PARENT, exchange_with=far)
     with pytest.raises(ValueError, match="not the interstitial"):
-        generate_frenkel_recombination(initial, config, PARENT, A, exchange_with=0)
+        generate_frenkel_recombination(initial, config, PARENT, exchange_with=0)
     with pytest.raises(ValueError, match="exactly once"):
-        generate_frenkel_recombination(initial, config, PARENT, A, exchange_with=99)
+        generate_frenkel_recombination(initial, config, PARENT, exchange_with=99)
     vacancy, v_config = _vacancy()
     with pytest.raises(ValueError, match="needs a Frenkel pair"):
-        generate_frenkel_recombination(vacancy, v_config, PARENT, A)
+        generate_frenkel_recombination(vacancy, v_config, PARENT)
+
+
+@pytest.mark.parametrize(
+    ("structure", "repeats", "a", "neighbors", "nn"),
+    [
+        ("sc", (3, 3, 3), 3.0, 6, 3.0),
+        ("fcc", (3, 3, 3), 4.05, 12, 4.05 / np.sqrt(2)),
+        ("diamond", (2, 2, 2), 5.43, 4, 5.43 * np.sqrt(3) / 4),
+        ("bcc", (3, 3, 3), 3.16, 8, 3.16 * np.sqrt(3) / 2),
+        ("hcp", (3, 3, 3), 3.2, 12, 3.2),
+    ],
+)
+def test_vacancy_hop_derives_the_first_shell_for_any_structure(
+    structure, repeats, a, neighbors, nn
+):
+    parent = generate_alloy(
+        AlloySpec(
+            crystal_structure=structure,
+            counts={
+                "Al": int(np.prod(repeats))
+                * {"sc": 1, "fcc": 4, "diamond": 8, "bcc": 2, "hcp": 2}[structure]
+            },
+            repeats=repeats,
+            lattice_parameter=a,
+            seed=0,
+        )
+    )
+    initial, config = generate_vacancy(parent, "p", 0)
+    movers = vacancy_neighbors(initial, config)
+    assert len(movers) == neighbors
+    pair = generate_vacancy_hop(initial, config, parent, movers[0])
+    params = pair.transition.mechanism.parameters
+    assert params["hop_distance"] == pytest.approx(nn, rel=1e-6)
+    assert params["displacement_length"] == pytest.approx(nn, rel=1e-6)
+
+
+def test_explicit_hop_distance_selects_a_farther_shell():
+    initial, config = _vacancy()
+    # BCC second shell: 6 neighbours at a, which fold onto 3 distinct atoms in the 2x2x2 cell.
+    movers = vacancy_neighbors(initial, config, A)
+    assert len(movers) == 3 and not set(movers) & set(vacancy_neighbors(initial, config))
+    with pytest.raises(ValueError, match="hop_distance"):
+        vacancy_neighbors(initial, config, -1.0)

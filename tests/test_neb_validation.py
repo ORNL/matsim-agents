@@ -18,8 +18,8 @@ PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2,
 
 def _setup(n_images=6):
     initial, config = generate_vacancy(PARENT, "p", 0)
-    mover = vacancy_neighbors(initial, config, A)[0]
-    pair = generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    pair = generate_vacancy_hop(initial, config, PARENT, mover)
     images = generate_linear_images(pair.initial, pair.final, n_images).images
     return pair, list(images)
 

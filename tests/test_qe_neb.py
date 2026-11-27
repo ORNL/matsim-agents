@@ -152,6 +152,8 @@ def test_execution_settings_validated():
     _bad("prefix", prefix="bad name")
     _bad("prefix", prefix="../x")
     _bad("nimage", nimage=0)
+    _bad("interior images", nimage=6)  # 7-image path has 5 interior images
+    assert _cfg(nimage=5).nimage == 5
     _bad("neb_executable", neb_executable="  ")
     _bad("launcher", launcher=("srun", ""))
     _bad("set by the config", extra_args=("-inp", "x.in"))

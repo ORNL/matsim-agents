@@ -54,7 +54,7 @@ def test_argv_includes_launcher_parallel_flags_and_extras(tmp_path):
     cfg = _cfg(
         tmp_path,
         launcher=("srun", "-n", "8"),
-        nimage=4,
+        nimage=3,
         npool=2,
         extra_args=("-ndiag", "1"),
     )
@@ -65,7 +65,7 @@ def test_argv_includes_launcher_parallel_flags_and_extras(tmp_path):
         "8",
         "neb.x",
         "-nimage",
-        "4",
+        "3",
         "-npool",
         "2",
         "-ndiag",

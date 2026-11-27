@@ -97,4 +97,4 @@ def test_resume_without_a_run_stage_is_refused(tmp_path):
 
 def test_example_config_is_valid_yaml_with_known_keys():
     data = yaml.safe_load(EXAMPLE.read_text())
-    assert set(data) <= {"parent", "defect", "lattice_parameter", "qe", "images", "method_id"}
+    assert set(data) <= {"parent", "defect", "hop_distance", "qe", "images", "method_id"}

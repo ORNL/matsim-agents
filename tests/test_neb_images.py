@@ -15,8 +15,8 @@ PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2,
 
 def _hop():
     initial, config = generate_vacancy(PARENT, "p", 0)
-    mover = vacancy_neighbors(initial, config, A)[0]
-    return generate_vacancy_hop(initial, config, PARENT, mover, A)
+    mover = vacancy_neighbors(initial, config)[0]
+    return generate_vacancy_hop(initial, config, PARENT, mover)
 
 
 def test_images_are_deterministic_ordered_and_endpoints_are_fixed():

@@ -411,7 +411,7 @@ def _sampling_execute(path: Path, run: ScientificRunDirectory, options: RunOptio
 
 # --- NEB --------------------------------------------------------------------------------
 
-_NEB_KEYS = {"parent", "defect", "lattice_parameter", "qe", "images", "method_id"}
+_NEB_KEYS = {"parent", "defect", "hop_distance", "qe", "images", "method_id"}
 
 
 def _neb_inputs(path: Path):
@@ -424,16 +424,16 @@ def _neb_inputs(path: Path):
     if unknown := set(data) - _NEB_KEYS:
         raise ValueError(f"{path}: unknown keys {sorted(unknown)}")
     parent = generate_alloy(AlloySpec(**data["parent"]))
-    lattice = float(data["lattice_parameter"])
+    hop = None if data.get("hop_distance") is None else float(data["hop_distance"])
     defect = data["defect"]
     if defect["mechanism"] != "vacancy_hop":
         raise ValueError(f"unsupported mechanism {defect['mechanism']!r}; build the pair in Python")
     initial, defect_config = generate_vacancy(parent, "parent", int(defect["site"]))
-    neighbors = vacancy_neighbors(initial, defect_config, lattice)
+    neighbors = vacancy_neighbors(initial, defect_config, hop)
     if not neighbors:
         raise ValueError("the vacancy has no nearest neighbours")
     mover = int(defect.get("mover", neighbors[0]))
-    pair = generate_vacancy_hop(initial, defect_config, parent, mover, lattice)
+    pair = generate_vacancy_hop(initial, defect_config, parent, mover, hop)
     return data, pair, QENebConfig(**data["qe"])
 
 

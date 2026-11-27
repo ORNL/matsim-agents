@@ -56,7 +56,8 @@ running an installer or modifying a working environment.
 The environment and its build artifacts are owned by the matsim-agents
 checkout; the HydraGNN checkout is source input only. “Self-contained” applies
 to Python packages. Facility modules and native GPU,
-MPI, Quantum ESPRESSO, and VASP runtimes remain external system dependencies.
+MPI, Quantum ESPRESSO, LAMMPS, and VASP runtimes remain external system dependencies
+(see [`docs/external/lammps.md`](../docs/external/lammps.md)).
 MACE cannot be installed in `.venv`: upstream `mace-torch==0.3.16` declares
 `e3nn==0.4.4`, while HydraGNN declares `e3nn==0.5.1`. The optional
 `.venv-mace` is also owned by matsim-agents and inherits the expensive

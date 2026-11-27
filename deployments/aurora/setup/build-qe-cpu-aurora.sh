@@ -43,6 +43,12 @@ fi
 PROJ="$(dirname "${REPO}")"
 
 QE_VERSION="${QE_VERSION:-develop}"
+# develop is pinned to the Frontier base commit; set QE_COMMIT='' to follow the branch tip.
+if [[ "${QE_VERSION}" == "develop" ]]; then
+    QE_COMMIT="${QE_COMMIT-2e651f7253920e1ce8737c5cee2cce63919746a6}"
+else
+    QE_COMMIT="${QE_COMMIT:-}"
+fi
 QE_REPO="${QE_REPO:-https://gitlab.com/QEF/q-e.git}"
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 SRC_DIR="${SRC_DIR:-${QE_PREFIX}/src}"
@@ -133,6 +139,12 @@ if [[ ! -d "${SRC_DIR}/.git" ]]; then
 else
     log "QE source already present at ${SRC_DIR}"
     log "HEAD: $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
+fi
+if [[ -n "${QE_COMMIT}" ]]; then
+    git -C "${SRC_DIR}" checkout --quiet --detach "${QE_COMMIT}"
+    [[ "$(git -C "${SRC_DIR}" rev-parse HEAD)" == "$(git -C "${SRC_DIR}" rev-parse "${QE_COMMIT}^{commit}")" ]] \
+        || { echo "ERROR: QE source is not at ${QE_COMMIT}" >&2; exit 1; }
+    log "pinned QE commit ${QE_COMMIT}"
 fi
 
 if [[ "${CLEAN_BUILD}" == "1" ]]; then

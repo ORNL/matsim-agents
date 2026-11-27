@@ -130,14 +130,76 @@ def test_missing_uncertainty_escalates_to_existing_qe_neb_workflow(tmp_path, mon
         iteration_dir / "neb",
         IterationState(iteration=0),
         completed_dft_neb=0,
+        timeout_sec=123.0,
     )
 
     assert dispatched
     assert record["decision"] == "dft_neb_complete"
     assert record["dft_result"]["method_id"] == "qe-neb"
     assert calls[0][3]["dispatch"] is True
+    assert calls[0][3]["timeout_sec"] == 123.0
     assert calls[0][0].transition.transition_id == "transition-1"
     assert (iteration_dir / "state.json").is_file()
+
+
+def test_unavailable_uncertainty_is_never_treated_as_low_even_when_the_limit_is_huge(tmp_path):
+    policy = NebEscalationConfig(policy="mlip_only", max_pathway_uncertainty_eV=1e9)
+    record, dispatched = _apply_neb_escalation(
+        policy,
+        _pathway(None),
+        tmp_path,
+        tmp_path / "neb",
+        IterationState(iteration=0),
+        completed_dft_neb=0,
+    )
+
+    assert record["decision"] == "not_accepted"
+    assert record["escalation"]["reason"] == "uncertainty_unavailable"
+    assert not dispatched
+
+
+def test_neb_image_labels_are_marked_single_points_not_a_dft_mep(tmp_path):
+    from matsim_agents.workflows.active_learning.candidates import Candidate
+    from matsim_agents.workflows.active_learning.loop import _record_provenance
+
+    image = Atoms("Cu2", positions=[[1, 1, 1], [3, 1, 1]], cell=[8, 8, 8], pbc=True)
+    candidate = Candidate(
+        candidate_id="img-1",
+        atoms=image.copy(),
+        sampling_method="neb",
+        model_id="mlip-a",
+        provenance={"transition_id": "t1", "label_is_dft_mep": True},
+    )
+    frame = SimpleNamespace(atoms=image.copy(), source_work_dir=str(tmp_path / "img-1"))
+    cfg = SimpleNamespace(loop=SimpleNamespace(out_dir=tmp_path), md=None)
+
+    _record_provenance(cfg, [frame], [candidate], 0)
+
+    assert frame.atoms.info["label_kind"] == "dft_single_point"
+    assert frame.atoms.info["label_is_dft_mep"] is False
+    assert frame.atoms.info["transition_id"] == "t1"
+
+
+def test_escalation_record_names_the_policy_reason_and_mlip(tmp_path):
+    outcome = _pathway(0.5)
+    outcome.result = outcome.result.model_copy(
+        update={"provenance": {**outcome.result.provenance, "model_id": "mlip-a"}}
+    )
+    policy = NebEscalationConfig(policy="mlip_only", max_pathway_uncertainty_eV=0.2)
+    record, _ = _apply_neb_escalation(
+        policy,
+        outcome,
+        tmp_path,
+        tmp_path / "neb",
+        IterationState(iteration=0),
+        completed_dft_neb=0,
+    )
+
+    assert record["escalation"] == {
+        "policy": "mlip_only",
+        "mlip_model_id": "mlip-a",
+        "reason": "uncertainty_above_limit",
+    }
 
 
 def test_required_escalation_fails_explicitly_when_budget_is_exhausted(tmp_path):

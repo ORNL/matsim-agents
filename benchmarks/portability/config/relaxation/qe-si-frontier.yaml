@@ -4,7 +4,7 @@
 #
 # The launcher is deployments/frontier/launchers/run-pw-gpu-frontier.sh
 # rather than a bare pw.x path: it performs its own `module reset` to the
-# PrgEnv-cray/rocm-6.2.4 QE toolchain, keeping it isolated from the
+# PrgEnv-cray QE toolchain, keeping it isolated from the
 # rocm-7.2.0 stack the driver process (this job) loads for torch. See
 # docs/quantum-espresso-frontier.md ("Module-stack isolation").
 mode: dft

@@ -1,0 +1,9 @@
+{
+  "arc_dpa": {
+    "element": "Fe",
+    "ed_eV": 40.0,
+    "b": -0.568,
+    "c": 0.286,
+    "source": "Nordlund et al., Nat. Commun. 9, 1084 (2018), Table 1 (PMC5852139)"
+  }
+}

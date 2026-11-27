@@ -277,6 +277,7 @@ matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC k
 matsim-agents benchmark agent-eval CONFIG.yaml [--case ID]  # compare LLM agent arms on graded claims
 matsim-agents neb prepare|validate|inspect|resume ...  # QE NEB for defect migration; dry run unless --dispatch
 matsim-agents external spectra-pka check|prepare|run|status|import ...  # optional interface to externally installed SPECTRA-PKA; dry run by default
+matsim-agents external lammps check  # report the LAMMPS executable, version and packages (docs/external/lammps.md)
 matsim-agents capabilities check [--kind K] [--require NAME]  # which backends can run here
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board

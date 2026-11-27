@@ -22,7 +22,8 @@
 # Environment overrides (defaults shown):
 #   QE_PREFIX        = <repo>/external/quantum-espresso
 #   PW_BIN           = ${QE_PREFIX}/install-gpu/bin/pw.x
-#   ROCM_MODULE      = rocm/6.2.4
+#   ROCM_MODULE      = rocm/7.2.0
+#   CPE_MODULE, CORE_MODULE, CCE_MODULE: the stack the build used (unset = site default)
 #   NRANKS           = 8         (one MPI rank per GCD)
 #   OMP_NUM_THREADS  = 7         (Frontier core-per-GCD count)
 # =============================================================================
@@ -35,7 +36,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
 NRANKS="${NRANKS:-8}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-7}"
 
@@ -55,8 +56,7 @@ INPUT="$1"; shift
 # Clearing it here lets the module loads below repopulate it from scratch.
 unset LD_LIBRARY_PATH
 
-# Same module stack as the build (see build-qe-gpu-frontier.sh for rationale
-# on the rocm/6.2.4 pin).
+# Same module stack as the build (site-default cpe + rocm/7.2.0).
 #
 # module commands here can spuriously return non-zero: Cray's Lmod init
 # (sourced via BASH_ENV in every subshell) tries to auto-deactivate conda
@@ -65,16 +65,15 @@ unset LD_LIBRARY_PATH
 # aborts this script under set -e before pw.x ever runs.
 set +e
 module reset
-module load "${CPE_MODULE:-cpe/24.11}"   # pw.x was built under cpe/24.11 (rocm 6.2.4, mpich 8.1.31)
+# Same CPE_MODULE/CORE_MODULE/CCE_MODULE overrides as the build script.
+if [[ -n "${CPE_MODULE:-}" ]]; then module load "${CPE_MODULE}"; fi
+if [[ -n "${CORE_MODULE:-}" ]]; then module load "${CORE_MODULE}"; fi
 module load PrgEnv-cray
-module load cce
+module load "${CCE_MODULE:-cce}"
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw
 set -e
-
-# The default /opt/cray/pe/lib64 GTL now needs ROCm 7; use the one matching this mpich.
-[[ -n "${CRAY_MPICH_ROOTDIR:-}" ]] && export LD_LIBRARY_PATH="${CRAY_MPICH_ROOTDIR}/gtl/lib:${LD_LIBRARY_PATH:-}"
 
 export MPICH_GPU_SUPPORT_ENABLED=1
 export OMP_TARGET_OFFLOAD="${OMP_TARGET_OFFLOAD:-DEFAULT}"

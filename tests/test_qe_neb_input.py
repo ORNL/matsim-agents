@@ -153,7 +153,7 @@ def test_engine_namelists_and_cards():
     assert re.search(r"^\s*W\s+183\.8400\s+W\.upf$", text, re.MULTILINE)
     assert re.search(r"^\s*2 2 2\s+0 0 0$", text, re.MULTILINE)
     assert "K_POINTS automatic" in text and "CELL_PARAMETERS angstrom" in text
-    order = [text.index(k) for k in ("END_POSITIONS", "ATOMIC_SPECIES", "END_ENGINE_INPUT")]
+    order = [text.index(k) for k in ("ATOMIC_SPECIES", "BEGIN_POSITIONS", "END_ENGINE_INPUT")]
     assert order == sorted(order)
 
 
@@ -279,6 +279,9 @@ BEGIN_ENGINE_INPUT
 &IONS
   ion_dynamics = 'bfgs'
 /
+ATOMIC_SPECIES
+  Mo  95.9500  Mo.upf
+  W  183.8400  W.upf
 BEGIN_POSITIONS
 FIRST_IMAGE
 ATOMIC_POSITIONS angstrom
@@ -301,9 +304,6 @@ ATOMIC_POSITIONS angstrom
   W        1.8000000000       1.5000000000       1.5000000000
   W        3.0000000000       3.0000000000       3.0000000000
 END_POSITIONS
-ATOMIC_SPECIES
-  Mo  95.9500  Mo.upf
-  W  183.8400  W.upf
 CELL_PARAMETERS angstrom
         6.0000000000       0.0000000000       0.0000000000
         0.0000000000       6.0000000000       0.0000000000

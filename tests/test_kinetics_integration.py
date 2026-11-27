@@ -46,7 +46,7 @@ def test_reversible_hop_reaches_the_boltzmann_occupancy():
 
 def test_recombination_first_passage_follows_the_synthetic_barrier():
     initial, config = generate_frenkel_pair(PARENT, "p", 0, 9, A)
-    pair = generate_frenkel_recombination(initial, config, PARENT, A)
+    pair = generate_frenkel_recombination(initial, config, PARENT)
     net = _network()
     (event,) = add_candidate_transition(net, pair.transition)
     result = _result(
