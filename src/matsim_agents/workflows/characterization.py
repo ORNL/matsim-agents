@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.backends.dft.vasp_relax import VASPSettings
-from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_paths
+from matsim_agents.backends.mlip.config import MLIPConfig, resolve_mlip_block
 from matsim_agents.core.composition import parse_composition
 from matsim_agents.core.contracts import (
     DFT_EVIDENCE,
@@ -58,6 +58,7 @@ from matsim_agents.core.contracts import (
 )
 from matsim_agents.core.hashing import sha256_file
 from matsim_agents.core.relaxation import RelaxationResult
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.execution.ledger import (
     CostRecord,
     DecisionRecord,
@@ -1580,12 +1581,8 @@ def _assess_stability(contract, relaxed, observables, base) -> CharacterizationR
 
 def load_contract(path: str | Path) -> CharacterizationContract:
     """Read a YAML or JSON contract; relative paths in it are relative to the file."""
-    import yaml
-
     path = Path(path).resolve()
-    data = yaml.safe_load(path.read_text())
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} is not a characterization contract mapping")
+    data = load_yaml_mapping(path)
 
     def resolve(value: Any) -> Any:
         return str(path.parent / value) if isinstance(value, str) else value
@@ -1595,9 +1592,7 @@ def load_contract(path: str | Path) -> CharacterizationContract:
     for key in ("reference_energies", "output_root"):
         if key in data:
             data[key] = resolve(data[key])
-    mlip = (data.get("methods") or {}).get("mlip")
-    if isinstance(mlip, dict):
-        resolve_mlip_paths(mlip, path.parent)
+    resolve_mlip_block(data.get("methods") or {}, path.parent)
     dft = (data.get("methods") or {}).get("dft")
     if isinstance(dft, dict):
         for key in ("pseudo_dir", "potcar_dir"):

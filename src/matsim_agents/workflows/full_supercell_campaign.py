@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-import yaml
 from ase import Atoms
 from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -22,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.core.application import ATOMS_PER_CONVENTIONAL_CELL
 from matsim_agents.core.hashing import sha256_file as _sha256
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.science.defects.bcc import (
     generate_bcc_interstitial,
     generate_divacancy,
@@ -161,7 +161,7 @@ class FullSupercellCampaign(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str | os.PathLike) -> FullSupercellCampaign:
-        return cls.model_validate(yaml.safe_load(Path(path).read_text()))
+        return cls.model_validate(load_yaml_mapping(path))
 
 
 # --------------------------------------------------------------------------------------------

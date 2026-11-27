@@ -690,6 +690,12 @@ def resolve_mlip_paths(block: dict[str, Any], base: Path) -> dict[str, Any]:
     return backend.resolve_paths(block, base) if backend is not None else block
 
 
+def resolve_mlip_block(container: dict[str, Any], base: Path) -> None:
+    """Resolve file paths in ``container["mlip"]`` against ``base``, if the block is present."""
+    if isinstance(container.get("mlip"), dict):
+        resolve_mlip_paths(container["mlip"], base)
+
+
 def load_mlip_config(path: str | Path) -> MLIPBackendConfig:
     """Read the ``mlip`` block of a YAML file.
 
@@ -698,15 +704,11 @@ def load_mlip_config(path: str | Path) -> MLIPBackendConfig:
     """
     import yaml
 
+    from matsim_agents.core.yamlio import load_yaml_mapping
     from matsim_agents.execution.variables import expand_variables, variable_defaults
 
     path = Path(path).expanduser().resolve()
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        raise ValueError(f"{path}: invalid YAML: {error}") from error
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected a mapping with an mlip block")
+    data = load_yaml_mapping(path)
     block = data.get("mlip")
     if not isinstance(block, dict) or "backend" not in block:
         raise ValueError(f"{path}: mlip block must define backend: {' | '.join(MLIP_BACKENDS)}")

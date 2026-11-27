@@ -269,7 +269,7 @@ def test_malformed_yaml_is_a_config_error_not_a_traceback(tmp_path, command):
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 2, result.output
     assert not isinstance(result.exception, yaml.YAMLError)
-    assert "malformed YAML" in result.output
+    assert "invalid YAML" in result.output
 
 
 EXAMPLES = sorted((REPO / "examples").rglob("*.y*ml"))

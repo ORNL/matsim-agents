@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from matsim_agents.core.hashing import sha256_file
+from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.execution.capabilities import check, get_capability
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.execution.variables import unset_variables
@@ -73,13 +74,7 @@ class Handler:
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        raise ValueError(f"{path}: malformed YAML: {error}") from error
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path}: expected a mapping at the top level")
-    return raw
+    return load_yaml_mapping(path)
 
 
 def load_workflow_config(path: Path) -> dict[str, Any]:
@@ -122,12 +117,11 @@ _WORKFLOW_STATE: dict[str, RunState] = {
 
 
 def _relax_config(path: Path):
-    from matsim_agents.backends.mlip.config import resolve_mlip_paths
+    from matsim_agents.backends.mlip.config import resolve_mlip_block
     from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
     raw = load_yaml(path)
-    if isinstance(raw.get("mlip"), dict):
-        resolve_mlip_paths(raw["mlip"], path.resolve().parent)
+    resolve_mlip_block(raw, path.resolve().parent)
     return ScientificRelaxationConfig.model_validate(raw)
 
 
