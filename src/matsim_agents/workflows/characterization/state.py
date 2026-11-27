@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.workflows.characterization.contract import CharacterizationContract
@@ -75,9 +76,7 @@ class _Run:
         self._save()
 
     def _save(self) -> None:
-        staged = self.state_path.with_name(f".{self.state_path.name}.tmp")
-        staged.write_text(json.dumps(self.state, indent=2) + "\n")
-        staged.replace(self.state_path)
+        atomic_write_text(self.state_path, json.dumps(self.state, indent=2) + "\n")
 
     def attempts(self, fidelity: str) -> int:
         return int(self.state["attempts"][fidelity])

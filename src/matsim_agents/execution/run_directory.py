@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from matsim_agents.core.contracts import ProvenanceRecord
-from matsim_agents.core.fileio import atomic_write_text
+from matsim_agents.core.fileio import append_line, atomic_write_text
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 _STANDARD_DIRS = ("structures", "calculations", "datasets", "models")
@@ -102,10 +102,7 @@ class ScientificRunDirectory:
             "event": event,
             "payload": _jsonable(dict(payload)),
         }
-        destination = self.path / "events.jsonl"
-        with destination.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(record, sort_keys=True) + "\n")
-        return destination
+        return append_line(self.path / "events.jsonl", json.dumps(record, sort_keys=True))
 
 
 __all__ = ["ScientificRunDirectory", "make_run_id", "safe_component"]
