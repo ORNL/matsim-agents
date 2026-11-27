@@ -59,6 +59,52 @@ def build_calculator(kind: str, model: str, zbl: bool):
     raise SystemExit(f"unsupported --calc {kind}")
 
 
+def force_consistency(atoms, calc, *, steps: int, timestep_fs: float, n_atoms: int, step_A: float):
+    """Central-difference -dE/dx against the returned forces at the step of largest energy jump.
+
+    Run on the ASE velocity-Verlet trajectory, so it tests the calculator, not the bridge.
+    """
+    from ase import units
+    from ase.md.verlet import VelocityVerlet
+
+    traj = atoms.copy()
+    traj.calc = calc
+    frames, energies = [traj.copy()], [traj.get_total_energy()]
+    dyn = VelocityVerlet(traj, timestep=timestep_fs * units.fs)
+    for _ in range(steps):
+        dyn.run(1)
+        frames.append(traj.copy())
+        energies.append(traj.get_total_energy())
+    jumps = np.abs(np.diff(energies))
+    worst = int(np.argmax(jumps))
+    probe = frames[worst]
+    probe.calc = calc
+    forces = probe.get_forces()
+    order = np.argsort(probe.get_distances(0, range(len(probe)), mic=True))
+    checked = [int(i) for i in order[:n_atoms]]
+    errors = []
+    for i in checked:
+        for k in range(3):
+            e = []
+            for sign in (1.0, -1.0):
+                shifted = probe.copy()
+                shifted.calc = calc
+                shifted.positions[i, k] += sign * step_A
+                e.append(shifted.get_potential_energy())
+            errors.append(abs(-(e[0] - e[1]) / (2 * step_A) - forces[i, k]))
+    return {
+        "worst_step": worst,
+        "worst_energy_jump_eV": float(jumps[worst]),
+        "max_total_energy_deviation_eV_per_atom": float(
+            np.max(np.abs(np.array(energies) - energies[0])) / len(atoms)
+        ),
+        "atoms_checked": checked,
+        "fd_step_A": step_A,
+        "max_force_minus_fd_eV_per_A": float(max(errors)),
+        "max_force_at_probe_eV_per_A": float(np.max(np.abs(forces[checked]))),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calc", choices=["emt", "mace", "hydragnn", "uma"], required=True)
@@ -78,6 +124,13 @@ def main() -> int:
         default=0.0,
         help="add a recoil of this energy to atom 0 along <110> before the MD stage (WP1 smoke)",
     )
+    ap.add_argument(
+        "--fd-check-atoms",
+        type=int,
+        default=0,
+        help="after MD, compare forces with -dE/dx on this many atoms nearest atom 0 (ASE only)",
+    )
+    ap.add_argument("--fd-step-A", type=float, default=1e-3)
     args = ap.parse_args()
 
     from matsim_agents.backends.external.lammps.mliap.parity import (
@@ -137,6 +190,16 @@ def main() -> int:
         payload["md"] = md.__dict__
         md_passed = md.passed
         print(json.dumps(payload["md"], indent=2, default=float))
+        if args.fd_check_atoms > 0:
+            payload["force_consistency"] = force_consistency(
+                md_atoms,
+                calc,
+                steps=args.md_steps,
+                timestep_fs=args.md_timestep_fs,
+                n_atoms=args.fd_check_atoms,
+                step_A=args.fd_step_A,
+            )
+            print(json.dumps(payload["force_consistency"], indent=2, default=float))
     rank, size = 0, 1
     if int(os.environ.get("SLURM_NTASKS", "1")) > 1:
         from mpi4py import MPI
