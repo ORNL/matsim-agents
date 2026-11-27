@@ -313,8 +313,11 @@ fine-tuned models are not checked against any reference, so only the plumbing is
   are not implemented, and the installed binary has no KOKKOS.
 - Parity was measured on a Frontier login node and in compute-node job 6004462 for all four
   calculators, at one geometry per case. Aurora and Perlmutter are untested.
-- Only CPU builds exist. GPU builds (KOKKOS with HIP on Frontier) need their own toolchain and are
-  not covered by the scripts' defaults. Even with KOKKOS, the ASE bridge copies atoms to the
-  Python calculator, so a GPU-resident ML-IAP path would need a separate implementation.
+- **Not done: KOKKOS/HIP (GPU-resident ML-IAP).** Only CPU builds exist, and no KOKKOS or HIP
+  LAMMPS has been built or run. The bridge copies the local atoms from LAMMPS into Python every
+  step and returns forces to LAMMPS, so even a KOKKOS build would not make the MLIP evaluation
+  GPU-resident or faster; that would need a separate implementation. The MLIPs themselves can use
+  a GPU through their ASE calculators, but no LAMMPS run here has done so (all jobs set
+  `--gpus-per-node=0`). There is therefore no measured speed-up and no scaling result.
 - The common script is validated only through the Frontier wrapper; other machines need their
   compiler, MPI and CMake loaded first and are untested.
