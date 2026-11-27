@@ -5,7 +5,7 @@
 #SBATCH -N 1
 #SBATCH -p batch
 # ---------------------------------------------------------------------------
-# HydraGNN, MACE and UMA fine-tunes on a small EMT-labelled Cu set (CPU), each followed by the
+# HydraGNN (branch-7 only), MACE and UMA fine-tunes on a small EMT-labelled Cu set (CPU), each followed by the
 # LAMMPS re-export of the resulting checkpoint: parity plus NVE stability, written as
 # <backend>/finetune-export.json. Checks the pipeline, not model accuracy. MATSIM_MLIAP_FT_LORA=1
 # makes the MACE and UMA fine-tunes low-rank.
@@ -22,6 +22,7 @@ SEED="${MATSIM_MLIAP_SEED:?set MATSIM_MLIAP_SEED (root seed of the run)}"
 PROJ="$(dirname "$REPO")"
 export HYDRAGNN_DIR="${HYDRAGNN_DIR:-$PROJ/HydraGNN-e4b-frozen-81d5b883}"
 export HYDRAGNN_WEIGHTS="${HYDRAGNN_WEIGHTS:-$PROJ/HydraGNN}"
+export HYDRAGNN_FT_REPO="${HYDRAGNN_FT_REPO:-$PROJ/HydraGNN_GFM_FineTuning4Materials}"
 
 # shellcheck disable=SC1091
 source "${LAMMPS_ROOT:-$REPO/external/lammps}/activate-mliap.sh"

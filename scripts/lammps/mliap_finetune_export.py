@@ -86,6 +86,7 @@ def finetune_hydragnn_case(dataset: Path, manifest: Path, out: Path, args):
         dataset,
         out,
         gfm_logdir=gfm,
+        strategy="frozen",
         head="OMat24",
         gfm_checkpoint=ckpt,
         epochs=args.epochs,
