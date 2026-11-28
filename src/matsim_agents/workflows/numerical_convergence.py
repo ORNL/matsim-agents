@@ -480,7 +480,10 @@ def ended_run_keys(config: ConvergenceConfig, manifest: str | Path) -> set[str]:
     """Run keys whose scheduler job has stopped, from one refresh of the job manifest."""
     from matsim_agents.execution.slurm_jobs import refresh_manifest
 
-    submitted = json.loads((Path(config.out_dir) / "submitted.json").read_text())
+    path = Path(config.out_dir) / "submitted.json"
+    if not path.exists():
+        return set()
+    submitted = json.loads(path.read_text())
     stopped = {e.job_id for e in refresh_manifest(manifest) if e.terminal}
     return {key for key, job_id in submitted.items() if job_id in stopped}
 

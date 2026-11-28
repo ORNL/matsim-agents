@@ -244,6 +244,11 @@ def test_partial_output_of_a_running_job_stays_pending(config_path):
     assert nc.collect(runs, log, ended={runs[0].key})["pending"] == len(runs) - 1
 
 
+def test_ended_run_keys_is_empty_before_the_first_submission(config_path, tmp_path):
+    config = nc.load_config(config_path)
+    assert nc.ended_run_keys(config, tmp_path / "jobs.jsonl") == set()
+
+
 def test_timed_out_runs_are_retried_once_on_the_retry_launcher(config_path, tmp_path):
     from matsim_agents.execution.slurm_jobs import CommandResult, refresh_manifest
 
