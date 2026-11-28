@@ -150,6 +150,12 @@ def al_init_campaign(
     force_tolerance: float | None = typer.Option(
         None, help="Reference relaxation max-force tolerance, eV/A."
     ),
+    magnetic_elements: list[str] = typer.Option(
+        [],
+        "--magnetic-element",
+        help="Element whose NM, FM and AFM reference phases are all declared (repeatable); "
+        "replaces the default Fe, Co, Ni, Cr.",
+    ),
     dft_settings: Path | None = typer.Option(
         None,
         help="YAML mapping merged into the generated dft.<backend> block "
@@ -191,6 +197,7 @@ def al_init_campaign(
             reference_kpts=reference_kpts,
             reference_kspacing_inv_A=reference_kspacing,
             relaxation_force_tolerance_eV_per_A=force_tolerance,
+            magnetic_elements=magnetic_elements or None,
             ecutwfc_ry=ecutwfc_ry,
             ecutrho_ry=ecutrho_ry,
             kpts=kpts,

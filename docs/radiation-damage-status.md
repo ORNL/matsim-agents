@@ -97,7 +97,7 @@ WP1 (`science/cascade/`, `workflows/radiation/cascade_candidates.py`) has recoil
   Scans on 54-site cells point to a denser mesh and 100/1200 Ry; see
   [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
 * Debug QoS is not sufficient for production 1,024-atom QE.
-* `pristine_ferromagnetic` stays `INPUT_BLOCKED`; gas examples are nonmagnetic (`nspin: 1`).
+* With the `magnetism` block of `examples/fusion_bcc_1024/campaign.yaml`, every structure is prepared nonmagnetic, ferromagnetic and antiferromagnetic (`<structure>_<state>`); gas examples are nonmagnetic (`nspin: 1`).
 
 ## Tests
 

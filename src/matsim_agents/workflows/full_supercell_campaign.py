@@ -29,7 +29,13 @@ from matsim_agents.science.defects.bcc import (
 )
 from matsim_agents.science.defects.point_defects import DefectConfiguration, generate_vacancy
 from matsim_agents.science.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism.generators import bcc_nn_cutoff
 from matsim_agents.science.magnetism.policies import configurations_for_policy, select_policy
+from matsim_agents.science.magnetism.survey import (
+    MagneticSurvey,
+    derive_survey_for_defect,
+    survey_configurations,
+)
 from matsim_agents.science.neb.endpoints import (
     MigrationPair,
     generate_frenkel_recombination,
@@ -158,6 +164,21 @@ class FullSupercellCampaign(BaseModel):
     qe: QEControls
     slurm: SlurmBudget
     transmutation: TransmutationExamples | None = None
+    magnetism: MagneticSurvey | None = Field(
+        default=None,
+        description=(
+            "Elements tried nonmagnetic, ferromagnetic and antiferromagnetic in the parent "
+            "and every defect cell. Without it the material-family policy decides."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _surveyed_elements_in_parent(self) -> FullSupercellCampaign:
+        if self.magnetism is not None:
+            absent = sorted(set(self.magnetism.elements) - set(self.parent_supercell.composition))
+            if absent:
+                raise ValueError(f"magnetism elements {absent} are not in the parent composition")
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | os.PathLike) -> FullSupercellCampaign:
@@ -377,7 +398,13 @@ def prepare_campaign(
     }
     entries: list[dict[str, Any]] = []
 
-    def scf(calc_id: str, atoms: Atoms, structure_id: str, mag: MagneticConfiguration | None):
+    def scf(
+        calc_id: str,
+        atoms: Atoms,
+        structure_id: str,
+        mag: MagneticConfiguration | None,
+        structure_key: str | None = None,
+    ):
         if mag is not None:
             validate_magnetic(atoms, mag)
         d = root / calc_id
@@ -396,6 +423,10 @@ def prepare_campaign(
             "input_sha256": None,
             "status": blocked or "PREPARED",
         }
+        if structure_key is not None:
+            # Rank the states sharing a structure_key (magnetism.competition.rank_states); the
+            # lowest converged energy is that structure's reference, all energies are kept.
+            entry["structure_key"] = structure_key
         if (
             not blocked
             and mag is not None
@@ -428,14 +459,26 @@ def prepare_campaign(
 
     parent = s["parent"]
     pid = f"{cfg.campaign_id}-parent"
-    policy = select_policy(parent)
-    mags = configurations_for_policy(parent, pid, policy) if policy else []
-    for mag in mags:
-        scf(f"pristine_{mag.mode}", parent, pid, mag)
-    if not any(m.mode == "nonmagnetic" for m in mags):
-        scf("pristine_nonmagnetic", parent, pid, None)
-    for kind, (atoms, config) in s["defects"].items():
-        scf(kind, atoms, config.config_id, None)
+    survey = cfg.magnetism
+    if survey is not None:
+        parent_mags = survey_configurations(
+            parent, pid, survey, nn_cutoff_A=bcc_nn_cutoff(cfg.parent_supercell.lattice_parameter)
+        )
+        for mag in parent_mags:
+            scf(f"pristine_{mag.mode}", parent, pid, mag, structure_key="pristine")
+        for kind, (atoms, config) in s["defects"].items():
+            derived = derive_survey_for_defect(parent_mags, atoms, config.config_id, kind, survey)
+            for parent_mag, mag in zip(parent_mags, derived, strict=True):
+                scf(f"{kind}_{parent_mag.mode}", atoms, config.config_id, mag, structure_key=kind)
+    else:
+        policy = select_policy(parent)
+        mags = configurations_for_policy(parent, pid, policy) if policy else []
+        for mag in mags:
+            scf(f"pristine_{mag.mode}", parent, pid, mag)
+        if not any(m.mode == "nonmagnetic" for m in mags):
+            scf("pristine_nonmagnetic", parent, pid, None)
+        for kind, (atoms, config) in s["defects"].items():
+            scf(kind, atoms, config.config_id, None)
 
     for key, pair in s["nebs"].items():
         d = root / key
@@ -454,7 +497,12 @@ def prepare_campaign(
                 "output_dir": str(d),
                 "input_sha256": None,
                 "status": blocked or "PREPARED",
-                "note": "NEB requires relaxed endpoints from the defect SCF/relax first",
+                "note": "NEB requires relaxed endpoints from the defect SCF/relax first"
+                + (
+                    "; use the lowest-energy converged magnetic state of the defect"
+                    if survey is not None
+                    else ""
+                ),
             }
         )
     (root / MANIFEST_FILE).write_text(json.dumps(entries, indent=2, sort_keys=True))

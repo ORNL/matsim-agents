@@ -27,14 +27,15 @@ from matsim_agents.workflows.active_learning.config import TrainerConfig
 from matsim_agents.workflows.active_learning.elemental_dft import ElementalReferencePlan
 
 _BULK_SYMMETRIES = {"bcc", "fcc", "hcp", "diamond"}
-# Ferromagnetic starting guesses for the 3d ferromagnets. The DFT result, not
-# this guess, decides the final moment.
-_FERROMAGNETS = {"Fe", "Co", "Ni"}
-# Commensurate collinear antiferromagnetic approximations: a two-site cubic cell
-# with antiparallel starting moments. The real ground state of Cr is an
-# incommensurate spin-density wave.
-_ANTIFERROMAGNETS = {"Cr": "bcc Cr ground state is an incommensurate spin-density wave"}
-_AFM_QE_STARTING_MAGNETIZATION = 0.5
+# Elements tried nonmagnetic, ferromagnetic and (where a cell exists) antiferromagnetic unless
+# the caller names them. The DFT result, not the starting guess, decides the final moment.
+_DEFAULT_MAGNETIC_ELEMENTS = {"Fe", "Co", "Ni", "Cr"}
+# Commensurate collinear antiferromagnetic approximation: a two-site cubic cell with
+# antiparallel starting moments. Only the bcc cell is generated.
+_AFM_SYMMETRIES = {"bcc"}
+_AFM_CAVEATS = {"Cr": "bcc Cr ground state is an incommensurate spin-density wave"}
+_AFM_DEFAULT_CAVEAT = "the true order may be noncollinear or incommensurate"
+_QE_STARTING_MAGNETIZATION = 0.5
 _AFM_VASP_MOMENT_MUB = 1.0
 _F_BLOCK = set(range(57, 72)) | set(range(89, 104))
 _NOBLE_GASES = {"He", "Ne", "Ar", "Kr", "Xe"}
@@ -83,10 +84,16 @@ def propose_reference_phases(
     reference_kpts: tuple[int, int, int] | None = None,
     reference_kspacing_inv_A: float | None = None,
     relaxation_force_tolerance_eV_per_A: float | None = None,
+    magnetic_elements: Iterable[str] | None = None,
 ) -> ReferenceProposal:
-    """Propose one declared condensed phase per element, or flag it as unresolved."""
+    """Propose declared condensed phases per element, or flag the element as unresolved.
+
+    ``magnetic_elements`` get nonmagnetic, ferromagnetic and antiferromagnetic phases (the last
+    only for the bcc two-site cell); the lowest energy per atom is later the reference.
+    """
     if reference_kpts is not None and reference_kspacing_inv_A is not None:
         raise ValueError("Give reference k-points or a reference k-spacing, not both")
+    magnetic = set(_DEFAULT_MAGNETIC_ELEMENTS if magnetic_elements is None else magnetic_elements)
     proposal = ReferenceProposal()
     for element in sorted(elements):
         number = atomic_numbers.get(element)
@@ -99,15 +106,23 @@ def propose_reference_phases(
                 "f-electron element: declare its phase, magnetic state and any DFT+U protocol"
             )
             continue
+        first_new = len(proposal.phases)
         if symmetry in _BULK_SYMMETRIES:
-            _propose_bulk(proposal, element, symmetry, backend, stress_tolerance_eV_per_A3)
-            phase = proposal.phases[-1]
-            if reference_kpts is not None:
-                phase["kpts"] = list(reference_kpts)
-            elif reference_kspacing_inv_A is not None:
-                phase["kpts"] = kpts_for_spacing(
-                    proposal.structures[phase["structure_path"]], reference_kspacing_inv_A
-                )
+            _propose_bulk(
+                proposal,
+                element,
+                symmetry,
+                backend,
+                stress_tolerance_eV_per_A3,
+                element in magnetic,
+            )
+            for phase in proposal.phases[first_new:]:
+                if reference_kpts is not None:
+                    phase["kpts"] = list(reference_kpts)
+                elif reference_kspacing_inv_A is not None:
+                    phase["kpts"] = kpts_for_spacing(
+                        proposal.structures[phase["structure_path"]], reference_kspacing_inv_A
+                    )
         elif symmetry == "diatom":
             _propose_diatom(proposal, element, backend)
         elif symmetry == "atom" and element in _NOBLE_GASES:
@@ -119,9 +134,8 @@ def propose_reference_phases(
             )
             continue
         if relaxation_force_tolerance_eV_per_A is not None:
-            proposal.phases[-1]["relaxation_force_tolerance_eV_per_A"] = (
-                relaxation_force_tolerance_eV_per_A
-            )
+            for phase in proposal.phases[first_new:]:
+                phase["relaxation_force_tolerance_eV_per_A"] = relaxation_force_tolerance_eV_per_A
     if reference_kspacing_inv_A is not None and backend == "qe":
         proposal.review.append(
             f"Bulk phase k-meshes give a spacing <= {reference_kspacing_inv_A:.4f} 2pi/A on "
@@ -152,48 +166,69 @@ def _propose_bulk(
     symmetry: str,
     backend: str,
     stress_tolerance: float,
+    magnetic: bool,
 ) -> None:
-    phase_id = f"{element.lower()}-{symmetry}"
-    phase: dict = {
-        "phase_id": phase_id,
-        "element": element,
-        "structure_path": f"references/{element}-{symmetry}.extxyz",
-        "kind": "bulk",
-        "geometry_status": "requires_relaxation",
-        "magnetic_state": "nonmagnetic",
-        "relaxation_stress_tolerance_eV_per_A3": stress_tolerance,
-    }
-    if element in _FERROMAGNETS:
-        phase["magnetic_state"] = "ferromagnetic"
-        if backend == "qe":
-            phase["qe_magnetic_settings"] = {"nspin": 2, "starting_magnetization(1)": 0.5}
-        else:
-            phase["vasp_magnetic_settings"] = {"ISPIN": "2"}
+    def phase_for(phase_id: str, path: str, state: str) -> dict:
+        return {
+            "phase_id": phase_id,
+            "element": element,
+            "structure_path": path,
+            "kind": "bulk",
+            "geometry_status": "requires_relaxation",
+            "magnetic_state": state,
+            "relaxation_stress_tolerance_eV_per_A3": stress_tolerance,
+        }
+
+    def add(phase: dict, atoms: Atoms) -> None:
+        proposal.phases.append(phase)
+        proposal.structures[phase["structure_path"]] = atoms
+
+    base_id = f"{element.lower()}-{symmetry}"
+    primitive_path = f"references/{element}-{symmetry}.extxyz"
+    if not magnetic:
+        add(phase_for(base_id, primitive_path, "nonmagnetic"), bulk(element))
+        return
+
+    add(phase_for(f"{base_id}-nm", primitive_path, "nonmagnetic"), bulk(element))
+    ferromagnetic = phase_for(f"{base_id}-fm", primitive_path, "ferromagnetic")
+    if backend == "qe":
+        ferromagnetic["qe_magnetic_settings"] = {
+            "nspin": 2,
+            "starting_magnetization(1)": _QE_STARTING_MAGNETIZATION,
+        }
+    else:
+        ferromagnetic["vasp_magnetic_settings"] = {"ISPIN": "2"}
+    add(ferromagnetic, bulk(element))
+    proposal.review.append(
+        f"{element}: nonmagnetic, ferromagnetic and antiferromagnetic phases are all declared; "
+        "the lowest energy per atom becomes the reference. Confirm the converged moments."
+    )
+
+    if symmetry not in _AFM_SYMMETRIES:
         proposal.review.append(
-            f"{phase_id}: ferromagnetic starting guess; confirm the converged moment."
+            f"{element}: no antiferromagnetic phase generated for a {symmetry} lattice (only the "
+            "two-site bcc cell is implemented); declare one by hand if it matters."
         )
-    atoms = bulk(element)
-    if element in _ANTIFERROMAGNETS:
-        atoms = bulk(element, cubic=True)
-        if len(atoms) != 2:
-            raise ValueError(f"{element}: expected a two-site cubic cell for AFM order")
-        phase_id = f"{element.lower()}-{symmetry}-afm"
-        phase["phase_id"] = phase_id
-        phase["structure_path"] = f"references/{element}-{symmetry}-afm.extxyz"
-        phase["magnetic_state"] = "antiferromagnetic"
-        if backend == "qe":
-            m = _AFM_QE_STARTING_MAGNETIZATION
-            phase["qe_site_starting_magnetization"] = [m, -m]
-        else:
-            m = _AFM_VASP_MOMENT_MUB
-            phase["vasp_magnetic_settings"] = {"ISPIN": "2", "MAGMOM": f"{m:g} {-m:g}"}
-        proposal.review.append(
-            f"{phase_id}: commensurate collinear AFM approximation of Cr "
-            f"({_ANTIFERROMAGNETS[element]}); confirm the converged moments are "
-            "antiparallel and nonzero."
-        )
-    proposal.phases.append(phase)
-    proposal.structures[phase["structure_path"]] = atoms
+        return
+    atoms = bulk(element, cubic=True)
+    if len(atoms) != 2:
+        raise ValueError(f"{element}: expected a two-site cubic cell for AFM order")
+    afm_id = f"{base_id}-afm"
+    antiferromagnetic = phase_for(
+        afm_id, f"references/{element}-{symmetry}-afm.extxyz", "antiferromagnetic"
+    )
+    if backend == "qe":
+        m = _QE_STARTING_MAGNETIZATION
+        antiferromagnetic["qe_site_starting_magnetization"] = [m, -m]
+    else:
+        m = _AFM_VASP_MOMENT_MUB
+        antiferromagnetic["vasp_magnetic_settings"] = {"ISPIN": "2", "MAGMOM": f"{m:g} {-m:g}"}
+    add(antiferromagnetic, atoms)
+    proposal.review.append(
+        f"{afm_id}: commensurate collinear AFM approximation of {element} "
+        f"({_AFM_CAVEATS.get(element, _AFM_DEFAULT_CAVEAT)}); confirm the converged moments "
+        "are antiparallel and nonzero."
+    )
 
 
 def _propose_diatom(proposal: ReferenceProposal, element: str, backend: str) -> None:
@@ -319,6 +354,7 @@ def write_campaign(
     reference_kpts: tuple[int, int, int] | None = None,
     reference_kspacing_inv_A: float | None = None,
     relaxation_force_tolerance_eV_per_A: float | None = None,
+    magnetic_elements: Iterable[str] | None = None,
     ecutwfc_ry: float | None = None,
     ecutrho_ry: float | None = None,
     kpts: tuple[int, int, int] | None = None,
@@ -340,6 +376,7 @@ def write_campaign(
         reference_kpts=reference_kpts,
         reference_kspacing_inv_A=reference_kspacing_inv_A,
         relaxation_force_tolerance_eV_per_A=relaxation_force_tolerance_eV_per_A,
+        magnetic_elements=magnetic_elements,
     )
     if not proposal.phases:
         raise ValueError(f"No reference phase could be proposed: {proposal.unresolved}")

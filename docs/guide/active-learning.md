@@ -64,8 +64,10 @@ matsim-agents al init-campaign campaigns/wtacrvhfmo \
 #      campaigns/wtacrvhfmo/references/*.extxyz     (starting structures)
 
 # 2. Review elemental-phases.yaml: phases, magnetic states, k-points and the
-#    review notes (for example: Cr is antiferromagnetic but is declared
-#    nonmagnetic). Elements that cannot be proposed safely are listed as
+#    review notes (for example: Cr, Fe, Co and Ni get nonmagnetic,
+#    ferromagnetic and, for bcc, antiferromagnetic phases; the lowest energy
+#    per atom is the reference; --magnetic-element replaces that list).
+#    Elements that cannot be proposed safely are listed as
 #    unresolved and must be added by hand. Then set phases_approved: true
 #    in al.yaml.
 

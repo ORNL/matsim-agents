@@ -135,16 +135,35 @@ def test_full_size_inputs_and_manifest(cfg, tmp_path):
     entries = fsc.prepare_campaign(ready, tmp_path / "run", git_revision="abc")
     by_id = {e["calc_id"]: e for e in entries}
     assert by_id["pristine_nonmagnetic"]["qe_atoms"] == 1024
-    assert by_id["vacancy"]["qe_atoms"] == 1023
-    assert by_id["interstitial"]["qe_atoms"] == 1025
-    assert by_id["frenkel_pair"]["qe_atoms"] == 1024
-    assert by_id["pristine_ferromagnetic"]["status"].startswith("INPUT_BLOCKED")
+    sizes = {"vacancy": 1023, "interstitial": 1025, "frenkel_pair": 1024, "divacancy": 1022}
+    for state in ("nonmagnetic", "ferromagnetic", "antiferromagnetic"):
+        assert by_id[f"pristine_{state}"]["qe_atoms"] == 1024
+        for kind, n in sizes.items():
+            entry = by_id[f"{kind}_{state}"]
+            assert entry["qe_atoms"] == n and entry["structure_key"] == kind
+            assert entry["magnetic_config"]["mode"] in (state, "custom_collinear")
     for e in entries:
         assert e["parent_atoms"] == 1024
-        if e["calc_id"] == "pristine_ferromagnetic":
-            continue
         assert e["status"] == "PREPARED"
         if e["kind"] == "scf":
             text = (Path(e["output_dir"]) / "pw.in").read_text()
             assert re.search(rf"\bnat\s*=\s*{e['qe_atoms']}\b", text)
             assert len(e["input_sha256"]) == 64
+    afm = (Path(by_id["vacancy_antiferromagnetic"]["output_dir"]) / "pw.in").read_text()
+    pols = [
+        float(m.replace("d", "e").replace("D", "e"))
+        for m in re.findall(r"starting_magnetization\(\d+\)\s*=\s*([-0-9.dDeE+]+)", afm)
+    ]
+    assert any(p > 0 for p in pols) and any(p < 0 for p in pols)
+
+
+def test_magnetism_elements_must_be_in_parent(cfg):
+    with pytest.raises(ValueError, match="not in the parent composition"):
+        fsc.FullSupercellCampaign.model_validate(
+            {
+                **cfg.model_dump(),
+                "magnetism": {
+                    "elements": {"Fe": {"moment_muB": 2.0, "qe_starting_magnetization": 0.5}}
+                },
+            }
+        )

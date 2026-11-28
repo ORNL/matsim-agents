@@ -14,7 +14,7 @@ docs and have not been run end to end.
   `datasets/` and `models/` directories.
 - Everything is software-verified only. Cutoffs (51/650 Ry) and k-points (2x2x2) are unconverged. The measured evidence for better values is in [dft-parameterization.md](../../examples/fusion_bcc_1024/dft-parameterization.md).
 - No converged 1,024-atom QE result exists. The debug QoS cannot run that cell (`RESOURCE_BLOCKED`).
-- `pristine_ferromagnetic` is `INPUT_BLOCKED` until the starting magnetization is tied to verified UPF valence.
+- Cr starting magnetizations (0.1) come from the Frontier Cr scans, not from verified UPF valence.
 - The 128-atom SCF has not converged yet.
 - The SPECTRA-PKA and OpenMC runs are smoke runs, and the OpenMC job phase has not run on a compute node.
 - A Slurm `COMPLETED` state is not a QE success. Check `pw.out` for `convergence has been achieved` and `JOB DONE`.
@@ -72,11 +72,12 @@ Expected result (nothing is submitted):
 | Calculation | Atoms | Status |
 | --- | --- | --- |
 | `pristine_nonmagnetic` | 1024 | PREPARED |
-| `pristine_ferromagnetic` | 1024 | INPUT_BLOCKED |
-| `vacancy` | 1023 | PREPARED |
-| `interstitial` | 1025 | PREPARED |
-| `frenkel_pair` | 1024 | PREPARED |
-| `divacancy` | 1022 | PREPARED |
+| `pristine_ferromagnetic` | 1024 | PREPARED |
+| `pristine_antiferromagnetic` | 1024 | PREPARED |
+| `vacancy_<nonmagnetic/ferromagnetic/antiferromagnetic>` | 1023 | PREPARED |
+| `interstitial_<state>` | 1025 | PREPARED |
+| `frenkel_pair_<state>` | 1024 | PREPARED |
+| `divacancy_<state>` | 1022 | PREPARED |
 | `neb_vacancy` | 1023 | PREPARED |
 | `neb_interstitial` | 1025 | PREPARED |
 | `neb_recombination` | 1024 | PREPARED |

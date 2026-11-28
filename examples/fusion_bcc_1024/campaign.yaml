@@ -12,6 +12,13 @@ parent_supercell:
 numerical_qualification:
   require_full_parent_supercell: true
   prohibit_smaller_cell_substitution: true
+# Every listed element is tried nonmagnetic, ferromagnetic and antiferromagnetic (two-sublattice
+# collinear) in the parent and in each defect cell; the lowest converged energy per structure
+# is its reference. Starting values only: DFT decides the final moments. 0.1 matches the Frontier
+# Cr smearing scans (examples/qe_convergence/frontier_cr_magnetic.yaml).
+magnetism:
+  elements:
+    Cr: {moment_muB: 1.0, qe_starting_magnetization: 0.1}
 defects:
   vacancy_site: 0
   interstitial_site: 0
