@@ -31,5 +31,5 @@ potential:
 hypothesis:
   hypothesis_id: demo-cu-cascade-recovery
   claim: >-
-    A 40 eV Cu recoil at 100 K leaves a nonzero surviving Frenkel-pair population under the
+    A 15 eV Cu recoil at 100 K leaves a nonzero surviving Frenkel-pair population under the
     EMT verification potential.

@@ -33,7 +33,7 @@ scans:
   - parameter: cutoff
     values: [[70, 840], [80, 960], [90, 1080], [100, 1200]]
 derived:
-  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9815}}
+  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9814814814814815}}
 criteria: {}
 resources:
   # srun, modules and GPU affinity come from the Frontier launcher; stdout goes to pw.out.

@@ -113,6 +113,7 @@ class QEControls(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     pseudo_dir: str
+    pseudo_manifest: str | None = None
     pseudopotentials: dict[str, str] = Field(default_factory=dict)
     ecutwfc_ry: float = 45.0
     ecutrho_ry: float = 360.0
@@ -123,11 +124,11 @@ class QEControls(BaseModel):
     mixing_beta: float = 0.2
     neb_images: StrictInt = 5
 
-    @field_validator("pseudo_dir")
+    @field_validator("pseudo_dir", "pseudo_manifest")
     @classmethod
-    def _expand_env(cls, value: str) -> str:
+    def _expand_env(cls, value: str | None) -> str | None:
         # An unset variable stays literal, so the missing-pseudopotential gate blocks the inputs.
-        return os.path.expandvars(value)
+        return os.path.expandvars(value) if value is not None else None
 
 
 class SlurmBudget(BaseModel):
@@ -453,6 +454,8 @@ def prepare_campaign(
             # Moment -> QE polarization needs the real pseudopotentials' valence counts.
             entry["status"] = "INPUT_BLOCKED: starting_magnetization needs verified UPF valence"
         elif not missing:
+            from matsim_agents.backends.dft.pseudo_validation import load_manifest
+
             qs = QESettings(
                 pseudo_dir=cfg.qe.pseudo_dir,
                 calculation="scf",
@@ -465,6 +468,9 @@ def prepare_campaign(
                 conv_thr_ry=cfg.qe.conv_thr_ry,
                 mixing_beta=cfg.qe.mixing_beta,
                 pseudopotentials=pseudos,
+                pseudo_manifest=load_manifest(cfg.qe.pseudo_manifest)
+                if cfg.qe.pseudo_manifest
+                else None,
             )
             path = Path(
                 write_pw_input(

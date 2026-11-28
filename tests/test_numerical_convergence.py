@@ -144,6 +144,17 @@ def test_derived_energy_threshold_is_0_02_eV():
     assert analyse_scan("cutoff", bad, AcceptanceCriteria()).status == "not_converged"
 
 
+def test_missing_required_derived_reference_is_incomplete():
+    points = scan([-1.0, -1.0, -1.0])
+    for point in points:
+        point.required_derived = (("bulk", "formation"),)
+    assert analyse_scan("cutoff", points, AcceptanceCriteria()).status == "incomplete"
+    for point in points:
+        point.cases["bulk"].derived["formation"] = 0.1
+    points[0].cases["bulk"].derived["formation"] = float("nan")
+    assert analyse_scan("cutoff", points, AcceptanceCriteria()).selected_value == 1
+
+
 def test_magnetic_state_change_blocks_acceptance():
     def point(value, mag):
         o = obs(-1.0)
@@ -222,6 +233,15 @@ def test_scheduler_completed_without_output_is_not_success(config_path):
     assert collected["pending"] == len(runs)
     data = nc.report(config, nc.analyse(config, runs, log), collected)
     assert data["status"] == "incomplete"
+
+
+def test_unknown_derived_case_is_rejected(config_path):
+    config = nc.load_config(config_path)
+    config.derived = [{"name": "formation", "terms": {"bulkk": 1.0}}]
+    with pytest.raises(ValueError, match="unknown cases"):
+        nc.analyse(config, [], KeyedResultLog(Path(config.out_dir) / "results.jsonl"))
+    with pytest.raises(ValueError, match="unknown cases"):
+        nc.ConvergenceConfig.model_validate(config.model_dump())
 
 
 def test_below_recommendation_scan_points_are_diagnostic_only(config_path, tmp_path):

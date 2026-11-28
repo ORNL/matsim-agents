@@ -64,6 +64,9 @@ def scientific_dft_payload(cfg: DFTConfig, elements: set[str]) -> dict[str, Any]
             if element in elements
         },
         "pw_template": path_identity(block.pw_template),
+        "pseudo_manifest": path_identity(block.pseudo_manifest),
+        "functional": block.functional,
+        "cutoff_override_reason": block.cutoff_override_reason,
         "ecutwfc_ry": block.ecutwfc_ry,
         "ecutrho_ry": block.ecutrho_ry,
         "kpts": block.kpts,

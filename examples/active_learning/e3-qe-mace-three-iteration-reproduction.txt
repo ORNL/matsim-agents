@@ -85,7 +85,8 @@ Set these variables for that material, preferably in a reviewed shell input:
   export E3_QE_ECUTRHO_RY='<converged density cutoff>'
   export E3_QE_KPTS='<reviewed YAML list, e.g. [2,2,2]>'
   export E3_QE_OCCUPATIONS='<fixed or smearing>'
-  export E3_QE_SYSTEM='<reviewed YAML SYSTEM mapping, including input_dft>'
+  export E3_QE_FUNCTIONAL='<reviewed XC functional>'
+  export E3_QE_SYSTEM='<reviewed YAML SYSTEM mapping, excluding input_dft>'
   export E3_FORCE_ERROR_TOLERANCE=0.2
   export E3_QE_PROMOTION_APPROVED=false
 

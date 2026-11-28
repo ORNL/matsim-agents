@@ -13,7 +13,7 @@ without needing HydraGNN, VASP, or QE. We monkey-patch:
 After one iteration we assert that:
 * `state.json` was written with `status="complete"`
 * `dataset.extxyz` exists and has at least one frame
-* the iteration's DFT working directory was created
+* individual DFT attempt directories were created
 """
 
 from __future__ import annotations
@@ -165,6 +165,8 @@ class _FakeDFTBackend:
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:
         Path(spec.work_dir).mkdir(parents=True, exist_ok=True)
+        for name in ("POSCAR", "INCAR", "KPOINTS", "POTCAR", "vasprun.xml"):
+            (Path(spec.work_dir) / name).write_text(f"synthetic {name}")
         n = len(spec.atoms)
         return DFTResult(
             backend=self.name,
@@ -342,11 +344,15 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         assert frame.info["time_index"] in {0, 1, 2}
         assert frame.info["al_iteration"] == 0
         assert frame.info["temperature_K"] == cfg.md.temperature_K
+        assert frame.info["dft_attempt_id"] == Path(frame.info["source_work_dir"]).parent.name
 
     # Per-candidate DFT work dirs exist.
-    dft_dir = iter_dir / "dft"
-    assert dft_dir.is_dir()
-    assert any(dft_dir.iterdir()), "DFT working directories were not created"
+    attempts = list((out_dir / "dft_attempts").iterdir())
+    assert len(attempts) == 2
+    assert all(
+        json.loads((path / "attempt.json").read_text())["status"] == "converged"
+        for path in attempts
+    )
 
 
 def test_neb_only_iteration_uses_shared_dft_and_dataset_pipeline(
@@ -1443,6 +1449,10 @@ def test_resumed_iteration_reuses_saved_dft_labels(
     with pytest.raises(RuntimeError, match="node failure"):
         loop_mod.run_active_learning(cfg)
     assert len(calls) == 2
+    attempts = list((cfg.loop.out_dir / "dft_attempts").iterdir())
+    assert len(attempts) == 2
+    for attempt in attempts:
+        (attempt / "sentinel").write_text("original output")
 
     monkeypatch.setattr(loop_mod, "_append_labelled_frames", append)
     loop_mod.run_active_learning(cfg)
@@ -1452,13 +1462,139 @@ def test_resumed_iteration_reuses_saved_dft_labels(
     assert state["n_dft_reused"] == 2 and state["n_dft_converged"] == 2
     assert len(calls) == 2, "saved DFT labels were recomputed"
     assert len(ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")) == 2
+    assert all((attempt / "sentinel").read_text() == "original output" for attempt in attempts)
+    assert {
+        frame.info["candidate_id"]
+        for frame in ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")
+    } == set(calls)
+
+
+def test_failed_attempt_is_retained_and_retry_gets_new_id(tmp_path, monkeypatch):
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    cfg.loop.fail_fast = True
+    _patch_runtime(loop_mod, monkeypatch)
+    seen = []
+
+    class FlakyBackend(_FakeDFTBackend):
+        def run_one(self, spec):
+            result = super().run_one(spec)
+            path = Path(spec.work_dir)
+            (path / "output.txt").write_text(f"attempt {len(seen)}")
+            seen.append(path)
+            if len(seen) == 1:
+                result.converged = False
+                result.return_code = 1
+            return result
+
+    monkeypatch.setattr(al_labelling, "make_backend", lambda _: FlakyBackend())
+    with pytest.raises(RuntimeError, match="jobs failed"):
+        loop_mod.run_active_learning(cfg)
+    failed = seen[0]
+    assert json.loads((failed.parent / "attempt.json").read_text())["status"] == "failed"
+    loop_mod.run_active_learning(cfg)
+    assert len(seen) == 3
+    assert seen[-1] != failed
+    assert (failed / "output.txt").read_text() == "attempt 0"
+    assert json.loads((seen[-1].parent / "attempt.json").read_text())["status"] == "converged"
+    assert (failed.parent / "structure.json").is_file()
+
+
+def test_same_candidate_ids_in_different_rounds_have_distinct_attempts(tmp_path, monkeypatch):
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.n_iterations = 2
+    _patch_runtime(loop_mod, monkeypatch)
+    loop_mod.run_active_learning(
+        cfg, candidate_sampler=lambda *_: [_make_candidate(i) for i in range(2)]
+    )
+    attempts = list((cfg.loop.out_dir / "dft_attempts").iterdir())
+    records = [json.loads((attempt / "attempt.json").read_text()) for attempt in attempts]
+    assert len(attempts) == 4
+    assert len({record["attempt_id"] for record in records}) == 4
+    assert {record["iteration"] for record in records} == {0, 1}
+    assert len({record["identity"] for record in records}) == 2
+
+
+def test_changed_cached_output_forces_new_attempt(tmp_path, monkeypatch):
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.resume = True
+    _patch_runtime(loop_mod, monkeypatch)
+    append = loop_mod._append_labelled_frames
+
+    def interrupt(*args, **kwargs):
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(loop_mod, "_append_labelled_frames", interrupt)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        loop_mod.run_active_learning(cfg)
+    attempts = list((cfg.loop.out_dir / "dft_attempts").iterdir())
+    record = json.loads((attempts[0] / "attempt.json").read_text())
+    (attempts[0] / record["identity"] / "vasprun.xml").write_text("changed")
+    monkeypatch.setattr(loop_mod, "_append_labelled_frames", append)
+    loop_mod.run_active_learning(cfg)
+    assert len(list((cfg.loop.out_dir / "dft_attempts").iterdir())) == 3
+    state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+    assert state["n_dft_reused"] == 1
+
+
+def test_resume_refuses_to_delete_dft_outside_archive(tmp_path):
+    from matsim_agents.workflows.active_learning.resume import _scan_resume
+
+    old_work = tmp_path / "iteration_0000" / "dft" / "candidate"
+    old_work.mkdir(parents=True)
+    (old_work / "pw.out").write_text("preserve")
+    with pytest.raises(ValueError, match="outside the attempt archive"):
+        _scan_resume(tmp_path)
+    assert (old_work / "pw.out").read_text() == "preserve"
+
+
+def test_duplicate_candidate_ids_are_rejected_before_dft(tmp_path, monkeypatch):
+    import matsim_agents.workflows.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    _patch_runtime(loop_mod, monkeypatch)
+    duplicate = _make_candidate(0)
+    with pytest.raises(ValueError, match="unique within an iteration"):
+        loop_mod.run_active_learning(cfg, candidate_sampler=lambda *_: [duplicate, duplicate])
+    assert not (cfg.loop.out_dir / "dft_attempts").exists()
+
+
+def test_attempt_id_collision_cannot_overwrite_existing_work(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from matsim_agents.workflows.active_learning import dft_attempts
+
+    existing = tmp_path / "dft_attempts" / "existing"
+    existing.mkdir(parents=True)
+    (existing / "output").write_text("preserved")
+    identifiers = iter([SimpleNamespace(hex="existing"), SimpleNamespace(hex="new")])
+    monkeypatch.setattr(dft_attempts, "uuid4", lambda: next(identifiers))
+    attempt = dft_attempts.create_attempt(tmp_path, iteration=0, kind="single_point", identity="c")
+    assert attempt.name == "new"
+    assert (existing / "output").read_text() == "preserved"
+
+
+@pytest.mark.parametrize("candidate_id", ["", ".", "..", "../other", "x/y"])
+def test_candidate_ids_cannot_escape_attempt_directory(candidate_id):
+    candidate = _make_candidate(0)
+    candidate.candidate_id = candidate_id
+    with pytest.raises(ValueError, match="single path components"):
+        al_labelling._validate_candidate_ids([candidate])
 
 
 def test_saved_dft_label_is_not_reused_for_a_different_geometry(tmp_path: Path) -> None:
 
     cfg = _make_cfg(tmp_path)
     ledger = tmp_path / "labels.jsonl"
-    spec = DFTJobSpec(job_id="cand_000", atoms=_make_candidate(0).atoms, work_dir="x")
+    spec = DFTJobSpec(
+        job_id="cand_000", atoms=_make_candidate(0).atoms, work_dir=str(tmp_path / "x")
+    )
     al_labelling._save_dft_label(
         ledger, al_labelling._dft_label_key(cfg, spec), _FakeDFTBackend().run_one(spec)
     )

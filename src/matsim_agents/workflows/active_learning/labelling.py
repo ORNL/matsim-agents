@@ -13,6 +13,8 @@ import numpy as np
 
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
+from matsim_agents.core.fileio import atomic_write_text
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.core.restart import KeyedResultLog
 from matsim_agents.core.seeding import stream_seed
 from matsim_agents.data.governance import (
@@ -24,6 +26,11 @@ from matsim_agents.workflows.active_learning.config import (
     ALConfig,
     MDSamplingStrategy,
     SamplingStrategy,
+)
+from matsim_agents.workflows.active_learning.dft_attempts import (
+    ATTEMPTS_DIR,
+    create_attempt,
+    update_attempt,
 )
 from matsim_agents.workflows.active_learning.dft_protocol import (
     dft_method_signature,
@@ -67,6 +74,7 @@ def _select_for_labelling(
 ) -> list:
     """Score sampling candidates and pick those to label within the remaining DFT budget."""
     t0 = time.time()
+    _validate_candidate_ids(candidates)
     selected, scores = select_candidates(
         candidates,
         cfg.acquisition,
@@ -116,14 +124,14 @@ def _label_with_dft(
 ) -> tuple[list, Any]:
     """Run single-point DFT for the selected candidates and record outcome counts."""
     t0 = time.time()
+    _validate_candidate_ids(selected)
     backend = make_backend(cfg.dft)
     state.dft_backend = backend.name
-    dft_dir = it_dir / "dft"
     specs = [
         DFTJobSpec(
             job_id=cand.candidate_id,
             atoms=cand.atoms,
-            work_dir=str(dft_dir / cand.candidate_id),
+            work_dir="",
         )
         for cand in selected
     ]
@@ -133,10 +141,26 @@ def _label_with_dft(
     pending = []
     for spec in specs:
         result = cached.get(_dft_label_key(cfg, spec))
-        if result is None or result.backend != backend.name:
+        if (
+            result is None
+            or result.backend != backend.name
+            or not _cached_attempt_valid(it_dir.parent, i, spec, result, cfg)
+        ):
+            from ase.io.jsonio import encode
+
+            attempt = create_attempt(
+                it_dir.parent, iteration=i, kind="single_point", identity=spec.job_id
+            )
+            atomic_write_text(attempt / "structure.json", encode(spec.atoms))
+            update_attempt(
+                attempt,
+                backend=backend.name,
+                structure_identity=structure_identity(spec.atoms),
+                method_signature=_dft_method_signature(cfg, set(spec.atoms.get_chemical_symbols())),
+            )
+            spec.work_dir = str(attempt / spec.job_id)
             pending.append(spec)
             continue
-        result.work_dir = spec.work_dir
         reused[spec.job_id] = result
     if reused:
         log.info("Iter %d: reusing %d saved DFT labels from %s", i, len(reused), ledger)
@@ -146,12 +170,18 @@ def _label_with_dft(
 
     def save(spec: DFTJobSpec, result: Any) -> None:
         by_job[spec.job_id] = result
+        hashes = _artifact_hashes(Path(spec.work_dir), backend.name) if result.converged else {}
+        update_attempt(
+            Path(spec.work_dir).parent,
+            status="converged" if result.converged else "failed",
+            return_code=result.return_code,
+            notes=result.notes,
+            artifact_sha256=hashes,
+        )
         if result.converged:
             _save_dft_label(ledger, _dft_label_key(cfg, spec), result)
 
-    returned = run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
-    for spec, result in zip(pending, returned, strict=True):
-        by_job.setdefault(spec.job_id, result)
+    run_dft_batch(pending, backend, placement.pool("dft"), on_complete=save)
     results = [by_job[spec.job_id] for spec in specs]
     n_ok = sum(1 for r in results if r.converged)
     state.n_dft_converged = n_ok
@@ -171,6 +201,59 @@ def _label_with_dft(
 
 
 _DFT_LABEL_CACHE = "dft_label_cache"
+
+
+def _validate_candidate_ids(candidates: list) -> None:
+    ids = [candidate.candidate_id for candidate in candidates]
+    if any(
+        not isinstance(value, str) or not value or value in {".", ".."} or Path(value).name != value
+        for value in ids
+    ):
+        raise ValueError("candidate IDs must be nonempty single path components")
+    if len(set(ids)) != len(ids):
+        raise ValueError("candidate IDs must be unique within an iteration")
+
+
+def _cached_attempt_valid(
+    root: Path, iteration: int, spec: DFTJobSpec, result: Any, cfg: ALConfig
+) -> bool:
+    work_dir = Path(result.work_dir)
+    attempt = work_dir.parent
+    if work_dir.name != spec.job_id or attempt.parent.resolve() != (root / ATTEMPTS_DIR).resolve():
+        return False
+    if not work_dir.is_dir() or not (attempt / "attempt.json").is_file():
+        return False
+    record = json.loads((attempt / "attempt.json").read_text(encoding="utf-8"))
+    hashes = record.get("artifact_sha256")
+    if not isinstance(hashes, dict) or not hashes:
+        return False
+    try:
+        if hashes != _artifact_hashes(work_dir, result.backend):
+            return False
+    except FileNotFoundError:
+        return False
+    return (
+        record.get("attempt_id") == attempt.name
+        and record.get("iteration") == iteration
+        and record.get("kind") == "single_point"
+        and record.get("identity") == spec.job_id
+        and record.get("status") == "converged"
+        and record.get("backend") == result.backend
+        and record.get("structure_identity") == structure_identity(spec.atoms)
+        and record.get("method_signature")
+        == _dft_method_signature(cfg, set(spec.atoms.get_chemical_symbols()))
+        and result.converged
+    )
+
+
+def _artifact_hashes(work_dir: Path, backend: str) -> dict[str, str]:
+    if backend == "qe":
+        names = ("pw.in", "pw.out")
+    elif backend == "vasp":
+        names = ("POSCAR", "INCAR", "KPOINTS", "POTCAR", "vasprun.xml")
+    else:
+        raise ValueError(f"unsupported DFT backend {backend!r} for attempt archive")
+    return {name: sha256_file(work_dir / name) for name in names}
 
 
 def _dft_label_key(cfg: ALConfig, spec: DFTJobSpec) -> str:
@@ -204,7 +287,8 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
     """
     candidates = {candidate.candidate_id: candidate for candidate in selected}
     for frame in frames:
-        candidate = candidates.get(Path(frame.source_work_dir).name)
+        work_dir = Path(frame.source_work_dir)
+        candidate = candidates.get(work_dir.name)
         info = frame.atoms.info
         if candidate is not None:
             frame_info = dict(info)
@@ -269,6 +353,8 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
                 if key in candidate.atoms.info:
                     info[key] = candidate.atoms.info[key]
         info["source_campaign"] = str(cfg.loop.out_dir)
+        if work_dir.parent.parent.name == ATTEMPTS_DIR:
+            info["dft_attempt_id"] = work_dir.parent.name
         if candidate is None:
             continue
         info["config_id"] = f"iteration-{i:04d}/{candidate.candidate_id}"

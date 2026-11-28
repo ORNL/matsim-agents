@@ -31,8 +31,8 @@ scans:
   - parameter: smearing
     values: [0.020, 0.010, 0.005]
 derived:
-  - {name: vacancy_formation_nm_eV, terms: {vac_nm: 1.0, bulk_nm: -0.98148148}}
-  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.98148148}}
+  - {name: vacancy_formation_nm_eV, terms: {vac_nm: 1.0, bulk_nm: -0.9814814814814815}}
+  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.9814814814814815}}
   - {name: afm_minus_nm_bulk_eV, terms: {bulk_afm: 1.0, bulk_nm: -1.0}}
   - {name: fm_minus_nm_bulk_eV, terms: {bulk_fm: 1.0, bulk_nm: -1.0}}
 criteria: {}

@@ -58,6 +58,7 @@ _MANAGED_SYSTEM = frozenset(
         "ntyp",
         "ecutwfc",
         "ecutrho",
+        "input_dft",
         "occupations",
         "smearing",
         "degauss",
@@ -115,6 +116,7 @@ class QENebConfig(BaseModel):
     # --- PW engine --------------------------------------------------------------------------
     species: tuple[str, ...] = Field(min_length=1)
     pseudo_dir: str = Field(min_length=1)
+    pseudo_manifest: str | None = None
     pseudopotentials: Mapping[str, str]
     functional: str = "PBE"
     # Diagnostic-only: allows cutoffs below the pseudopotential recommendation; never qualifies.

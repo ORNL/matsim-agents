@@ -130,7 +130,31 @@ class ConvergenceConfig(BaseModel):
         parameters = [s.parameter for s in self.scans]
         if len(set(parameters)) != len(parameters):
             raise ValueError("each scan parameter may appear once")
+        self._validate_derived()
         return self
+
+    def _validate_derived(self) -> None:
+        cases = {case.name for case in self.cases}
+        names: set[str] = set()
+        for definition in self.derived:
+            name, terms = definition.get("name"), definition.get("terms")
+            if not isinstance(name, str) or not name or name in names:
+                raise ValueError("derived energy names must be nonempty and unique")
+            if not isinstance(terms, dict) or not terms:
+                raise ValueError(f"derived energy {name!r} needs nonempty terms")
+            missing = set(terms) - cases
+            if missing:
+                raise ValueError(
+                    f"derived energy {name!r} references unknown cases: {sorted(missing)}"
+                )
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                for value in terms.values()
+            ):
+                raise ValueError(f"derived energy {name!r} requires finite numeric coefficients")
+            names.add(name)
 
     @property
     def config_hash(self) -> str:
@@ -484,6 +508,7 @@ def analyse(
     config: ConvergenceConfig, runs: Sequence[PlannedRun], log: KeyedResultLog
 ) -> list[ScanOutcome]:
     results = log.load()
+    config._validate_derived()
     criteria = AcceptanceCriteria.from_mapping(config.criteria)
     kinds = {c.name: c.kind for c in config.cases}
     magnetic = [c.name for c in config.cases if c.magnetic]
@@ -514,6 +539,10 @@ def analyse(
                     cases=cases,
                     cost=cost or float(index),
                     expected_cases=frozenset(c.name for c in config.cases),
+                    required_derived=tuple(
+                        (next(iter(definition["terms"])), definition["name"])
+                        for definition in config.derived
+                    ),
                     diagnostic_only=diagnostic,
                 )
             )

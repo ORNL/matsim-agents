@@ -224,6 +224,9 @@ pseudopotentials to work around that crash.
   `cutoff_override_reason` and is then diagnostic only. Missing recommendations must be supplied
   by matching, checksum-verified manifest metadata; a diagnostic override cannot substitute for
   unknown recommendations. Templates must specify `pseudo_dir`, `ecutwfc` and `ecutrho`.
+  Configure XC through the typed `functional` setting, not `extra_system.input_dft`.
+  Elemental relaxations, staged NEB inputs and the full-supercell campaign accept a
+  `pseudo_manifest` for pseudopotentials without UPF cutoff hints.
 - **Campaign values.** `examples/fusion_bcc_1024/campaign.yaml` uses the provisional
   recommendation from the 54-site scans: 100/1200 Ry, 3x3x3 (k-spacing 0.10), MV 0.010 Ry,
   `conv_thr` 1e-7. That clears the PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V) but

@@ -45,7 +45,7 @@ scans:
   - parameter: cutoff
     values: [[90, 1080], [100, 1200], [110, 1320]]
 derived:
-  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9815}}
+  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9814814814814815}}
 criteria: {}
 resources:
   launcher:

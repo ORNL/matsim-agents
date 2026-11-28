@@ -28,7 +28,7 @@ scans:
   - parameter: kpoints
     values: [0.25, 0.20, 0.16, 0.13, 0.11]
 derived:
-  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.98148148}}
+  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.9814814814814815}}
 criteria: {}
 resources:
   launcher:

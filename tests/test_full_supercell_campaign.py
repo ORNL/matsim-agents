@@ -121,13 +121,38 @@ def test_manifest_blocked_without_pseudos(cfg, tmp_path):
 
 
 def test_full_size_inputs_and_manifest(cfg, tmp_path):
+    import hashlib
+
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir()
     for el in cfg.parent_supercell.composition:
         write_synthetic_upf(pseudo, f"{el}.pbe.UPF", el)
+    missing_hint = pseudo / "Mo.pbe.UPF"
+    missing_hint.write_text(
+        missing_hint.read_text().replace('wfc_cutoff="30.0" rho_cutoff="240.0"', "")
+    )
+    manifest = tmp_path / "pseudo-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "pseudopotentials": {
+                    el: {
+                        "filename": f"{el}.pbe.UPF",
+                        "sha256": hashlib.sha256(
+                            (pseudo / f"{el}.pbe.UPF").read_bytes()
+                        ).hexdigest(),
+                        "recommended_ecutwfc_ry": 30,
+                        "recommended_ecutrho_ry": 240,
+                    }
+                    for el in cfg.parent_supercell.composition
+                }
+            }
+        )
+    )
     qe = cfg.qe.model_copy(
         update={
             "pseudo_dir": str(pseudo),
+            "pseudo_manifest": str(manifest),
             "pseudopotentials": {el: f"{el}.pbe.UPF" for el in cfg.parent_supercell.composition},
         }
     )

@@ -19,7 +19,14 @@ _ROOT_SEED_FILE = "random-seed.json"
 
 def _prior_run_artifacts(root: Path) -> list[str]:
     """Evidence a previous run left in *root*: iterations, datasets, and seed structures."""
-    names = ["dataset.extxyz", "dataset.db", "validation.extxyz", "seeds", "dft_label_cache"]
+    names = [
+        "dataset.extxyz",
+        "dataset.db",
+        "validation.extxyz",
+        "seeds",
+        "dft_label_cache",
+        "dft_attempts",
+    ]
     found = [name for name in names if (root / name).exists()]
     return found + sorted(path.name for path in root.glob("iteration_*"))
 
@@ -65,6 +72,8 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
         return 0, None
     completed: list[tuple[int, Path | None]] = []
     for d in sorted(root.glob("iteration_*")):
+        if (d / "dft").exists() or any(d.rglob("*-dft-neb")):
+            raise ValueError(f"{d} contains DFT work outside the attempt archive; refusing resume")
         sf = d / "state.json"
         if not sf.exists():
             # Partial — nuke it so we don't double-count.

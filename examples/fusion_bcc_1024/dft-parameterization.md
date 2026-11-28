@@ -58,7 +58,7 @@ A scan point is accepted only if it and every more demanding point agree with th
 | Observable | Limit | Applies to |
 |---|---|---|
 | Total energy | 1.0 meV/atom | each case |
-| Derived energy (vacancy formation) | 0.02 eV | `E(vacancy) - 0.9815 E(bulk)` |
+| Derived energy (vacancy formation) | 0.02 eV | `E(vacancy) - (53/54) E(bulk)` |
 | Force, max component difference | 0.005 eV/A | bulk and non-defect cases |
 | Force, defect cases | 0.01 eV/A | vacancy, substitution, interstitial |
 | Stress | 0.1 GPa | each case |
@@ -66,6 +66,12 @@ A scan point is accepted only if it and every more demanding point agree with th
 Tables below report the largest difference over the four cases against the reference point.
 `dE` is the energy difference in meV/atom, `d(Ef)` the change of the vacancy formation energy in
 eV, `max dF` the largest force difference in eV/A and `dP` the pressure difference in GPa.
+The formation-energy differences in the tables were recomputed from the recorded bulk and
+vacancy energies with 53/54; their displayed rounded values are unchanged. The earlier 0.9815
+coefficient introduced a large absolute-energy error: for the first cutoff scan reference
+(80/960 Ry), it gave 13.286368 eV instead of 2.942496 eV. This correction does not change
+the recorded convergence decisions. Existing on-disk reports made with the old coefficient
+are historical artifacts, not corrected reports; do not use their absolute derived energies.
 
 ## Run inventory
 

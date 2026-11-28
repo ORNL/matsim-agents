@@ -36,10 +36,11 @@ dft:
     kpts: ${E3_QE_KPTS:?set a reviewed YAML k-mesh such as [2,2,2]}
     koffset: [0, 0, 0]
     occupations: ${E3_QE_OCCUPATIONS:?set fixed or smearing after material-specific review}
+    functional: ${E3_QE_FUNCTIONAL:?set the reviewed XC functional}
     smearing: ${E3_QE_SMEARING:-mv}
     degauss_ry: ${E3_QE_DEGAUSS_RY:-0.01}
     extra_control: {tstress: true, tprnfor: true, calculation: scf}
-    extra_system: ${E3_QE_SYSTEM:?set reviewed YAML SYSTEM settings including XC and spin}
+    extra_system: ${E3_QE_SYSTEM:?set reviewed YAML SYSTEM settings such as spin}
     extra_electrons: {conv_thr: 1.0e-8, electron_maxstep: 150, mixing_beta: 0.3}
     timeout_sec: 1800
 

@@ -36,7 +36,10 @@ from typing import Any
 import numpy as np
 from ase import Atoms
 
-from matsim_agents.backends.dft.pseudo_validation import require_valid_pseudopotentials
+from matsim_agents.backends.dft.pseudo_validation import (
+    load_manifest,
+    require_valid_pseudopotentials,
+)
 from matsim_agents.backends.dft.qe_neb import QENebConfig
 from matsim_agents.backends.dft.qe_relax import _ATOMIC_MASS, _fortran, _namelist
 from matsim_agents.core.fileio import atomic_write_text
@@ -92,6 +95,10 @@ def render_neb_input(
     if not images:
         raise ValueError("no images supplied")
     _check_images(config, images)
+    if pseudo_manifest is not None and config.pseudo_manifest is not None:
+        raise ValueError("specify the pseudopotential manifest in the config or as an argument")
+    if config.pseudo_manifest is not None:
+        pseudo_manifest = load_manifest(config.pseudo_manifest)
     require_valid_pseudopotentials(
         {s: config.pseudopotentials[s] for s in sorted(set(images[0].get_chemical_symbols()))},
         config.pseudo_dir,

@@ -153,6 +153,7 @@ class ScanPoint:
     cost: float  # core-hours or wall seconds; a larger cost is more demanding
     cell_ids: list[str] = field(default_factory=list)
     expected_cases: frozenset[str] = field(default_factory=frozenset)
+    required_derived: tuple[tuple[str, str], ...] = ()
     diagnostic_only: bool = False
 
 
@@ -222,6 +223,13 @@ def compare_point(
         out.complete = False
         out.reasons.append(f"unusable or missing cases: {missing}")
         return out
+    for owner, name in reference.required_derived:
+        for cases in (point.cases, reference.cases):
+            value = cases[owner].derived.get(name) if owner in cases else None
+            if value is None or not math.isfinite(value):
+                out.complete = False
+                out.reasons.append(f"derived energy {name!r} missing or nonfinite")
+                return out
     for name in magnetic_cases:
         if name not in expected:
             continue

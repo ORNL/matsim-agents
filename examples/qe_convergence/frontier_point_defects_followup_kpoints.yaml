@@ -34,7 +34,7 @@ scans:
   - parameter: kpoints
     values: [0.2, 0.14, 0.12, 0.10]
 derived:
-  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9815}}
+  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9814814814814815}}
 criteria: {}
 resources:
   # srun, modules and GPU affinity come from the Frontier launcher; stdout goes to pw.out.

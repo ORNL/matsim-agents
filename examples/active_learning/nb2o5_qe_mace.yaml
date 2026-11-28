@@ -47,11 +47,10 @@ dft:
     kpts: [2, 2, 2]
     koffset: [0, 0, 0]
     occupations: fixed
+    functional: PBE
     extra_control:
       tstress: true
       tprnfor: true
-    extra_system:
-      input_dft: PBE
     extra_electrons:
       conv_thr: 1.0e-8
       electron_maxstep: 150

@@ -240,10 +240,10 @@ Quick audit of a run:
 
 ```bash
 # real converged energies produced?
-grep -rl "free  energy   TOTEN" runs/<RUN_TAG>/iteration_*/dft/*/OUTCAR | wc -l
+grep -rl "free  energy   TOTEN" runs/<RUN_TAG>/dft_attempts/*/*/OUTCAR | wc -l
 # any NCCL/CUDA crashes left? (should be 0)
 grep -rlE "NCCL WARN|invalid device ordinal|ILLEGAL_ADDRESS" \
-  runs/<RUN_TAG>/iteration_*/dft/*/vasp.out | wc -l
+  runs/<RUN_TAG>/dft_attempts/*/*/vasp.out | wc -l
 ```
 
 ## Related repository docs
