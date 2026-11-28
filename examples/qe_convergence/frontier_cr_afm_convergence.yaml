@@ -1,0 +1,43 @@
+# Cr antiferromagnetic cutoff and k-point scans (54 sites, bulk and monovacancy) at degauss 0.005,
+# the smearing the magnetic scan did not show converged. Cells come from cells_cr.yaml.
+#
+# 1. python -m matsim_agents.workflows.numerical_convergence this.yaml plan
+# 2. ... submit --job-manifest $OUT/jobs.jsonl, then collect, then analyse
+#
+# Each scan reference is its last value; a run past the limit is unusable, never converged.
+protocol: point_defects
+out_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/outputs/qe-convergence/cr_afm_convergence
+label: ""
+base:
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudo_manifest: deployments/common/pseudopotentials/pslibrary-1.0.0-pbe-paw.yaml
+  pseudopotentials:
+    Cr: Cr.pbe-spn-kjpaw_psl.1.0.0.UPF
+  ecutwfc_ry: 60.0
+  ecutrho_ry: 720.0
+  kspacing_inv_A: 0.16
+  smearing: mv
+  degauss_ry: 0.005
+  conv_thr_ry: 1.0e-7
+cases:
+  - {name: bulk_afm, structure: outputs/qe-convergence/cr_magnetic/cells/bulk.extxyz, kind: bulk, magnetic: true, starting_magnetization: {Cr: 0.1}, afm_lattice_A: 2.88}
+  - {name: vac_afm, structure: outputs/qe-convergence/cr_magnetic/cells/vacancy.extxyz, kind: vacancy, magnetic: true, starting_magnetization: {Cr: 0.1}, afm_lattice_A: 2.88}
+scans:
+  - parameter: cutoff
+    values: [[50, 600], [60, 720], [70, 840], [80, 960]]
+  - parameter: kpoints
+    values: [0.25, 0.20, 0.16, 0.13, 0.11]
+derived:
+  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.98148148}}
+criteria: {}
+resources:
+  launcher:
+    - bash
+    - -c
+    - "NRANKS=8 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} -nk 8 > {output} 2> {output}.err"
+  time_limit: "02:00:00"
+  account: LRN110
+  qos: normal
+  partition: batch
+  gpus: 8
+  max_outstanding: 64
