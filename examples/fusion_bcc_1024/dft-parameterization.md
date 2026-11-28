@@ -188,14 +188,13 @@ Findings:
   about 15.6 muB per cell to about 0 muB and the SCF was still at 1e-6 Ry. Its energy matches the
   non-magnetic one, so no stable ferromagnetic state is shown at this lattice parameter. No FM
   conclusion is drawn.
-- Not run: any Cr cutoff or k-point scan, other cell sizes, a spin-spiral or other AFM orderings, a
+- Not run: other cell sizes, a spin-spiral or other AFM orderings, a
   lattice-parameter relaxation in the AFM state, and the divacancy, dumbbell, H, Os and alloy cells
   (generated, not run through DFT).
 
 ## Open items
 
 1. Repeat the smearing scan at 7x7x7 (and 100/1200 Ry), the one scan that needs a rerun.
-   For Cr, run the cutoff and k-point scans in the AFM state.
 2. Run one combined check (7x7x7, 100/1200 Ry) against a denser mesh or cutoff to show a plateau.
 3. Qualify a larger cell. The mesh for the 1024-site cell is derived from the spacing, not run.
 4. [campaign.yaml](campaign.yaml) still has 60/720 Ry and a 2x2x2 mesh. Tests pin these values, so
