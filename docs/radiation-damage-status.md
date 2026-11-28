@@ -26,7 +26,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | 6 | Mechanism registry and NEB preparation | `kinetics/gas_mechanisms.py` | `IMPLEMENTED_TESTED` | No barriers computed. |
 | 7 | Cluster-dynamics bridge | `kinetics/cluster_dynamics.py` | `IMPLEMENTED_TESTED` | Bubble physics rejected as future work; bubble kinetics `NOT_ESTABLISHED`. |
 | 8 | Transfer-driven gas acquisition | `campaign/gas_transfer.py` | `IMPLEMENTED_TESTED` | Not shown to beat random selection on any real data. |
-| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). The campaign cutoffs (60/720 Ry) clear the PSlibrary recommended maxima (wfc 53.8 Ry for Os, rho 645 Ry for V), enforced by `backends/dft/pseudo_validation.py`, but are provisional and not converged. The convergence workflow (`workflows/numerical_convergence.py`, Frontier config `examples/qe_convergence/frontier_point_defects.yaml`) plans 64 runs; none has been run, and all 7 protocols in `deployments/common/qe-protocols.yaml` are `unqualified`. No QE run with them yet. Own dispatch, not `slurm_jobs`. |
+| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). The campaign cutoffs (100/1200 Ry, from the 54-site convergence scans) clear the PSlibrary recommended maxima (wfc 53.8 Ry for Os, rho 645 Ry for V), enforced by `backends/dft/pseudo_validation.py`, but are provisional and not shown converged. The convergence workflow (`workflows/numerical_convergence.py`, Frontier config `examples/qe_convergence/frontier_point_defects.yaml`) produced the scans recorded in `examples/fusion_bcc_1024/dft-parameterization.md`; all 7 protocols in `deployments/common/qe-protocols.yaml` remain `unqualified`. No QE run with them yet. Own dispatch, not `slurm_jobs`. |
 | 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; PKA data archive (`pkas.zip`) cached, extracted per campaign. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
@@ -93,8 +93,9 @@ WP1 (`science/cascade/`, `workflows/radiation/cascade_candidates.py`) has recoil
   check for `convergence has been achieved` and `JOB DONE`.
 * See [multiproperty-selection.md](multiproperty-selection.md) for the property, selection,
   and acquisition workflow. All of it is software-verified only.
-* The 2x2x2 k-mesh and the 51/650 Ry cutoffs used for the 1,024-atom input are unconverged.
-  Scans on 54-site cells point to a denser mesh and 100/1200 Ry; see
+* The 1,024-atom input uses the provisional recommendation from the 54-site scans (100/1200 Ry,
+  3x3x3 from the 0.10 k-spacing, MV 0.010, `conv_thr` 1e-7); the cutoff is not shown converged
+  and no protocol is qualified. See
   [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
 * Debug QoS is not sufficient for production 1,024-atom QE.
 * With the `magnetism` block of `examples/fusion_bcc_1024/campaign.yaml`, every structure is prepared nonmagnetic, ferromagnetic and antiferromagnetic (`<structure>_<state>`); gas examples are nonmagnetic (`nspin: 1`).

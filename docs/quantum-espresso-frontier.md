@@ -222,9 +222,10 @@ pseudopotentials to work around that crash.
   `write_neb_input`. It rejects a cutoff below the UPF-recommended minimum, a functional
   mismatch with the manifest and a missing or mismatched file. A deliberate low value needs
   `cutoff_override_reason` and is then diagnostic only.
-- **Campaign values.** `examples/fusion_bcc_1024/campaign.yaml` uses 60/720 Ry. That clears the
-  PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V). It is provisional, not converged. The
-  scans point to 100/1200 Ry and a denser mesh; `campaign.yaml` is unchanged until a protocol qualifies.
+- **Campaign values.** `examples/fusion_bcc_1024/campaign.yaml` uses the provisional
+  recommendation from the 54-site scans: 100/1200 Ry, 3x3x3 (k-spacing 0.10), MV 0.010 Ry,
+  `conv_thr` 1e-7. That clears the PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V) but
+  is provisional, not a qualified protocol; see `deployments/common/qe-protocols.yaml`.
 - **Convergence runs.** They run on OLCF Frontier. `examples/qe_convergence/frontier_point_defects.yaml`
   drives `workflows/numerical_convergence.py` through `deployments/frontier/launchers/run-pw-gpu-frontier.sh`,
   one node and one GCD per run (the `execution/slurm_jobs` limit). Cells come from

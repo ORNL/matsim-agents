@@ -49,16 +49,21 @@ qe:
   # Cutoff classes, kept apart on purpose:
   #  1. Pseudopotential-recommended minima (UPF headers, this library): wfc max 53.8 Ry (Os),
   #     rho max 645 Ry (V). Enforced by backends.dft.pseudo_validation; below these is rejected.
-  #  2. Provisional qualification values below. They only clear (1); they are NOT converged.
-  #  3. Numerically converged production values: none yet. They come from the cutoff study
-  #     (workflows/numerical_convergence.py) and are recorded in the qualification matrix.
-  # The former 51/650 Ry sat below the Os wfc recommendation and is diagnostic-only.
-  ecutwfc_ry: 60.0
-  ecutrho_ry: 720.0
+  #  2. The values below are the evidence-based provisional recommendation from the 54-site W
+  #     convergence scans (deployments/common/qe-protocols.yaml, provisional_recommendation;
+  #     detail in dft-parameterization.md). conv_thr is qualified; the k-mesh is the k-spacing
+  #     0.10 2pi/A equivalent (3x3x3 on this 25.28 A cell, derived, not run); 100/1200 Ry and
+  #     degauss 0.010 are provisional and NOT shown converged.
+  #  3. Numerically qualified production values: none yet. Every protocol in
+  #     deployments/common/qe-protocols.yaml is unqualified.
+  # The former 51/650 Ry sat below the Os wfc recommendation and is diagnostic-only; the former
+  # 60/720 Ry, 2x2x2, degauss 0.02, conv_thr 1e-6 pre-dated the scans.
+  ecutwfc_ry: 100.0
+  ecutrho_ry: 1200.0
   smearing: mv
-  degauss_ry: 0.02
-  kpts: [2, 2, 2]
-  conv_thr_ry: 1.0e-6
+  degauss_ry: 0.010
+  kpts: [3, 3, 3]
+  conv_thr_ry: 1.0e-7
   mixing_beta: 0.2
   neb_images: 5
 slurm:

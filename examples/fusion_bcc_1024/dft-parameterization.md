@@ -155,8 +155,10 @@ rather than the smearing. Forces never reach the 0.005 eV/A limit. This scan mus
 | Smearing | MV, 0.010 Ry | Keeps the value used in all scans, so the other results stay comparable | Forces moved 0.0265 eV/A with `degauss` at a coarse mesh; unknown at 7x7x7 |
 
 The formation energy and forces are the quantities the campaign uses, and both are inside their
-limits from 70/840 Ry. The 60/720 Ry value in `campaign.yaml` was provisional, and the scans back
-a move to 100/1200 Ry for margin, not as a proven converged value.
+limits from 70/840 Ry. [campaign.yaml](campaign.yaml) now carries this provisional recommendation
+(100/1200 Ry, k-spacing 0.10 as 3x3x3 on the 1,024-site cell, MV 0.010 Ry, `conv_thr` 1e-7) for
+margin, not as a proven converged protocol; the earlier 60/720 Ry, 2x2x2, `degauss` 0.02,
+`conv_thr` 1e-6 pre-dated the scans.
 
 ## Cr magnetic smearing scan (54-site cell, 60/720 Ry, 5x5x5, `conv_thr` 1e-7)
 
@@ -213,8 +215,9 @@ Findings:
 1. Repeat the smearing scan at 7x7x7 (and 100/1200 Ry), the one scan that needs a rerun.
 2. Run one combined check (7x7x7, 100/1200 Ry) against a denser mesh or cutoff to show a plateau.
 3. Qualify a larger cell. The mesh for the 1024-site cell is derived from the spacing, not run.
-4. [campaign.yaml](campaign.yaml) still has 60/720 Ry and a 2x2x2 mesh. Tests pin these values, so
-   they are changed together with a new qualified protocol, not here.
+4. [campaign.yaml](campaign.yaml) carries the provisional recommendation (100/1200 Ry, 3x3x3,
+   MV 0.010, `conv_thr` 1e-7). No test pins these numbers; they change again only with a
+   qualified protocol. The 3x3x3 mesh is derived from the 0.10 spacing, not run at 1,024 sites.
 
 ## Reproduce
 

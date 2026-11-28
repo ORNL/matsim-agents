@@ -3,8 +3,8 @@
 # A protocol is "qualified" only through a convergence report (workflows/numerical_convergence.py)
 # whose status is "qualified", whose label is empty (not "software verification only"), and
 # whose cells cover the protocol's domain. No such report exists yet: every protocol below is
-# unqualified, and the cutoffs in the campaign configs are provisional (pseudopotential
-# recommendation plus margin), not convergence results.
+# unqualified. The W campaign config (examples/fusion_bcc_1024/campaign.yaml) carries the
+# provisional_recommendation values below (scan evidence, not a qualified protocol).
 #
 # settings are the numerical parameters a qualified report must have selected; null means not
 # yet determined. Cutoffs are never filled in here from a recommendation.
