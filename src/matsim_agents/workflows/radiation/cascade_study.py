@@ -119,7 +119,7 @@ def run_task(task: dict, calculators: dict[str, Calculator], out_dir: Path) -> d
         direction_source="user",
         direction=tuple(float(x) for x in direction),
     )
-    ball, spike, cool = PHASE_DURATIONS_FS[task["phase_set"]]
+    ball, spike, cool = task.get("phase_durations_fs") or PHASE_DURATIONS_FS[task["phase_set"]]
     result = run_protocol(
         atoms,
         event,

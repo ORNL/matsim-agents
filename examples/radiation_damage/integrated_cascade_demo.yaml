@@ -1,0 +1,35 @@
+# Integrated cascade investigation demo: qualification gate -> adaptive ensemble ->
+# surviving-defect statistics -> evidence ledger -> hypothesis revision -> report.
+# EMT on Cu is a software-verification potential; with no qualification record the gate
+# resolves UNASSESSED, so the run is labelled exploratory_unqualified in every record.
+# Requesting classification: production with this config is refused by the gate. The 15 eV
+# recoil in a 256-atom cell keeps the verification boundary check clean.
+campaign_id: integrated-cascade-demo
+classification: exploratory
+seed: 7
+material:
+  element: Cu
+  lattice_parameter_A: 3.615
+  n_cells: 4
+pka:
+  energy_eV: 15.0
+  direction: iso
+  temperature_K: 100.0
+phases:
+  # Short verification phases; production values are the cascade defaults (200/2000/5000 fs).
+  ballistic_fs: 30.0
+  thermal_spike_fs: 60.0
+  cooling_fs: 90.0
+ensemble:
+  initial_realizations: 2
+  max_realizations: 4
+  relative_ci_half_width: 0.5
+potential:
+  backend: emt
+  checkpoint: ase-emt-cu
+  short_range: zbl
+hypothesis:
+  hypothesis_id: demo-cu-cascade-recovery
+  claim: >-
+    A 40 eV Cu recoil at 100 K leaves a nonzero surviving Frenkel-pair population under the
+    EMT verification potential.
