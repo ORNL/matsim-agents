@@ -39,6 +39,23 @@ def test_generation_is_reproducible(tmp_path):
     assert (tmp_path / "a/train0.extxyz").read_text() == (tmp_path / "b/train0.extxyz").read_text()
 
 
+def test_vacancy_neb_moves_one_atom_to_vacant_site_with_mic(tmp_path):
+    import numpy as np
+    from ase.geometry import find_mic
+    from ase.io import read
+
+    generate(BCC, tmp_path)
+    base = read(tmp_path / "bulk.extxyz")
+    initial, middle, final = [read(tmp_path / f"neb_image{i}.extxyz") for i in range(3)]
+    delta = final.positions - initial.positions
+    moving = np.flatnonzero(np.linalg.norm(delta, axis=1) > 1e-8)
+    assert len(moving) == 1
+    assert np.linalg.norm(delta[moving[0]]) == pytest.approx(BCC.lattice_A * 3**0.5 / 2)
+    assert middle.positions == pytest.approx((initial.positions + final.positions) / 2)
+    _, distance = find_mic(final.positions[moving[0]] - base.positions[0], base.cell, pbc=True)
+    assert distance < 1e-8
+
+
 def test_all_seven_protocols_are_unqualified_and_have_domains():
     protocols, criteria = load_protocols(ROOT / "deployments/common/qe-protocols.yaml")
     assert len(protocols) == 7

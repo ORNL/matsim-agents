@@ -167,3 +167,87 @@ def test_magnetism_elements_must_be_in_parent(cfg):
                 },
             }
         )
+
+
+def test_collects_magnetic_states_and_blocks_incomplete_results(cfg, tmp_path):
+    pseudo = tmp_path / "pseudo"
+    pseudo.mkdir()
+    for element in cfg.parent_supercell.composition:
+        write_synthetic_upf(pseudo, f"{element}.pbe.UPF", element)
+    qe = cfg.qe.model_copy(
+        update={
+            "pseudo_dir": str(pseudo),
+            "pseudopotentials": {
+                element: f"{element}.pbe.UPF" for element in cfg.parent_supercell.composition
+            },
+        }
+    )
+    root = tmp_path / "campaign"
+    entries = fsc.prepare_campaign(cfg.model_copy(update={"qe": qe}), root, git_revision="test")
+    pristine = {e["calc_id"]: e for e in entries if e.get("structure_key") == "pristine"}
+
+    def moments(antiferromagnetic):
+        return "".join(
+            f"atom: {i + 1} charge: 1.0 magn: {-1.0 if antiferromagnetic and i % 2 else 1.0:.1f}\n"
+            for i in range(cfg.parent_supercell.expected_parent_atoms)
+        )
+
+    for state, energy in (("nonmagnetic", -100.0), ("ferromagnetic", -101.0)):
+        entry = pristine[f"pristine_{state}"]
+        (root / entry["calc_id"] / "pw.out").write_text(
+            f"!    total energy = {energy:.6f} Ry\n"
+            + (moments(False) if state == "ferromagnetic" else "")
+            + "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+        )
+    afm = root / "pristine_antiferromagnetic" / "pw.out"
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        "convergence NOT achieved after 100 iterations: stopping\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_ferromagnetic"
+    assert report["status"] == "provisional"
+    assert not report["downstream_allowed"]
+    assert any(e["calc_id"] == "pristine_antiferromagnetic" for e in report["incomplete"])
+
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_antiferromagnetic"
+    assert report["status"] == "complete"
+    assert not report["downstream_allowed"]
+    assert any("site moments missing" in note for note in report["missing_evidence"])
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        + moments(True)
+        + "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_antiferromagnetic"
+    assert report["ready_for_review"]
+    assert not report["downstream_allowed"]
+    assert {observation["requested_mode"] for observation in report["observations"]} == {
+        "nonmagnetic",
+        "ferromagnetic",
+        "antiferromagnetic",
+    }
+    input_path = root / "pristine_antiferromagnetic" / "pw.in"
+    input_path.write_text(input_path.read_text() + "\n")
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["status"] == "provisional"
+    assert not report["downstream_allowed"]
+    manifest_path = root / fsc.MANIFEST_FILE
+    manifest = json.loads(manifest_path.read_text())
+    manifest_path.write_text(
+        json.dumps(
+            [entry for entry in manifest if entry["calc_id"] != "pristine_antiferromagnetic"]
+        )
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert any("missing from manifest" in item["reason"] for item in report["incomplete"])
+    structure_path = root / "pristine_ferromagnetic" / "structure.extxyz"
+    structure_path.write_text(structure_path.read_text() + "\n")
+    with pytest.raises(ValueError, match="structure is missing or changed"):
+        fsc.collect_magnetic_survey(root)

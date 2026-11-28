@@ -12,6 +12,7 @@ production.
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
@@ -77,9 +78,15 @@ def _manifest_cutoffs(entry: Mapping[str, Any]) -> tuple[float | None, float | N
     wfc = entry.get("recommended_ecutwfc_ry", entry.get("sssp_cutoff_wfc_ry"))
     rho = entry.get("recommended_ecutrho_ry", entry.get("sssp_cutoff_rho_ry"))
     return (
-        float(wfc) if isinstance(wfc, (int, float)) else None,
-        float(rho) if isinstance(rho, (int, float)) else None,
+        _positive_cutoff(wfc),
+        _positive_cutoff(rho),
     )
+
+
+def _positive_cutoff(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) and value > 0 else None
 
 
 def validate_pseudopotentials(
@@ -111,7 +118,9 @@ def validate_pseudopotentials(
             problems.append(f"{element}: file {filename} is for element {header.element!r}")
         if canonical_functional(header.functional) != canonical_functional(functional):
             problems.append(f"{element}: functional {header.functional!r} is not {functional}")
-        wfc, rho, source = header.wfc_cutoff_ry, header.rho_cutoff_ry, "upf_header"
+        wfc = _positive_cutoff(header.wfc_cutoff_ry)
+        rho = _positive_cutoff(header.rho_cutoff_ry)
+        source = "upf_header"
         entry = entries.get(element)
         if manifest is not None:
             if entry is None:
@@ -122,8 +131,10 @@ def validate_pseudopotentials(
                 if entry.get("sha256") != header.sha256:
                     problems.append(f"{element}: checksum differs from the manifest")
                 m_wfc, m_rho = _manifest_cutoffs(entry)
-                if wfc is None and rho is None and (m_wfc is not None or m_rho is not None):
-                    wfc, rho, source = m_wfc, m_rho, "manifest"
+                if wfc is None and m_wfc is not None:
+                    wfc, source = m_wfc, "manifest"
+                if rho is None and m_rho is not None:
+                    rho, source = m_rho, "manifest"
         if wfc is None or rho is None:
             unavailable.append(element)
             source = "unavailable"
@@ -136,7 +147,9 @@ def validate_pseudopotentials(
         ("ecutwfc", ecutwfc_ry, min_wfc),
         ("ecutrho", ecutrho_ry, min_rho),
     ):
-        if minimum is not None and configured < minimum - 1e-9:
+        if _positive_cutoff(configured) is None:
+            problems.append(f"{label} must be a positive finite cutoff")
+        elif minimum is not None and configured < minimum - 1e-9:
             problems.append(
                 f"{label} {configured:g} Ry is below the pseudopotential recommendation "
                 f"{minimum:g} Ry"
@@ -160,12 +173,14 @@ def require_valid_pseudopotentials(
 ) -> PseudoValidation:
     """Raise unless valid; with ``override_reason`` set, only cutoff shortfalls are tolerated."""
     result = validate_pseudopotentials(pseudopotentials, pseudo_dir, **kwargs)
-    tolerated = bool(result.override_reason)
+    tolerated = bool(result.override_reason and result.override_reason.strip())
     blocking = [
         p
         for p in result.problems
         if not (tolerated and "below the pseudopotential recommendation" in p)
     ]
+    if result.unavailable:
+        blocking.append(f"cutoff recommendations unavailable for: {', '.join(result.unavailable)}")
     if blocking:
         raise PseudopotentialError(
             "pseudopotential validation failed: "

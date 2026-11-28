@@ -81,20 +81,18 @@ def main(argv: list[str] | None = None) -> int:
             "library": args.library,
             "version": args.version,
             "note": args.note or UNAVAILABLE,
-            "manifest_generated_utc": dt.datetime.now(dt.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
+            "manifest_generated_utc": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
         "campaign_minimum_cutoffs_ry": {
-            "ecutwfc": max(
-                p["recommended_ecutwfc_ry"]
-                for p in pseudos.values()
-                if p["recommended_ecutwfc_ry"] != UNAVAILABLE
+            "ecutwfc": (
+                max(p["recommended_ecutwfc_ry"] for p in pseudos.values())
+                if all(p["recommended_ecutwfc_ry"] != UNAVAILABLE for p in pseudos.values())
+                else UNAVAILABLE
             ),
-            "ecutrho": max(
-                p["recommended_ecutrho_ry"]
-                for p in pseudos.values()
-                if p["recommended_ecutrho_ry"] != UNAVAILABLE
+            "ecutrho": (
+                max(p["recommended_ecutrho_ry"] for p in pseudos.values())
+                if all(p["recommended_ecutrho_ry"] != UNAVAILABLE for p in pseudos.values())
+                else UNAVAILABLE
             ),
             "note": "max over listed elements of the UPF-header recommendation; not a "
             "convergence result",

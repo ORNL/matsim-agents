@@ -16,6 +16,26 @@ numbers behind each choice. It covers the measured evidence only. No protocol is
 Every protocol in [qe-protocols.yaml](../../deployments/common/qe-protocols.yaml) stays `unqualified`.
 The values above are stored there under `provisional_recommendation`, not in any `settings` block.
 
+## Collecting magnetic-state results
+
+For a campaign prepared by the current code, put each QE output in its calculation directory
+as `pw.out`, then run `matsim-agents magnetic collect <campaign-directory>`. The collector
+writes `magnetic_selection.json` with the converged energies and output hashes for each state,
+the lowest-energy evaluated state per structure, and incomplete or rejected results. It
+checks the prepared structure, input and pseudopotential hashes and rejects differing structures or
+methods. A missing, incomplete or unconverged state leaves the selection provisional and the
+magnetic downstream flag false. Missing spin-resolved site moments or unresolved energy ties
+also prevent readiness for review. The downstream flag remains false even for complete groups:
+the collector cannot verify that an output was produced from its prepared input. Rankings cover
+only the requested states, not all magnetic orders.
+
+The flag is only a magnetic-survey check, not numerical qualification of the DFT method. The
+generic NEB workflow does not yet consume this flag or selected moments automatically; do not
+run a downstream campaign calculation on the assumption that this report gates it. Older
+manifests without the full magnetic configuration and pseudopotential hashes cannot be
+collected by this command; preserve their original inputs and results rather than overwriting
+them. No QE calculation is launched by collection.
+
 ## Scope and constraints
 
 - Machine: OLCF Frontier, account LRN110, QOS `normal` (120 min limit), `pw.x` from QE 8.0dev on

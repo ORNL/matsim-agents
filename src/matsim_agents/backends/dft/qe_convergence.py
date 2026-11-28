@@ -65,6 +65,19 @@ class PointObservables:
     def usable(self) -> bool:
         return self.scf_converged and self.job_done and math.isfinite(self.energy_eV)
 
+    @property
+    def convergence_usable(self) -> bool:
+        forces = self.forces_eV_per_A
+        return (
+            self.usable
+            and self.natoms > 0
+            and forces is not None
+            and len(forces) == self.natoms
+            and all(len(row) == 3 and all(math.isfinite(x) for x in row) for row in forces)
+            and self.stress_kbar is not None
+            and math.isfinite(self.stress_kbar)
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "natoms": self.natoms,
@@ -139,6 +152,8 @@ class ScanPoint:
     cases: dict[str, PointObservables]
     cost: float  # core-hours or wall seconds; a larger cost is more demanding
     cell_ids: list[str] = field(default_factory=list)
+    expected_cases: frozenset[str] = field(default_factory=frozenset)
+    diagnostic_only: bool = False
 
 
 @dataclass
@@ -173,13 +188,15 @@ def _max_force_difference(a: PointObservables, b: PointObservables) -> float | N
 
 
 def _magnetization_differs(obs: PointObservables, ref: PointObservables) -> bool:
-    if (obs.total_magnetization is None) != (ref.total_magnetization is None):
-        return True
-    if obs.total_magnetization is None or ref.total_magnetization is None:
-        return False
-    return abs(obs.total_magnetization - ref.total_magnetization) > 0.1 * max(
-        1.0, abs(ref.total_magnetization)
-    )
+    for value, reference in (
+        (obs.total_magnetization, ref.total_magnetization),
+        (obs.absolute_magnetization, ref.absolute_magnetization),
+    ):
+        if value is None or reference is None or not math.isfinite(value + reference):
+            return True
+        if abs(value - reference) > 0.1 * max(1.0, abs(reference)):
+            return True
+    return False
 
 
 def compare_point(
@@ -192,15 +209,30 @@ def compare_point(
     """Differences between ``point`` and ``reference`` over all shared cases."""
     case_kinds = case_kinds or {}
     out = PointComparison(value=point.value, complete=True)
+    expected = reference.expected_cases or frozenset(reference.cases)
     missing = sorted(
         name
-        for name, obs in reference.cases.items()
-        if name not in point.cases or not point.cases[name].usable or not obs.usable
+        for name in expected
+        if name not in reference.cases
+        or name not in point.cases
+        or not point.cases[name].convergence_usable
+        or not reference.cases[name].convergence_usable
     )
     if missing:
         out.complete = False
         out.reasons.append(f"unusable or missing cases: {missing}")
         return out
+    for name in magnetic_cases:
+        if name not in expected:
+            continue
+        for obs in (point.cases[name], reference.cases[name]):
+            if any(
+                value is None or not math.isfinite(value)
+                for value in (obs.total_magnetization, obs.absolute_magnetization)
+            ):
+                out.complete = False
+                out.reasons.append(f"{name}: missing or nonfinite magnetization")
+                return out
     de, dd, df, ds = [], [], [], []
     for name, ref in reference.cases.items():
         obs = point.cases[name]
@@ -242,6 +274,8 @@ def compare_point(
         out.reasons.append(f"stress {out.stress_GPa:.4f} GPa > {criteria.stress_GPa}")
     if out.magnetization_changed:
         out.reasons.append("magnetic state differs from the reference")
+    if point.diagnostic_only:
+        out.reasons.append("below pseudopotential recommendation; diagnostic only")
     out.accepted = out.complete and not out.reasons
     return out
 
@@ -283,11 +317,18 @@ def analyse_scan(
     if len(points) < 3:
         raise ValueError(f"scan {parameter!r} needs at least three points to show a plateau")
     reference = points[-1]
-    if not reference.cases or not all(o.usable for o in reference.cases.values()):
+    if (
+        not reference.cases
+        or reference.diagnostic_only
+        or not all(o.convergence_usable for o in reference.cases.values())
+        or not reference.expected_cases.issubset(reference.cases)
+    ):
         return ScanOutcome(parameter, reference.value, [], None, "incomplete")
     comparisons = [
         compare_point(p, reference, criteria, case_kinds, magnetic_cases) for p in points
     ]
+    if not comparisons[-1].complete:
+        return ScanOutcome(parameter, reference.value, comparisons, None, "incomplete")
     selected = None
     for index in range(len(points) - 1):
         if all(c.accepted for c in comparisons[index:]):

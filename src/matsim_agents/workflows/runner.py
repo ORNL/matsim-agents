@@ -645,6 +645,7 @@ def _cascade_preflight(path: Path, options: RunOptions) -> Preflight:
             "qualification_level": resolution.level.name,
             "element": cfg.material.element,
             "pka_energy_eV": cfg.pka.energy_eV,
+            "pka_source": "spectrum" if cfg.pka.spectrum_file is not None else "imposed",
             "max_realizations": cfg.ensemble.max_realizations,
         },
         blockers,

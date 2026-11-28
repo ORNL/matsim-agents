@@ -390,6 +390,13 @@ def write_pw_input(
     if missing:
         raise ValueError(f"Missing pseudopotentials for: {missing}")
 
+    managed = {"ecutwfc", "ecutrho", "input_dft"}
+    conflicts = sorted(key for key in settings.extra_system if key.lower() in managed)
+    if conflicts:
+        raise ValueError(f"extra_system cannot override managed QE settings: {conflicts}")
+    if any(key.lower() == "pseudo_dir" for key in settings.extra_control):
+        raise ValueError("extra_control cannot override managed QE setting pseudo_dir")
+
     require_valid_pseudopotentials(
         {s: settings.pseudopotentials[s] for s in symbols_unique},
         settings.pseudo_dir,

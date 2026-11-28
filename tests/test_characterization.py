@@ -10,6 +10,7 @@ import pytest
 from ase import Atoms
 from ase.io import write
 from pydantic import ValidationError
+from synthetic_upf import write_synthetic_upf
 
 from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.core.contracts import (
@@ -1030,6 +1031,10 @@ def test_an_unconverged_scf_is_retried_with_softer_mixing(system):
 def test_recorded_qe_failure_reaches_the_recovery_ledger(system):
     tmp_path, structures, references = system
     data = _dft(references, budget={"max_dft_calculations": 1})
+    pseudo_dir = tmp_path / "pseudos"
+    for element in ("Nb", "O"):
+        write_synthetic_upf(pseudo_dir, f"{element}.UPF", element)
+    data["methods"]["dft"]["pseudo_dir"] = str(pseudo_dir)
     fixtures = Path(__file__).parent / "data" / "dft_outputs"
     data["methods"]["dft"]["launcher"] = [
         sys.executable,
@@ -1059,6 +1064,9 @@ def _replayed_recovery_contract_data(system, backend, mode):
     data.pop("reference_energies")
     structure = _structure(tmp_path / "Si.extxyz", "Si2" if backend == "qe" else "Si4")
     data["methods"]["dft"]["settings"]["pseudopotentials"] = {"Si": "Si.UPF"}
+    pseudo_dir = tmp_path / "pseudos"
+    write_synthetic_upf(pseudo_dir, "Si.UPF", "Si")
+    data["methods"]["dft"]["pseudo_dir"] = str(pseudo_dir)
     data["observables"] = [
         {
             "name": "energy_per_atom",

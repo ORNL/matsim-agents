@@ -38,6 +38,7 @@ from matsim_agents.science.cascade.qualification import (
     Resolution,
     resolve_level,
 )
+from matsim_agents.science.irradiation.contracts import PKASpectrum
 from matsim_agents.workflows.radiation import cascade_study
 
 Z_95 = 1.959963984540054
@@ -65,9 +66,27 @@ class PKASpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     symbol: str | None = None
-    energy_eV: float = Field(gt=0, allow_inf_nan=False)
+    energy_eV: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    spectrum_file: Path | None = None
     direction: str = "iso"
     temperature_K: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _source(self) -> PKASpec:
+        if (self.energy_eV is None) == (self.spectrum_file is None):
+            raise ValueError("specify exactly one of energy_eV or spectrum_file")
+        if self.spectrum_file is not None and self.symbol:
+            raise ValueError("spectrum_file forbids symbol")
+        return self
+
+
+class DisplacementSpectrum(BaseModel):
+    """A saved spectrum explicitly identified as one non-transmuting channel."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    channel: Literal["elastic", "inelastic"]
+    spectrum: PKASpectrum
 
 
 class PhaseDurations(BaseModel):
@@ -152,12 +171,26 @@ class IntegratedCascadeConfig(BaseModel):
                 updates[field] = (Path(path).parent / value).resolve()
         if updates:
             cfg = cfg.model_copy(update={"potential": cfg.potential.model_copy(update=updates)})
+        spectrum = cfg.pka.spectrum_file
+        if spectrum is not None and not spectrum.is_absolute():
+            cfg = cfg.model_copy(
+                update={
+                    "pka": cfg.pka.model_copy(
+                        update={"spectrum_file": (Path(path).parent / spectrum).resolve()}
+                    )
+                }
+            )
         return cfg
 
 
 def load_qualification_record(path: Path) -> QualificationRecord:
     raw = json.loads(Path(path).read_text())
     domain = raw["domain"]
+    for check in raw["checks"]:
+        if not isinstance(check["passed"], bool):
+            raise ValueError(
+                f"{path}: qualification check {check['name']!r} must have a boolean 'passed'"
+            )
     return QualificationRecord(
         checkpoint=raw["checkpoint"],
         domain=Domain(
@@ -171,7 +204,7 @@ def load_qualification_record(path: Path) -> QualificationRecord:
         checks=tuple(
             Check(
                 name=c["name"],
-                passed=bool(c["passed"]),
+                passed=c["passed"],
                 criterion=c["criterion"],
                 value=c.get("value"),
                 dataset=c["dataset"],
@@ -192,6 +225,12 @@ def _n_atoms(material: MaterialSpec) -> int:
 
 def resolve_gate(cfg: IntegratedCascadeConfig) -> Resolution:
     """Resolve the qualification level of this exact query; no record means UNASSESSED."""
+    if cfg.pka.spectrum_file is not None:
+        return Resolution(
+            Level.UNASSESSED,
+            ("spectrum-sampled events have not been individually qualified",),
+            {},
+        )
     path = cfg.potential.qualification_record
     if path is None or not Path(path).is_file():
         return Resolution(
@@ -200,6 +239,7 @@ def resolve_gate(cfg: IntegratedCascadeConfig) -> Resolution:
             {},
         )
     record = load_qualification_record(Path(path))
+    assert cfg.pka.energy_eV is not None
     elements = set(cfg.material.counts or {cfg.material.element: 1})
     query = Query(
         elements=frozenset(elements | {cfg.pka.symbol or cfg.material.element}),
@@ -309,6 +349,38 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
     atomic_write_text(out / "gate.json", json.dumps(gate, indent=2))
     label = classify(cfg, resolution)  # raises GateRefusal; gate.json records why
 
+    spectrum = None
+    spectrum_sha256 = None
+    spectrum_channel = None
+    if cfg.pka.spectrum_file is not None:
+        spectrum_sha256 = sha256_file(cfg.pka.spectrum_file)
+        source = DisplacementSpectrum.model_validate_json(cfg.pka.spectrum_file.read_text())
+        spectrum = source.spectrum
+        spectrum_channel = source.channel
+        if spectrum.provenance.numerical_validation.value == "STRUCTURALLY_INVALID":
+            raise ValueError("spectrum provenance reports structurally invalid data")
+        counts = cfg.material.counts or {cfg.material.element: _n_atoms(cfg.material)}
+        total = sum(counts.values())
+        composition = {element: count / total for element, count in counts.items()}
+        if set(composition) != set(spectrum.scenario.composition) or any(
+            not math.isclose(fraction, spectrum.scenario.composition[element], abs_tol=1e-6)
+            for element, fraction in composition.items()
+        ):
+            raise ValueError("spectrum composition does not match the simulated material")
+        for entry in spectrum.spectra:
+            if (
+                entry.parent is None
+                or entry.parent.mass_number is None
+                or entry.parent != entry.species
+            ):
+                raise ValueError(
+                    f"spectrum species {entry.species.key} does not identify an unchanged isotope"
+                )
+            if entry.species.element not in counts or entry.species.element in {"H", "He"}:
+                raise ValueError(
+                    f"spectrum species {entry.species.key} is not a supported lattice recoil"
+                )
+
     calculator, short_range_model = build_calculator(cfg.potential)
     if cfg.potential.backend == "eam_fs":
         elements = set(cfg.material.counts or {cfg.material.element: 1})
@@ -318,12 +390,26 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             raise ValueError(f"potential does not cover elements: {', '.join(sorted(missing))}")
     calculators = {cfg.potential.short_range: calculator}
     tasks = _plan(cfg)
-    fingerprint = sha256_json(cfg.model_dump(mode="json"))
+    fingerprint = (
+        sha256_json(cfg.model_dump(mode="json", exclude={"pka": {"spectrum_file"}}))
+        if spectrum is None
+        else sha256_json(
+            {"config": cfg.model_dump(mode="json"), "spectrum_sha256": spectrum_sha256}
+        )
+    )
 
     records: list[dict] = []
     stopping = "budget_exhausted"
     required: int | None = None
     for task in tasks:
+        task["qualification"] = label
+        task["execution_fingerprint"] = fingerprint
+        if spectrum is None:
+            records.append(cascade_study.run_task(task, calculators, tasks_dir))
+        else:
+            task["spectrum_sha256"] = spectrum_sha256
+            task["spectrum_channel"] = spectrum_channel
+            records.append(cascade_study.run_task(task, calculators, tasks_dir, spectrum=spectrum))
         if len(records) >= cfg.ensemble.initial_realizations:
             usable_so_far = [r for r in records if r["numerically_stable"] and r["boundary_ok"]]
             required = required_realizations(
@@ -333,9 +419,6 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             if required is not None and len(usable_so_far) >= required:
                 stopping = "target_met"
                 break
-        task["qualification"] = label
-        task["execution_fingerprint"] = fingerprint
-        records.append(cascade_study.run_task(task, calculators, tasks_dir))
 
     usable = [r for r in records if r["numerically_stable"] and r["boundary_ok"]]
     excluded = [
@@ -370,7 +453,12 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
         ),
     }
 
-    subject = f"{cfg.campaign_id}:{cfg.material.element}-{cfg.pka.energy_eV:g}eV"
+    recoil_label = (
+        f"{cfg.pka.energy_eV:g}eV"
+        if cfg.pka.energy_eV is not None
+        else f"spectrum-{spectrum_sha256}"
+    )
+    subject = f"{cfg.campaign_id}:{cfg.material.element}-{recoil_label}"
     method = MethodRecord(
         backend=cfg.potential.backend,
         model=cfg.potential.checkpoint,
@@ -385,15 +473,33 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             "temperature_K": cfg.pka.temperature_K,
             "n_cells": cfg.material.n_cells,
             "qualification": label,
+            "spectrum_sha256": spectrum_sha256,
+            "spectrum_channel": spectrum_channel,
         },
     )
     ledger = EvidenceLedger(out / "ledger.jsonl")
     assumptions = [
         f"classification: {label}",
-        "PKA energy imposed by configuration; no nuclear data",
+        (
+            "PKA energy imposed by configuration; no nuclear data"
+            if spectrum is None
+            else (
+                "PKA spectrum and reaction channel supplied by the user; "
+                "not independently validated"
+            )
+        ),
+        *(
+            [
+                "isotope-specific masses and isotope site assignments are not modelled",
+                "excluded trajectories can bias spectrum-averaged defect statistics",
+            ]
+            if spectrum is not None
+            else []
+        ),
         "initial velocities are sampled without equilibrium MD; electronic stopping is off",
         *short_range_model.assumptions,
     ]
+    input_hashes = {"pka_spectrum": spectrum_sha256} if spectrum_sha256 is not None else {}
     if values:
         evidence = EvidenceRecord(
             kind="property",
@@ -401,6 +507,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             campaign_id=cfg.campaign_id,
             method=method,
             evidence_level=EvidenceLevel.EMPIRICAL_POTENTIAL_PREDICTION,
+            input_sha256=input_hashes,
             outcome=EvidenceOutcome.MEASURED,
             values=[
                 LedgerQuantity(name="surviving_frenkel_pairs_mean", value=mean, unit="count"),
@@ -421,6 +528,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             campaign_id=cfg.campaign_id,
             method=method,
             evidence_level=EvidenceLevel.EMPIRICAL_POTENTIAL_PREDICTION,
+            input_sha256=input_hashes,
             outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
             failure_reason="no numerically stable, boundary-clean realization",
             physical_assumptions=assumptions,
@@ -465,6 +573,20 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             ),
             "short_range": short_range_model.policy,
         },
+        "pka_source": (
+            {"type": "imposed", "energy_eV": cfg.pka.energy_eV}
+            if spectrum is None
+            else {
+                "type": "spectrum",
+                "sha256": spectrum_sha256,
+                "scenario_id": spectrum.scenario.scenario_id,
+                "channel": spectrum_channel,
+                "rate_basis": spectrum.rate_basis,
+                "rate_unit": spectrum.rate_unit,
+                "nuclear_data_identity": spectrum.provenance.nuclear_data_identity,
+                "numerical_validation": spectrum.provenance.numerical_validation.value,
+            }
+        ),
         "statistics": statistics,
         "excluded": excluded,
         "evidence_id": stored.evidence_id,

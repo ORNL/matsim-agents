@@ -40,8 +40,20 @@ exhausted. Both passed the implemented numerical and boundary checks and produce
 detected Frenkel pairs. These tiny, unequilibrated, imposed-recoil runs have no electronic
 stopping and are far too short to establish a surviving-defect yield or validate a
 potential, boundary condition, ensemble or cascade prediction. A passing heuristic is
-not independent scientific qualification. The workflow does not yet integrate a
-fusion-spectrum PKA source or establish production readiness.
+not independent scientific qualification. A fusion-spectrum source and production readiness
+remain unestablished.
+
+The integrated runner can alternatively read a saved JSON `DisplacementSpectrum` through
+`pka.spectrum_file` instead of `pka.energy_eV`. The JSON has a `channel` (`elastic` or
+`inelastic`) and a `spectrum` containing the structured `PKASpectrum` contract. The channel
+must be established by the source, not guessed: each species must identify the same explicit
+parent and recoil isotope, and the scenario composition must match the simulated cell.
+The global SPECTRA-PKA spectrum currently omits parent and channel information, so it is
+refused rather than automatically labelled elastic. No nuclear calculation is launched.
+The source hash, channel and sampled events are recorded; a changed file prevents task reuse.
+Sampling uses elemental masses and assigns sites by element, not isotope. Excluding unstable
+or boundary-contaminated trajectories may bias spectrum-averaged statistics. This path is
+exploratory, and its source declaration is not independently validated.
 
 ## Qualification levels
 

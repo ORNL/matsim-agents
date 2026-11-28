@@ -113,6 +113,9 @@ class QEBackendConfig(BaseModel):
         None,
         description="Optional explicit {symbol: filename} mapping (else auto-detected).",
     )
+    pseudo_manifest: Path | None = None
+    functional: str = "PBE"
+    cutoff_override_reason: str | None = None
     extra_control: dict[str, Any] = Field(default_factory=dict)
     extra_system: dict[str, Any] = Field(default_factory=dict)
     extra_electrons: dict[str, Any] = Field(default_factory=dict)

@@ -17,6 +17,7 @@ from matsim_agents.backends.dft.qe_neb_stages import (
     prepare_stage,
     run_stage,
 )
+from tests.synthetic_upf import write_synthetic_upf
 
 ENERGIES = [-100.0, -99.6, -99.2, -99.7, -100.1]
 ENDPOINT_MAX = [-99.0, -99.4, -99.5, -99.7, -100.1]
@@ -37,10 +38,13 @@ def _images(n=5):
 
 
 def _cfg(workdir, **over):
+    pseudo = workdir.parent / "pseudos"
+    for element in ("Mo", "W"):
+        write_synthetic_upf(pseudo, f"{element}.upf", element)
     base = {
         "n_images": 5,
         "species": ("Mo", "W"),
-        "pseudo_dir": "/pseudos",
+        "pseudo_dir": str(pseudo),
         "pseudopotentials": {"Mo": "Mo.upf", "W": "W.upf"},
         "ecutwfc_ry": 50.0,
         "ecutrho_ry": 400.0,

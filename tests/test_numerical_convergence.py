@@ -29,7 +29,12 @@ RY_EV = 13.605693122994
 
 
 def pw_out(
-    energy_ev: float, pressure_kbar: float = 10.0, *, converged: bool = True, done: bool = True
+    energy_ev: float,
+    pressure_kbar: float = 10.0,
+    *,
+    converged: bool = True,
+    done: bool = True,
+    natoms: int = 1,
 ) -> str:
     lines = ["     Program PWSCF v.7.3 starts on  1Jan2026"]
     if converged:
@@ -40,7 +45,12 @@ def pw_out(
     lines += [
         "     Forces acting on atoms (cartesian axes, Ry/au):",
         "",
-        "     atom    1 type  1   force =     0.00000000    0.00000000    0.00000000",
+    ]
+    lines += [
+        f"     atom {i:4d} type  1   force =     0.00000000    0.00000000    0.00000000"
+        for i in range(1, natoms + 1)
+    ]
+    lines += [
         "",
         "          total   stress  (Ry/bohr**3)                   (kbar)"
         f"     P=       {pressure_kbar:.2f}",
@@ -138,6 +148,7 @@ def test_magnetic_state_change_blocks_acceptance():
     def point(value, mag):
         o = obs(-1.0)
         o.total_magnetization = mag
+        o.absolute_magnetization = abs(mag)
         return ScanPoint(value=value, cases={"bulk": o}, cost=float(value))
 
     points = [point(0, 0.0), point(1, 2.0), point(2, 2.0)]
@@ -190,7 +201,7 @@ def test_workflow_plan_collect_analyse_report_and_restart(config_path, tmp_path)
 
     for r in runs:
         energy = -100.0 if r.scan == "cutoff" else -200.0
-        r.output_path.write_text(pw_out(energy))
+        r.output_path.write_text(pw_out(energy, natoms=r.natoms))
     collected = nc.collect(runs, log)
     assert collected["pending"] == 0 and collected["versions"] == ["7.3"]
     # Finished runs are not resubmitted.
@@ -219,6 +230,12 @@ def test_below_recommendation_scan_points_are_diagnostic_only(config_path, tmp_p
     runs = nc.plan(config)
     flagged = [r for r in runs if r.scan == "cutoff" and r.below_recommendation]
     assert len(flagged) == 2
+    log = KeyedResultLog(Path(config.out_dir) / "results.jsonl")
+    for run in runs:
+        run.output_path.write_text(pw_out(-100.0, natoms=run.natoms))
+    nc.collect(runs, log)
+    cutoff = next(o for o in nc.analyse(config, runs, log) if o.parameter == "cutoff")
+    assert cutoff.selected_value is None
 
 
 def test_cost_proxy_is_finite(config_path):
@@ -317,3 +334,140 @@ def test_afm_case_writes_two_magnetic_types_per_element(config_path, tmp_path):
     assert "starting_magnetization(2) = -3.00000000d-01" in afm
     nm = next(r for r in runs if r.case == "cr_nm").input_path.read_text()
     assert "nspin" not in nm and "ntyp        = 1" in nm
+
+
+@pytest.mark.parametrize("missing", ["forces", "short_forces", "nonfinite_force", "stress"])
+def test_missing_or_invalid_observables_cannot_qualify(missing):
+    points = scan([-1.0, -1.0, -1.0])
+    ref = points[-1].cases["bulk"]
+    if missing == "forces":
+        ref.forces_eV_per_A = None
+    elif missing == "short_forces":
+        ref.forces_eV_per_A = []
+    elif missing == "nonfinite_force":
+        ref.forces_eV_per_A = [[float("nan"), 0.0, 0.0]]
+    else:
+        ref.stress_kbar = float("nan")
+    assert analyse_scan("cutoff", points, AcceptanceCriteria()).status == "incomplete"
+
+
+def test_magnetic_comparison_requires_both_moments_and_detects_afm():
+    points = scan([-1.0, -1.0, -1.0])
+    for point in points:
+        point.cases["bulk"].total_magnetization = 0.0
+        point.cases["bulk"].absolute_magnetization = 2.0
+    points[0].cases["bulk"].absolute_magnetization = 0.0
+    assert (
+        analyse_scan("cutoff", points, AcceptanceCriteria(), magnetic_cases=["bulk"]).selected_value
+        == 1
+    )
+    points[-1].cases["bulk"].absolute_magnetization = None
+    assert (
+        analyse_scan("cutoff", points, AcceptanceCriteria(), magnetic_cases=["bulk"]).status
+        == "incomplete"
+    )
+
+
+def test_missing_planned_reference_case_blocks_qualification(config_path):
+    config = nc.load_config(config_path)
+    config.cases.append(config.cases[0].model_copy(update={"name": "other"}))
+    runs = nc.plan(config)
+    log = KeyedResultLog(Path(config.out_dir) / "results.jsonl")
+    for run in runs:
+        if run.case == "bulk":
+            run.output_path.write_text(pw_out(-100, natoms=run.natoms))
+    nc.collect(runs, log)
+    assert all(o.status == "incomplete" for o in nc.analyse(config, runs, log))
+
+
+def test_changed_inputs_and_pseudos_use_new_directories(config_path):
+    config = nc.load_config(config_path)
+    first = nc.plan(config)
+    first[0].output_path.write_text("original")
+    config.scans[0].values[0] = [41, 328]
+    changed = nc.plan(config)
+    assert first[0].directory != changed[0].directory
+    assert first[0].output_path.read_text() == "original"
+    upf = Path(config.base.pseudo_dir) / "Cu.upf"
+    upf.write_text(upf.read_text() + "\n")
+    replaced = nc.plan(config)
+    assert changed[0].directory != replaced[0].directory
+    assert changed[0].key != replaced[0].key
+
+
+def test_selected_cutoff_is_revalidated_against_changed_pseudopotential(config_path):
+    config = nc.load_config(config_path)
+    runs = nc.plan(config)
+    log = KeyedResultLog(Path(config.out_dir) / "results.jsonl")
+    for run in runs:
+        run.output_path.write_text(pw_out(-100, natoms=run.natoms))
+    nc.collect(runs, log)
+    upf = Path(config.base.pseudo_dir) / "Cu.upf"
+    upf.write_text(upf.read_text() + "\n")
+    result = next(o for o in nc.analyse(config, runs, log) if o.parameter == "cutoff")
+    assert result.status == "incomplete" and result.selected_value is None
+
+
+def test_ferromagnetic_alloy_leaves_unlisted_species_unpolarized(config_path, tmp_path):
+    config = nc.load_config(config_path)
+    path = tmp_path / "structures" / "alloy.xyz"
+    atoms = bulk("Cu", "fcc", a=3.6, cubic=True)
+    atoms.symbols[0] = "Cr"
+    write(path, atoms)
+    write_synthetic_upf(config.base.pseudo_dir, "Cr.upf", "Cr")
+    config.base.pseudopotentials["Cr"] = "Cr.upf"
+    config.cases = [
+        nc.CaseConfig(
+            name="alloy", structure=str(path), magnetic=True, starting_magnetization={"Cr": 0.1}
+        )
+    ]
+    text = nc.plan(config)[0].input_path.read_text()
+    assert "starting_magnetization(2) = 0.00000000d+00" in text
+
+
+def test_legacy_plan_is_preserved(config_path):
+    config = nc.load_config(config_path)
+    out = Path(config.out_dir)
+    out.mkdir()
+    legacy = '{"runs": [{"key": "old"}]}'
+    (out / "plan.json").write_text(legacy)
+    with pytest.raises(ValueError, match="legacy plan"):
+        nc.plan(config)
+    assert (out / "plan.json").read_text() == legacy
+
+
+def test_retry_replaces_failed_result_and_preserves_cached_versions(config_path):
+    config = nc.load_config(config_path)
+    run = nc.plan(config)[0]
+    log = KeyedResultLog(Path(config.out_dir) / "results.jsonl")
+    run.output_path.write_text(pw_out(-100, done=False, natoms=run.natoms))
+    nc.collect([run], log, ended={run.key})
+    assert not PointObservables.from_dict(log.load()[run.key]["observables"]).usable
+    run.output_path.write_text(pw_out(-101, natoms=run.natoms))
+    assert nc.collect([run], log)["versions"] == ["7.3"]
+    assert PointObservables.from_dict(log.load()[run.key]["observables"]).usable
+    assert nc.collect([run], log)["versions"] == ["7.3"]
+    history = [json.loads(line)["result"] for line in log.path.read_text().splitlines()]
+    assert len(history) == 2 and not history[0]["observables"]["job_done"]
+
+
+def test_submit_persists_partial_batch_and_merges_previous_ids(config_path):
+    from matsim_agents.execution.slurm_jobs import OutstandingLimitError
+
+    config = nc.load_config(config_path)
+    runs = nc.plan(config)
+    calls = []
+
+    def limited(run):
+        calls.append(run.key)
+        if len(calls) == 2:
+            raise OutstandingLimitError("at capacity")
+        return "123"
+
+    result = nc.run_stage(config, "submit", limited)
+    assert result["status"] == "capacity_reached"
+    sent = json.loads((Path(config.out_dir) / "submitted.json").read_text())
+    assert sent == {runs[0].key: "123"}
+    nc.run_stage(config, "submit", lambda run: "456")
+    sent = json.loads((Path(config.out_dir) / "submitted.json").read_text())
+    assert sent[runs[0].key] == "123" and len(sent) == len(runs)

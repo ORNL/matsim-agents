@@ -23,7 +23,7 @@ from ase.optimize import LBFGS
 from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.seeding import numpy_rng, stream_seed
 from matsim_agents.science.cascade.boundaries import assess_cascade_boundaries
-from matsim_agents.science.cascade.events import CascadeEvent, structure_hash
+from matsim_agents.science.cascade.events import CascadeEvent, event_from_pka, structure_hash
 from matsim_agents.science.cascade.protocol import (
     analyze_cascade,
     default_phases,
@@ -36,7 +36,8 @@ from matsim_agents.science.cascade.recoil import (
     isotropic_direction,
     sample_family_direction,
 )
-from matsim_agents.science.irradiation.contracts import RecoilSpecies
+from matsim_agents.science.irradiation.contracts import PKASpectrum, RecoilSpecies
+from matsim_agents.science.irradiation.pka_sampling import sample_pka_events
 
 PHASE_DURATIONS_FS = {"threshold": (150.0, 500.0, 1000.0), "cascade": (200.0, 2000.0, 5000.0)}
 SHELL_FRACTION = 0.05
@@ -84,7 +85,13 @@ def relax_positions(atoms: Atoms, fmax: float = 0.02, steps: int = 200) -> float
     return float(np.max(np.linalg.norm(atoms.get_forces(), axis=1)))
 
 
-def run_task(task: dict, calculators: dict[str, Calculator], out_dir: Path) -> dict:
+def run_task(
+    task: dict,
+    calculators: dict[str, Calculator],
+    out_dir: Path,
+    *,
+    spectrum: PKASpectrum | None = None,
+) -> dict:
     """Run one task, write ``task-<id>.json`` and return the record."""
     path = out_dir / f"task-{task['id']:05d}.json"
     if path.exists():
@@ -106,26 +113,55 @@ def run_task(task: dict, calculators: dict[str, Calculator], out_dir: Path) -> d
     thermalize(atoms, task["temperature_K"], seed)
     reference = atoms.copy()
     reference.set_velocities(np.zeros((len(atoms), 3)))
-    pka = choose_pka(atoms, task["pka_symbol"], rng)
-    direction = direction_vector(atoms, task["direction"], rng)
-    event = CascadeEvent(
-        event_id=f"study-{task['id']}",
-        parent_material_id=task["label"],
-        parent_structure_hash=structure_hash(atoms),
-        kind="displacement",
-        recoil_species=RecoilSpecies(element=task["pka_symbol"]),
-        parent_species=None,
-        site_index=pka,
-        energy_eV=float(task["energy_eV"]),
-        scenario_id=task["study"],
-        channel="elastic",
-        seed=seed,
-        nuclear_data_provenance="imposed PKA energy for a verification run; no nuclear data",
-        rate_or_probability=1.0,
-        rate_or_probability_basis="imposed, not a physical rate",
-        direction_source="user",
-        direction=tuple(float(x) for x in direction),
-    )
+    if spectrum is None:
+        pka = choose_pka(atoms, task["pka_symbol"], rng)
+        direction = direction_vector(atoms, task["direction"], rng)
+        event = CascadeEvent(
+            event_id=f"study-{task['id']}",
+            parent_material_id=task["label"],
+            parent_structure_hash=structure_hash(atoms),
+            kind="displacement",
+            recoil_species=RecoilSpecies(element=task["pka_symbol"]),
+            parent_species=None,
+            site_index=pka,
+            energy_eV=float(task["energy_eV"]),
+            scenario_id=task["study"],
+            channel="elastic",
+            seed=seed,
+            nuclear_data_provenance="imposed PKA energy for a verification run; no nuclear data",
+            rate_or_probability=1.0,
+            rate_or_probability_basis="imposed, not a physical rate",
+            direction_source="user",
+            direction=tuple(float(x) for x in direction),
+        )
+    else:
+        direction = direction_vector(atoms, task["direction"], rng)
+        sample = sample_pka_events(
+            spectrum, 1, seed=seed, lattice_elements=atoms.get_chemical_symbols()
+        )
+        if sample.excluded_rate_fraction > 1e-12:
+            raise ValueError(f"spectrum includes unplaceable species: {sample.excluded_species}")
+        sampled = sample.events[0]
+        event = event_from_pka(
+            sampled,
+            atoms,
+            parent_material_id=task["label"],
+            channel=task["spectrum_channel"],
+            seed=seed,
+            nuclear_data_provenance=f"saved spectrum sha256:{task['spectrum_sha256']}",
+            scenario_id=spectrum.scenario.scenario_id,
+            rate_basis="sampled_species_energy_bin_probability",
+        )
+        pka = event.site_index
+        task = {
+            **task,
+            "pka_symbol": event.recoil_species.element,
+            "energy_eV": event.energy_eV,
+            "recoil_species": event.recoil_species.key,
+            "event_probability": event.rate_or_probability,
+            "event_probability_basis": event.rate_or_probability_basis,
+            "event_id": event.event_id,
+        }
     ball, spike, cool = task.get("phase_durations_fs") or PHASE_DURATIONS_FS[task["phase_set"]]
     result = run_protocol(
         atoms,
@@ -223,7 +259,7 @@ def plan_cascades(
     element: str,
     a: float,
     sizes: list[int],
-    energy_eV: float,
+    energy_eV: float | None,
     realizations: int,
     short_range: str,
     *,

@@ -74,6 +74,68 @@ def test_unavailable_cutoffs_are_not_guessed(tmp_path):
     )
     assert result.minimum_ecutwfc_ry is None
     assert result.unavailable == ["A"] and not result.qualified
+    with pytest.raises(PseudopotentialError, match="unavailable"):
+        require_valid_pseudopotentials(
+            {"A": "A.upf"},
+            tmp_path,
+            ecutwfc_ry=999.0,
+            ecutrho_ry=9999.0,
+            override_reason="diagnostic",
+        )
+    digest = hashlib.sha256((tmp_path / "A.upf").read_bytes()).hexdigest()
+    manifest = {
+        "pseudopotentials": {
+            "A": {
+                "filename": "A.upf",
+                "sha256": digest,
+                "recommended_ecutwfc_ry": 20.0,
+                "recommended_ecutrho_ry": 200.0,
+            }
+        }
+    }
+    assert require_valid_pseudopotentials(
+        {"A": "A.upf"}, tmp_path, ecutwfc_ry=999.0, ecutrho_ry=9999.0, manifest=manifest
+    ).qualified
+
+
+def test_pslibrary_manifest_handles_missing_cutoffs(tmp_path):
+    import importlib.util
+
+    import yaml
+
+    script = Path(__file__).resolve().parents[1] / "scripts/utils/build_pslibrary_manifest.py"
+    spec = importlib.util.spec_from_file_location("build_pslibrary_manifest", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    pp = tmp_path / "Cu.test.UPF"
+    write_synthetic_upf(tmp_path, pp.name, "Cu")
+    pp.write_text(pp.read_text().replace('wfc_cutoff="30.0" rho_cutoff="240.0"', ""))
+    out = tmp_path / "manifest.yaml"
+    assert (
+        module.main(
+            [
+                str(tmp_path),
+                "--library-id",
+                "test",
+                "--library",
+                "test",
+                "--version",
+                "1",
+                "--source-url-template",
+                "https://example.invalid/{filename}",
+                "--library-dir-var",
+                "TEST_DIR",
+                "--element",
+                "Cu",
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    result = yaml.safe_load(out.read_text())
+    assert result["campaign_minimum_cutoffs_ry"]["ecutwfc"] == "unavailable"
+    assert result["campaign_minimum_cutoffs_ry"]["ecutrho"] == "unavailable"
 
 
 def test_override_is_diagnostic_and_never_qualified(pseudo_dir):
@@ -132,6 +194,9 @@ def test_pw_writer_rejects_below_recommendation(pseudo_dir, tmp_path):
     settings.ecutwfc_ry, settings.ecutrho_ry = 50.0, 400.0
     write_pw_input(atoms, settings, str(tmp_path / "pw.in"))
     assert (tmp_path / "pw.in").is_file()
+    settings.extra_system = {"ecutwfc": 1.0}
+    with pytest.raises(ValueError, match="managed QE settings"):
+        write_pw_input(atoms, settings, str(tmp_path / "overridden.in"))
 
 
 @pytest.mark.skipif(not REAL_DIR.is_dir(), reason="PSlibrary cache not on this host")

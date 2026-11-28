@@ -35,6 +35,7 @@ TEMPLATE = """&CONTROL
   nat = {nat}
   ntyp = {ntyp}
   ecutwfc = 40
+  ecutrho = 320
   occupations = 'smearing'
   smearing = 'gaussian'
   degauss = 0.01
@@ -167,6 +168,26 @@ def test_template_with_magnetic_keys_is_rejected(tmp_path):
     body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40\n  nspin = 2")
     with pytest.raises(ValueError, match="controls"):
         _render(tmp_path, atoms, cfg, body)
+
+
+def test_template_validates_effective_pseudopotential_settings(tmp_path):
+    atoms = _atoms()
+    with pytest.raises(ValueError, match="below the pseudopotential recommendation"):
+        _render(tmp_path, atoms, None, TEMPLATE.replace("ecutwfc = 40", "ecutwfc = 1"))
+    with pytest.raises(ValueError, match="functional"):
+        _render(
+            tmp_path,
+            atoms,
+            None,
+            TEMPLATE.replace("ecutwfc = 40", "input_dft = 'PBEsol'\n  ecutwfc = 40"),
+        )
+    with pytest.raises(ValueError, match="pseudo_dir"):
+        _render(
+            tmp_path,
+            atoms,
+            None,
+            TEMPLATE.replace("pseudo_dir = '{pseudo_dir}'", "pseudo_dir = '/wrong'"),
+        )
 
 
 def test_template_with_inline_magnetic_key_is_rejected(tmp_path):

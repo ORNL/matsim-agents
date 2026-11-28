@@ -67,6 +67,10 @@ class SlurmJobError(RuntimeError):
     """A submission rule was violated or the scheduler call failed."""
 
 
+class OutstandingLimitError(SlurmJobError):
+    """The configured outstanding GPU job limit has been reached."""
+
+
 @dataclass(frozen=True)
 class CommandResult:
     returncode: int
@@ -258,7 +262,7 @@ def submit_job(
         if spec.gpus:
             outstanding = [e.job_id for e in entries if e.outstanding_gpu]
             if len(outstanding) >= max_outstanding_gpu_jobs:
-                raise SlurmJobError(
+                raise OutstandingLimitError(
                     f"{len(outstanding)} GPU jobs are outstanding "
                     f"(limit {max_outstanding_gpu_jobs}): {', '.join(outstanding)}; "
                     "refresh the manifest first if some have finished"
@@ -301,7 +305,7 @@ def retry_job(
         if new_spec.gpus and len([e for e in entries if e.outstanding_gpu]) >= (
             max_outstanding_gpu_jobs
         ):
-            raise SlurmJobError("the outstanding GPU job limit is reached")
+            raise OutstandingLimitError("the outstanding GPU job limit is reached")
         entries[index] = old.model_copy(update={"retried": True, "diagnosis": diagnosis.strip()})
         if new_spec.spec_hash == old.spec_hash:
             entries.pop(index)  # keep the hash unique; history lives in the retry's retry_of

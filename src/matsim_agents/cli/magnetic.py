@@ -1,6 +1,6 @@
 """Collinear magnetic configuration commands: ``matsim-agents magnetic ...``.
 
-These commands prepare and inspect starting states. They never run DFT.
+These commands prepare starting states and collect results. They never run DFT.
 """
 
 from __future__ import annotations
@@ -14,10 +14,7 @@ from matsim_agents.cli._app import app, console
 
 magnetic_app = typer.Typer(
     add_completion=False,
-    help=(
-        "Prepare and inspect collinear magnetic starting states. "
-        "When to use: before a spin-polarized DFT comparison. Never runs DFT."
-    ),
+    help=("Prepare and inspect magnetic states or collect a survey. Never runs DFT."),
 )
 app.add_typer(magnetic_app, name="magnetic")
 
@@ -108,3 +105,22 @@ def show(
     console.print(f"Fingerprint: {loaded.fingerprint()}", markup=False)
     for assumption in loaded.assumptions:
         console.print(f"Assumption: {assumption}", markup=False, soft_wrap=True)
+
+
+@magnetic_app.command("collect")
+def collect(
+    campaign_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, help="Prepared full-supercell campaign directory."
+    ),
+) -> None:
+    """Rank completed QE survey outputs; incomplete groups remain provisional."""
+    from matsim_agents.workflows.full_supercell_campaign import collect_magnetic_survey
+
+    report = collect_magnetic_survey(campaign_dir)
+    console.print(f"Wrote {campaign_dir / 'magnetic_selection.json'}", markup=False)
+    for key, result in report["structures"].items():
+        console.print(
+            f"{key}: {result['status']}; selected={result['selected_calc_id']}; "
+            f"downstream_allowed={result['downstream_allowed']}",
+            markup=False,
+        )

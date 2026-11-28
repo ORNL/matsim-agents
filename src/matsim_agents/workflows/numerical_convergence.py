@@ -20,6 +20,7 @@ import math
 import platform
 import re
 import sys
+import tempfile
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,7 +31,9 @@ from ase.io import read
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.dft.pseudo_validation import (
+    PseudopotentialError,
     load_manifest,
+    require_valid_pseudopotentials,
     validate_pseudopotentials,
 )
 from matsim_agents.backends.dft.qe_convergence import (
@@ -150,6 +153,7 @@ class PlannedRun:
     ecutwfc_ry: float
     ecutrho_ry: float
     below_recommendation: bool
+    pseudo_sha256: dict[str, str]
 
 
 def load_config(path: str | Path) -> ConvergenceConfig:
@@ -212,14 +216,40 @@ def _settings_for(
 def plan(config: ConvergenceConfig) -> list[PlannedRun]:
     """Write one input deck per (scan, value, case) and return the runs. Deterministic."""
     out = Path(config.out_dir)
+    plan_path = out / "plan.json"
+    if plan_path.is_file():
+        existing = json.loads(plan_path.read_text(encoding="utf-8"))
+        if existing.get("identity_version") != 2:
+            raise ValueError(
+                f"{plan_path} is a legacy plan without pseudopotential identities; "
+                "preserve it and use a new out_dir for new runs"
+            )
     runs: list[PlannedRun] = []
     structures = {c.name: read(c.structure) for c in config.cases}
     for scan in config.scans:
-        for index, value in enumerate(scan.values):
+        for value in scan.values:
             for case in config.cases:
                 atoms = structures[case.name]
                 settings, kpts = _settings_for(config, scan, value, atoms)
-                directory = out / "runs" / scan.parameter / f"p{index:02d}" / case.name
+                symbols = sorted(set(atoms.get_chemical_symbols()))
+                pseudo_hashes = {
+                    symbol: sha256_file(
+                        Path(config.base.pseudo_dir) / config.base.pseudopotentials[symbol]
+                    )
+                    for symbol in symbols
+                }
+                identity = {
+                    "scan": scan.parameter,
+                    "value": value,
+                    "case": case.model_dump(mode="json"),
+                    "structure_sha256": sha256_file(case.structure),
+                    "base": config.base.model_dump(mode="json"),
+                    "pseudo_sha256": pseudo_hashes,
+                }
+                identity_hash = hashlib.sha256(
+                    json.dumps(identity, sort_keys=True).encode()
+                ).hexdigest()
+                directory = out / "runs" / scan.parameter / case.name / identity_hash
                 directory.mkdir(parents=True, exist_ok=True)
                 input_path = directory / "pw.in"
                 magnetic_config = None
@@ -234,21 +264,29 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
                     species = sorted(set(atoms.get_chemical_symbols()))
                     settings.extra_system.update(
                         {
-                            f"starting_magnetization({i})": case.starting_magnetization[s]
+                            f"starting_magnetization({i})": case.starting_magnetization.get(s, 0.0)
                             for i, s in enumerate(species, start=1)
                         }
                     )
                     settings.extra_system["nspin"] = 2
-                write_pw_input(
-                    atoms,
-                    settings,
-                    str(input_path),
-                    prefix=case.name,
-                    outdir=str(directory / "tmp"),
-                    magnetic_config=magnetic_config,
-                )
-                text = input_path.read_text(encoding="utf-8")
-                key = hashlib.sha256(f"{scan.parameter}|{case.name}|{text}".encode()).hexdigest()
+                with tempfile.TemporaryDirectory(prefix="matsim-qe-input-") as temp_dir:
+                    candidate = Path(temp_dir) / "pw.in"
+                    write_pw_input(
+                        atoms,
+                        settings,
+                        str(candidate),
+                        prefix=case.name,
+                        outdir=str(directory / "tmp"),
+                        magnetic_config=magnetic_config,
+                    )
+                    text = candidate.read_text(encoding="utf-8")
+                if input_path.exists() and input_path.read_text(encoding="utf-8") != text:
+                    raise ValueError(
+                        f"{input_path} differs from its planned identity; refusing overwrite"
+                    )
+                if not input_path.exists():
+                    atomic_write_text(input_path, text)
+                key = hashlib.sha256(f"{identity_hash}|{text}".encode()).hexdigest()
                 below = settings.cutoff_override_reason is not None
                 runs.append(
                     PlannedRun(
@@ -264,6 +302,7 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
                         ecutwfc_ry=float(settings.ecutwfc_ry),
                         ecutrho_ry=float(settings.ecutrho_ry),
                         below_recommendation=below,
+                        pseudo_sha256=pseudo_hashes,
                     )
                 )
     atomic_write_text(
@@ -271,6 +310,7 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
         json.dumps(
             {
                 "protocol": config.protocol,
+                "identity_version": 2,
                 "config_hash": config.config_hash,
                 "runs": [
                     {
@@ -283,6 +323,7 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
                         "ecutwfc_ry": r.ecutwfc_ry,
                         "ecutrho_ry": r.ecutrho_ry,
                         "below_recommendation": r.below_recommendation,
+                        "pseudo_sha256": r.pseudo_sha256,
                         "input": str(r.input_path),
                     }
                     for r in runs
@@ -372,8 +413,8 @@ def retry_timed_out(
             runner=runner,
         )
         retried[key] = new.job_id
-    sent.update(retried)
-    atomic_write_text(path, json.dumps(sent, indent=2))
+        sent[key] = new.job_id
+        atomic_write_text(path, json.dumps(sent, indent=2))
     return retried
 
 
@@ -383,6 +424,7 @@ def submit(
     submitter: Submitter,
     *,
     submitted: Mapping[str, str] | None = None,
+    persist: Callable[[Mapping[str, str]], None] | None = None,
 ) -> dict[str, str]:
     """Submit runs that have neither a collected result nor an earlier submission."""
     done = set(log.load())
@@ -391,6 +433,8 @@ def submit(
         if run.key in done or run.key in sent or run.output_path.is_file():
             continue
         sent[run.key] = submitter(run)
+        if persist is not None:
+            persist(sent)
     return sent
 
 
@@ -400,10 +444,16 @@ def collect(
     """Parse each finished output once. An output counts as finished when it ends in JOB DONE or
     its run key is in ``ended`` (the scheduler stopped the job); a partial output stays pending."""
     known = log.load()
-    versions: dict[str, str] = {}
+    run_keys = {run.key for run in runs}
+    versions: dict[str, str] = {
+        key: result["qe_version"]
+        for key, result in known.items()
+        if key in run_keys and result.get("qe_version")
+    }
     pending = 0
     for run in runs:
-        if run.key in known:
+        previous = known.get(run.key)
+        if previous is not None and PointObservables.from_dict(previous["observables"]).usable:
             continue
         if not run.output_path.is_file():
             pending += 1
@@ -411,11 +461,22 @@ def collect(
         if run.key not in ended and "JOB DONE" not in run.output_path.read_text(errors="replace"):
             pending += 1
             continue
+        output_sha = sha256_file(run.output_path)
+        if previous is not None and previous.get("output_sha256") == output_sha:
+            continue
         observed = parse_observables(run.output_path, run.natoms)
         match = _RE_VERSION.search(run.output_path.read_text(errors="replace"))
+        versions.pop(run.key, None)
         if match:
             versions[run.key] = match.group(1)
-        log.save(run.key, {"observables": observed.to_dict(), "qe_version": versions.get(run.key)})
+        log.save(
+            run.key,
+            {
+                "observables": observed.to_dict(),
+                "qe_version": versions.get(run.key),
+                "output_sha256": output_sha,
+            },
+        )
     return {"pending": pending, "versions": sorted(set(versions.values()))}
 
 
@@ -442,8 +503,47 @@ def analyse(
                 cases[run.case] = obs
                 cost += obs.wall_time_sec or 0.0
             apply_derived(cases, config.derived)
-            points.append(ScanPoint(value=value, cases=cases, cost=cost or float(index)))
-        outcomes.append(analyse_scan(scan.parameter, points, criteria, kinds, magnetic))
+            diagnostic = any(
+                r.below_recommendation
+                for r in runs
+                if r.scan == scan.parameter and r.value == value
+            )
+            points.append(
+                ScanPoint(
+                    value=value,
+                    cases=cases,
+                    cost=cost or float(index),
+                    expected_cases=frozenset(c.name for c in config.cases),
+                    diagnostic_only=diagnostic,
+                )
+            )
+        outcome = analyse_scan(scan.parameter, points, criteria, kinds, magnetic)
+        if scan.parameter == "cutoff" and outcome.selected_value is not None:
+            try:
+                for run in runs:
+                    if run.scan != scan.parameter or run.value != outcome.selected_value:
+                        continue
+                    for symbol, digest in run.pseudo_sha256.items():
+                        path = Path(config.base.pseudo_dir) / config.base.pseudopotentials[symbol]
+                        if sha256_file(path) != digest:
+                            raise PseudopotentialError(
+                                f"{symbol}: pseudopotential changed since planning"
+                            )
+                    require_valid_pseudopotentials(
+                        {s: config.base.pseudopotentials[s] for s in run.pseudo_sha256},
+                        config.base.pseudo_dir,
+                        ecutwfc_ry=run.ecutwfc_ry,
+                        ecutrho_ry=run.ecutrho_ry,
+                        manifest=load_manifest(config.base.pseudo_manifest)
+                        if config.base.pseudo_manifest
+                        else None,
+                        functional=config.base.functional,
+                    )
+            except (PseudopotentialError, OSError) as exc:
+                outcome.status = "incomplete"
+                outcome.selected_value = None
+                outcome.comparisons[-1].reasons.append(f"selected cutoff validation failed: {exc}")
+        outcomes.append(outcome)
     return outcomes
 
 
@@ -517,8 +617,22 @@ def run_stage(
     if stage == "submit":
         if submitter is None:
             raise ValueError("submit needs a submitter")
-        sent = submit(runs, log, submitter)
-        atomic_write_text(out / "submitted.json", json.dumps(sent, indent=2))
+        from matsim_agents.execution.slurm_jobs import OutstandingLimitError
+
+        submitted_path = out / "submitted.json"
+        previous = json.loads(submitted_path.read_text()) if submitted_path.exists() else {}
+
+        def persist(sent: Mapping[str, str]) -> None:
+            atomic_write_text(submitted_path, json.dumps(sent, indent=2))
+
+        try:
+            sent = submit(runs, log, submitter, submitted=previous, persist=persist)
+        except OutstandingLimitError as exc:
+            current = (
+                json.loads(submitted_path.read_text()) if submitted_path.exists() else previous
+            )
+            return {"submitted": len(current), "status": "capacity_reached", "reason": str(exc)}
+        persist(sent)
         return {"submitted": len(sent)}
     collected = collect(runs, log, ended)
     if stage == "collect":

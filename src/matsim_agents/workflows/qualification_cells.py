@@ -129,13 +129,11 @@ def generate(spec: MatrixSpec, out_dir: str | Path) -> dict[str, Any]:
     neighbour = 1 + int(np.argmin(distances))
     initial = base.copy()
     del initial[0]
-    final = base.copy()
-    final.positions[0] = final.positions[neighbour]
-    del final[neighbour]
+    moving_index = neighbour - 1
+    displacement = base.get_distance(neighbour, 0, mic=True, vector=True)
     for index, fraction in enumerate((0.0, 0.5, 1.0)):
         image = initial.copy()
-        shift = final.positions - initial.positions
-        image.positions = initial.positions + fraction * shift
+        image.positions[moving_index] += fraction * displacement
         cells[f"neb_image{index}"] = ("neb_image", image)
 
     for solute in spec.solutes:
