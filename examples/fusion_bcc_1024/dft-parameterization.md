@@ -176,6 +176,19 @@ NM one by 0.056 and 0.012 eV. The analysis rejects both coarser values (largest 
 change 0.026 eV at 0.010): forces change by 0.011 to 0.033 eV/A (limit 0.01 for defect forces) and
 stress by 0.18 GPa at 0.010 (limit 0.1 GPa), and the magnetic state differs from the reference.
 
+Total energies of the 12 finished, converged runs (Ry), read back from
+`outputs/qe-convergence/cr_magnetic/runs/smearing`:
+
+| `degauss` (Ry) | bulk NM | bulk AFM | vacancy NM | vacancy AFM |
+|---|---|---|---|---|
+| 0.020 | -13403.76572 | -13403.83820 | -13155.32451 | -13155.38864 |
+| 0.010 | -13403.75907 | -13403.84862 | -13155.32117 | -13155.39744 |
+| 0.005 | -13403.75747 | -13403.84895 | -13155.32053 | -13155.39937 |
+
+Bulk AFM is 0.072 to 0.091 Ry below NM (0.99 to 1.24 eV per 54-atom cell), and `vac_afm` is 0.064
+to 0.079 Ry below `vac_nm`; both separations widen as the smearing narrows, so neither is
+converged against smearing.
+
 Findings:
 
 - The antiferromagnet is 18 to 23 meV/atom below the non-magnetic state, so the non-magnetic
@@ -184,10 +197,13 @@ Findings:
 - The AFM vacancy cell has an odd sublattice count (27/26), so it carries a net moment that grows as
   `degauss` narrows (-2.3 to -3.2 muB) and has not plateaued. This is a cell-size effect to test at
   larger cells, not a converged moment.
-- `bulk_fm` (uniform starting moment) did not converge in the 2 h limit: the moment collapsed from
-  about 15.6 muB per cell to about 0 muB and the SCF was still at 1e-6 Ry. Its energy matches the
-  non-magnetic one, so no stable ferromagnetic state is shown at this lattice parameter. No FM
-  conclusion is drawn.
+- `bulk_fm` (uniform starting moment) has not converged. As of 2026-11-28 the three runs are at
+  SCF iterations 52 to 53 with an estimated accuracy of 3e-7 to 6e-7 Ry against the 1e-7 target,
+  falling slowly; if they hit the wall-time limit they are recorded as unusable, not converged.
+  The ferromagnetic state has already collapsed: net moment about 0.00 muB with an absolute
+  magnetization of 0.08 to 0.22 muB per cell, and the running energies sit within about 0.4 mRy
+  of `bulk_nm` (for example -13403.7653 against -13403.7657 Ry at `degauss` 0.020). No stable
+  ferromagnetic state is shown at this lattice parameter; no FM conclusion is drawn.
 - Not run: other cell sizes, a spin-spiral or other AFM orderings, a
   lattice-parameter relaxation in the AFM state, and the divacancy, dumbbell, H, Os and alloy cells
   (generated, not run through DFT).
