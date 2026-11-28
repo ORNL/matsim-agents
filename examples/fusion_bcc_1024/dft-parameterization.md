@@ -76,6 +76,36 @@ The mesh follows the cell edge $L$ as $n = \lceil (2\pi/L)/s \rceil$ for spacing
 
 The meshes for the 1024-site cell follow from the formula and were not run.
 
+### Why 3x3x3 is the 1,024-site equivalent of the qualified 7x7x7
+
+All k-point evidence in this document comes from the 54-site qualification cell. A mesh count is
+not transferable between cells of different size; the k-point **spacing** (sampling density) is.
+The Brillouin zone shrinks as the real-space cell grows, and the electronic states fold into it,
+so the cell-independent measure is
+
+(mesh count) x (cell repeats) = effective sampling of one conventional bcc cell.
+
+| Cell | Conventional repeats | Mesh | Effective conventional-cell sampling | Spacing (2pi/A) |
+|---|---|---|---|---|
+| 54-site qualification cell (9.48 A) | 3x3x3 | 7x7x7 | 21x21x21 | 0.095 |
+| 1,024-site production cell (25.28 A) | 8x8x8 | 3x3x3 | 24x24x24 | 0.083 |
+
+3x3x3 on the 1,024-site cell is therefore a slightly *denser* sampling than the qualified
+7x7x7 on the 54-site cell, not a downgrade. The limit makes this intuitive: an infinitely large
+supercell needs only the Gamma point, because its Brillouin zone has collapsed to a point.
+
+"More k x k x k is better" holds only at fixed cell size (it is how the 54-site scan itself was
+run, 3x3x3 up to 7x7x7). Carrying the mesh *count* 7x7x7 to the 1,024-site cell would be an
+effective 56x56x56 per conventional cell, about 12.7x more k-points than anything tested, at
+roughly proportional cost per SCF, with no scan evidence that it changes any observable within
+the acceptance limits. It is rejected on that basis.
+
+**Decision:** the stored invariant is the spacing 0.10 2pi/A from the 54-site study; its
+translation to the 1,024-site cell is 3x3x3 (`kpts: [3, 3, 3]` in [campaign.yaml](campaign.yaml),
+checked against `kpts_for_spacing`). The caveat stands that this mesh is derived, not run at
+1,024 sites, and that 7x7x7 was the densest mesh tested, so no independent plateau beyond it is
+shown (see Decisions and Open items).
+
 ## Results
 
 ### Cutoff scan, first matrix (3x3x3, `degauss` 0.010, `conv_thr` 1e-8)
