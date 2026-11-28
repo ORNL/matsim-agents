@@ -15,6 +15,7 @@ from matsim_agents.workflows.active_learning.config import (
     NebEscalationConfig,
     NebSamplingConfig,
 )
+from matsim_agents.workflows.active_learning.dft_attempts import create_attempt, update_attempt
 from matsim_agents.workflows.active_learning.iteration_state import IterationState, _write_state
 
 _DFT_NEB_RESERVATIONS = "dft_neb_reservations.jsonl"
@@ -112,9 +113,18 @@ def _apply_neb_escalation(
             "escalation does not preserve ASE constraints"
         )
 
+    attempt = create_attempt(
+        iteration_dir.parent,
+        iteration=state.iteration,
+        kind="neb",
+        identity=transition.transition_id,
+    )
+    update_attempt(attempt, backend="qe", source_pathway=str(pathway_directory))
     _reserve_dft_neb(iteration_dir.parent, state.iteration, transition.transition_id)
     state.n_dft_neb_runs += 1
     record["decision"] = "dispatching_dft_neb"
+    record["dft_attempt_id"] = attempt.name
+    record["dft_attempt_directory"] = str(attempt)
     state.neb_pathways.append(record)
     _write_state(iteration_dir, state)
 
@@ -132,20 +142,25 @@ def _apply_neb_escalation(
         final_config=None,
     )
     start_images = tuple(outcome.images) if len(outcome.images) == policy.dft_neb.n_images else None
-    dft_outcome = run_neb_workflow(
-        pair,
-        policy.dft_neb,
-        pathway_directory / f"{transition.transition_id}-dft-neb",
-        dispatch=True,
-        allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
-        timeout_sec=timeout_sec,
-        env=env,
-        images=start_images,
-    )
+    try:
+        dft_outcome = run_neb_workflow(
+            pair,
+            policy.dft_neb,
+            attempt / "neb",
+            dispatch=True,
+            allow_unrelaxed_endpoints=policy.allow_unrelaxed_endpoints,
+            timeout_sec=timeout_sec,
+            env=env,
+            images=start_images,
+        )
+    except Exception as exc:
+        update_attempt(attempt, status="failed", error=str(exc))
+        raise
     record["dft_start_path"] = (
         "mlip_optimized" if start_images is not None else "linear_regenerated"
     )
     if dft_outcome.plan.status != "planned" or dft_outcome.result is None:
+        update_attempt(attempt, status="failed", error="; ".join(dft_outcome.plan.reasons))
         raise RuntimeError(
             "QE NEB escalation did not produce a result: " + "; ".join(dft_outcome.plan.reasons)
         )
@@ -154,6 +169,12 @@ def _apply_neb_escalation(
     record["dft_run_directory"] = dft_outcome.plan.directory
     if dft_outcome.result.state not in ("converged_unqualified", "qualified"):
         record["decision"] = "dft_neb_unconverged"
+    update_attempt(
+        attempt,
+        status="converged" if record["decision"] == "dft_neb_complete" else "failed",
+        result_state=dft_outcome.result.state,
+        work_dir=dft_outcome.plan.directory,
+    )
     return record, True
 
 

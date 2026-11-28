@@ -27,6 +27,7 @@ from matsim_agents.workflows.active_learning.elemental_dft import (
     prepare_elemental_references,
 )
 from matsim_agents.workflows.active_learning.training_references import resolve_training_references
+from tests.synthetic_upf import write_synthetic_upf
 
 LAUNCH = ProcessLaunch(hosts=("node0",), devices=(0,), ranks_per_node=1, threads_per_rank=1)
 
@@ -36,7 +37,7 @@ def setup_references(tmp_path, monkeypatch):
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir()
     for element in ("Si", "O"):
-        (pseudo / f"{element}.upf").write_text(f"synthetic-{element}")
+        write_synthetic_upf(pseudo, f"{element}.upf", element)
     binary = tmp_path / "pw.x"
     binary.write_text("synthetic executable")
     dft = DFTConfig.model_validate(
@@ -588,12 +589,33 @@ def test_site_magnetization_reaches_static_job_and_cache_key(setup_references):
 
 
 def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monkeypatch):
+    import hashlib
+
     from matsim_agents.backends.dft import qe_relax
 
     setup = setup_references
     phase = setup.plan.phases[-1]
     phase.geometry_status = "requires_relaxation"
     cfg = elemental_dft._phase_config(setup.dft, phase)
+    upf = Path(cfg.qe.pseudo_dir) / "O.upf"
+    upf.write_text(upf.read_text().replace('wfc_cutoff="30.0" rho_cutoff="240.0"', ""))
+    manifest = setup.tmp / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "pseudopotentials": {
+                    "O": {
+                        "filename": "O.upf",
+                        "sha256": hashlib.sha256(upf.read_bytes()).hexdigest(),
+                        "recommended_ecutwfc_ry": 30,
+                        "recommended_ecutrho_ry": 240,
+                    }
+                }
+            }
+        )
+    )
+    cfg.qe.pseudo_manifest = manifest
+    cfg.qe.cutoff_override_reason = "test diagnostic"
     atoms = read(phase.structure_path)
     final_atoms = atoms.copy()
     final_atoms.calc = SinglePointCalculator(
@@ -638,9 +660,30 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
     assert force == pytest.approx(0.015)
     assert steps == 5
     assert stress is None
+    assert observed["pseudo_manifest"]["pseudopotentials"]["O"]["filename"] == "O.upf"
+    assert observed["functional"] == cfg.qe.functional
+    assert observed["cutoff_override_reason"] == "test diagnostic"
     assert observed["forc_conv_thr_ry_au"] == pytest.approx(
         phase.relaxation_force_tolerance_eV_per_A / (25.711033545 * np.sqrt(3))
     )
+
+
+def test_qe_method_identity_includes_validation_settings(setup_references):
+    cfg = setup_references.dft
+    before = dft_method_signature(cfg, {"O"})
+    cfg.qe.functional = "PBEsol"
+    assert dft_method_signature(cfg, {"O"}) != before
+    cfg.qe.functional = "PBE"
+    manifest = setup_references.tmp / "manifest.json"
+    manifest.write_text('{"pseudopotentials": {}}')
+    cfg.qe.pseudo_manifest = manifest
+    with_manifest = dft_method_signature(cfg, {"O"})
+    assert with_manifest != before
+    manifest.write_text('{"pseudopotentials": {"O": {}}}')
+    assert dft_method_signature(cfg, {"O"}) != with_manifest
+    with_manifest = dft_method_signature(cfg, {"O"})
+    cfg.qe.cutoff_override_reason = "diagnostic"
+    assert dft_method_signature(cfg, {"O"}) != with_manifest
 
 
 @pytest.mark.parametrize(("stress_component", "accepted"), [(0.005, True), (0.02, False)])
@@ -840,7 +883,7 @@ def test_cache_invalidates_scientific_changes(setup_references, change):
         atoms.positions[0, 0] += 0.01
         write(path, atoms)
     elif change == "pseudo":
-        (setup.dft.qe.pseudo_dir / "Si.upf").write_text("changed pseudo")
+        write_synthetic_upf(setup.dft.qe.pseudo_dir, "Si.upf", "Si", z=5.0)
     elif change == "spin":
         setup.plan.phases[0].qe_magnetic_settings = {"nspin": 2}
     else:

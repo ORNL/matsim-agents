@@ -1,0 +1,10 @@
+# Qualification cells for the W-matrix campaign (small cells; not the production supercell).
+# python -m matsim_agents.workflows.qualification_cells cells.yaml <out_dir>
+matrix_element: W
+structure: bcc
+lattice_A: 3.17
+supercell: [3, 3, 3]
+solutes: [Re, Os]
+interstitial_species: [He]
+gas: [H, He]
+training_configs: 4

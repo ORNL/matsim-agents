@@ -309,10 +309,14 @@ Every converged DFT label is appended to
 `out_dir/dft_label_cache/iteration_NNNN.jsonl` as soon as its job finishes.
 This happens while the rest of the batch is still running. A restarted
 iteration reuses a saved label only if the candidate ID, the geometry, the
-DFT method and the backend all match; every other candidate is recomputed.
+DFT method and the backend all match, and the archived inputs and outputs still
+match their recorded hashes; every other candidate is recomputed.
 `state.json` reports reused labels as `n_dft_reused`. The loop skips truncated
-ledger lines and logs a warning. Failed or unconverged calculations are not
-saved, so they run again.
+ledger lines and logs a warning. Every DFT attempt, including failures and
+partial outputs, stays in a uniquely identified directory under
+`out_dir/dft_attempts/`. A retried calculation gets a new directory. Failed or
+unconverged labels are not cached and run again. Resume refuses DFT work
+outside the attempt archive rather than deleting it.
 
 ## Seed sources
 

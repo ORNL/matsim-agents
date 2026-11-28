@@ -1,0 +1,164 @@
+library_id: pslibrary-1.0.0-pbe-paw
+library_dir: ${MATSIM_PSLIBRARY_PSEUDO_DIR}
+provenance:
+  library: PSlibrary
+  version: 1.0.0
+  note: scalar-relativistic PBE PAW, A. Dal Corso, atomic v6.2.2, generated 4May2018;
+    downloaded 2026-11-24
+  manifest_generated_utc: '2026-11-27T20:41:06Z'
+campaign_minimum_cutoffs_ry:
+  ecutwfc: 53.79326057354
+  ecutrho: 645.0774287028
+  note: max over listed elements of the UPF-header recommendation; not a convergence
+    result
+pseudopotentials:
+  W:
+    filename: W.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: 10810897c4da7ba6a78be544cab4339026c68c5bce7e224b2cf4bdc365d25cb1
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/W.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 14.0
+    valence_configuration: '[Xe] 4f14 6s2 6p0 5d4'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 50.39015407863
+    recommended_ecutrho_ry: 475.2212497981
+    upf_version: 2
+  Ta:
+    filename: Ta.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: c59011388e8d5ce55d194bd1bc61115ba3e3ff7e8b1a3ebb06d4f20e106e9942
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Ta.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 13.0
+    valence_configuration: '[Xe] 4f14 6s2 6p0 5d3'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 43.40771601953
+    recommended_ecutrho_ry: 264.126118212
+    upf_version: 2
+  Cr:
+    filename: Cr.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: b47d605445bf58a064315dfe9c30b40a526851bcefb675112f5dac8693ceccbb
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Cr.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 14.0
+    valence_configuration: '[Ar] 4s2 4p0 3d4'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 48.03377538307
+    recommended_ecutrho_ry: 456.6060713719
+    upf_version: 2
+  V:
+    filename: V.pbe-spnl-kjpaw_psl.1.0.0.UPF
+    sha256: 0a0b4f7104d7e842b85453cedca0ffb22c392228d0beb098c190a1940db147f1
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/V.pbe-spnl-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 13.0
+    valence_configuration: '[Ar] 4s2 4p0 3d3'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 47.55197948915
+    recommended_ecutrho_ry: 645.0774287028
+    upf_version: 2
+  Hf:
+    filename: Hf.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: 095c2e6c7997f8b78dedd2132f6cf12c60e93e1a30c77a85b2d552a0527b87bd
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Hf.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 12.0
+    valence_configuration: '[Xe] 4f14 6s2 6p0 5d2'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 45.57765349528
+    recommended_ecutrho_ry: 264.4375310705
+    upf_version: 2
+  Mo:
+    filename: Mo.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: a6ddbb09781c4bfec200e54e312d51a8e83e9503d4d37ba9ac889a3eb95404c7
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Mo.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 14.0
+    valence_configuration: '[Kr] 5s2 5p0 4d4'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 48.94838608899
+    recommended_ecutrho_ry: 306.3381929381
+    upf_version: 2
+  Re:
+    filename: Re.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: 302ba5468810d9d73572d3de672d1c7c92ca073a2ed8bb80daf2353f134f1ba6
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Re.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 15.0
+    valence_configuration: '[Xe] 4f14 6s2 6p0 5d5'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 51.28298335701
+    recommended_ecutrho_ry: 273.9366060121
+    upf_version: 2
+  Os:
+    filename: Os.pbe-spn-kjpaw_psl.1.0.0.UPF
+    sha256: 19c947b20eb036281773abeb997664427cf2ee90a562bd5ebe672cf72616e5d9
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/Os.pbe-spn-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 16.0
+    valence_configuration: '[Xe] 4f14 6s2 6p0 5d6'
+    nonlinear_core_correction: true
+    recommended_ecutwfc_ry: 53.79326057354
+    recommended_ecutrho_ry: 267.9600069054
+    upf_version: 2
+  H:
+    filename: H.pbe-kjpaw_psl.1.0.0.UPF
+    sha256: dd48be99c7a91c4163ed123cdac938af189a9f62f382c41e3f664d00a586839d
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/H.pbe-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 1.0
+    valence_configuration: 1s1 2p-2
+    nonlinear_core_correction: false
+    recommended_ecutwfc_ry: 45.65576003474
+    recommended_ecutrho_ry: 220.9107022339
+    upf_version: 2
+  He:
+    filename: He.pbe-kjpaw_psl.1.0.0.UPF
+    sha256: fb4b357a26b69422c8394f7098b019936c20648384433c4e90ce49b0c95f20e5
+    source_url: https://pseudopotentials.quantum-espresso.org/upf_files/He.pbe-kjpaw_psl.1.0.0.UPF
+    xc_functional: PBE
+    pseudo_type: PAW
+    is_paw: true
+    relativistic: scalar
+    has_spin_orbit: false
+    z_valence: 2.0
+    valence_configuration: 1s2 2p-2
+    nonlinear_core_correction: false
+    recommended_ecutwfc_ry: 46.23466171907
+    recommended_ecutrho_ry: 203.1148913833
+    upf_version: 2

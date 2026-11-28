@@ -131,3 +131,15 @@ def test_seeded_alternatives_are_reproducible_and_distinct():
     assert all(c.seed == 11 for c in first)
     with pytest.raises(ValueError, match="two magnetic"):
         gen.seeded_collinear_alternatives(_cell("W"), "s", {"Fe": 2.0}, n=1, seed=0)
+
+
+def test_bipartite_sublattices_match_bcc_parity_and_reject_close_packed():
+    atoms = _cell("Cr", 3)
+    graph = gen.bipartite_sublattices(atoms, gen.bcc_nn_cutoff(A))
+    parity = gen.bcc_two_sublattices(atoms, A)
+    assert graph == parity or all(graph[i] != parity[i] for i in graph)
+    assert len(set(graph.values())) == 2
+    fcc = bulk("Cu", "fcc", a=3.6, cubic=True)
+    fcc.set_array("atom_id", np.arange(len(fcc), dtype=np.int64))
+    with pytest.raises(ValueError, match="not bipartite"):
+        gen.bipartite_sublattices(fcc, 3.0)

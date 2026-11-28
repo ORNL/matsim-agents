@@ -22,6 +22,8 @@ the framework.
 
 - [Choosing a scientific workflow](guide/workflows.md)
 - [Run a workflow or E3 campaign](workflows/run-campaigns.md)
+- [First end-to-end test of the W-alloy campaign](workflows/w-alloy-first-test.md)
+- [DFT parameterization of the W campaign](../examples/fusion_bcc_1024/dft-parameterization.md)
 - [Scientific workflow contracts](scientific-workflows.md)
 - [Radiation-damage extension status](radiation-damage-status.md)
 - [External SPECTRA-PKA interface](external/spectra-pka.md)

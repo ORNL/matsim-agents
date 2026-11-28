@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tempfile as _tempfile
 
 import numpy as np
 import pytest
@@ -11,6 +12,15 @@ from ase.build import bulk
 from matsim_agents.backends.dft.qe import _write_pw_from_template
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.science.magnetism import generators as gen
+from tests.synthetic_upf import write_synthetic_upf
+
+PP_DIR = _tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in ("Fe", "Cr"):
+    write_synthetic_upf(PP_DIR, f"{_el}.pbe.UPF", _el)
+
+PP_DIR = _tempfile.mkdtemp(prefix="synthetic-upf-")
+for _el in ("Fe", "Cr"):
+    write_synthetic_upf(PP_DIR, f"{_el}.pbe.UPF", _el)
 
 A = 2.87
 PSEUDOS = {"Fe": "Fe.pbe.UPF", "Cr": "Cr.pbe.UPF"}
@@ -25,6 +35,7 @@ TEMPLATE = """&CONTROL
   nat = {nat}
   ntyp = {ntyp}
   ecutwfc = 40
+  ecutrho = 320
   occupations = 'smearing'
   smearing = 'gaussian'
   degauss = 0.01
@@ -49,7 +60,7 @@ def _polar(cfg):
 
 def _settings(**extra):
     return QESettings(
-        pseudo_dir="/tmp/pp",
+        pseudo_dir=PP_DIR,
         ecutwfc_ry=40.0,
         ecutrho_ry=320.0,
         occupations="smearing",
@@ -123,7 +134,7 @@ def _render(tmp_path, atoms, cfg, body=TEMPLATE):
     _write_pw_from_template(
         template_path=_template(tmp_path, body),
         atoms=atoms,
-        pseudo_dir="/tmp/pp",
+        pseudo_dir=PP_DIR,
         kpts=(2, 2, 2),
         koffset=(0, 0, 0),
         pseudopotentials=dict(PSEUDOS),
@@ -157,6 +168,26 @@ def test_template_with_magnetic_keys_is_rejected(tmp_path):
     body = TEMPLATE.replace("  ecutwfc = 40", "  ecutwfc = 40\n  nspin = 2")
     with pytest.raises(ValueError, match="controls"):
         _render(tmp_path, atoms, cfg, body)
+
+
+def test_template_validates_effective_pseudopotential_settings(tmp_path):
+    atoms = _atoms()
+    with pytest.raises(ValueError, match="below the pseudopotential recommendation"):
+        _render(tmp_path, atoms, None, TEMPLATE.replace("ecutwfc = 40", "ecutwfc = 1"))
+    with pytest.raises(ValueError, match="functional"):
+        _render(
+            tmp_path,
+            atoms,
+            None,
+            TEMPLATE.replace("ecutwfc = 40", "input_dft = 'PBEsol'\n  ecutwfc = 40"),
+        )
+    with pytest.raises(ValueError, match="pseudo_dir"):
+        _render(
+            tmp_path,
+            atoms,
+            None,
+            TEMPLATE.replace("pseudo_dir = '{pseudo_dir}'", "pseudo_dir = '/wrong'"),
+        )
 
 
 def test_template_with_inline_magnetic_key_is_rejected(tmp_path):

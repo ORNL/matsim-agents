@@ -10,6 +10,7 @@ import pytest
 from matsim_agents.science.structures.alloy_ensemble import occupation_fingerprint
 from matsim_agents.science.structures.alloys import AlloySpec, generate_alloy
 from matsim_agents.workflows import full_supercell_campaign as fsc
+from tests.synthetic_upf import write_synthetic_upf
 
 CONFIG = Path(__file__).parents[1] / "examples/fusion_bcc_1024/campaign.yaml"
 
@@ -120,13 +121,38 @@ def test_manifest_blocked_without_pseudos(cfg, tmp_path):
 
 
 def test_full_size_inputs_and_manifest(cfg, tmp_path):
+    import hashlib
+
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir()
     for el in cfg.parent_supercell.composition:
-        (pseudo / f"{el}.pbe.UPF").write_text("dummy, input-writer test only\n")
+        write_synthetic_upf(pseudo, f"{el}.pbe.UPF", el)
+    missing_hint = pseudo / "Mo.pbe.UPF"
+    missing_hint.write_text(
+        missing_hint.read_text().replace('wfc_cutoff="30.0" rho_cutoff="240.0"', "")
+    )
+    manifest = tmp_path / "pseudo-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "pseudopotentials": {
+                    el: {
+                        "filename": f"{el}.pbe.UPF",
+                        "sha256": hashlib.sha256(
+                            (pseudo / f"{el}.pbe.UPF").read_bytes()
+                        ).hexdigest(),
+                        "recommended_ecutwfc_ry": 30,
+                        "recommended_ecutrho_ry": 240,
+                    }
+                    for el in cfg.parent_supercell.composition
+                }
+            }
+        )
+    )
     qe = cfg.qe.model_copy(
         update={
             "pseudo_dir": str(pseudo),
+            "pseudo_manifest": str(manifest),
             "pseudopotentials": {el: f"{el}.pbe.UPF" for el in cfg.parent_supercell.composition},
         }
     )
@@ -134,16 +160,119 @@ def test_full_size_inputs_and_manifest(cfg, tmp_path):
     entries = fsc.prepare_campaign(ready, tmp_path / "run", git_revision="abc")
     by_id = {e["calc_id"]: e for e in entries}
     assert by_id["pristine_nonmagnetic"]["qe_atoms"] == 1024
-    assert by_id["vacancy"]["qe_atoms"] == 1023
-    assert by_id["interstitial"]["qe_atoms"] == 1025
-    assert by_id["frenkel_pair"]["qe_atoms"] == 1024
-    assert by_id["pristine_ferromagnetic"]["status"].startswith("INPUT_BLOCKED")
+    sizes = {"vacancy": 1023, "interstitial": 1025, "frenkel_pair": 1024, "divacancy": 1022}
+    for state in ("nonmagnetic", "ferromagnetic", "antiferromagnetic"):
+        assert by_id[f"pristine_{state}"]["qe_atoms"] == 1024
+        for kind, n in sizes.items():
+            entry = by_id[f"{kind}_{state}"]
+            assert entry["qe_atoms"] == n and entry["structure_key"] == kind
+            assert entry["magnetic_config"]["mode"] in (state, "custom_collinear")
     for e in entries:
         assert e["parent_atoms"] == 1024
-        if e["calc_id"] == "pristine_ferromagnetic":
-            continue
         assert e["status"] == "PREPARED"
         if e["kind"] == "scf":
             text = (Path(e["output_dir"]) / "pw.in").read_text()
             assert re.search(rf"\bnat\s*=\s*{e['qe_atoms']}\b", text)
             assert len(e["input_sha256"]) == 64
+    afm = (Path(by_id["vacancy_antiferromagnetic"]["output_dir"]) / "pw.in").read_text()
+    pols = [
+        float(m.replace("d", "e").replace("D", "e"))
+        for m in re.findall(r"starting_magnetization\(\d+\)\s*=\s*([-0-9.dDeE+]+)", afm)
+    ]
+    assert any(p > 0 for p in pols) and any(p < 0 for p in pols)
+
+
+def test_magnetism_elements_must_be_in_parent(cfg):
+    with pytest.raises(ValueError, match="not in the parent composition"):
+        fsc.FullSupercellCampaign.model_validate(
+            {
+                **cfg.model_dump(),
+                "magnetism": {
+                    "elements": {"Fe": {"moment_muB": 2.0, "qe_starting_magnetization": 0.5}}
+                },
+            }
+        )
+
+
+def test_collects_magnetic_states_and_blocks_incomplete_results(cfg, tmp_path):
+    pseudo = tmp_path / "pseudo"
+    pseudo.mkdir()
+    for element in cfg.parent_supercell.composition:
+        write_synthetic_upf(pseudo, f"{element}.pbe.UPF", element)
+    qe = cfg.qe.model_copy(
+        update={
+            "pseudo_dir": str(pseudo),
+            "pseudopotentials": {
+                element: f"{element}.pbe.UPF" for element in cfg.parent_supercell.composition
+            },
+        }
+    )
+    root = tmp_path / "campaign"
+    entries = fsc.prepare_campaign(cfg.model_copy(update={"qe": qe}), root, git_revision="test")
+    pristine = {e["calc_id"]: e for e in entries if e.get("structure_key") == "pristine"}
+
+    def moments(antiferromagnetic):
+        return "".join(
+            f"atom: {i + 1} charge: 1.0 magn: {-1.0 if antiferromagnetic and i % 2 else 1.0:.1f}\n"
+            for i in range(cfg.parent_supercell.expected_parent_atoms)
+        )
+
+    for state, energy in (("nonmagnetic", -100.0), ("ferromagnetic", -101.0)):
+        entry = pristine[f"pristine_{state}"]
+        (root / entry["calc_id"] / "pw.out").write_text(
+            f"!    total energy = {energy:.6f} Ry\n"
+            + (moments(False) if state == "ferromagnetic" else "")
+            + "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+        )
+    afm = root / "pristine_antiferromagnetic" / "pw.out"
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        "convergence NOT achieved after 100 iterations: stopping\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_ferromagnetic"
+    assert report["status"] == "provisional"
+    assert not report["downstream_allowed"]
+    assert any(e["calc_id"] == "pristine_antiferromagnetic" for e in report["incomplete"])
+
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_antiferromagnetic"
+    assert report["status"] == "complete"
+    assert not report["downstream_allowed"]
+    assert any("site moments missing" in note for note in report["missing_evidence"])
+    afm.write_text(
+        "!    total energy = -102.000000 Ry\n"
+        + moments(True)
+        + "convergence has been achieved in 9 iterations\nJOB DONE.\n"
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["selected_calc_id"] == "pristine_antiferromagnetic"
+    assert report["ready_for_review"]
+    assert not report["downstream_allowed"]
+    assert {observation["requested_mode"] for observation in report["observations"]} == {
+        "nonmagnetic",
+        "ferromagnetic",
+        "antiferromagnetic",
+    }
+    input_path = root / "pristine_antiferromagnetic" / "pw.in"
+    input_path.write_text(input_path.read_text() + "\n")
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert report["status"] == "provisional"
+    assert not report["downstream_allowed"]
+    manifest_path = root / fsc.MANIFEST_FILE
+    manifest = json.loads(manifest_path.read_text())
+    manifest_path.write_text(
+        json.dumps(
+            [entry for entry in manifest if entry["calc_id"] != "pristine_antiferromagnetic"]
+        )
+    )
+    report = fsc.collect_magnetic_survey(root)["structures"]["pristine"]
+    assert any("missing from manifest" in item["reason"] for item in report["incomplete"])
+    structure_path = root / "pristine_ferromagnetic" / "structure.extxyz"
+    structure_path.write_text(structure_path.read_text() + "\n")
+    with pytest.raises(ValueError, match="structure is missing or changed"):
+        fsc.collect_magnetic_survey(root)

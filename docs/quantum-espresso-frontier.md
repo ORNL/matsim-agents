@@ -215,3 +215,36 @@ pseudopotentials to work around that crash.
    reason to prefer SSSP.
 4. If SSSP is adopted, create a new versioned protocol. Update `campaign.yaml`, the QE
    configs, the elemental references and the fine-tuning metadata together.
+
+## Numerical protocol and convergence runs
+
+- **Cutoff check.** `backends/dft/pseudo_validation.py` runs inside `write_pw_input` and
+  `write_neb_input`, and rendered `pw_template` inputs. It rejects a cutoff below the UPF-recommended minimum, a functional
+  mismatch with the manifest and a missing or mismatched file. A deliberate low value needs
+  `cutoff_override_reason` and is then diagnostic only. Missing recommendations must be supplied
+  by matching, checksum-verified manifest metadata; a diagnostic override cannot substitute for
+  unknown recommendations. Templates must specify `pseudo_dir`, `ecutwfc` and `ecutrho`.
+  Configure XC through the typed `functional` setting, not `extra_system.input_dft`.
+  Elemental relaxations, staged NEB inputs and the full-supercell campaign accept a
+  `pseudo_manifest` for pseudopotentials without UPF cutoff hints.
+- **Campaign values.** `examples/fusion_bcc_1024/campaign.yaml` uses the provisional
+  recommendation from the 54-site scans: 100/1200 Ry, 3x3x3 (k-spacing 0.10), MV 0.010 Ry,
+  `conv_thr` 1e-7. That clears the PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V) but
+  is provisional, not a qualified protocol; see `deployments/common/qe-protocols.yaml`.
+- **Convergence runs.** They run on OLCF Frontier. `examples/qe_convergence/frontier_point_defects.yaml`
+  drives `workflows/numerical_convergence.py` through `deployments/frontier/launchers/run-pw-gpu-frontier.sh`,
+  one node and one GCD per run (the `execution/slurm_jobs` limit). Cells come from
+  `workflows/qualification_cells.py`. A run counts only with a `JOB DONE` line and a
+  converged SCF, complete finite forces and pressure for every planned case, and (for magnetic
+  cases) finite total and absolute magnetization. Below-recommendation cutoff points remain
+  diagnostic and cannot be selected.
+- **Restart safety.** New convergence runs use input- and UPF-checksum-specific directories;
+  submission IDs are saved as each job is sent. A legacy `plan.json` without UPF identities is
+  preserved and refused by the new planner: keep its jobs and outputs intact, and configure a new
+  `out_dir` for new identity-tracked runs. Its results cannot be automatically attributed to
+  verified pseudopotential contents. No running jobs are cancelled or migrated.
+- **Status.** The 64-run matrix and two 16-run follow-ups (dense k-meshes, higher cutoffs) have run.
+  Only `conv_thr` (1e-7 Ry) qualified. The provisional values (7x7x7 on the 54-site cell, 100/1200 Ry,
+  MV 0.010 Ry) are in [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
+  All seven protocols in `deployments/common/qe-protocols.yaml` are `unqualified`. Larger cells need
+  a multi-node sbatch like `deployments/frontier/campaigns/qe-1024/qe_kconv_job.sbatch`.

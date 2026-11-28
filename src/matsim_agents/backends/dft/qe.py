@@ -17,7 +17,9 @@ case the backend.
 
 from __future__ import annotations
 
+import io
 import logging
+import math
 import os
 import re
 import subprocess
@@ -72,6 +74,12 @@ class QEBackend:
         s.degauss_ry = cfg.degauss_ry
         if cfg.pseudopotentials:
             s.pseudopotentials = dict(cfg.pseudopotentials)
+        if cfg.pseudo_manifest is not None:
+            from matsim_agents.backends.dft.pseudo_validation import load_manifest
+
+            s.pseudo_manifest = load_manifest(cfg.pseudo_manifest)
+        s.functional = cfg.functional
+        s.cutoff_override_reason = cfg.cutoff_override_reason
         if cfg.extra_control:
             s.extra_control = {**s.extra_control, **cfg.extra_control}
         if cfg.extra_system:
@@ -100,6 +108,9 @@ class QEBackend:
                 prefix="pwscf",
                 outdir="./tmp",
                 magnetic_config=spec.magnetic_config,
+                pseudo_manifest=cfg.pseudo_manifest,
+                functional=cfg.functional,
+                cutoff_override_reason=cfg.cutoff_override_reason,
             )
         else:
             settings = self._settings_for(spec.atoms)
@@ -240,6 +251,9 @@ def _write_pw_from_template(
     prefix: str,
     outdir: str,
     magnetic_config=None,
+    pseudo_manifest: str | Path | None = None,
+    functional: str = "PBE",
+    cutoff_override_reason: str | None = None,
 ) -> str:
     """Render a pw.in by appending structure-cards to a namelist template.
 
@@ -318,6 +332,40 @@ def _write_pw_from_template(
             f"pw_template {template_path} references unknown placeholder {{{exc.args[0]}}}. "
             f"Allowed: {sorted(fmt_kwargs)}."
         ) from exc
+
+    from ase.io.espresso import read_fortran_namelist
+
+    from matsim_agents.backends.dft.pseudo_validation import (
+        load_manifest,
+        require_valid_pseudopotentials,
+    )
+
+    namelists, _ = read_fortran_namelist(io.StringIO(text))
+    system = namelists.get("system", {})
+    control = namelists.get("control", {})
+    for key in ("ecutwfc", "ecutrho"):
+        value = system.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError(f"pw_template must specify a positive finite {key}")
+    rendered_dir = control.get("pseudo_dir")
+    if rendered_dir is None or Path(str(rendered_dir)).resolve() != Path(pseudo_dir).resolve():
+        raise ValueError(
+            "pw_template pseudo_dir must match the configured pseudopotential directory"
+        )
+    require_valid_pseudopotentials(
+        {sym: pseudopotentials[sym] for sym in symbols_unique},
+        pseudo_dir,
+        ecutwfc_ry=float(system["ecutwfc"]),
+        ecutrho_ry=float(system["ecutrho"]),
+        manifest=load_manifest(pseudo_manifest) if pseudo_manifest else None,
+        functional=str(system.get("input_dft", functional)),
+        override_reason=cutoff_override_reason,
+    )
 
     cards: list[str] = [text.rstrip(), ""]
     cards.append("ATOMIC_SPECIES")

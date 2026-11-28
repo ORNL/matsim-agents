@@ -20,6 +20,7 @@ from matsim_agents.workflows.active_learning.campaign_init import (
 )
 from matsim_agents.workflows.active_learning.config import TrainerConfig
 from matsim_agents.workflows.active_learning.elemental_dft import ElementalReferencePlan
+from tests.synthetic_upf import write_synthetic_upf
 
 ROOT = Path(__file__).resolve().parents[1]
 UMA = ROOT / "examples/mlip/uma-s-1p1-omat.yaml"
@@ -109,13 +110,30 @@ def test_unsupported_and_magnetic_elements_are_flagged_not_guessed():
         {"Cr", "Fe", "Gd", "S"}, backend="vasp", stress_tolerance_eV_per_A3=0.01
     )
     assert set(proposal.unresolved) == {"Gd", "S"}
-    fe = next(phase for phase in proposal.phases if phase["element"] == "Fe")
+    by_id = {phase["phase_id"]: phase for phase in proposal.phases}
+    assert {k for k in by_id if k.startswith(("fe-", "cr-"))} == {
+        f"{el}-bcc-{state}" for el in ("fe", "cr") for state in ("nm", "fm", "afm")
+    }
+    assert by_id["fe-bcc-nm"]["magnetic_state"] == "nonmagnetic"
+    fe = by_id["fe-bcc-fm"]
     assert fe["magnetic_state"] == "ferromagnetic"
     assert fe["vasp_magnetic_settings"] == {"ISPIN": "2"}
-    cr = next(phase for phase in proposal.phases if phase["element"] == "Cr")
+    cr = by_id["cr-bcc-afm"]
     assert cr["magnetic_state"] == "antiferromagnetic"
     assert cr["vasp_magnetic_settings"] == {"ISPIN": "2", "MAGMOM": "1 -1"}
     assert any("spin-density wave" in note for note in proposal.review)
+
+
+def test_magnetic_elements_are_configurable_and_afm_is_bcc_only():
+    proposal = propose_reference_phases(
+        {"Cr", "Ni", "W"},
+        backend="qe",
+        stress_tolerance_eV_per_A3=0.01,
+        magnetic_elements=["Ni", "W"],
+    )
+    ids = {phase["phase_id"] for phase in proposal.phases}
+    assert ids == {"cr-bcc", "ni-fcc-nm", "ni-fcc-fm", "w-bcc-nm", "w-bcc-fm", "w-bcc-afm"}
+    assert any("no antiferromagnetic phase" in note and "fcc" in note for note in proposal.review)
 
 
 def test_cr_reference_is_a_declared_two_site_antiferromagnet(tmp_path):
@@ -124,14 +142,19 @@ def test_cr_reference_is_a_declared_two_site_antiferromagnet(tmp_path):
 
     campaign = _w_campaign(tmp_path)
     plan = ElementalReferencePlan.from_yaml(campaign / "elemental-phases.yaml")
-    cr = next(phase for phase in plan.phases if phase.element == "Cr")
+    cr = next(phase for phase in plan.phases if phase.phase_id == "cr-bcc-afm")
+    assert {p.magnetic_state for p in plan.phases if p.element == "Cr"} == {
+        "nonmagnetic",
+        "ferromagnetic",
+        "antiferromagnetic",
+    }
     assert cr.phase_id == "cr-bcc-afm"
     assert cr.qe_site_starting_magnetization == (0.5, -0.5)
     from ase.io import read
 
     atoms, config = _site_magnetism(cr, read(cr.structure_path))
     assert len(atoms) == 2 and config.mode == "antiferromagnetic"
-    (tmp_path / "Cr.UPF").write_text("")
+    write_synthetic_upf(tmp_path, "Cr.UPF", "Cr")
     settings = QESettings(pseudo_dir=str(tmp_path), pseudopotentials={"Cr": "Cr.UPF"})
     text = Path(
         write_pw_input(atoms, settings, str(tmp_path / "pw.in"), magnetic_config=config)

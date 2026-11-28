@@ -1,0 +1,60 @@
+# Point-defect convergence matrix, run on OLCF Frontier (Lux access is not yet granted).
+#
+# 1. python -m matsim_agents.workflows.qualification_cells cells.yaml $OUT/cells
+# 2. python -m matsim_agents.workflows.numerical_convergence this.yaml plan
+# 3. ... submit --job-manifest $OUT/jobs.jsonl, then collect, then analyse
+#
+# Each run is one job on one node and one GCD (the validation-job limit in execution/slurm_jobs):
+# a 54-site cell on one GCD is slow, so time_limit is the 2 h job-spec maximum; a run that hits it
+# is recorded as unusable, never as converged. Larger cells need a non-debug queue and their own
+# submitter. The cutoffs, k-spacing and cell sizes here are starting values, not results.
+protocol: point_defects
+out_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/outputs/qe-convergence/point_defects
+label: ""
+base:
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudo_manifest: deployments/common/pseudopotentials/pslibrary-1.0.0-pbe-paw.yaml
+  pseudopotentials:
+    W: W.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Re: Re.pbe-spn-kjpaw_psl.1.0.0.UPF
+    He: He.pbe-kjpaw_psl.1.0.0.UPF
+  ecutwfc_ry: 60.0
+  ecutrho_ry: 720.0
+  kspacing_inv_A: 0.3
+  smearing: mv
+  degauss_ry: 0.010
+  conv_thr_ry: 1.0e-8
+cases:
+  - {name: bulk, structure: outputs/qe-convergence/point_defects/cells/bulk.extxyz, kind: bulk}
+  - {name: vacancy, structure: outputs/qe-convergence/point_defects/cells/vacancy.extxyz, kind: vacancy}
+  - {name: sub_Re, structure: outputs/qe-convergence/point_defects/cells/sub_Re.extxyz, kind: substitution}
+  - {name: int_He, structure: outputs/qe-convergence/point_defects/cells/int_He.extxyz, kind: interstitial}
+scans:
+  - parameter: cutoff
+    values: [[50, 650], [60, 720], [70, 840], [80, 960]]
+  - parameter: kpoints
+    values: [0.5, 0.4, 0.3, 0.25, 0.2]
+  - parameter: smearing
+    values: [0.030, 0.020, 0.010, 0.005]
+  - parameter: conv_thr
+    values: [1.0e-6, 1.0e-7, 1.0e-8]
+derived:
+  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9814814814814815}}
+criteria: {}
+resources:
+  # srun, modules and GPU affinity come from the Frontier launcher; stdout goes to pw.out.
+  launcher:
+    - bash
+    - -c
+    - "NRANKS=1 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} > {output} 2> {output}.err"
+  time_limit: "02:00:00"
+  account: LRN110
+  qos: normal
+  partition: batch
+  gpus: 1
+  max_outstanding: 64
+  retry_launcher:
+    - bash
+    - -c
+    - "NRANKS=8 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} -nk 4 > {output} 2> {output}.err"
+  retry_gpus: 8

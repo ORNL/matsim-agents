@@ -1,0 +1,17 @@
+# Cr-matrix cells for the magnetic scan: bulk, vacancy, divacancies, dumbbells, W/Os solutes,
+# He and H interstitials, vacancy-gas complexes and a random Cr-W alloy. Qualification cells only.
+matrix_element: Cr
+structure: bcc
+lattice_A: 2.88
+supercell: [3, 3, 3]
+solutes: [W, Os]
+interstitial_species: [H, He]
+gas: [H, He]
+divacancy: true
+dumbbells: ["110", "111"]
+vacancy_gas: [H, He]
+alloys:
+  - {name: W10, fractions: {W: 0.10}}
+magnetic_elements: [Cr]
+training_configs: 0
+seed: 0

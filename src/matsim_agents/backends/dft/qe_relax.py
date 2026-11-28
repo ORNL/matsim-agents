@@ -30,6 +30,7 @@ from matsim_agents.backends.dft.process import (
     launcher_from_environment,
     run_launcher,
 )
+from matsim_agents.backends.dft.pseudo_validation import require_valid_pseudopotentials
 
 # --------------------------------------------------------------------------- #
 # Element-aware defaults                                                      #
@@ -270,6 +271,10 @@ class QESettings:
     extra_electrons: dict[str, Any] = field(default_factory=dict)
     extra_ions: dict[str, Any] = field(default_factory=dict)
     extra_cell: dict[str, Any] = field(default_factory=dict)
+    pseudo_manifest: dict[str, Any] | None = None  # checked against file checksums when given
+    functional: str = "PBE"
+    # Diagnostic-only: allows cutoffs below the pseudopotential recommendation; never qualifies.
+    cutoff_override_reason: str | None = None
 
 
 def recommend_settings(atoms, pseudo_dir: str, **overrides) -> QESettings:
@@ -384,6 +389,23 @@ def write_pw_input(
     missing = [s for s in symbols_unique if s not in settings.pseudopotentials]
     if missing:
         raise ValueError(f"Missing pseudopotentials for: {missing}")
+
+    managed = {"ecutwfc", "ecutrho", "input_dft"}
+    conflicts = sorted(key for key in settings.extra_system if key.lower() in managed)
+    if conflicts:
+        raise ValueError(f"extra_system cannot override managed QE settings: {conflicts}")
+    if any(key.lower() == "pseudo_dir" for key in settings.extra_control):
+        raise ValueError("extra_control cannot override managed QE setting pseudo_dir")
+
+    require_valid_pseudopotentials(
+        {s: settings.pseudopotentials[s] for s in symbols_unique},
+        settings.pseudo_dir,
+        ecutwfc_ry=settings.ecutwfc_ry,
+        ecutrho_ry=settings.ecutrho_ry,
+        manifest=settings.pseudo_manifest,
+        functional=settings.functional,
+        override_reason=settings.cutoff_override_reason,
+    )
 
     nat = len(atoms)
     ntyp = len(symbols_unique)

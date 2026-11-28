@@ -26,7 +26,7 @@ Do not merge these. A row in any table below belongs to exactly one of them.
 numerically validated or scientifically qualified.** No real QE SCF, EPW,
 ShengBTE, or SPECTRA-PKA run for this campaign exists.
 
-## Evidence contract (`execution/properties.py`)
+## Evidence contract (`science/properties/calculators.py`)
 
 Every property value is a `PropertyEvidence` record with a kind:
 `MEASURED`, `CALCULATED`, `SURROGATE_PREDICTED`, `APPROXIMATED`, `MISSING`, or

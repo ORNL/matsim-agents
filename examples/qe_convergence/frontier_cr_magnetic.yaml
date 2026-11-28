@@ -1,0 +1,49 @@
+# Cr magnetic-state scan on OLCF Frontier: non-magnetic, ferromagnetic and two-sublattice
+# antiferromagnetic bcc Cr (54 sites) and its monovacancy, against the smearing width.
+#
+# 1. python -m matsim_agents.workflows.qualification_cells cells_cr.yaml $OUT/cells
+# 2. python -m matsim_agents.workflows.numerical_convergence this.yaml plan
+# 3. ... submit --job-manifest $OUT/jobs.jsonl, then collect, then analyse
+#
+# Starting polarization 0.1 of the valence charge (about 1.4 mu_B) is a starting value, not a result.
+# Whole-node runs (8 ranks, 8 k-pools); a run past the limit is unusable, never converged.
+protocol: point_defects
+out_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/outputs/qe-convergence/cr_magnetic
+label: ""
+base:
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudo_manifest: deployments/common/pseudopotentials/pslibrary-1.0.0-pbe-paw.yaml
+  pseudopotentials:
+    Cr: Cr.pbe-spn-kjpaw_psl.1.0.0.UPF
+  ecutwfc_ry: 60.0
+  ecutrho_ry: 720.0
+  kspacing_inv_A: 0.16
+  smearing: mv
+  degauss_ry: 0.010
+  conv_thr_ry: 1.0e-7
+cases:
+  - {name: bulk_nm, structure: outputs/qe-convergence/cr_magnetic/cells/bulk.extxyz, kind: bulk}
+  - {name: bulk_fm, structure: outputs/qe-convergence/cr_magnetic/cells/bulk.extxyz, kind: bulk, magnetic: true, starting_magnetization: {Cr: 0.1}}
+  - {name: bulk_afm, structure: outputs/qe-convergence/cr_magnetic/cells/bulk.extxyz, kind: bulk, magnetic: true, starting_magnetization: {Cr: 0.1}, afm_lattice_A: 2.88}
+  - {name: vac_nm, structure: outputs/qe-convergence/cr_magnetic/cells/vacancy.extxyz, kind: vacancy}
+  - {name: vac_afm, structure: outputs/qe-convergence/cr_magnetic/cells/vacancy.extxyz, kind: vacancy, magnetic: true, starting_magnetization: {Cr: 0.1}, afm_lattice_A: 2.88}
+scans:
+  - parameter: smearing
+    values: [0.020, 0.010, 0.005]
+derived:
+  - {name: vacancy_formation_nm_eV, terms: {vac_nm: 1.0, bulk_nm: -0.9814814814814815}}
+  - {name: vacancy_formation_afm_eV, terms: {vac_afm: 1.0, bulk_afm: -0.9814814814814815}}
+  - {name: afm_minus_nm_bulk_eV, terms: {bulk_afm: 1.0, bulk_nm: -1.0}}
+  - {name: fm_minus_nm_bulk_eV, terms: {bulk_fm: 1.0, bulk_nm: -1.0}}
+criteria: {}
+resources:
+  launcher:
+    - bash
+    - -c
+    - "NRANKS=8 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} -nk 8 > {output} 2> {output}.err"
+  time_limit: "02:00:00"
+  account: LRN110
+  qos: normal
+  partition: batch
+  gpus: 8
+  max_outstanding: 64

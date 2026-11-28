@@ -1,0 +1,49 @@
+# Follow-up 2: cutoffs above the first matrix's 80/960 Ry reference, on a whole node (8 ranks, 4 k-pools).
+# Point-defect convergence matrix, run on OLCF Frontier (Lux access is not yet granted).
+#
+# 1. python -m matsim_agents.workflows.qualification_cells cells.yaml $OUT/cells
+# 2. python -m matsim_agents.workflows.numerical_convergence this.yaml plan
+# 3. ... submit --job-manifest $OUT/jobs.jsonl, then collect, then analyse
+#
+# Each run is one job on one whole node (8 GCDs, one rank per GCD): a 54-site cell is slow on one GCD.
+# Cutoffs, k-spacing and cell sizes are starting values, not results; a run past the 2 h limit is
+# recorded as unusable, never as converged.
+protocol: point_defects
+out_dir: /lustre/orion/lrn110/proj-shared/matsim-agents/outputs/qe-convergence/point_defects_followup_cutoff
+label: ""
+base:
+  pseudo_dir: /lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw
+  pseudo_manifest: deployments/common/pseudopotentials/pslibrary-1.0.0-pbe-paw.yaml
+  pseudopotentials:
+    W: W.pbe-spn-kjpaw_psl.1.0.0.UPF
+    Re: Re.pbe-spn-kjpaw_psl.1.0.0.UPF
+    He: He.pbe-kjpaw_psl.1.0.0.UPF
+  ecutwfc_ry: 60.0
+  ecutrho_ry: 720.0
+  kspacing_inv_A: 0.3
+  smearing: mv
+  degauss_ry: 0.010
+  conv_thr_ry: 1.0e-8
+cases:
+  - {name: bulk, structure: outputs/qe-convergence/point_defects/cells/bulk.extxyz, kind: bulk}
+  - {name: vacancy, structure: outputs/qe-convergence/point_defects/cells/vacancy.extxyz, kind: vacancy}
+  - {name: sub_Re, structure: outputs/qe-convergence/point_defects/cells/sub_Re.extxyz, kind: substitution}
+  - {name: int_He, structure: outputs/qe-convergence/point_defects/cells/int_He.extxyz, kind: interstitial}
+scans:
+  - parameter: cutoff
+    values: [[70, 840], [80, 960], [90, 1080], [100, 1200]]
+derived:
+  - {name: vacancy_formation_eV, terms: {vacancy: 1.0, bulk: -0.9814814814814815}}
+criteria: {}
+resources:
+  # srun, modules and GPU affinity come from the Frontier launcher; stdout goes to pw.out.
+  launcher:
+    - bash
+    - -c
+    - "NRANKS=8 OMP_NUM_THREADS=7 bash /lustre/orion/lrn110/proj-shared/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh {input} -nk 4 > {output} 2> {output}.err"
+  time_limit: "02:00:00"
+  account: LRN110
+  qos: normal
+  partition: batch
+  gpus: 8
+  max_outstanding: 64

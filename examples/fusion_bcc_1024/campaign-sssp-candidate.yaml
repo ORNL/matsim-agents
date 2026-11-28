@@ -35,6 +35,7 @@ qe:
   #   deployments/common/pseudopotentials/sssp-1.3.0-pbe-precision.yaml
   # Separate env var, so this config never silently resolves to the pslibrary directory.
   pseudo_dir: ${MATSIM_SSSP_PSEUDO_DIR}
+  pseudo_manifest: deployments/common/pseudopotentials/sssp-1.3.0-pbe-precision.yaml
   # Mixed types: GBRV ultrasoft (W Ta Cr V Re Os), norm-conserving SG15 (Mo H He) and
   # Dojo (Hf). None is PAW. Explicit map required: prefix auto-resolution is ambiguous
   # in the full SSSP directory (e.g. "H" vs "Hf-sp...").

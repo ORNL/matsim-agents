@@ -140,6 +140,7 @@ def test_chromium_requires_recorded_magnetic_treatment():
 def test_managed_keys_cannot_be_overridden_through_extras():
     _bad("managed", extra_system={"ecutwfc": 10})
     _bad("managed", extra_system={"NSPIN": 2})
+    _bad("managed", extra_system={"INPUT_DFT": "PBEsol"})
     _bad("managed", extra_electrons={"conv_thr": 1e-3})
     _bad("managed", extra_path={"num_of_images": 3})
     _bad("managed", extra_path={"CI_scheme": "auto"})

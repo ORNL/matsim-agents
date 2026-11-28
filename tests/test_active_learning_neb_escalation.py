@@ -280,7 +280,9 @@ def test_dft_neb_reservation_survives_deletion_of_the_iteration_directory(tmp_pa
 
     import matsim_agents.workflows.neb.workflow as neb_workflow
 
-    def interrupted(*args, **kwargs):
+    def interrupted(pair, config, directory, **kwargs):
+        directory.mkdir(parents=True)
+        (directory / "partial.out").write_text("partial DFT output")
         raise RuntimeError("allocation ended")
 
     monkeypatch.setattr(neb_workflow, "run_neb_workflow", interrupted)
@@ -300,6 +302,9 @@ def test_dft_neb_reservation_survives_deletion_of_the_iteration_directory(tmp_pa
     shutil.rmtree(iteration_dir)  # what _scan_resume does to an unfinished iteration
 
     assert _completed_dft_neb_count(root) == 1
+    [attempt] = (root / "dft_attempts").iterdir()
+    assert (attempt / "neb" / "partial.out").read_text() == "partial DFT output"
+    assert json.loads((attempt / "attempt.json").read_text())["status"] == "failed"
 
 
 def test_interrupted_reservation_is_added_to_legacy_runs_without_double_counting(tmp_path):

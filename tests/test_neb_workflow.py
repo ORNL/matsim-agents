@@ -17,6 +17,7 @@ from matsim_agents.workflows.neb.workflow import (
     prepare_neb_workflow,
     run_neb_workflow,
 )
+from tests.synthetic_upf import write_synthetic_upf
 
 A = 3.16
 PARENT = generate_alloy(AlloySpec(counts={"Mo": 4, "Ta": 4, "W": 8}, repeats=(2, 2, 2), seed=1))
@@ -33,8 +34,8 @@ def _pair():
 def _cfg(tmp_path, **over):
     pseudo = tmp_path / "pseudo"
     pseudo.mkdir(exist_ok=True)
-    for name in ("Mo.upf", "Ta.upf", "W.upf"):
-        (pseudo / name).write_text("x")
+    for element in ("Mo", "Ta", "W"):
+        write_synthetic_upf(pseudo, f"{element}.upf", element)
     base = {
         "n_images": 6,
         "species": ("Mo", "Ta", "W"),

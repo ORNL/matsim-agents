@@ -1,0 +1,29 @@
+# Software integration check only, not a physical cascade or qualification calculation.
+# Download the NIST w_eam4.fs file next to this YAML; see docs/radiation-damage-status.md.
+campaign_id: integrated-w-eam4-demo
+classification: exploratory
+seed: 7
+material:
+  element: W
+  lattice_parameter_A: 3.14339
+  n_cells: 3
+pka:
+  energy_eV: 10.0
+  direction: iso
+  temperature_K: 100.0
+phases:
+  ballistic_fs: 0.1
+  thermal_spike_fs: 0.1
+  cooling_fs: 0.1
+ensemble:
+  initial_realizations: 2
+  max_realizations: 2
+  relative_ci_half_width: 0.5
+potential:
+  backend: eam_fs
+  checkpoint: sha256:f7347150e02cae5def044eab6a0044cfb08603a951e9e1c5dd692b6ce2f2874e
+  potential_file: w_eam4.fs
+  short_range: none
+hypothesis:
+  hypothesis_id: demo-w-cascade-recovery
+  claim: A short, imposed W recoil can be processed through the integrated software workflow.

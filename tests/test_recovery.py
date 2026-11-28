@@ -10,6 +10,7 @@ from matsim_agents.execution.recovery import (
     can_retry,
     classify_failure,
 )
+from tests.synthetic_upf import write_synthetic_upf
 
 
 @pytest.mark.parametrize(
@@ -87,7 +88,7 @@ def test_scf_recovery_reaches_the_written_pw_input(tmp_path):
                 return float(value.strip().replace("d", "e"))
         raise AssertionError(f"{key} missing from pw.in")
 
-    (tmp_path / "Si.upf").write_text("placeholder")
+    write_synthetic_upf(tmp_path, "Si.upf", "Si")
     atoms = bulk("Si", "diamond", a=5.43)
     settings: dict = {}
     written = []

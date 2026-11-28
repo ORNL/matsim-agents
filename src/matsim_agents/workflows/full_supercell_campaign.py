@@ -10,17 +10,22 @@ from __future__ import annotations
 import json
 import math
 import os
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 from ase import Atoms
+from ase.io import read as ase_read
 from ase.io import write as ase_write
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
+from matsim_agents.backends.dft.qe_convergence import parse_observables
 from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 from matsim_agents.core.application import ATOMS_PER_CONVENTIONAL_CELL
+from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file as _sha256
+from matsim_agents.core.hashing import sha256_json
 from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.science.defects.bcc import (
     generate_bcc_interstitial,
@@ -28,8 +33,17 @@ from matsim_agents.science.defects.bcc import (
     generate_frenkel_pair,
 )
 from matsim_agents.science.defects.point_defects import DefectConfiguration, generate_vacancy
+from matsim_agents.science.magnetism.competition import StateEvaluation, rank_states
 from matsim_agents.science.magnetism.config import MagneticConfiguration
+from matsim_agents.science.magnetism.generators import bcc_nn_cutoff
 from matsim_agents.science.magnetism.policies import configurations_for_policy, select_policy
+from matsim_agents.science.magnetism.results import classify_moments, parse_qe_magnetic_output
+from matsim_agents.science.magnetism.survey import (
+    SURVEY_MODES,
+    MagneticSurvey,
+    derive_survey_for_defect,
+    survey_configurations,
+)
 from matsim_agents.science.neb.endpoints import (
     MigrationPair,
     generate_frenkel_recombination,
@@ -99,6 +113,7 @@ class QEControls(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     pseudo_dir: str
+    pseudo_manifest: str | None = None
     pseudopotentials: dict[str, str] = Field(default_factory=dict)
     ecutwfc_ry: float = 45.0
     ecutrho_ry: float = 360.0
@@ -109,11 +124,11 @@ class QEControls(BaseModel):
     mixing_beta: float = 0.2
     neb_images: StrictInt = 5
 
-    @field_validator("pseudo_dir")
+    @field_validator("pseudo_dir", "pseudo_manifest")
     @classmethod
-    def _expand_env(cls, value: str) -> str:
+    def _expand_env(cls, value: str | None) -> str | None:
         # An unset variable stays literal, so the missing-pseudopotential gate blocks the inputs.
-        return os.path.expandvars(value)
+        return os.path.expandvars(value) if value is not None else None
 
 
 class SlurmBudget(BaseModel):
@@ -158,6 +173,21 @@ class FullSupercellCampaign(BaseModel):
     qe: QEControls
     slurm: SlurmBudget
     transmutation: TransmutationExamples | None = None
+    magnetism: MagneticSurvey | None = Field(
+        default=None,
+        description=(
+            "Elements tried nonmagnetic, ferromagnetic and antiferromagnetic in the parent "
+            "and every defect cell. Without it the material-family policy decides."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _surveyed_elements_in_parent(self) -> FullSupercellCampaign:
+        if self.magnetism is not None:
+            absent = sorted(set(self.magnetism.elements) - set(self.parent_supercell.composition))
+            if absent:
+                raise ValueError(f"magnetism elements {absent} are not in the parent composition")
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | os.PathLike) -> FullSupercellCampaign:
@@ -370,6 +400,9 @@ def prepare_campaign(
         "parent_ordering_id": s["parent_fingerprint"],
         "pseudo_dir": cfg.qe.pseudo_dir,
         "pseudopotentials": pseudos,
+        "pseudopotential_sha256": {
+            el: _sha256(Path(cfg.qe.pseudo_dir) / name) for el, name in pseudos.items()
+        },
         "settings": settings,
         "git_revision": git_revision,
         "job_id": None,
@@ -377,7 +410,13 @@ def prepare_campaign(
     }
     entries: list[dict[str, Any]] = []
 
-    def scf(calc_id: str, atoms: Atoms, structure_id: str, mag: MagneticConfiguration | None):
+    def scf(
+        calc_id: str,
+        atoms: Atoms,
+        structure_id: str,
+        mag: MagneticConfiguration | None,
+        structure_key: str | None = None,
+    ):
         if mag is not None:
             validate_magnetic(atoms, mag)
         d = root / calc_id
@@ -388,14 +427,24 @@ def prepare_campaign(
             "calc_id": calc_id,
             "kind": "scf",
             "structure_id": structure_id,
+            "structure_sha256": _sha256(d / "structure.extxyz"),
             "qe_atoms": len(atoms),
             "magnetic_config": None
             if mag is None
-            else {"config_id": mag.config_id, "mode": mag.mode, "spin": mag.spin_polarized},
+            else {
+                "config_id": mag.config_id,
+                "mode": mag.mode,
+                "spin": mag.spin_polarized,
+                "configuration": mag.model_dump(mode="json"),
+            },
             "output_dir": str(d),
             "input_sha256": None,
             "status": blocked or "PREPARED",
         }
+        if structure_key is not None:
+            # Rank the states sharing a structure_key (magnetism.competition.rank_states); the
+            # lowest converged energy is that structure's reference, all energies are kept.
+            entry["structure_key"] = structure_key
         if (
             not blocked
             and mag is not None
@@ -405,6 +454,8 @@ def prepare_campaign(
             # Moment -> QE polarization needs the real pseudopotentials' valence counts.
             entry["status"] = "INPUT_BLOCKED: starting_magnetization needs verified UPF valence"
         elif not missing:
+            from matsim_agents.backends.dft.pseudo_validation import load_manifest
+
             qs = QESettings(
                 pseudo_dir=cfg.qe.pseudo_dir,
                 calculation="scf",
@@ -417,6 +468,9 @@ def prepare_campaign(
                 conv_thr_ry=cfg.qe.conv_thr_ry,
                 mixing_beta=cfg.qe.mixing_beta,
                 pseudopotentials=pseudos,
+                pseudo_manifest=load_manifest(cfg.qe.pseudo_manifest)
+                if cfg.qe.pseudo_manifest
+                else None,
             )
             path = Path(
                 write_pw_input(
@@ -428,14 +482,26 @@ def prepare_campaign(
 
     parent = s["parent"]
     pid = f"{cfg.campaign_id}-parent"
-    policy = select_policy(parent)
-    mags = configurations_for_policy(parent, pid, policy) if policy else []
-    for mag in mags:
-        scf(f"pristine_{mag.mode}", parent, pid, mag)
-    if not any(m.mode == "nonmagnetic" for m in mags):
-        scf("pristine_nonmagnetic", parent, pid, None)
-    for kind, (atoms, config) in s["defects"].items():
-        scf(kind, atoms, config.config_id, None)
+    survey = cfg.magnetism
+    if survey is not None:
+        parent_mags = survey_configurations(
+            parent, pid, survey, nn_cutoff_A=bcc_nn_cutoff(cfg.parent_supercell.lattice_parameter)
+        )
+        for mag in parent_mags:
+            scf(f"pristine_{mag.mode}", parent, pid, mag, structure_key="pristine")
+        for kind, (atoms, config) in s["defects"].items():
+            derived = derive_survey_for_defect(parent_mags, atoms, config.config_id, kind, survey)
+            for parent_mag, mag in zip(parent_mags, derived, strict=True):
+                scf(f"{kind}_{parent_mag.mode}", atoms, config.config_id, mag, structure_key=kind)
+    else:
+        policy = select_policy(parent)
+        mags = configurations_for_policy(parent, pid, policy) if policy else []
+        for mag in mags:
+            scf(f"pristine_{mag.mode}", parent, pid, mag)
+        if not any(m.mode == "nonmagnetic" for m in mags):
+            scf("pristine_nonmagnetic", parent, pid, None)
+        for kind, (atoms, config) in s["defects"].items():
+            scf(kind, atoms, config.config_id, None)
 
     for key, pair in s["nebs"].items():
         d = root / key
@@ -454,8 +520,177 @@ def prepare_campaign(
                 "output_dir": str(d),
                 "input_sha256": None,
                 "status": blocked or "PREPARED",
-                "note": "NEB requires relaxed endpoints from the defect SCF/relax first",
+                "note": "NEB requires relaxed endpoints from the defect SCF/relax first"
+                + (
+                    "; use the lowest-energy converged magnetic state of the defect"
+                    if survey is not None
+                    else ""
+                ),
             }
         )
-    (root / MANIFEST_FILE).write_text(json.dumps(entries, indent=2, sort_keys=True))
+    atomic_write_text(root / MANIFEST_FILE, json.dumps(entries, indent=2, sort_keys=True))
     return entries
+
+
+def collect_magnetic_survey(root: str | os.PathLike) -> dict[str, Any]:
+    """Rank completed QE survey states per structure; incomplete groups stay provisional."""
+    root = Path(root)
+    entries = json.loads((root / MANIFEST_FILE).read_text())
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        if entry.get("kind") == "scf" and entry.get("structure_key") is not None:
+            groups.setdefault(entry["structure_key"], []).append(entry)
+    if not groups:
+        raise ValueError("manifest has no magnetic survey entries")
+    results: dict[str, Any] = {}
+    for key, group in groups.items():
+        evaluations: list[StateEvaluation] = []
+        observations: list[dict[str, Any]] = []
+        output_hashes: dict[str, str] = {}
+        failures: list[dict[str, str]] = []
+        structure_identities: set[str] = set()
+        methods: set[str] = set()
+        modes = [entry["calc_id"].removeprefix(f"{key}_") for entry in group]
+        if len(set(modes)) != len(modes) or set(modes) - set(SURVEY_MODES):
+            raise ValueError(f"{key}: duplicate or unsupported magnetic survey states")
+        for mode in SURVEY_MODES:
+            if mode not in modes:
+                failures.append(
+                    {"calc_id": f"{key}_{mode}", "reason": "survey state missing from manifest"}
+                )
+        for entry in group:
+            calc_id = entry["calc_id"]
+            directory = root / calc_id
+            config_data = (entry.get("magnetic_config") or {}).get("configuration")
+            if config_data is None:
+                raise ValueError(
+                    f"{calc_id}: manifest lacks magnetic configuration; prepare the campaign again"
+                )
+            config = MagneticConfiguration.model_validate(config_data)
+            structure_path = directory / "structure.extxyz"
+            if (
+                not structure_path.is_file()
+                or not entry.get("structure_sha256")
+                or _sha256(structure_path) != entry["structure_sha256"]
+            ):
+                raise ValueError(f"{calc_id}: prepared structure is missing or changed")
+            atoms = ase_read(structure_path)
+            config.validate_against(atoms)
+            structure_identities.add(
+                sha256_json(
+                    {
+                        "numbers": atoms.numbers.tolist(),
+                        "positions": atoms.positions.tolist(),
+                        "cell": atoms.cell.array.tolist(),
+                        "atom_ids": atoms.get_array("atom_id").tolist(),
+                    }
+                )
+            )
+            pseudo_hashes = entry.get("pseudopotential_sha256")
+            if not pseudo_hashes:
+                failures.append({"calc_id": calc_id, "reason": "pseudopotential hashes missing"})
+                continue
+            pseudo_dir = Path(entry["pseudo_dir"])
+            if any(
+                not (pseudo_dir / name).is_file()
+                or _sha256(pseudo_dir / name) != pseudo_hashes.get(element)
+                for element, name in entry["pseudopotentials"].items()
+            ):
+                failures.append(
+                    {"calc_id": calc_id, "reason": "pseudopotential missing or changed"}
+                )
+                continue
+            method_hash = sha256_json(
+                {
+                    "settings": entry["settings"],
+                    "pseudopotentials": pseudo_hashes,
+                    "git_revision": entry["git_revision"],
+                }
+            )
+            methods.add(method_hash)
+            input_path = directory / "pw.in"
+            if not input_path.is_file() or _sha256(input_path) != entry["input_sha256"]:
+                failures.append({"calc_id": calc_id, "reason": "QE input missing or changed"})
+                continue
+            output = directory / "pw.out"
+            if not output.is_file():
+                failures.append({"calc_id": calc_id, "reason": "QE output missing"})
+                continue
+            obs = parse_observables(output, len(atoms))
+            if not obs.usable:
+                failures.append(
+                    {
+                        "calc_id": calc_id,
+                        "reason": "QE output incomplete or unconverged",
+                        "output_sha256": _sha256(output),
+                    }
+                )
+                continue
+            magnetic = parse_qe_magnetic_output(
+                output.read_text(errors="replace"), atoms, spin_polarized=config.spin_polarized
+            )
+            output_hashes[config.config_id] = _sha256(output)
+            evaluations.append(
+                StateEvaluation(
+                    config,
+                    method_hash,
+                    obs.energy_eV,
+                    len(atoms),
+                    magnetic,
+                    composition=atoms.get_chemical_formula(),
+                )
+            )
+            observations.append(
+                {
+                    "calc_id": calc_id,
+                    "requested_mode": config.mode,
+                    "energy_eV": obs.energy_eV,
+                    "output_sha256": output_hashes[config.config_id],
+                    "classification": (
+                        classify_moments(magnetic) if config.spin_polarized else "nonmagnetic"
+                    ),
+                    "classification_source": (
+                        "qe_site_moments" if config.spin_polarized else "non_spin_polarized_input"
+                    ),
+                }
+            )
+        if len(structure_identities) != 1:
+            raise ValueError(f"{key}: magnetic states do not share the same structure")
+        if len(methods) > 1:
+            raise ValueError(f"{key}: magnetic states use different numerical methods")
+        ranked = rank_states(evaluations)
+        calc_by_config = {e["magnetic_config"]["config_id"]: e["calc_id"] for e in group}
+        ranking = [
+            {
+                **asdict(state),
+                "calc_id": calc_by_config[state.config_id],
+                "output_sha256": output_hashes[state.config_id],
+            }
+            for state in ranked.ranking
+        ]
+        complete = not failures and len(evaluations) == len(group)
+        ties = sum(state.within_tie_tolerance for state in ranked.ranking) > 1
+        missing_moments = [
+            calc_by_config[e.config.config_id]
+            for e in evaluations
+            if e.config.spin_polarized and (e.result is None or not e.result.local_moments_muB)
+        ]
+        results[key] = {
+            "status": "complete" if complete else "provisional",
+            "selected_calc_id": ranking[0]["calc_id"] if ranking else None,
+            "ready_for_review": bool(complete and ranking and not ties and not missing_moments),
+            "downstream_allowed": False,
+            "ranking": ranking,
+            "observations": observations,
+            "incomplete": failures,
+            "excluded": list(ranked.excluded),
+            "missing_evidence": list(ranked.missing_evidence)
+            + [f"{calc_id}: site moments missing" for calc_id in missing_moments]
+            + ["QE output-to-input execution provenance is not verified"],
+            "statement": ranked.statement,
+        }
+    report = {"campaign_id": entries[0]["campaign_id"], "structures": results}
+    atomic_write_text(
+        root / "magnetic_selection.json", json.dumps(report, indent=2, sort_keys=True)
+    )
+    return report

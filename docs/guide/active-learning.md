@@ -48,6 +48,25 @@ Before the first iteration, `al run` and `al validate-config` also check that th
 training references cover every element in the seed structures. A missing
 element stops the run.
 
+### DFT attempt archive and resume
+
+Each DFT single point or full DFT NEB attempt gets a unique directory under
+`loop.out_dir/dft_attempts/<attempt_id>/`, outside the iteration directory.
+`attempt.json` identifies the iteration, candidate or transition, backend and
+outcome; a single-point attempt also retains its input structure and its QE or
+VASP work directory. Dataset frames record the attempt ID and work-directory
+path. Failed and interrupted attempts remain on disk. A retry
+gets a new attempt ID and does not overwrite the previous files.
+
+Candidate IDs must be unique within an iteration. On resume, incomplete
+iteration directories are removed, but the attempt archive and the per-iteration
+label cache remain. A converged cached label is reused only for the same
+candidate, geometry and DFT method, when its archived input and output hashes still match;
+otherwise a new attempt is made. A `prepared` attempt has no recorded outcome
+and may have been interrupted before or during dispatch. Retaining every
+attempt can require significant disk space; archive management is not automatic.
+Resume refuses an iteration containing DFT work outside this archive instead of deleting it.
+
 ### Quick start
 
 ```bash
@@ -64,8 +83,10 @@ matsim-agents al init-campaign campaigns/wtacrvhfmo \
 #      campaigns/wtacrvhfmo/references/*.extxyz     (starting structures)
 
 # 2. Review elemental-phases.yaml: phases, magnetic states, k-points and the
-#    review notes (for example: Cr is antiferromagnetic but is declared
-#    nonmagnetic). Elements that cannot be proposed safely are listed as
+#    review notes (for example: Cr, Fe, Co and Ni get nonmagnetic,
+#    ferromagnetic and, for bcc, antiferromagnetic phases; the lowest energy
+#    per atom is the reference; --magnetic-element replaces that list).
+#    Elements that cannot be proposed safely are listed as
 #    unresolved and must be added by hand. Then set phases_approved: true
 #    in al.yaml.
 

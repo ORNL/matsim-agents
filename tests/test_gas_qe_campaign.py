@@ -101,7 +101,8 @@ def test_manifest_records_required_fields(cfg, examples, tmp_path):
     assert v1["config_id"].startswith("gascomplex-")
     assert v1["job_id"] is None
     assert v1["qe_atoms"] == 1023
-    assert v1["settings"]["kpts"] == [2, 2, 2]
+    # The mesh follows the campaign config (provisional recommendation), never a pinned literal.
+    assert v1["settings"]["kpts"] == list(cfg.qe.kpts)
     assert v1["cost"]["requested_node_hours"] == 96.0
     assert v1["cost"]["actual_node_hours"] is None
     assert v1["numerical_qualification"] == "not_run"

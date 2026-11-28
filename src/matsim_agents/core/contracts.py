@@ -13,6 +13,7 @@ class EvidenceLevel(StrEnum):
     """Fidelity of the evidence supporting a result."""
 
     HYPOTHESIS = "hypothesis"
+    EMPIRICAL_POTENTIAL_PREDICTION = "empirical_potential_prediction"
     MLIP_PREDICTION = "mlip_prediction"
     MLIP_RELAXATION = "mlip_relaxation"
     LOW_FIDELITY_DFT = "low_fidelity_dft"

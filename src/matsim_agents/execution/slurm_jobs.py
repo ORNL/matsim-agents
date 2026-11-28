@@ -2,7 +2,7 @@
 
 Safety rules enforced here, not left to callers:
 
-* one node, at most one GPU, and a finite time limit per job;
+* one node, at most ``MAX_GPUS_PER_JOB`` GPUs, and a finite time limit per job;
 * a job spec is hashed, and a spec already in the manifest is never submitted twice;
 * at most ``MAX_OUTSTANDING_GPU_JOBS`` GPU jobs may be unfinished at once;
 * a failed job may be retried once, only with a stated diagnosis, and a retry cannot be retried;
@@ -35,6 +35,7 @@ from matsim_agents.execution.locking import exclusive_lock
 MANIFEST_SCHEMA = "matsim-validation-jobs/1"
 DEFAULT_MANIFEST = Path("outputs/radiation_damage/validation_jobs.json")
 MAX_OUTSTANDING_GPU_JOBS = 2
+MAX_GPUS_PER_JOB = 8  # the GCDs of one Frontier node
 MAX_TIME_SECONDS = 2 * 3600  # the debug QoS wall-time limit on this system
 TERMINAL_OK = frozenset({"COMPLETED"})
 TERMINAL_FAILED = frozenset(
@@ -64,6 +65,10 @@ _TIME = re.compile(r"^(?:(\d+)-)?(\d{1,2}):(\d{2}):(\d{2})$")
 
 class SlurmJobError(RuntimeError):
     """A submission rule was violated or the scheduler call failed."""
+
+
+class OutstandingLimitError(SlurmJobError):
+    """The configured outstanding GPU job limit has been reached."""
 
 
 @dataclass(frozen=True)
@@ -117,8 +122,8 @@ class JobSpec(BaseModel):
             raise ValueError(f"time limit must be within (0, {MAX_TIME_SECONDS}] seconds")
         if self.nodes != 1:
             raise ValueError("validation jobs use exactly one node")
-        if self.gpus > 1:
-            raise ValueError("validation jobs use at most one GPU")
+        if self.gpus > MAX_GPUS_PER_JOB:
+            raise ValueError(f"validation jobs use at most {MAX_GPUS_PER_JOB} GPUs")
         if any(not part for part in self.command):
             raise ValueError("command parts must be non-empty")
         return self
@@ -243,9 +248,11 @@ def submit_job(
     manifest: str | os.PathLike = DEFAULT_MANIFEST,
     *,
     runner: Runner = subprocess_runner,
+    max_outstanding_gpu_jobs: int = MAX_OUTSTANDING_GPU_JOBS,
 ) -> tuple[JobEntry, bool]:
     """Submit ``spec`` once. Returns ``(entry, submitted)``; ``submitted`` is False when the
-    same spec is already in the manifest, in which case nothing is sent to the scheduler."""
+    same spec is already in the manifest, in which case nothing is sent to the scheduler.
+    A caller that queues a batch of independent jobs passes its own explicit cap."""
     path = Path(manifest)
     with exclusive_lock(_lock_path(path), timeout=30):
         entries = load_manifest(path)
@@ -254,10 +261,10 @@ def submit_job(
                 return existing, False
         if spec.gpus:
             outstanding = [e.job_id for e in entries if e.outstanding_gpu]
-            if len(outstanding) >= MAX_OUTSTANDING_GPU_JOBS:
-                raise SlurmJobError(
+            if len(outstanding) >= max_outstanding_gpu_jobs:
+                raise OutstandingLimitError(
                     f"{len(outstanding)} GPU jobs are outstanding "
-                    f"(limit {MAX_OUTSTANDING_GPU_JOBS}): {', '.join(outstanding)}; "
+                    f"(limit {max_outstanding_gpu_jobs}): {', '.join(outstanding)}; "
                     "refresh the manifest first if some have finished"
                 )
         entry = _submit_locked(spec, path, runner, entries, retry_of=None, diagnosis=None)
@@ -277,6 +284,7 @@ def retry_job(
     diagnosis: str,
     spec: JobSpec | None = None,
     runner: Runner = subprocess_runner,
+    max_outstanding_gpu_jobs: int = MAX_OUTSTANDING_GPU_JOBS,
 ) -> JobEntry:
     """Resubmit a failed job once. ``spec`` may change what the diagnosis blames (for example
     a longer time limit); an identical spec is allowed because the failed entry is marked."""
@@ -295,9 +303,9 @@ def retry_job(
             raise SlurmJobError(f"job {old.job_id} was already retried or is itself a retry")
         new_spec = spec or old.spec
         if new_spec.gpus and len([e for e in entries if e.outstanding_gpu]) >= (
-            MAX_OUTSTANDING_GPU_JOBS
+            max_outstanding_gpu_jobs
         ):
-            raise SlurmJobError("the outstanding GPU job limit is reached")
+            raise OutstandingLimitError("the outstanding GPU job limit is reached")
         entries[index] = old.model_copy(update={"retried": True, "diagnosis": diagnosis.strip()})
         if new_spec.spec_hash == old.spec_hash:
             entries.pop(index)  # keep the hash unique; history lives in the retry's retry_of

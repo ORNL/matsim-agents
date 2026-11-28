@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from matsim_agents.science.structures.species_support import canonical_functional, parse_upf_header
+from matsim_agents.core.upf import canonical_functional, parse_upf_header
 
 
 def build(args: argparse.Namespace) -> tuple[dict, list[str]]:

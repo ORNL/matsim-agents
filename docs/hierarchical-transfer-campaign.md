@@ -8,19 +8,21 @@ reference: Lupo Pasini et al., Comput. Mater. Sci. 257 (2025) 113908).
 > this campaign and nothing is numerically validated. Real-alloy transferability is
 > `NOT_YET_ESTABLISHED`.
 
-## Components (`src/matsim_agents/campaign/`)
+## Components
+
+Modules without a directory are in `src/matsim_agents/workflows/hierarchy/`. The others are paths from `src/matsim_agents/`.
 
 | Step | Module | Role |
 | --- | --- | --- |
-| H1 | `registry.py` | Hierarchy subspaces, dataset ingestion, structure and calculation de-duplication, provenance |
+| H1 | `workflows/candidate_registry.py` | Hierarchy subspaces, dataset ingestion, structure and calculation de-duplication, provenance |
 | H2 | `coverage.py` | Interaction coverage, explicit missing interactions, coverage-gain ranking |
 | H3 | `transfer.py`, `synthetic.py` | Held-out transfer experiments (2->3 ... 2,3,4,5->6), leakage checks, per-property verdicts |
-| H4 | `acquisition.py` | Cost-aware candidate selection; falls back to coverage + uncertainty without transfer evidence |
+| H4 | `science/acquisition/acquisition.py` | Cost-aware candidate selection; falls back to coverage + uncertainty without transfer evidence |
 | H5 | `stages.py` | Stages 0-5 with evidence gates and a next-action decision |
 | H6 | `qe_plan.py` | Full-size (1024 / 1023 / 1025 / 1022 atom) records, method compatibility, `READY` / `RESOURCE_BLOCKED` / `BUDGET_BLOCKED` / `INPUT_BLOCKED` |
-| H7 | `budget.py` | Hard node-hour ledger with a 15% validation reserve |
+| H7 | `execution/budget.py` | Hard node-hour ledger with a 15% validation reserve |
 | H8 | `strategies.py` | Strategies A-E compared per node-hour on identical held-out rows |
-| H9 | `hierarchy_config.py`, `hierarchy_campaign.py`, `cli/campaign.py` | Validated config, resumable planner, CLI, report |
+| H9 | `config.py`, `engine.py` | Validated config, resumable planner (`CampaignWorkspace`, `plan`, `dispatch`, `monitor`), report |
 
 Cells are never shrunk to fit a queue. A job that does not fit is `RESOURCE_BLOCKED` and its
 full-size input is kept. Historical smaller cells are prior evidence only.
@@ -108,8 +110,8 @@ the software behaves correctly on synthetic data, not that real alloys transfer.
 - Pseudopotentials (pslibrary 1.0.0 PBE PAW, six elements, checksums and provenance beside the files
   under `/lustre/orion/lrn110/proj-shared/cache/pseudopotentials/pslibrary-1.0.0-pbe-paw`) are on disk and
   wired into `examples/fusion_bcc_1024/campaign.yaml`. Five full-size SCF inputs and three
-  NEB records now prepare; `pristine_ferromagnetic` stays `INPUT_BLOCKED` until a starting magnetization
-  is derived from the UPF valence.
+  NEB records now prepare; the Cr magnetic states now prepare from the configured `magnetism` block (starting magnetization
+  from the Frontier Cr scans, not derived from the UPF valence).
 - The campaign cutoffs (51 / 650 Ry) are the maxima of the UPF-header suggestions (W 50.4 Ry, V 645 Ry
   density), rounded up. The code defaults (45 / 360 Ry) are lower. No cutoff or k-point convergence test
   has been run, so results would not be validated.

@@ -13,7 +13,7 @@ artifacts in `research/`.
 
 | Package | Responsibility |
 | --- | --- |
-| `core` | Dependency-free contracts: application schema, composition, seeding, hashing, energy conventions, relaxation results, numerical stress |
+| `core` | Dependency-free contracts and shared helpers: application schema, composition, seeding, hashing, atomic file writes, YAML mapping loader, restart records, energy conventions, relaxation results, numerical stress |
 | `execution` | Scheduler-neutral resources, launch contracts, provenance, run directories, allocation, budgets and the capability registry |
 | `data` | Dataset governance, energy alignment, formation-energy training data and objective-aware splits |
 | `backends.llm` | Configuration-selected language-model providers |
@@ -22,7 +22,7 @@ artifacts in `research/`.
 | `backends.mcp` | Optional Model Context Protocol client with deny-by-default authorization ([MCP tools](mcp.md)) |
 | `science` | Backend-free physics: structures, thermodynamics, defects, NEB, kinetics, irradiation, magnetism, properties, acquisition and decision scoring |
 | `backends.external` | Adapters for external codes that consume science contracts, e.g. SPECTRA-PKA |
-| `workflows` | Composable relaxation, exploration, active learning, hierarchy, full-supercell, radiation, debate and evaluation workflows |
+| `workflows` | Composable relaxation, exploration, active learning, hierarchy, full-supercell, radiation, debate and evaluation workflows. Larger workflows are packages split by stage: `active_learning`, `characterization`, `multi_formula`, `exploration`, `neb`, `radiation` |
 | `agents` | Objective graph, role agents and interactive chat |
 | `cli` | The `matsim-agents` command; generic commands only |
 

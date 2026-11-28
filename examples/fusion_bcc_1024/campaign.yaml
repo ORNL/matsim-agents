@@ -12,6 +12,13 @@ parent_supercell:
 numerical_qualification:
   require_full_parent_supercell: true
   prohibit_smaller_cell_substitution: true
+# Every listed element is tried nonmagnetic, ferromagnetic and antiferromagnetic (two-sublattice
+# collinear) in the parent and in each defect cell; the lowest converged energy per structure
+# is its reference. Starting values only: DFT decides the final moments. 0.1 matches the Frontier
+# Cr smearing scans (examples/qe_convergence/frontier_cr_magnetic.yaml).
+magnetism:
+  elements:
+    Cr: {moment_muB: 1.0, qe_starting_magnetization: 0.1}
 defects:
   vacancy_site: 0
   interstitial_site: 0
@@ -39,14 +46,24 @@ qe:
     Os: Os.pbe-spn-kjpaw_psl.1.0.0.UPF
     H: H.pbe-kjpaw_psl.1.0.0.UPF
     He: He.pbe-kjpaw_psl.1.0.0.UPF
-  # Max of the UPF header suggestions (W 50.4 wfc, V 645 rho), rounded up; not convergence-tested.
-  # Os suggests 53.8 Ry wfc, above this value; Re/Os/H/He cells need a cutoff check first.
-  ecutwfc_ry: 51.0
-  ecutrho_ry: 650.0
+  # Cutoff classes, kept apart on purpose:
+  #  1. Pseudopotential-recommended minima (UPF headers, this library): wfc max 53.8 Ry (Os),
+  #     rho max 645 Ry (V). Enforced by backends.dft.pseudo_validation; below these is rejected.
+  #  2. The values below are the evidence-based provisional recommendation from the 54-site W
+  #     convergence scans (deployments/common/qe-protocols.yaml, provisional_recommendation;
+  #     detail in dft-parameterization.md). conv_thr is qualified; the k-mesh is the k-spacing
+  #     0.10 2pi/A equivalent (3x3x3 on this 25.28 A cell, derived, not run); 100/1200 Ry and
+  #     degauss 0.010 are provisional and NOT shown converged.
+  #  3. Numerically qualified production values: none yet. Every protocol in
+  #     deployments/common/qe-protocols.yaml is unqualified.
+  # The former 51/650 Ry sat below the Os wfc recommendation and is diagnostic-only; the former
+  # 60/720 Ry, 2x2x2, degauss 0.02, conv_thr 1e-6 pre-dated the scans.
+  ecutwfc_ry: 100.0
+  ecutrho_ry: 1200.0
   smearing: mv
-  degauss_ry: 0.02
-  kpts: [2, 2, 2]
-  conv_thr_ry: 1.0e-6
+  degauss_ry: 0.010
+  kpts: [3, 3, 3]
+  conv_thr_ry: 1.0e-7
   mixing_beta: 0.2
   neb_images: 5
 slurm:

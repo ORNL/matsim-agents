@@ -8,9 +8,18 @@ nuclear, DFT, MLIP or kinetic result.
 from __future__ import annotations
 
 import pytest
+from ase.build import bulk
+from ase.calculators.lj import LennardJones
 
 from matsim_agents.backends.external.spectra_pka import adapter
 from matsim_agents.science.acquisition.pka_acquisition import PKACandidate, select_pka_informed
+from matsim_agents.science.cascade.events import event_from_pka
+from matsim_agents.science.cascade.protocol import (
+    analyze_cascade,
+    default_phases,
+    run_protocol,
+    thermalize,
+)
 from matsim_agents.science.defects.gas import GasComplexSpec, GasPlacement, generate_gas_complex
 from matsim_agents.science.irradiation.contracts import (
     DefectStatus,
@@ -95,3 +104,40 @@ def test_defects_and_ranking_stay_unestablished(tmp_path):
     assert [s.candidate_id for s in ranking.selected] == ["w", "ta"]
     with pytest.raises(ValueError):
         select_pka_informed(run.spectrum, [], -1.0)
+
+
+def test_synthetic_spectrum_recoil_can_be_handed_to_cascade_protocol(tmp_path):
+    cfg = make_config(tmp_path, write_mock_executable(tmp_path / "spka-mock"))
+    spectrum = adapter.run(cfg, make_campaign(tmp_path), execute=True).spectrum
+    atoms = bulk("W", "bcc", a=3.165, cubic=True).repeat((3, 3, 3))
+    atoms.calc = LennardJones(sigma=2.5, epsilon=0.3, rc=6.0)
+    sample = sample_pka_events(spectrum, 1, seed=3, lattice_elements=atoms.get_chemical_symbols())
+    assert sample.excluded_rate_fraction > 0
+    pka = sample.events[0]
+    reference = atoms.copy()
+    thermalize(atoms, 100.0, seed=1)
+    event = event_from_pka(
+        pka,
+        atoms,
+        parent_material_id="synthetic-w",
+        channel="elastic",
+        seed=3,
+        nuclear_data_provenance="synthetic test",
+        scenario_id="synthetic",
+        rate_basis=spectrum.rate_basis,
+    )
+    result = run_protocol(
+        atoms,
+        event,
+        direction=(1.0, 0.0, 0.0),
+        phases=default_phases(0.1, 0.1, 0.1),
+        require_level=None,
+    )
+    analysis = analyze_cascade(
+        result, reference, cluster_cutoff=3.5, cluster_justification="synthetic test"
+    )
+    assert event.site_index == pka.site_index
+    assert event.energy_eV == pytest.approx(pka.energy_mev * 1.0e6)
+    assert result.event == event
+    assert analysis.event_id == event.event_id
+    assert any("not qualified" in caveat for caveat in analysis.caveats)

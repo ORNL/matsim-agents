@@ -60,7 +60,7 @@ environment (module stack, `LD_LIBRARY_PATH`, and the CUDA-aware-MPI / NCCL env)
 | Launcher | Used by | Invocation |
 |----------|---------|------------|
 | [`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh) | `matsim_agents.backends.dft.vasp_relax` and the VASP warm-start benchmark, via `MATSIM_VASP_LAUNCHER` | run *inside* a work dir already holding `INCAR/POSCAR/KPOINTS/POTCAR`; **no argv** |
-| [`deployments/perlmutter/launchers/_vasp-step-perlmutter.sh`](../deployments/perlmutter/launchers/_vasp-step-perlmutter.sh) | the AL loop's DFT step (`dft.vasp.vasp_wrapper` in the AL YAML), called from `active_learning/backends/vasp.py` | `bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>` |
+| [`deployments/perlmutter/launchers/_vasp-step-perlmutter.sh`](../deployments/perlmutter/launchers/_vasp-step-perlmutter.sh) | the AL loop's DFT step (`dft.vasp.vasp_wrapper` in the AL YAML), called from `backends/dft/vasp.py` | `bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>` |
 
 Both do a full `module reset` to the VASP build toolchain, unset venv-injected
 variables that perturb the launch (`LD_PRELOAD`, `VLLM_CUDART_SO_PATH`,
@@ -240,10 +240,10 @@ Quick audit of a run:
 
 ```bash
 # real converged energies produced?
-grep -rl "free  energy   TOTEN" runs/<RUN_TAG>/iteration_*/dft/*/OUTCAR | wc -l
+grep -rl "free  energy   TOTEN" runs/<RUN_TAG>/dft_attempts/*/*/OUTCAR | wc -l
 # any NCCL/CUDA crashes left? (should be 0)
 grep -rlE "NCCL WARN|invalid device ordinal|ILLEGAL_ADDRESS" \
-  runs/<RUN_TAG>/iteration_*/dft/*/vasp.out | wc -l
+  runs/<RUN_TAG>/dft_attempts/*/*/vasp.out | wc -l
 ```
 
 ## Related repository docs

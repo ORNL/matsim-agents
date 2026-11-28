@@ -4,6 +4,57 @@ This page separates what is implemented and unit-tested from what is scientifica
 Nothing here is numerically validated: no production DFT or MLIP result, no validated SPECTRA-PKA
 result (one software smoke run only), and no kinetic prediction exists. Unit tests establish software behaviour only.
 
+## Pure-W integrated workflow smoke test
+
+The [pure-W example](../examples/radiation_damage/integrated_w_eam4_demo.yaml) uses the
+[Marinica et al. 2013 EAM4 potential](https://doi.org/10.1088/0953-8984/25/39/395502),
+developed for radiation defects and dislocations in tungsten. The
+[NIST entry](https://www.ctcms.nist.gov/potentials/entry/2013--Marinica-M-C-Ventelon-L-Gilbert-M-R-et-al--W-4/)
+identifies the distributed `w_eam4.fs` as the EAM4 parameter set and says the author
+permitted NIST to post it. The file is not bundled here; that permission is not a general
+redistribution license. Its SHA-256 is
+`f7347150e02cae5def044eab6a0044cfb08603a951e9e1c5dd692b6ce2f2874e`.
+It covers W only, not W alloys or gas species. ASE reads the original EAM/FS file without
+an added ZBL correction; the collision-region behavior has not been qualified.
+
+To reproduce from the repository root, copy the example to a work directory and download
+the original alongside it:
+
+```bash
+mkdir -p w-eam4-demo
+cp examples/radiation_damage/integrated_w_eam4_demo.yaml w-eam4-demo/
+curl -fL 'https://www.ctcms.nist.gov/potentials/Download/2013--Marinica-M-C-Ventelon-L-Gilbert-M-R-et-al--W-4/1/w_eam4.fs' -o w-eam4-demo/w_eam4.fs
+sha256sum w-eam4-demo/w_eam4.fs
+matsim-agents run w-eam4-demo/integrated_w_eam4_demo.yaml --runs-dir w-eam4-demo/runs --dispatch
+```
+
+The loader checks the hash and elemental coverage before running. Task records carry a
+configuration fingerprint so incompatible cached tasks are refused. The report links to
+the evidence ledger and hypothesis revision; the potential hash is in the ledger's method
+record. All executions of this integration are exploratory; production is refused even
+when a supplied qualification record claims the necessary level.
+
+A real-file software smoke run completed through the generic runner: two 54-atom, 10 eV
+recoils, three phases of 0.1 fs each, with the gate `UNASSESSED` and the stopping budget
+exhausted. Both passed the implemented numerical and boundary checks and produced zero
+detected Frenkel pairs. These tiny, unequilibrated, imposed-recoil runs have no electronic
+stopping and are far too short to establish a surviving-defect yield or validate a
+potential, boundary condition, ensemble or cascade prediction. A passing heuristic is
+not independent scientific qualification. A fusion-spectrum source and production readiness
+remain unestablished.
+
+The integrated runner can alternatively read a saved JSON `DisplacementSpectrum` through
+`pka.spectrum_file` instead of `pka.energy_eV`. The JSON has a `channel` (`elastic` or
+`inelastic`) and a `spectrum` containing the structured `PKASpectrum` contract. The channel
+must be established by the source, not guessed: each species must identify the same explicit
+parent and recoil isotope, and the scenario composition must match the simulated cell.
+The global SPECTRA-PKA spectrum currently omits parent and channel information, so it is
+refused rather than automatically labelled elastic. No nuclear calculation is launched.
+The source hash, channel and sampled events are recorded; a changed file prevents task reuse.
+Sampling uses elemental masses and assigns sites by element, not isotope. Excluding unstable
+or boundary-contaminated trajectories may bias spectrum-averaged statistics. This path is
+exploratory, and its source declaration is not independently validated.
+
 ## Qualification levels
 
 | Level | Meaning |
@@ -26,7 +77,7 @@ result (one software smoke run only), and no kinetic prediction exists. Unit tes
 | 6 | Mechanism registry and NEB preparation | `kinetics/gas_mechanisms.py` | `IMPLEMENTED_TESTED` | No barriers computed. |
 | 7 | Cluster-dynamics bridge | `kinetics/cluster_dynamics.py` | `IMPLEMENTED_TESTED` | Bubble physics rejected as future work; bubble kinetics `NOT_ESTABLISHED`. |
 | 8 | Transfer-driven gas acquisition | `campaign/gas_transfer.py` | `IMPLEMENTED_TESTED` | Not shown to beat random selection on any real data. |
-| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). Cutoffs are not convergence-tested (the Os suggestion of 53.8 Ry exceeds the campaign `ecutwfc`). No QE run with them yet. Own dispatch, not `slurm_jobs`. |
+| 9 | 1,024-site QE campaign | `campaign/gas_qe_campaign.py` | `IMPLEMENTED_TESTED` | Re/Os/H/He PSlibrary 1.0.0 PAW files are now in the Frontier cache, checksummed, with headers inspected (see `SOURCE.txt` there). The campaign cutoffs (100/1200 Ry, from the 54-site convergence scans) clear the PSlibrary recommended maxima (wfc 53.8 Ry for Os, rho 645 Ry for V), enforced by `backends/dft/pseudo_validation.py`, but are provisional and not shown converged. The convergence workflow (`workflows/numerical_convergence.py`, Frontier config `examples/qe_convergence/frontier_point_defects.yaml`) produced the scans recorded in `examples/fusion_bcc_1024/dft-parameterization.md`; all 7 protocols in `deployments/common/qe-protocols.yaml` remain `unqualified`. No QE run with them yet. Own dispatch, not `slurm_jobs`. |
 | 10 | External SPECTRA-PKA adapter | `integrations/external/spectra_pka/` | `EXTERNAL_SMOKE_RUN` | Built on Frontier; PKA data archive (`pkas.zip`) cached, extracted per campaign. One real run (W-182, upstream PWR test spectrum) gave `STRUCTURALLY_VALID`, after the `columns=` line and parser layout were fixed. Not validated against a reference. |
 | 11 | PKA-informed ranking | `campaign/pka_acquisition.py` | `IMPLEMENTED_TESTED` | Policy only; no per-PKA jobs. |
 | 12 | Surviving-defect production | `irradiation/contracts.py` | `NOT_ESTABLISHED` | Default `NoCascadeModel`; a PKA is not a surviving defect. |
@@ -93,9 +144,12 @@ WP1 (`science/cascade/`, `workflows/radiation/cascade_candidates.py`) has recoil
   check for `convergence has been achieved` and `JOB DONE`.
 * See [multiproperty-selection.md](multiproperty-selection.md) for the property, selection,
   and acquisition workflow. All of it is software-verified only.
-* The 2x2x2 k-mesh and the 51/650 Ry cutoffs used for the 1,024-atom input are unconverged.
+* The 1,024-atom input uses the provisional recommendation from the 54-site scans (100/1200 Ry,
+  3x3x3 from the 0.10 k-spacing, MV 0.010, `conv_thr` 1e-7); the cutoff is not shown converged
+  and no protocol is qualified. See
+  [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
 * Debug QoS is not sufficient for production 1,024-atom QE.
-* `pristine_ferromagnetic` stays `INPUT_BLOCKED`; gas examples are nonmagnetic (`nspin: 1`).
+* With the `magnetism` block of `examples/fusion_bcc_1024/campaign.yaml`, every structure is prepared nonmagnetic, ferromagnetic and antiferromagnetic (`<structure>_<state>`); gas examples are nonmagnetic (`nspin: 1`).
 
 ## Tests
 

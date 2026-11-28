@@ -620,6 +620,65 @@ def _investigation_execute(path: Path, run: ScientificRunDirectory, options: Run
     )
 
 
+# --- integrated cascade -----------------------------------------------------------------
+
+
+def _cascade_preflight(path: Path, options: RunOptions) -> Preflight:
+    from matsim_agents.workflows.radiation.integrated import (
+        GateRefusal,
+        IntegratedCascadeConfig,
+        classify,
+        resolve_gate,
+    )
+
+    cfg = IntegratedCascadeConfig.from_yaml(path)
+    resolution = resolve_gate(cfg)
+    blockers = []
+    try:
+        classify(cfg, resolution)
+    except GateRefusal as refusal:
+        blockers.append(str(refusal))
+    return Preflight(
+        {
+            "campaign_id": cfg.campaign_id,
+            "classification": cfg.classification,
+            "qualification_level": resolution.level.name,
+            "element": cfg.material.element,
+            "pka_energy_eV": cfg.pka.energy_eV,
+            "pka_source": "spectrum" if cfg.pka.spectrum_file is not None else "imposed",
+            "max_realizations": cfg.ensemble.max_realizations,
+        },
+        blockers,
+    )
+
+
+def _cascade_execute(path: Path, run: ScientificRunDirectory, options: RunOptions) -> Outcome:
+    from matsim_agents.workflows.radiation.integrated import (
+        GateRefusal,
+        IntegratedCascadeConfig,
+    )
+    from matsim_agents.workflows.radiation.integrated import (
+        run_investigation as run_cascade_investigation,
+    )
+
+    cfg = IntegratedCascadeConfig.from_yaml(path)
+    out = Path(run.path) / "cascade"
+    try:
+        report = run_cascade_investigation(cfg, out)
+    except GateRefusal as refusal:
+        return Outcome("blocked", str(out), {}, failure_reason=str(refusal))
+    summary = {
+        "classification": report["classification"],
+        "qualification_level": report["gate"]["level"],
+        "n_usable": report["statistics"]["n_usable"],
+        "mean_surviving_frenkel_pairs": report["statistics"]["mean"],
+        "stopping": report["statistics"]["stopping"],
+        "hypothesis_status": report["hypothesis_status"],
+    }
+    state = "complete" if report["statistics"]["n_usable"] else "partial"
+    return Outcome(state, str(out), summary)
+
+
 # --- registry ---------------------------------------------------------------------------
 
 HANDLERS: dict[str, Handler] = {
@@ -635,6 +694,7 @@ HANDLERS: dict[str, Handler] = {
     "explore": Handler(_explore_preflight, _explore_execute, _explore_resume),
     "alloy-spec": Handler(_alloy_preflight, _alloy_execute),
     "investigation": Handler(_investigation_preflight, _investigation_execute),
+    "cascade": Handler(_cascade_preflight, _cascade_execute, rerun_resumes=True),
 }
 
 # Files that configure something else; `run` explains what to use instead.
@@ -668,6 +728,7 @@ def detect_kind(path: str | Path) -> str:
         return "workflow"
     rules: list[tuple[Callable[[set[str]], bool], str]] = [
         (lambda k: "phase_policy" in k, "investigation"),
+        (lambda k: {"material", "pka", "ensemble", "potential"} <= k, "cascade"),
         (lambda k: "external_tools" in k, "external"),
         (lambda k: k == {"evaluation"}, "finetune-eval"),
         (lambda k: {"selection", "candidates", "reference_alloy"} <= k, "selection-example"),

@@ -6,10 +6,12 @@ Sublattices are never inferred from ASE atom order. For BCC they are derived fro
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 import numpy as np
 from ase import Atoms
+from ase.neighborlist import neighbor_list
 
 from matsim_agents.core.seeding import numpy_rng
 from matsim_agents.science.magnetism.config import MagneticConfiguration
@@ -129,6 +131,41 @@ def bcc_two_sublattices(atoms: Atoms, lattice_parameter: float) -> dict[int, str
             raise ValueError(f"atom_id {atom_id} is not on a BCC site of a={lattice_parameter}")
         labels[atom_id] = "B" if parity == {1} else "A"
     return labels
+
+
+def bcc_nn_cutoff(lattice_parameter: float) -> float:
+    """Distance between the BCC first (sqrt(3)/2 a) and second (a) neighbour shells."""
+    return 0.5 * (math.sqrt(3.0) / 2.0 + 1.0) * lattice_parameter
+
+
+def bipartite_sublattices(atoms: Atoms, nn_cutoff_A: float) -> dict[int, str]:
+    """Two-colour the graph of atom pairs closer than ``nn_cutoff_A`` ('A' and 'B').
+
+    Meant for an ideal lattice (a defect-free parent): the pattern is carried to defect cells
+    by ``atom_id``. Raises when the graph is not bipartite (e.g. a close-packed lattice) or has
+    several components, because the relative sublattice of separate components is undefined.
+    """
+    ids = _atom_ids(atoms)
+    first, second = neighbor_list("ij", atoms, nn_cutoff_A)
+    adjacency: list[list[int]] = [[] for _ in ids]
+    for a, b in zip(first.tolist(), second.tolist(), strict=True):
+        adjacency[a].append(b)
+    color = [-1] * len(ids)
+    color[0] = 0
+    stack = [0]
+    while stack:
+        k = stack.pop()
+        for m in adjacency[k]:
+            if color[m] == -1:
+                color[m] = 1 - color[k]
+                stack.append(m)
+            elif color[m] == color[k]:
+                raise ValueError(
+                    "nearest-neighbour graph is not bipartite; no two-sublattice order"
+                )
+    if -1 in color:
+        raise ValueError("nearest-neighbour graph is disconnected; sublattices are undefined")
+    return {atom_id: "AB"[c] for atom_id, c in zip(ids, color, strict=True)}
 
 
 def _check_sublattices(atoms: Atoms, sublattices: Sublattices) -> None:

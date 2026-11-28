@@ -17,6 +17,7 @@ from matsim_agents.backends.dft.qe_neb_stages import (
     prepare_stage,
     run_stage,
 )
+from tests.synthetic_upf import write_synthetic_upf
 
 ENERGIES = [-100.0, -99.6, -99.2, -99.7, -100.1]
 ENDPOINT_MAX = [-99.0, -99.4, -99.5, -99.7, -100.1]
@@ -37,10 +38,13 @@ def _images(n=5):
 
 
 def _cfg(workdir, **over):
+    pseudo = workdir.parent / "pseudos"
+    for element in ("Mo", "W"):
+        write_synthetic_upf(pseudo, f"{element}.upf", element)
     base = {
         "n_images": 5,
         "species": ("Mo", "W"),
-        "pseudo_dir": "/pseudos",
+        "pseudo_dir": str(pseudo),
         "pseudopotentials": {"Mo": "Mo.upf", "W": "W.upf"},
         "ecutwfc_ry": 50.0,
         "ecutrho_ry": 400.0,
@@ -119,6 +123,37 @@ def test_initial_stage_is_prepared_with_no_ci_and_recorded(tmp_path):
     history = load_history(config.workdir)
     assert [s.index for s in history.stages] == [1]
     assert entry.input_sha256 == _sha(tmp_path / "w" / "neb.stage1.in")
+
+
+def test_manifest_cutoffs_are_used_for_initial_and_restart_stages(tmp_path):
+    config = _cfg(tmp_path / "w")
+    pseudo = tmp_path / "pseudos"
+    entries = {}
+    for element in ("Mo", "W"):
+        upf = pseudo / f"{element}.upf"
+        upf.write_text(upf.read_text().replace('wfc_cutoff="30.0" rho_cutoff="240.0"', ""))
+        entries[element] = {
+            "filename": upf.name,
+            "sha256": _sha(upf),
+            "recommended_ecutwfc_ry": 30,
+            "recommended_ecutrho_ry": 240,
+        }
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"pseudopotentials": entries}))
+    config = QENebConfig.model_validate({**config.model_dump(), "pseudo_manifest": str(manifest)})
+    images = _images()
+    prepare_stage(config, images, kind="initial")
+    run_stage(config.workdir, launcher=_fake())
+    restarted = derive_stage_config(config, "ci", nstep_path=200)
+    assert restarted.pseudo_manifest == str(manifest)
+    wrong = json.loads(manifest.read_text())
+    wrong["pseudopotentials"]["Mo"]["sha256"] = "0" * 64
+    manifest.write_text(json.dumps(wrong))
+    with pytest.raises(ValueError, match="checksum"):
+        prepare_stage(restarted, images, kind="ci")
+    manifest.write_text(json.dumps({"pseudopotentials": entries}))
+    prepare_stage(restarted, images, kind="ci")
+    assert (tmp_path / "w" / "neb.stage2.in").is_file()
 
 
 def test_initial_stage_rejects_restart_or_ci_config(tmp_path):

@@ -350,6 +350,7 @@ def _run_reference_relaxation(
     if cfg.backend == "qe":
         from ase import units as ase_units
 
+        from matsim_agents.backends.dft.pseudo_validation import load_manifest
         from matsim_agents.backends.dft.qe_relax import (
             parse_pw_stdout,
             recommend_settings,
@@ -376,6 +377,9 @@ def _run_reference_relaxation(
                 / ((ase_units.Ry / ase_units.Bohr) * np.sqrt(3))
             ),
             pseudopotentials=qe.pseudopotentials,
+            pseudo_manifest=load_manifest(qe.pseudo_manifest) if qe.pseudo_manifest else None,
+            functional=qe.functional,
+            cutoff_override_reason=qe.cutoff_override_reason,
             extra_control=dict(qe.extra_control),
             extra_system=dict(qe.extra_system),
             extra_electrons=dict(qe.extra_electrons),
