@@ -223,12 +223,15 @@ pseudopotentials to work around that crash.
   mismatch with the manifest and a missing or mismatched file. A deliberate low value needs
   `cutoff_override_reason` and is then diagnostic only.
 - **Campaign values.** `examples/fusion_bcc_1024/campaign.yaml` uses 60/720 Ry. That clears the
-  PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V). It is provisional, not converged.
+  PSlibrary maxima (wfc 53.8 Ry for Os, rho 645 Ry for V). It is provisional, not converged. The
+  scans point to 100/1200 Ry and a denser mesh; `campaign.yaml` is unchanged until a protocol qualifies.
 - **Convergence runs.** They run on OLCF Frontier. `examples/qe_convergence/frontier_point_defects.yaml`
   drives `workflows/numerical_convergence.py` through `deployments/frontier/launchers/run-pw-gpu-frontier.sh`,
   one node and one GCD per run (the `execution/slurm_jobs` limit). Cells come from
   `workflows/qualification_cells.py`. A run counts only with a `JOB DONE` line and a
   converged SCF.
-- **Status.** `plan` writes 64 validated inputs for the example. No run has been submitted, and all
-  seven protocols in `deployments/common/qe-protocols.yaml` are `unqualified`. Larger cells need
+- **Status.** The 64-run matrix and two 16-run follow-ups (dense k-meshes, higher cutoffs) have run.
+  Only `conv_thr` (1e-7 Ry) qualified. The provisional values (7x7x7 on the 54-site cell, 100/1200 Ry,
+  MV 0.010 Ry) are in [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
+  All seven protocols in `deployments/common/qe-protocols.yaml` are `unqualified`. Larger cells need
   a multi-node sbatch like `deployments/frontier/campaigns/qe-1024/qe_kconv_job.sbatch`.

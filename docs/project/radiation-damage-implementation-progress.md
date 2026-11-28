@@ -41,7 +41,7 @@ Paths are under `src/matsim_agents/`.
 
 ## Open items
 
-- Run the QE convergence scans on OLCF Frontier (`examples/qe_convergence/frontier_point_defects.yaml`, 64 planned runs, none submitted). The 60/720 Ry campaign cutoffs are provisional. Every protocol in `deployments/common/qe-protocols.yaml` is `unqualified`.
+- The QE convergence scans ran on OLCF Frontier (64 runs plus two 16-run follow-ups; only `conv_thr` qualified; see `examples/fusion_bcc_1024/dft-parameterization.md`). Repeat the smearing scan at 7x7x7 and check 7x7x7 with 100/1200 Ry. The 60/720 Ry campaign cutoffs are provisional. Every protocol in `deployments/common/qe-protocols.yaml` is `unqualified`.
 - Record measured evidence in the qualification matrix. Until then every row stays at `not_assessed`.
 - Run NEB end to end with real `neb.x` and an MLIP pre-screen on HPC. Only parsers and input writers are tested.
 - Scalability numbers cover a synthetic KMC chain, not DFT, MLIP or large-cell cost. No lock file pins the environment.

@@ -14,6 +14,24 @@ criteria_default:
   force_eV_per_A: 0.005
   force_defect_eV_per_A: 0.01
   stress_GPa: 0.1
+# Evidence-based starting values for the point-defect protocol. They are NOT protocol settings: the
+# settings blocks below stay null until a convergence report is qualified. Detail, tables and the
+# open items are in examples/fusion_bcc_1024/dft-parameterization.md.
+provisional_recommendation:
+  protocol: point_defects
+  status: unqualified
+  basis: qualification cell, 54 sites, W, PBE, PSlibrary 1.0.0 PAW, Marzari-Vanderbilt smearing
+  ecutwfc_ry: 100.0
+  ecutrho_ry: 1200.0
+  kspacing_inv_A: 0.10
+  smearing: mv
+  degauss_ry: 0.010
+  conv_thr_ry: 1.0e-7
+  parameter_status:
+    conv_thr_ry: qualified
+    kspacing_inv_A: densest mesh tested; 0.12 qualified against it, no independent plateau
+    ecut_ry: not_converged, 90/1080 is 1.09 meV/atom from 100/1200 against a 1.0 limit
+    degauss_ry: not_converged, scanned only at a 3x3x3 mesh
 scans:
   smearing_degauss_ry: [0.005, 0.010, 0.020, 0.030]
   conv_thr_ry: [1.0e-6, 1.0e-7, 1.0e-8]

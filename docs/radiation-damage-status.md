@@ -94,6 +94,8 @@ WP1 (`science/cascade/`, `workflows/radiation/cascade_candidates.py`) has recoil
 * See [multiproperty-selection.md](multiproperty-selection.md) for the property, selection,
   and acquisition workflow. All of it is software-verified only.
 * The 2x2x2 k-mesh and the 51/650 Ry cutoffs used for the 1,024-atom input are unconverged.
+  Scans on 54-site cells point to a denser mesh and 100/1200 Ry; see
+  [dft-parameterization.md](../examples/fusion_bcc_1024/dft-parameterization.md).
 * Debug QoS is not sufficient for production 1,024-atom QE.
 * `pristine_ferromagnetic` stays `INPUT_BLOCKED`; gas examples are nonmagnetic (`nspin: 1`).
 

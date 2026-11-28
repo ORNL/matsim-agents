@@ -12,7 +12,7 @@ docs and have not been run end to end.
 - No single command runs the whole campaign. `matsim-agents run examples/fusion_bcc_1024/application.yaml`
   is a dry check: it reports `complete` but writes only empty `structures/`, `calculations/`,
   `datasets/` and `models/` directories.
-- Everything is software-verified only. Cutoffs (51/650 Ry) and k-points (2x2x2) are unconverged.
+- Everything is software-verified only. Cutoffs (51/650 Ry) and k-points (2x2x2) are unconverged. The measured evidence for better values is in [dft-parameterization.md](../../examples/fusion_bcc_1024/dft-parameterization.md).
 - No converged 1,024-atom QE result exists. The debug QoS cannot run that cell (`RESOURCE_BLOCKED`).
 - `pristine_ferromagnetic` is `INPUT_BLOCKED` until the starting magnetization is tied to verified UPF valence.
 - The 128-atom SCF has not converged yet.
