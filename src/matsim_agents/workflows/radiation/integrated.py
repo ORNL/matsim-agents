@@ -1,12 +1,9 @@
 """End-to-end cascade investigation from one configuration.
 
-One run chains the complete production workflow: qualification-gate resolution (recorded,
-never silently bypassed), an adaptive cascade ensemble, surviving-defect characterization,
-ensemble statistics with an explicit stopping decision, evidence-ledger records and a
-deterministic hypothesis revision, closed by a JSON report. ``production`` classification is
-refused below ``CASCADE_QUALIFIED``; everything else is labelled ``exploratory_unqualified``
-in every record it produces. The PKA energy is imposed, so no result here is a physical
-damage prediction.
+One run chains qualification-gate resolution, an adaptive cascade ensemble, surviving-defect
+characterization, ensemble statistics, evidence-ledger records and a hypothesis revision.
+Only exploratory execution is supported. The PKA energy is imposed and the protocol has not
+been qualified, so no result here is a physical damage prediction.
 """
 
 from __future__ import annotations
@@ -21,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from matsim_agents.core.contracts import EvidenceLevel
 from matsim_agents.core.fileio import atomic_write_text
+from matsim_agents.core.hashing import sha256_file, sha256_json
 from matsim_agents.core.yamlio import load_yaml_mapping
 from matsim_agents.execution.ledger import (
     EvidenceLedger,
@@ -99,11 +97,29 @@ class EnsembleSpec(BaseModel):
 class PotentialSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    backend: Literal["emt"] = Field(description="Calculator backend; emt is verification-only.")
+    backend: Literal["emt", "eam_fs"] = Field(description="ASE calculator backend.")
     checkpoint: str = Field(min_length=1, description="Identity the qualification record names.")
+    potential_file: Path | None = None
     short_range: Literal["none", "zbl"] = "none"
     precision: str = "float64"
     qualification_record: Path | None = None
+
+    @model_validator(mode="after")
+    def _potential_identity(self) -> PotentialSpec:
+        if self.backend == "eam_fs":
+            if self.potential_file is None:
+                raise ValueError("eam_fs requires potential_file")
+            if len(self.checkpoint) != 71 or not self.checkpoint.startswith("sha256:"):
+                raise ValueError("eam_fs checkpoint must be sha256:<64 lowercase hex digits>")
+            if any(c not in "0123456789abcdef" for c in self.checkpoint[7:]):
+                raise ValueError("eam_fs checkpoint must be sha256:<64 lowercase hex digits>")
+            if self.short_range != "none":
+                raise ValueError("eam_fs supports only the original potential without added ZBL")
+            if self.precision != "float64":
+                raise ValueError("eam_fs requires precision float64")
+        elif self.potential_file is not None:
+            raise ValueError("potential_file is only supported for eam_fs")
+        return self
 
 
 class HypothesisSpec(BaseModel):
@@ -129,15 +145,13 @@ class IntegratedCascadeConfig(BaseModel):
     @classmethod
     def from_yaml(cls, path: str | os.PathLike) -> IntegratedCascadeConfig:
         cfg = cls.model_validate(load_yaml_mapping(path))
-        record = cfg.potential.qualification_record
-        if record is not None and not record.is_absolute():
-            cfg = cfg.model_copy(
-                update={
-                    "potential": cfg.potential.model_copy(
-                        update={"qualification_record": (Path(path).parent / record).resolve()}
-                    )
-                }
-            )
+        updates = {}
+        for field in ("qualification_record", "potential_file"):
+            value = getattr(cfg.potential, field)
+            if value is not None and not value.is_absolute():
+                updates[field] = (Path(path).parent / value).resolve()
+        if updates:
+            cfg = cfg.model_copy(update={"potential": cfg.potential.model_copy(update=updates)})
         return cfg
 
 
@@ -199,14 +213,15 @@ def resolve_gate(cfg: IntegratedCascadeConfig) -> Resolution:
 
 
 def classify(cfg: IntegratedCascadeConfig, resolution: Resolution) -> str:
-    """The run label; production below CASCADE_QUALIFIED is refused, not downgraded."""
-    if resolution.level >= Level.CASCADE_QUALIFIED:
-        return PRODUCTION_LABEL
+    """Only exploratory execution is supported, regardless of record assertions."""
     if cfg.classification == "production":
-        missing = "; ".join(resolution.reasons or ("no evidence",))
-        raise GateRefusal(
-            f"production requires CASCADE_QUALIFIED, model is {resolution.level.name}: {missing}"
-        )
+        if resolution.level < Level.CASCADE_QUALIFIED:
+            missing = "; ".join(resolution.reasons or ("no evidence",))
+            raise GateRefusal(
+                f"production requires CASCADE_QUALIFIED, "
+                f"model is {resolution.level.name}: {missing}"
+            )
+        raise GateRefusal("this integration is exploratory only; production is not supported")
     return EXPLORATORY_LABEL
 
 
@@ -230,6 +245,18 @@ def build_calculator(spec: PotentialSpec):
         justification = (
             "EMT verification potential; software integration check only, no cascade physics"
         )
+    elif spec.backend == "eam_fs":
+        from ase.calculators.eam import EAM
+
+        assert spec.potential_file is not None
+        actual = f"sha256:{sha256_file(spec.potential_file)}"
+        if actual != spec.checkpoint:
+            raise ValueError(
+                f"potential file checksum mismatch: expected {spec.checkpoint}, got {actual}"
+            )
+        base = EAM(potential=str(spec.potential_file), form="fs")
+        native = False
+        justification = "Original EAM/FS potential, without an added short-range correction."
     else:  # pragma: no cover - the Literal forbids it
         raise ValueError(f"unsupported backend {spec.backend!r}")
     from matsim_agents.science.cascade.zbl import build_short_range_calculator
@@ -283,8 +310,15 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
     label = classify(cfg, resolution)  # raises GateRefusal; gate.json records why
 
     calculator, short_range_model = build_calculator(cfg.potential)
+    if cfg.potential.backend == "eam_fs":
+        elements = set(cfg.material.counts or {cfg.material.element: 1})
+        elements.add(cfg.pka.symbol or cfg.material.element)
+        missing = elements - set(calculator.elements)
+        if missing:
+            raise ValueError(f"potential does not cover elements: {', '.join(sorted(missing))}")
     calculators = {cfg.potential.short_range: calculator}
     tasks = _plan(cfg)
+    fingerprint = sha256_json(cfg.model_dump(mode="json"))
 
     records: list[dict] = []
     stopping = "budget_exhausted"
@@ -300,6 +334,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
                 stopping = "target_met"
                 break
         task["qualification"] = label
+        task["execution_fingerprint"] = fingerprint
         records.append(cascade_study.run_task(task, calculators, tasks_dir))
 
     usable = [r for r in records if r["numerically_stable"] and r["boundary_ok"]]
@@ -339,6 +374,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
     method = MethodRecord(
         backend=cfg.potential.backend,
         model=cfg.potential.checkpoint,
+        model_sha256=(cfg.potential.checkpoint[7:] if cfg.potential.backend == "eam_fs" else None),
         settings={
             "short_range": short_range_model.policy,
             "phase_durations_fs": [
@@ -355,6 +391,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
     assumptions = [
         f"classification: {label}",
         "PKA energy imposed by configuration; no nuclear data",
+        "initial velocities are sampled without equilibrium MD; electronic stopping is off",
         *short_range_model.assumptions,
     ]
     if values:
@@ -363,7 +400,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             subject=subject,
             campaign_id=cfg.campaign_id,
             method=method,
-            evidence_level=EvidenceLevel.MLIP_PREDICTION,
+            evidence_level=EvidenceLevel.EMPIRICAL_POTENTIAL_PREDICTION,
             outcome=EvidenceOutcome.MEASURED,
             values=[
                 LedgerQuantity(name="surviving_frenkel_pairs_mean", value=mean, unit="count"),
@@ -383,7 +420,7 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
             subject=subject,
             campaign_id=cfg.campaign_id,
             method=method,
-            evidence_level=EvidenceLevel.MLIP_PREDICTION,
+            evidence_level=EvidenceLevel.EMPIRICAL_POTENTIAL_PREDICTION,
             outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
             failure_reason="no numerically stable, boundary-clean realization",
             physical_assumptions=assumptions,
@@ -393,19 +430,18 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
     status = HypothesisStatus.UNRESOLVED if values else HypothesisStatus.PROPOSED
     proposed = [
         f"{level}: obtain {', '.join(names)}" for level, names in resolution.missing.items()
-    ] or ["none: the qualification domain covers this query"]
+    ] or (
+        ["none: the qualification domain covers this query"]
+        if resolution.level >= Level.CASCADE_QUALIFIED
+        else ["obtain a qualification record for this exact potential and domain"]
+    )
     revision = ledger.append(
         HypothesisRecord(
             hypothesis_id=cfg.hypothesis.hypothesis_id,
             campaign_id=cfg.campaign_id,
             claim_type="property",
             scientific_claim=cfg.hypothesis.claim,
-            falsifiable_prediction=(
-                f"an independent qualified ensemble gives a surviving-Frenkel-pair mean "
-                f"outside {mean:.3g} +- {Z_95 * sem:.3g}"
-                if values and math.isfinite(sem)
-                else None
-            ),
+            falsifiable_prediction=None,
             status=status,
             evidence_ids=[stored.evidence_id],
             support_level=ledger.support_level([stored.evidence_id]),
@@ -424,6 +460,9 @@ def run_investigation(cfg: IntegratedCascadeConfig, out_dir: str | os.PathLike) 
         "potential": {
             "backend": cfg.potential.backend,
             "checkpoint": cfg.potential.checkpoint,
+            "potential_file": (
+                str(cfg.potential.potential_file) if cfg.potential.potential_file else None
+            ),
             "short_range": short_range_model.policy,
         },
         "statistics": statistics,

@@ -625,18 +625,19 @@ def _investigation_execute(path: Path, run: ScientificRunDirectory, options: Run
 
 def _cascade_preflight(path: Path, options: RunOptions) -> Preflight:
     from matsim_agents.workflows.radiation.integrated import (
+        GateRefusal,
         IntegratedCascadeConfig,
+        classify,
         resolve_gate,
     )
 
     cfg = IntegratedCascadeConfig.from_yaml(path)
     resolution = resolve_gate(cfg)
     blockers = []
-    if cfg.classification == "production" and resolution.level.name != "CASCADE_QUALIFIED":
-        blockers.append(
-            f"production requires CASCADE_QUALIFIED; the record resolves {resolution.level.name}"
-            f" ({'; '.join(resolution.reasons) or 'missing checks'})"
-        )
+    try:
+        classify(cfg, resolution)
+    except GateRefusal as refusal:
+        blockers.append(str(refusal))
     return Preflight(
         {
             "campaign_id": cfg.campaign_id,

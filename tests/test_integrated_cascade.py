@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from matsim_agents.core.hashing import sha256_file
 from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.science.cascade.qualification import Level
+from matsim_agents.workflows import runner
 from matsim_agents.workflows.radiation import integrated as integ
 
 CONFIG = Path(__file__).parents[1] / "examples/radiation_damage/integrated_cascade_demo.yaml"
@@ -83,6 +85,12 @@ def test_gate_resolves_a_recorded_domain(cfg, tmp_path):
         update={"potential": cfg.potential.model_copy(update={"qualification_record": path})}
     )
     assert integ.resolve_gate(qualified).level is Level.CASCADE_QUALIFIED
+    production = qualified.model_copy(update={"classification": "production"})
+    config_path = tmp_path / "production.json"
+    config_path.write_text(json.dumps(production.model_dump(mode="json")))
+    kind, preflight = runner.validate(config_path)
+    assert kind == "cascade"
+    assert any("exploratory only" in blocker for blocker in preflight.blockers)
     # Outside the recorded domain the level collapses to UNASSESSED.
     hot = qualified.model_copy(update={"pka": qualified.pka.model_copy(update={"energy_eV": 1e4})})
     assert integ.resolve_gate(hot).level is Level.UNASSESSED
@@ -94,3 +102,71 @@ def test_required_realizations_formula():
     assert integ.required_realizations([0.0, 0.0], 0.2) is None  # zero mean: inapplicable
     n = integ.required_realizations([4.0, 6.0], 0.1)
     assert n == pytest.approx((integ.Z_95 * (2.0) ** 0.5 / 0.5) ** 2, abs=1), n
+
+
+def test_eam_fs_integrated_run_and_restart_identity(cfg, tmp_path):
+    potential = tmp_path / "synthetic.fs"
+    potential.write_text(
+        "synthetic\nsynthetic\nsynthetic\n"
+        "1 W\n5 1.0 5 1.0 4.0\n74 183.84 3.14 BCC\n"
+        "0 0 0 0 0\n0 0 0 0 0\n0 0 0 0 0\n"
+    )
+    spec = integ.PotentialSpec(
+        backend="eam_fs",
+        checkpoint=f"sha256:{sha256_file(potential)}",
+        potential_file=potential,
+    )
+    config = cfg.model_copy(
+        update={
+            "material": integ.MaterialSpec(element="W", lattice_parameter_A=3.14, n_cells=3),
+            "potential": spec,
+            "phases": integ.PhaseDurations(ballistic_fs=0.1, thermal_spike_fs=0.1, cooling_fs=0.1),
+            "ensemble": integ.EnsembleSpec(
+                initial_realizations=2, max_realizations=2, relative_ci_half_width=0.5
+            ),
+        }
+    )
+    config_path = tmp_path / "cascade.json"
+    config_path.write_text(json.dumps(config.model_dump(mode="json")))
+    run_dir, run_record = runner.run(config_path, runs_dir=tmp_path / "runs")
+    assert run_record.kind == "cascade"
+    assert run_record.state in {"complete", "partial"}
+    out = run_dir / "cascade"
+    report = json.loads((out / "report.json").read_text())
+    assert report["classification"] == integ.EXPLORATORY_LABEL
+    assert report["potential"]["checkpoint"] == spec.checkpoint
+    assert report["statistics"]["n_run"] == 2
+    evidence = EvidenceLedger(out / "ledger.jsonl").get(report["evidence_id"])
+    assert evidence.method.model == spec.checkpoint
+    assert evidence.method.model_sha256 == spec.checkpoint[7:]
+    assert evidence.evidence_level.value == "empirical_potential_prediction"
+    revision = EvidenceLedger(out / "ledger.jsonl").get(report["hypothesis_revision_id"])
+    assert "qualification record" in revision.proposed_tests[0]
+    assert revision.falsifiable_prediction is None
+    changed = config.model_copy(update={"seed": config.seed + 1})
+    with pytest.raises(ValueError, match="different settings"):
+        integ.run_investigation(changed, out)
+    wrong_species = config.model_copy(
+        update={"material": integ.MaterialSpec(element="Cu", lattice_parameter_A=3.615, n_cells=3)}
+    )
+    with pytest.raises(ValueError, match="does not cover elements"):
+        integ.run_investigation(wrong_species, tmp_path / "wrong-species")
+    potential.write_text(potential.read_text() + "\n")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        integ.run_investigation(config, tmp_path / "other")
+
+
+def test_eam_fs_rejects_production_even_if_record_claims_qualification(cfg, tmp_path):
+    spec = integ.PotentialSpec(
+        backend="eam_fs",
+        checkpoint="sha256:" + "0" * 64,
+        potential_file=tmp_path / "not-needed.fs",
+    )
+    config = cfg.model_copy(update={"potential": spec, "classification": "production"})
+    with pytest.raises(integ.GateRefusal, match="exploratory only"):
+        integ.classify(config, integ.Resolution(Level.CASCADE_QUALIFIED, (), {}))
+    with pytest.raises(integ.GateRefusal, match="exploratory only"):
+        integ.classify(
+            cfg.model_copy(update={"classification": "production"}),
+            integ.Resolution(Level.CASCADE_QUALIFIED, (), {}),
+        )

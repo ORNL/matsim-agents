@@ -4,6 +4,45 @@ This page separates what is implemented and unit-tested from what is scientifica
 Nothing here is numerically validated: no production DFT or MLIP result, no validated SPECTRA-PKA
 result (one software smoke run only), and no kinetic prediction exists. Unit tests establish software behaviour only.
 
+## Pure-W integrated workflow smoke test
+
+The [pure-W example](../examples/radiation_damage/integrated_w_eam4_demo.yaml) uses the
+[Marinica et al. 2013 EAM4 potential](https://doi.org/10.1088/0953-8984/25/39/395502),
+developed for radiation defects and dislocations in tungsten. The
+[NIST entry](https://www.ctcms.nist.gov/potentials/entry/2013--Marinica-M-C-Ventelon-L-Gilbert-M-R-et-al--W-4/)
+identifies the distributed `w_eam4.fs` as the EAM4 parameter set and says the author
+permitted NIST to post it. The file is not bundled here; that permission is not a general
+redistribution license. Its SHA-256 is
+`f7347150e02cae5def044eab6a0044cfb08603a951e9e1c5dd692b6ce2f2874e`.
+It covers W only, not W alloys or gas species. ASE reads the original EAM/FS file without
+an added ZBL correction; the collision-region behavior has not been qualified.
+
+To reproduce from the repository root, copy the example to a work directory and download
+the original alongside it:
+
+```bash
+mkdir -p w-eam4-demo
+cp examples/radiation_damage/integrated_w_eam4_demo.yaml w-eam4-demo/
+curl -fL 'https://www.ctcms.nist.gov/potentials/Download/2013--Marinica-M-C-Ventelon-L-Gilbert-M-R-et-al--W-4/1/w_eam4.fs' -o w-eam4-demo/w_eam4.fs
+sha256sum w-eam4-demo/w_eam4.fs
+matsim-agents run w-eam4-demo/integrated_w_eam4_demo.yaml --runs-dir w-eam4-demo/runs --dispatch
+```
+
+The loader checks the hash and elemental coverage before running. Task records carry a
+configuration fingerprint so incompatible cached tasks are refused. The report links to
+the evidence ledger and hypothesis revision; the potential hash is in the ledger's method
+record. All executions of this integration are exploratory; production is refused even
+when a supplied qualification record claims the necessary level.
+
+A real-file software smoke run completed through the generic runner: two 54-atom, 10 eV
+recoils, three phases of 0.1 fs each, with the gate `UNASSESSED` and the stopping budget
+exhausted. Both passed the implemented numerical and boundary checks and produced zero
+detected Frenkel pairs. These tiny, unequilibrated, imposed-recoil runs have no electronic
+stopping and are far too short to establish a surviving-defect yield or validate a
+potential, boundary condition, ensemble or cascade prediction. A passing heuristic is
+not independent scientific qualification. The workflow does not yet integrate a
+fusion-spectrum PKA source or establish production readiness.
+
 ## Qualification levels
 
 | Level | Meaning |

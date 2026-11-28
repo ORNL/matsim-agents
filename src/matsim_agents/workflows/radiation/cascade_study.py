@@ -88,7 +88,14 @@ def run_task(task: dict, calculators: dict[str, Calculator], out_dir: Path) -> d
     """Run one task, write ``task-<id>.json`` and return the record."""
     path = out_dir / f"task-{task['id']:05d}.json"
     if path.exists():
-        return json.loads(path.read_text())
+        cached = json.loads(path.read_text())
+        if "execution_fingerprint" in task and (
+            cached.get("execution_fingerprint") != task["execution_fingerprint"]
+        ):
+            raise ValueError(
+                f"{path} was generated with different settings; use a new output directory"
+            )
+        return cached
     t0 = time.time()
     seed = int(task["seed"])
     rng = numpy_rng(seed, "task")
