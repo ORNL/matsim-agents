@@ -289,3 +289,31 @@ def test_timed_out_runs_are_retried_once_on_the_retry_launcher(config_path, tmp_
     assert set(again) == {r.key for r in runs}
     assert any("--gpus-per-node=8" in " ".join(c) for c in calls)
     assert json.loads((out / "submitted.json").read_text()) == again
+
+
+def test_afm_case_writes_two_magnetic_types_per_element(config_path, tmp_path):
+    from ase.build import bulk as make_bulk
+
+    pseudo = tmp_path / "pp"
+    write_synthetic_upf(pseudo, "Cr.upf", "Cr", wfc=30.0, rho=240.0)
+    write(tmp_path / "structures" / "cr.xyz", make_bulk("Cr", "bcc", a=2.88, cubic=True).repeat(2))
+    config = nc.load_config(config_path)
+    config.base.pseudopotentials = {"Cr": "Cr.upf"}
+    config.cases = [
+        nc.CaseConfig(name="cr_nm", structure=str(tmp_path / "structures" / "cr.xyz")),
+        nc.CaseConfig(
+            name="cr_afm",
+            structure=str(tmp_path / "structures" / "cr.xyz"),
+            magnetic=True,
+            starting_magnetization={"Cr": 0.3},
+            afm_lattice_A=2.88,
+        ),
+    ]
+    config.scans = config.scans[1:]
+    runs = nc.plan(config)
+    afm = next(r for r in runs if r.case == "cr_afm").input_path.read_text()
+    assert "nspin                     = 2" in afm and "ntyp                      = 2" in afm
+    assert "starting_magnetization(1) = 3.00000000d-01" in afm
+    assert "starting_magnetization(2) = -3.00000000d-01" in afm
+    nm = next(r for r in runs if r.case == "cr_nm").input_path.read_text()
+    assert "nspin" not in nm and "ntyp        = 1" in nm

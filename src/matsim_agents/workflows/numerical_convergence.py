@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 from ase.io import read
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -46,6 +47,7 @@ from matsim_agents.core.fileio import atomic_write_text
 from matsim_agents.core.hashing import sha256_file
 from matsim_agents.core.restart import KeyedResultLog
 from matsim_agents.core.yamlio import load_yaml_mapping
+from matsim_agents.science.magnetism.generators import bcc_afm
 from matsim_agents.workflows.active_learning.campaign_init import kpts_for_spacing
 
 ScanParameter = Literal["cutoff", "kpoints", "smearing", "conv_thr"]
@@ -61,6 +63,9 @@ class CaseConfig(BaseModel):
     kind: str = "bulk"  # bulk | vacancy | substitution | interstitial | gas | neb_image | ...
     magnetic: bool = False
     starting_magnetization: dict[str, float] = Field(default_factory=dict)
+    # Set with ``magnetic``: two-sublattice (corner / body-centre) antiferromagnet of a cubic BCC
+    # supercell of this lattice parameter. The sign of ``starting_magnetization`` alternates.
+    afm_lattice_A: float | None = None
 
 
 class ScanConfig(BaseModel):
@@ -217,7 +222,15 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
                 directory = out / "runs" / scan.parameter / f"p{index:02d}" / case.name
                 directory.mkdir(parents=True, exist_ok=True)
                 input_path = directory / "pw.in"
-                if case.magnetic:
+                magnetic_config = None
+                if case.magnetic and case.afm_lattice_A is not None:
+                    atoms = atoms.copy()
+                    atoms.set_array("atom_id", np.arange(1, len(atoms) + 1))
+                    afm = bcc_afm(atoms, case.name, case.afm_lattice_A, case.starting_magnetization)
+                    magnetic_config = afm.model_copy(
+                        update={"qe_starting_magnetization": afm.initial_moments_muB}
+                    )
+                elif case.magnetic:
                     species = sorted(set(atoms.get_chemical_symbols()))
                     settings.extra_system.update(
                         {
@@ -232,6 +245,7 @@ def plan(config: ConvergenceConfig) -> list[PlannedRun]:
                     str(input_path),
                     prefix=case.name,
                     outdir=str(directory / "tmp"),
+                    magnetic_config=magnetic_config,
                 )
                 text = input_path.read_text(encoding="utf-8")
                 key = hashlib.sha256(f"{scan.parameter}|{case.name}|{text}".encode()).hexdigest()
