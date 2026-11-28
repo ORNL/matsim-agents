@@ -158,9 +158,44 @@ The formation energy and forces are the quantities the campaign uses, and both a
 limits from 70/840 Ry. The 60/720 Ry value in `campaign.yaml` was provisional, and the scans back
 a move to 100/1200 Ry for margin, not as a proven converged value.
 
+## Cr magnetic smearing scan (54-site cell, 60/720 Ry, 5x5x5, `conv_thr` 1e-7)
+
+Config: [frontier_cr_magnetic.yaml](../qe_convergence/frontier_cr_magnetic.yaml), cells from
+[cells_cr.yaml](../qe_convergence/cells_cr.yaml). The AFM state is the two-sublattice bcc
+checkerboard (`Cr1`/`Cr2`, opposite starting moments). Single cell size, one cutoff, one mesh: this is
+a screening result, not a qualification.
+
+| `degauss` (Ry) | E(AFM)-E(NM) bulk (meV/atom) | Ef NM (eV) | Ef AFM (eV) | `vac_afm` total moment (muB) |
+|---|---|---|---|---|
+| 0.020 | -18.3 | 3.039 | 3.134 | -2.31 |
+| 0.010 | -22.6 | 2.995 | 3.153 | -2.81 |
+| 0.005 (reference) | -23.0 | 2.983 | 3.131 | -3.18 |
+
+Relative to `degauss` 0.005 the AFM vacancy formation energy changes by 0.003 and 0.022 eV, and the
+NM one by 0.056 and 0.012 eV. The analysis rejects both coarser values (largest derived-energy
+change 0.026 eV at 0.010): forces change by 0.011 to 0.033 eV/A (limit 0.01 for defect forces) and
+stress by 0.18 GPa at 0.010 (limit 0.1 GPa), and the magnetic state differs from the reference.
+
+Findings:
+
+- The antiferromagnet is 18 to 23 meV/atom below the non-magnetic state, so the non-magnetic
+  protocol is not valid for Cr. The spin state moves the vacancy formation energy by 0.10 to 0.16 eV,
+  far above the 0.02 eV limit. The AFM value (about 3.1 eV) is the one to use.
+- The AFM vacancy cell has an odd sublattice count (27/26), so it carries a net moment that grows as
+  `degauss` narrows (-2.3 to -3.2 muB) and has not plateaued. This is a cell-size effect to test at
+  larger cells, not a converged moment.
+- `bulk_fm` (uniform starting moment) did not converge in the 2 h limit: the moment collapsed from
+  about 15.6 muB per cell to about 0 muB and the SCF was still at 1e-6 Ry. Its energy matches the
+  non-magnetic one, so no stable ferromagnetic state is shown at this lattice parameter. No FM
+  conclusion is drawn.
+- Not run: any Cr cutoff or k-point scan, other cell sizes, a spin-spiral or other AFM orderings, a
+  lattice-parameter relaxation in the AFM state, and the divacancy, dumbbell, H, Os and alloy cells
+  (generated, not run through DFT).
+
 ## Open items
 
 1. Repeat the smearing scan at 7x7x7 (and 100/1200 Ry), the one scan that needs a rerun.
+   For Cr, run the cutoff and k-point scans in the AFM state.
 2. Run one combined check (7x7x7, 100/1200 Ry) against a denser mesh or cutoff to show a plateau.
 3. Qualify a larger cell. The mesh for the 1024-site cell is derived from the spacing, not run.
 4. [campaign.yaml](campaign.yaml) still has 60/720 Ry and a 2x2x2 mesh. Tests pin these values, so
